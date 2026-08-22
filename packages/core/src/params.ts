@@ -43,7 +43,11 @@ export const DEFAULT_PARAMS: Params = {
     max_hops: 3,
   },
   review: { max_cards_per_session: 20 },
-  calibration: { max_questions: 8 },
+  calibration: {
+    max_questions: 8,
+    stop_uncertainty: 0.25,
+    round_size: 5,
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,10 +152,14 @@ function validateParams(params: Params): Params {
   for (const [path, value] of [
     ["review.max_cards_per_session", params.review.max_cards_per_session],
     ["calibration.max_questions", params.calibration.max_questions],
+    ["calibration.round_size", params.calibration.round_size],
   ] as const) {
     if (!Number.isSafeInteger(value) || value < 0)
       throw new Error(`params ${path} must be a non-negative safe integer`);
   }
+  if (params.calibration.round_size < 1)
+    throw new Error("params calibration.round_size must be at least 1");
+  finite("calibration.stop_uncertainty", params.calibration.stop_uncertainty, 0, 1);
   return params;
 }
 

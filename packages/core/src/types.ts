@@ -24,6 +24,7 @@ export const EVIDENCE_SOURCES = [
   "srs",
   "artifact",
   "free-question",
+  "calibration",
   "manual",
 ] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
@@ -212,5 +213,11 @@ export interface Params {
   };
   /** User-level volume bounds (attention span), never per-domain. */
   review: { max_cards_per_session: number };
-  calibration: { max_questions: number };
+  calibration: {
+    max_questions: number;
+    /** Stop a calibration once every node is below this effective uncertainty. */
+    stop_uncertainty: number;
+    /** Questions selected and then answered as one adaptive batch. */
+    round_size: number;
+  };
 }
