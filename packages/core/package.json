@@ -1,0 +1,16 @@
+{
+  "name": "@concept/core",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "ts-fsrs": "^4.0.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
