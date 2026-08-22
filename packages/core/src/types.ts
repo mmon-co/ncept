@@ -92,7 +92,12 @@ export function knowledgeTypePolicy(type: KnowledgeType): KnowledgeTypePolicy {
 }
 
 export interface GraphNode {
+  /** Stable only inside its owning course; events address it with their course/domain. */
   id: string;
+  /** Immutable assessment criterion. A changed criterion requires a new local id on publication. */
+  criterion: string;
+  /** Published history is retained; a deprecated node may still have evidence and edges. */
+  deprecated: boolean;
   title: string;
   /** What is being learned; controls assessment-rung and item-template policy. */
   knowledge_type: KnowledgeType;

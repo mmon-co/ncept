@@ -7,6 +7,7 @@ import {
   parseNodeFile,
 } from "./graph";
 import { domainDir, type DataDir } from "./datadir";
+import { ensureLocalCourse } from "./courses";
 import type { GraphEdge, KnowledgeType } from "./types";
 
 /** JSON shape accepted by `tutor domain create|add-nodes` (stdin). */
@@ -15,10 +16,14 @@ export interface NodeSpec {
   title?: string;
   aliases?: string[];
   tags?: string[];
+  /** Immutable assessment criterion; changing it after publication requires a new local id. */
+  criterion?: string;
   /** Defaults to conceptual for v1-compatible authored nodes. */
   type?: KnowledgeType;
   /** Whether this is a threshold concept deserving extra authoring attention. */
   threshold?: boolean;
+  /** Keep an old published identity in history while routing new material to its replacement. */
+  deprecated?: boolean;
   body: string;
   requires?: string[];
   see_also?: string[];
@@ -38,13 +43,15 @@ function validateSpecShape(raw: unknown): NodeSpec[] {
       throw new AuthorError(`nodes[${i}]: id must be kebab-case (got ${JSON.stringify(o.id)})`);
     if (typeof o.body !== "string" || o.body.trim() === "")
       throw new AuthorError(`nodes[${i}] (${o.id}): body must be a non-empty string`);
-    for (const k of ["title"] as const)
-      if (o[k] !== undefined && typeof o[k] !== "string")
-        throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be a string`);
+    for (const k of ["title", "criterion"] as const)
+      if (o[k] !== undefined && (typeof o[k] !== "string" || o[k].trim() === ""))
+        throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be a non-empty string`);
     if (o.type !== undefined && o.type !== "factual" && o.type !== "conceptual" && o.type !== "procedural")
       throw new AuthorError(`nodes[${i}] (${o.id}): type must be factual, conceptual, or procedural`);
     if (o.threshold !== undefined && typeof o.threshold !== "boolean")
       throw new AuthorError(`nodes[${i}] (${o.id}): threshold must be a boolean`);
+    if (o.deprecated !== undefined && typeof o.deprecated !== "boolean")
+      throw new AuthorError(`nodes[${i}] (${o.id}): deprecated must be a boolean`);
     for (const k of ["aliases", "tags", "requires", "see_also"] as const)
       if (o[k] !== undefined && (!Array.isArray(o[k]) || !(o[k] as unknown[]).every((s) => typeof s === "string")))
         throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be an array of strings`);
@@ -55,12 +62,16 @@ function validateSpecShape(raw: unknown): NodeSpec[] {
 /** Serializes a node spec to the standard markdown node format (round-trips through the parser). */
 export function serializeNode(spec: NodeSpec): string {
   const fm: string[] = [`id: ${spec.id}`];
+  // JSON string syntax is valid YAML and preserves criteria containing YAML
+  // punctuation, comments, or newlines without changing their meaning.
+  if (spec.criterion !== undefined) fm.push(`criterion: ${JSON.stringify(spec.criterion)}`);
   if (spec.aliases !== undefined && spec.aliases.length > 0)
     fm.push(`aliases: [${spec.aliases.join(", ")}]`);
   if (spec.tags !== undefined && spec.tags.length > 0)
     fm.push(`tags: [${spec.tags.join(", ")}]`);
   if (spec.type !== undefined) fm.push(`type: ${spec.type}`);
   if (spec.threshold === true) fm.push("threshold: true");
+  if (spec.deprecated === true) fm.push("deprecated: true");
   const parts = [
     `---\n${fm.join("\n")}\n---`,
     `# ${spec.title ?? spec.id}`,
@@ -148,5 +159,8 @@ export function authorDomain(
       `domain written but failed to load cleanly: ${e instanceof Error ? e.message : e}`,
     );
   }
+  // A course artifact id is assigned at creation, not when it is first sent
+  // to a hub, so a later publication never renames course-local evidence.
+  ensureLocalCourse(dd, domain);
   return { domain, written: specs.map((s) => s.id) };
 }

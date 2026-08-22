@@ -47,6 +47,15 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   if (fm.threshold !== undefined && typeof fm.threshold !== "boolean")
     throw new GraphError(`${path}: frontmatter threshold must be a boolean`);
   const threshold = fm.threshold ?? false;
+  if (fm.criterion !== undefined && (typeof fm.criterion !== "string" || fm.criterion.trim() === ""))
+    throw new GraphError(`${path}: frontmatter criterion must be a non-empty string`);
+  if (fm.deprecated !== undefined && typeof fm.deprecated !== "boolean")
+    throw new GraphError(`${path}: frontmatter deprecated must be a boolean`);
+  // Legacy nodes had no explicit criterion; their stable local name is the
+  // only non-prose identity available, so use it rather than treating title
+  // edits as a criterion change.
+  const criterion = fm.criterion?.trim() ?? fm.id;
+  const deprecated = fm.deprecated ?? false;
 
   const requires: string[] = [];
   const seeAlso: string[] = [];
@@ -68,7 +77,7 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   }
 
   return {
-    node: { id: fm.id, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, threshold, file: path, body },
+    node: { id: fm.id, criterion, deprecated, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, threshold, file: path, body },
     requires,
     seeAlso,
   };
@@ -186,6 +195,8 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
     if (!nodes.has(n.id))
       nodes.set(n.id, {
         id: n.id,
+        criterion: n.id,
+        deprecated: false,
         title: n.title ?? n.id,
         aliases: [],
         tags: [],
@@ -243,7 +254,11 @@ export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
     parsed.push(parseNodeFile(path, readFileSync(path, "utf8")));
   }
   const nodes = new Map<string, GraphNode>();
-  for (const p of parsed) nodes.set(p.node.id, p.node);
+  for (const p of parsed) {
+    if (nodes.has(p.node.id))
+      throw new GraphError(`duplicate node id '${p.node.id}' in ${domain}`);
+    nodes.set(p.node.id, p.node);
+  }
   const index = buildLinkIndex(nodes.values());
   const edges: GraphEdge[] = [];
   for (const p of parsed) {
@@ -252,12 +267,15 @@ export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
     for (const t of p.seeAlso)
       edges.push({ from: p.node.id, to: resolveLink(index, t, p.node.id), type: "strong-relevance" });
   }
+  assertAcyclic(edges);
   return { domain, nodes, edges };
 }
 
 export function listDomains(dd: DataDir): string[] {
   if (!existsSync(dd.domainsDir)) return [];
   return readdirSync(dd.domainsDir, { withFileTypes: true })
+    // Binding transaction state lives under overlay, so every pre-existing
+    // directory name remains a visible legacy course key.
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();

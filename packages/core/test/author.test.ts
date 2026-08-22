@@ -36,6 +36,12 @@ describe("node serialization", () => {
     expect(parsed.node.knowledge_type).toBe("conceptual");
     expect(parsed.requires).toEqual(["alpha"]);
   });
+
+  test("preserves criteria containing YAML punctuation", () => {
+    const criterion = "can explain ratio: numerator to denominator # precisely";
+    const parsed = parseNodeFile("ratio.md", serializeNode({ id: "ratio", criterion, body: "A ratio compares quantities." }));
+    expect(parsed.node.criterion).toBe(criterion);
+  });
 });
 
 describe("domain create", () => {
