@@ -68,8 +68,15 @@ learner into CATEGORICAL evidence only. Rules:
   demonstrated-guided (applied correctly with guidance), recognized (recalled or
   identified but did not apply), failed (attempted and got it wrong),
   misconception-observed (a specific wrong belief surfaced).
+- Grade a free response with SOLO internally, then compile it into the kinds:
+  an attempted prestructural response is failed; isolated correct recall or
+  identification (unistructural/multistructural) is recognized; relational
+  correct application is demonstrated-guided or demonstrated-unaided according
+  to support; extended-abstract transfer/generalization is
+  demonstrated-unaided; a specific wrong belief is misconception-observed.
 - "observation" carries the specifics (what exactly they did, quirks,
-  misconception details). Never include numbers, scores, or degrees.
+  misconception details). Never include numbers, scores, degrees, or SOLO
+  labels.
 - Emit NOTHING for concepts that simply were not touched.
 - Return [] when nothing was demonstrated.`;
 
