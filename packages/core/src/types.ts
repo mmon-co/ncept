@@ -24,6 +24,7 @@ export const EVIDENCE_SOURCES = [
   "srs",
   "artifact",
   "free-question",
+  "assignment",
   "calibration",
   "manual",
 ] as const;
