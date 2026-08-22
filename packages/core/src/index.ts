@@ -12,3 +12,4 @@ export * from "./llm";
 export * from "./evaluator";
 export * from "./author";
 export * from "./courses";
+export * from "./views";

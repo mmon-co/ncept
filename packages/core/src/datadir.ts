@@ -4,6 +4,7 @@ import { readCardLog } from "./cards";
 import { readEvents } from "./events";
 import { listDomains, loadDomainGraph } from "./graph";
 import { ensureLocalCourse, loadBindings, recoverBindingTransaction } from "./courses";
+import { loadViewStore } from "./views";
 
 /** V2 adds opaque course artifacts, immutable revisions, and user bindings; node ids remain course-local. */
 export const STORE_FORMAT_VERSION = 2;
@@ -17,6 +18,8 @@ export interface DataDir {
   overlayDir: string;
   /** One user-level binding per adopted course. */
   bindingsFile: string;
+  /** Learner-owned tag memberships, materialized scopes, and saved set views. */
+  viewsFile: string;
   /** Durable journal for the two-directory binding install transaction. */
   bindingTransactionFile: string;
   /** Transaction-only staging/backup directories, deliberately outside user domains. */
@@ -41,6 +44,7 @@ export function resolveDataDir(root?: string): DataDir {
     coursesDir: join(r, "courses"),
     overlayDir: join(r, "overlay"),
     bindingsFile: join(r, "overlay", "course-bindings.yaml"),
+    viewsFile: join(r, "overlay", "views.yaml"),
     bindingTransactionFile: join(r, "overlay", "course-binding-transaction.yaml"),
     bindingTransactionsDir: join(r, "overlay", "course-binding-transactions"),
     eventsFile: join(r, "events.jsonl"),
@@ -81,6 +85,7 @@ export function migrateV1Store(dd: DataDir): void {
     validateStage(stage);
     for (const domain of listDomains(stage)) ensureLocalCourse(stage, domain);
     loadBindings(stage);
+    loadViewStore(stage);
     writeFileSync(marker(stage), `${STORE_FORMAT_VERSION}\n`);
 
     const backup = `${dd.root}.v1-backup`;
@@ -116,6 +121,7 @@ export function ensureDataDir(dd: DataDir): void {
   // This is user-level state, not course metadata: every store gets exactly
   // one standing personal namespace even before it adopts a hub artifact.
   loadBindings(dd);
+  loadViewStore(dd);
 }
 
 export function domainDir(dd: DataDir, domain: string): string { return join(dd.domainsDir, domain); }

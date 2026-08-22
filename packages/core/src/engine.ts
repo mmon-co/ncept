@@ -109,12 +109,15 @@ export function foldMastery(
     const graph = graphs.get(ev.domain);
     const isSuccess = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
     for (const node of ev.nodes) {
+      // Tags and other views are selectors, not graph nodes. Evidence can
+      // attach only to a current ground node; stale/foreign log rows remain
+      // readable history but cannot manufacture mastery state.
+      if (graph === undefined || !graph.nodes.has(node)) continue;
       const s = get(ev.domain, node);
       grow(s, ts, p);
       applyDirect(s, ev, p);
       s.last = ts;
 
-      if (graph === undefined || !graph.nodes.has(node)) continue;
       if (isSuccess) {
         const up = walkAncestors(graph, node, p.propagation.success_up, p.propagation.max_hops);
         for (const [anc, { factor }] of [...up.entries()].sort()) {
