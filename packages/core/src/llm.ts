@@ -1,5 +1,7 @@
 import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 
 /**
  * LLM adapter: the Vercel AI SDK, so the backend is swappable. Models are
@@ -24,7 +26,23 @@ export function registerProvider(prefix: string, factory: ProviderFactory): void
   providers.set(prefix, factory);
 }
 
-registerProvider("anthropic", (id) => createAnthropic()(id));
+export interface ProviderKeys {
+  anthropic?: string;
+  openai?: string;
+  google?: string;
+}
+
+/**
+ * Register all supported providers. Omitted keys let each SDK read its own
+ * environment variable; supplied keys explicitly take precedence.
+ */
+export function registerConfiguredProviders(keys: ProviderKeys = {}): void {
+  registerProvider("anthropic", (id) => createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id));
+  registerProvider("openai", (id) => createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id));
+  registerProvider("google", (id) => createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id));
+}
+
+registerConfiguredProviders();
 
 /** Provider prefixes resolveModel can currently serve. */
 export function registeredProviders(): string[] {

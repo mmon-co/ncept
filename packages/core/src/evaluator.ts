@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { EVIDENCE_KINDS, GRADES, VOCAB_VERSION } from "./types";
 import type { Card, DomainGraph, EvidenceEvent, EvidenceSource, Grade } from "./types";
 import { validateEvent } from "./events";
-import { complete, completeJson, fastModel } from "./llm";
+import { complete, completeJson, type LlmOptions } from "./llm";
 import { nudgeByTime } from "./grading";
 import { readDossier } from "./graph";
 import { dossierFile, type DataDir } from "./datadir";
@@ -80,11 +80,13 @@ export async function evaluateTranscript(
   sourceRef: string,
   source: EvidenceSource,
   ts: string,
+  opts: LlmOptions = {},
 ): Promise<EvidenceEvent[]> {
   const findings = await completeJson(
     CLASSIFY_RULES,
     `Domain nodes:\n${nodeCatalog(g)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
     (raw) => parseFindings(raw, g),
+    opts,
   );
   return toEvents(findings, g.domain, source, sourceRef, ts);
 }
@@ -99,6 +101,7 @@ export async function evaluateArtifact(
   artifact: string,
   sourceRef: string,
   ts: string,
+  opts: LlmOptions = {},
 ): Promise<EvidenceEvent[]> {
   const findings = await completeJson(
     CLASSIFY_RULES +
@@ -111,6 +114,7 @@ Additional rules for self-produced artifacts:
   artifact clearly shows misunderstanding rather than a typo or shortcut.`,
     `Domain nodes:\n${nodeCatalog(g)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
     (raw) => parseFindings(raw, g),
+    opts,
   );
   return toEvents(findings, g.domain, "artifact", sourceRef, ts);
 }
@@ -120,6 +124,7 @@ export async function autoGrade(
   card: Card,
   answer: string,
   responseMs: number | undefined,
+  opts: LlmOptions = {},
 ): Promise<{ grade: Grade; observation?: string }> {
   const res = await completeJson(
     `You grade a flashcard answer. Output JSON: {"grade": "again|hard|good|easy", "observation": "<only if a specific confusion/misconception is visible>"}.
@@ -140,7 +145,7 @@ Grade on semantic correctness, not exact wording. Never output anything but the 
         ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
       };
     },
-    { model: fastModel() },
+    opts,
   );
   return { ...res, grade: nudgeByTime(res.grade, responseMs) };
 }
@@ -156,6 +161,7 @@ export async function consolidateDossier(
   nodeId: string,
   events: EvidenceEvent[],
   fromScratch = false,
+  opts: LlmOptions = {},
 ): Promise<string | null> {
   const node = g.nodes.get(nodeId);
   if (node === undefined) throw new Error(`unknown node: ${nodeId}`);
@@ -177,6 +183,7 @@ their understanding. Rewrite it integrating the evidence below. Rules:
 - Write dense, specific prose a tutor can act on. No scores or numbers.
 - Markdown, no frontmatter, no title heading.`,
     `Concept: ${node.title} (${nodeId})\n\nCurrent dossier:\n${current ?? "(none yet)"}\n\nEvidence history:\n${evidenceLines || "(none)"}`,
+    opts,
   );
   const path = dossierFile(dd, g.domain, nodeId);
   if (!existsSync(dirname(path))) mkdirSync(dirname(path), { recursive: true });
