@@ -9,6 +9,12 @@ export interface DataDir {
   cardsFile: string;
   cacheFile: string;
   paramsFile: string;
+  /** Web-only persisted conversation history; harmless to core consumers. */
+  sessionsDir: string;
+  /** Web-only submitted work records; harmless to core consumers. */
+  artifactsDir: string;
+  /** Local configuration and secrets. */
+  settingsFile: string;
 }
 
 export function resolveDataDir(root?: string): DataDir {
@@ -24,6 +30,9 @@ export function resolveDataDir(root?: string): DataDir {
     cardsFile: join(r, "cards.jsonl"),
     cacheFile: join(r, "cache.sqlite"),
     paramsFile: join(r, "params.yaml"),
+    sessionsDir: join(r, "sessions"),
+    artifactsDir: join(r, "artifacts"),
+    settingsFile: join(r, "settings.json"),
   };
 }
 
