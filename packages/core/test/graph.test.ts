@@ -23,6 +23,18 @@ describe("domain graph loader", () => {
     expect(g.edges).toContainEqual({ from: "d", to: "b", type: "strong-relevance" });
   });
 
+  test("parses typed nodes and defaults legacy node files to conceptual", () => {
+    const dd = tempDataDir();
+    writeTestDomain(dd);
+    writeNode(dd, "math", "a.md", `---\nid: a\ntype: factual\n---\n# Alpha\nBase fact.\n`);
+    const g = loadDomainGraph(dd, "math");
+    expect(g.nodes.get("a")!.knowledge_type).toBe("factual");
+    expect(g.nodes.get("b")!.knowledge_type).toBe("conceptual");
+
+    writeNode(dd, "math", "a.md", `---\nid: a\ntype: dubious\n---\n# Alpha\n`);
+    expect(() => loadDomainGraph(dd, "math")).toThrow(/type must be factual, conceptual, or procedural/);
+  });
+
   test("node rename (title change) preserves references via stable id", () => {
     const dd = tempDataDir();
     writeTestDomain(dd);

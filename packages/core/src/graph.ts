@@ -7,6 +7,7 @@ import type {
   GraphEdits,
   GraphNode,
   EdgeType,
+  KnowledgeType,
 } from "./types";
 import { type DataDir, domainDir, dossierFile, graphEditsFile } from "./datadir";
 
@@ -38,6 +39,11 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
     ? fm.aliases.map(String)
     : [];
   const tags: string[] = Array.isArray(fm.tags) ? fm.tags.map(String) : [];
+  // v1 node files predate knowledge types. Conceptual is the conservative
+  // default: it neither invents a named misconception nor limits later rungs.
+  const knowledgeType = fm.type ?? "conceptual";
+  if (knowledgeType !== "factual" && knowledgeType !== "conceptual" && knowledgeType !== "procedural")
+    throw new GraphError(`${path}: frontmatter type must be factual, conceptual, or procedural`);
 
   const requires: string[] = [];
   const seeAlso: string[] = [];
@@ -59,7 +65,7 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   }
 
   return {
-    node: { id: fm.id, title, aliases, tags, file: path, body },
+    node: { id: fm.id, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, file: path, body },
     requires,
     seeAlso,
   };
@@ -170,12 +176,15 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
   const nodes = new Map(g.nodes);
   let edges = [...g.edges];
   for (const n of edits.add_nodes ?? []) {
+    if (n.knowledge_type !== undefined && n.knowledge_type !== "factual" && n.knowledge_type !== "conceptual" && n.knowledge_type !== "procedural")
+      throw new GraphError(`graph-edits: node '${n.id}' has invalid knowledge_type`);
     if (!nodes.has(n.id))
       nodes.set(n.id, {
         id: n.id,
         title: n.title ?? n.id,
         aliases: [],
         tags: [],
+        knowledge_type: n.knowledge_type ?? "conceptual",
         body: n.body ?? "",
       });
   }
@@ -218,7 +227,8 @@ export function mergeEdits(a: GraphEdits, b: GraphEdits): GraphEdits {
   };
 }
 
-function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
+/** Load only the portable course graph, without learner-local overlay edits. */
+export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
   const dir = domainDir(dd, domain);
   const parsed: ParsedNodeFile[] = [];
   for (const f of readdirSync(dir).sort()) {

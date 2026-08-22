@@ -33,11 +33,20 @@ describe("node serialization", () => {
     expect(parsed.node.title).toBe("Beta");
     expect(parsed.node.aliases).toEqual(["the beta thing"]);
     expect(parsed.node.tags).toEqual(["basics"]);
+    expect(parsed.node.knowledge_type).toBe("conceptual");
     expect(parsed.requires).toEqual(["alpha"]);
   });
 });
 
 describe("domain create", () => {
+  test("serializes and validates the node knowledge type", () => {
+    const factual = parseNodeFile("fact.md", serializeNode({ id: "fact", body: "A fact.", type: "factual" }));
+    expect(factual.node.knowledge_type).toBe("factual");
+    const dd = tempDataDir();
+    expect(() => authorDomain(dd, "demo", { nodes: [{ id: "bad", body: "x", type: "taxonomy" }] }, "create"))
+      .toThrow(/type must be factual, conceptual, or procedural/);
+  });
+
   test("creates a loadable domain from JSON specs", () => {
     const dd = tempDataDir();
     const res = authorDomain(dd, "demo", SPECS, "create");

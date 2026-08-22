@@ -56,9 +56,44 @@ export interface EvidenceEvent {
 export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
 export type EdgeType = (typeof EDGE_TYPES)[number];
 
+export const KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
+export type KnowledgeType = (typeof KNOWLEDGE_TYPES)[number];
+
+/**
+ * Type-specific assessment policy. This is metadata for emitters/selectors,
+ * not a change to graph edges or mastery propagation.
+ */
+export interface KnowledgeTypePolicy {
+  /** Success rungs that are meaningful evidence for this kind of node. */
+  allowed_rungs: readonly SuccessKind[];
+  /** The preauthored MC-item pattern required for nodes of this kind. */
+  item_template: "recall" | "slip-distractors" | "misconception-distractors";
+}
+
+export const KNOWLEDGE_TYPE_POLICIES: Readonly<Record<KnowledgeType, KnowledgeTypePolicy>> = {
+  factual: {
+    allowed_rungs: ["recognized", "recalled"],
+    item_template: "recall",
+  },
+  conceptual: {
+    allowed_rungs: ["recognized", "recalled", "used", "generalized"],
+    item_template: "misconception-distractors",
+  },
+  procedural: {
+    allowed_rungs: ["recognized", "recalled", "used", "generalized"],
+    item_template: "slip-distractors",
+  },
+};
+
+export function knowledgeTypePolicy(type: KnowledgeType): KnowledgeTypePolicy {
+  return KNOWLEDGE_TYPE_POLICIES[type];
+}
+
 export interface GraphNode {
   id: string;
   title: string;
+  /** What is being learned; controls assessment-rung and item-template policy. */
+  knowledge_type: KnowledgeType;
   aliases: string[];
   /** Organization metadata only — never affects edges, propagation, or programmes. */
   tags: string[];
@@ -79,7 +114,7 @@ export interface DomainGraph {
 }
 
 export interface GraphEdits {
-  add_nodes?: { id: string; title?: string; body?: string }[];
+  add_nodes?: { id: string; title?: string; body?: string; knowledge_type?: KnowledgeType }[];
   remove_nodes?: string[];
   add_edges?: { from: string; to: string; type: EdgeType }[];
   remove_edges?: { from: string; to: string; type: EdgeType }[];
