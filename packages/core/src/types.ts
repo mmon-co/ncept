@@ -21,7 +21,7 @@ export const FAILURE_KINDS: readonly EvidenceKind[] = ["not-recalled", "mistake"
 
 export const EVIDENCE_SOURCES = [
   "lesson",
-  "card-review",
+  "srs",
   "artifact",
   "free-question",
   "manual",

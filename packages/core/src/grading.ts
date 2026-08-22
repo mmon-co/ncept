@@ -23,7 +23,7 @@ export function reviewEvidence(
       domain: card.domain,
       nodes: card.nodes,
       kind: gradeToKind(grade),
-      source: "card-review",
+      source: "srs",
       source_ref: `card:${card.id}`,
       native_outcome: grade,
       ...(observation !== undefined ? { observation } : {}),
