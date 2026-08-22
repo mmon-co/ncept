@@ -2,6 +2,7 @@ import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 /**
  * LLM adapter: the Vercel AI SDK, so the backend is swappable. Models are
@@ -28,6 +29,9 @@ export interface ModelSpec {
   effort?: Effort;
 }
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue | undefined };
+type ProviderOptions = Record<string, { [key: string]: JsonValue | undefined }>;
+
 /**
  * Parse "provider/model-id[:effort]". The effort suffix is only recognized
  * from the closed vocabulary, so model ids with tags ("qwen3:32b") survive.
@@ -51,8 +55,8 @@ export function parseModelSpec(spec: string): ModelSpec {
     modelId = trimmed;
   }
 
-  // Find effort only after separating a legacy provider:model prefix. Otherwise
-  // a legacy model literally named "medium" would become bare anthropic + effort.
+  // Separate the legacy provider:model prefix before recognizing effort, so a
+  // legacy model literally named "medium" is not treated as bare Anthropic.
   let effort: Effort | undefined;
   const effortColon = modelId.lastIndexOf(":");
   if (effortColon !== -1 && EFFORTS.includes(modelId.slice(effortColon + 1) as Effort)) {
@@ -71,6 +75,7 @@ export function formatModelSpec(s: ModelSpec): string {
 type ProviderFactory = (modelId: string) => LanguageModel;
 
 const providers = new Map<string, ProviderFactory>();
+let configuredCustomProviders = new Set<string>();
 
 /** Register an extra backend, e.g. registerProvider("openai", createOpenAI()). */
 export function registerProvider(prefix: string, factory: ProviderFactory): void {
@@ -84,41 +89,44 @@ export interface ProviderKeys {
   openrouter?: string;
 }
 
-export interface OpenAILikeProviderConfig {
+/** A user-configured endpoint implementing the OpenAI-compatible API. */
+export interface OpenAICompatibleProviderConfig {
   url: string;
   key?: string;
 }
 
-const configuredOpenAILike = new Set<string>();
-
 /**
- * Register all supported providers. Omitted keys let each SDK read its own
- * environment variable; supplied keys explicitly take precedence.
+ * Register built-ins plus configured OpenAI-compatible endpoints. Omitted
+ * built-in keys let their SDK read its environment; supplied keys win. This
+ * replaces only previously configured custom entries, leaving manually
+ * registered test/extension providers intact.
  */
 export function registerConfiguredProviders(
   keys: ProviderKeys = {},
-  custom: Record<string, OpenAILikeProviderConfig> = {},
+  custom: Record<string, OpenAICompatibleProviderConfig> = {},
 ): void {
   registerProvider("anthropic", (id) => createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id));
   registerProvider("openai", (id) => createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id));
   registerProvider("google", (id) => createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id));
-  registerProvider("openrouter", (id) => createOpenAI({
-    name: "openrouter",
+  // OpenRouter accepts the OpenAI chat-completions dialect. Use the compatible
+  // adapter so a missing OpenRouter key never falls through to OPENAI_API_KEY,
+  // while retaining the OpenAI provider-options namespace for effort.
+  const openrouterKey = keys.openrouter ?? process.env.OPENROUTER_API_KEY;
+  const openrouter = createOpenAICompatible({
+    name: "openai",
     baseURL: "https://openrouter.ai/api/v1",
-    apiKey: keys.openrouter ?? process.env.OPENROUTER_API_KEY,
-  }).chat(id));
+    ...(openrouterKey === undefined ? {} : { apiKey: openrouterKey }),
+  });
+  registerProvider("openrouter", (id) => openrouter(id));
 
-  for (const name of configuredOpenAILike) providers.delete(name);
-  configuredOpenAILike.clear();
+  for (const name of configuredCustomProviders) providers.delete(name);
+  configuredCustomProviders = new Set(Object.keys(custom));
   for (const [name, config] of Object.entries(custom)) {
-    registerProvider(name, (id) => createOpenAI({
+    registerProvider(name, (id) => createOpenAICompatible({
       name,
       baseURL: config.url,
-      // The SDK requires a value, while local OpenAI-compatible endpoints
-      // commonly require no authentication at all.
-      apiKey: config.key ?? "not-needed",
-    }).chat(id));
-    configuredOpenAILike.add(name);
+      ...(config.key === undefined ? {} : { apiKey: config.key }),
+    })(id));
   }
 }
 
@@ -145,6 +153,28 @@ export function resolveModel(name?: string): LanguageModel {
   return resolveModelSpec(name).model;
 }
 
+/**
+ * Map the effort suffix to each provider's documented options. OpenRouter uses
+ * the OpenAI SDK adapter, so it receives the OpenAI option namespace too.
+ * Anthropic has no "minimal" effort; its documented equivalent is "low".
+ */
+export function effortProviderOptions(name?: string): ProviderOptions | undefined {
+  const { provider, effort } = parseModelSpec(name ?? defaultModel());
+  if (effort === undefined) return undefined;
+  if (provider === "anthropic") {
+    if (effort === "none") return { anthropic: { thinking: { type: "disabled" } } };
+    return {
+      anthropic: {
+        thinking: { type: "adaptive", display: "summarized" },
+        effort: effort === "minimal" ? "low" : effort,
+      },
+    };
+  }
+  if (provider === "openai" || provider === "openrouter")
+    return { openai: { reasoningEffort: effort } };
+  return undefined;
+}
+
 export function defaultModel(): string {
   return process.env.CONCEPT_MODEL ?? DEFAULT_MODEL;
 }
@@ -159,10 +189,13 @@ export async function complete(
   user: string,
   opts: LlmOptions = {},
 ): Promise<string> {
+  const spec = opts.model ?? defaultModel();
+  const providerOptions = effortProviderOptions(spec);
   const { text } = await generateText({
-    model: resolveModel(opts.model),
+    model: resolveModelSpec(spec).model,
     system,
     prompt: user,
+    ...(providerOptions !== undefined ? { providerOptions } : {}),
   });
   return text.trim();
 }
