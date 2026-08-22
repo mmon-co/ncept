@@ -5,8 +5,10 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 
 /**
  * LLM adapter: the Vercel AI SDK, so the backend is swappable. Models are
- * named "provider:model-id"; Anthropic is bundled, other providers are one
- * dependency + one registry entry away.
+ * named "provider/model-id[:effort]" (e.g. "anthropic/claude-opus-5:high",
+ * "openrouter/openai/gpt-5.1"); Anthropic is bundled, other providers are one
+ * dependency + one registry entry away. The legacy "provider:model-id" form
+ * still parses.
  *
  * Env overrides: CONCEPT_MODEL (default model), CONCEPT_FAST_MODEL (model for
  * cheap grading/summary calls; unset = default model).
@@ -15,7 +17,56 @@ export interface LlmOptions {
   model?: string;
 }
 
-export const DEFAULT_MODEL = "anthropic:claude-opus-5";
+export const DEFAULT_MODEL = "anthropic/claude-opus-5";
+
+export const EFFORTS = ["none", "minimal", "low", "medium", "high", "max"] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+export interface ModelSpec {
+  provider: string;
+  modelId: string;
+  effort?: Effort;
+}
+
+/**
+ * Parse "provider/model-id[:effort]". The effort suffix is only recognized
+ * from the closed vocabulary, so model ids with tags ("qwen3:32b") survive.
+ * Legacy "provider:model-id" (":" before any "/") and bare anthropic model
+ * ids also parse.
+ */
+export function parseModelSpec(spec: string): ModelSpec {
+  const trimmed = spec.trim();
+  const slash = trimmed.indexOf("/");
+  const legacy = trimmed.indexOf(":");
+  let provider: string;
+  let modelId: string;
+  if (legacy !== -1 && (slash === -1 || legacy < slash)) {
+    provider = trimmed.slice(0, legacy);
+    modelId = trimmed.slice(legacy + 1);
+  } else if (slash !== -1) {
+    provider = trimmed.slice(0, slash);
+    modelId = trimmed.slice(slash + 1);
+  } else {
+    provider = "anthropic";
+    modelId = trimmed;
+  }
+
+  // Find effort only after separating a legacy provider:model prefix. Otherwise
+  // a legacy model literally named "medium" would become bare anthropic + effort.
+  let effort: Effort | undefined;
+  const effortColon = modelId.lastIndexOf(":");
+  if (effortColon !== -1 && EFFORTS.includes(modelId.slice(effortColon + 1) as Effort)) {
+    effort = modelId.slice(effortColon + 1) as Effort;
+    modelId = modelId.slice(0, effortColon);
+  }
+  if (provider === "" || modelId === "") throw new Error(`unparseable model spec '${spec}'`);
+  return { provider, modelId, ...(effort !== undefined ? { effort } : {}) };
+}
+
+/** Serialize a ModelSpec back to canonical "provider/model-id[:effort]" form. */
+export function formatModelSpec(s: ModelSpec): string {
+  return `${s.provider}/${s.modelId}${s.effort !== undefined ? `:${s.effort}` : ""}`;
+}
 
 type ProviderFactory = (modelId: string) => LanguageModel;
 
@@ -30,16 +81,45 @@ export interface ProviderKeys {
   anthropic?: string;
   openai?: string;
   google?: string;
+  openrouter?: string;
 }
+
+export interface OpenAILikeProviderConfig {
+  url: string;
+  key?: string;
+}
+
+const configuredOpenAILike = new Set<string>();
 
 /**
  * Register all supported providers. Omitted keys let each SDK read its own
  * environment variable; supplied keys explicitly take precedence.
  */
-export function registerConfiguredProviders(keys: ProviderKeys = {}): void {
+export function registerConfiguredProviders(
+  keys: ProviderKeys = {},
+  custom: Record<string, OpenAILikeProviderConfig> = {},
+): void {
   registerProvider("anthropic", (id) => createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id));
   registerProvider("openai", (id) => createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id));
   registerProvider("google", (id) => createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id));
+  registerProvider("openrouter", (id) => createOpenAI({
+    name: "openrouter",
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: keys.openrouter ?? process.env.OPENROUTER_API_KEY,
+  }).chat(id));
+
+  for (const name of configuredOpenAILike) providers.delete(name);
+  configuredOpenAILike.clear();
+  for (const [name, config] of Object.entries(custom)) {
+    registerProvider(name, (id) => createOpenAI({
+      name,
+      baseURL: config.url,
+      // The SDK requires a value, while local OpenAI-compatible endpoints
+      // commonly require no authentication at all.
+      apiKey: config.key ?? "not-needed",
+    }).chat(id));
+    configuredOpenAILike.add(name);
+  }
 }
 
 registerConfiguredProviders();
@@ -49,16 +129,20 @@ export function registeredProviders(): string[] {
   return [...providers.keys()];
 }
 
-/** Resolve a "provider:model-id" string to an AI SDK model. */
-export function resolveModel(name?: string): LanguageModel {
-  const spec = name ?? defaultModel();
-  const sep = spec.indexOf(":");
-  if (sep === -1) return providers.get("anthropic")!(spec);
-  const prefix = spec.slice(0, sep);
-  const factory = providers.get(prefix);
+/** Resolve a spec to an AI SDK model plus the requested reasoning effort. */
+export function resolveModelSpec(name?: string): { model: LanguageModel; effort?: Effort } {
+  const parsed = parseModelSpec(name ?? defaultModel());
+  const factory = providers.get(parsed.provider);
   if (factory === undefined)
-    throw new Error(`unknown model provider '${prefix}' (registered: ${[...providers.keys()].join(", ")})`);
-  return factory(spec.slice(sep + 1));
+    throw new Error(
+      `unknown model provider '${parsed.provider}' (registered: ${[...providers.keys()].join(", ")})`,
+    );
+  return { model: factory(parsed.modelId), ...(parsed.effort !== undefined ? { effort: parsed.effort } : {}) };
+}
+
+/** Resolve a spec to an AI SDK model (effort, if any, is dropped — callers that honor it use resolveModelSpec). */
+export function resolveModel(name?: string): LanguageModel {
+  return resolveModelSpec(name).model;
 }
 
 export function defaultModel(): string {
