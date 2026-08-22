@@ -44,6 +44,9 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   const knowledgeType = fm.type ?? "conceptual";
   if (knowledgeType !== "factual" && knowledgeType !== "conceptual" && knowledgeType !== "procedural")
     throw new GraphError(`${path}: frontmatter type must be factual, conceptual, or procedural`);
+  if (fm.threshold !== undefined && typeof fm.threshold !== "boolean")
+    throw new GraphError(`${path}: frontmatter threshold must be a boolean`);
+  const threshold = fm.threshold ?? false;
 
   const requires: string[] = [];
   const seeAlso: string[] = [];
@@ -65,7 +68,7 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   }
 
   return {
-    node: { id: fm.id, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, file: path, body },
+    node: { id: fm.id, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, threshold, file: path, body },
     requires,
     seeAlso,
   };
@@ -178,6 +181,8 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
   for (const n of edits.add_nodes ?? []) {
     if (n.knowledge_type !== undefined && n.knowledge_type !== "factual" && n.knowledge_type !== "conceptual" && n.knowledge_type !== "procedural")
       throw new GraphError(`graph-edits: node '${n.id}' has invalid knowledge_type`);
+    if (n.threshold !== undefined && typeof n.threshold !== "boolean")
+      throw new GraphError(`graph-edits: node '${n.id}' has invalid threshold`);
     if (!nodes.has(n.id))
       nodes.set(n.id, {
         id: n.id,
@@ -185,6 +190,7 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
         aliases: [],
         tags: [],
         knowledge_type: n.knowledge_type ?? "conceptual",
+        threshold: n.threshold ?? false,
         body: n.body ?? "",
       });
   }

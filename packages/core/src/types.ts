@@ -94,6 +94,8 @@ export interface GraphNode {
   title: string;
   /** What is being learned; controls assessment-rung and item-template policy. */
   knowledge_type: KnowledgeType;
+  /** A transformative, troublesome portal worth extra authoring attention. */
+  threshold: boolean;
   aliases: string[];
   /** Organization metadata only — never affects edges, propagation, or programmes. */
   tags: string[];
@@ -114,7 +116,7 @@ export interface DomainGraph {
 }
 
 export interface GraphEdits {
-  add_nodes?: { id: string; title?: string; body?: string; knowledge_type?: KnowledgeType }[];
+  add_nodes?: { id: string; title?: string; body?: string; knowledge_type?: KnowledgeType; threshold?: boolean }[];
   remove_nodes?: string[];
   add_edges?: { from: string; to: string; type: EdgeType }[];
   remove_edges?: { from: string; to: string; type: EdgeType }[];

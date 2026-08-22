@@ -39,12 +39,16 @@ describe("node serialization", () => {
 });
 
 describe("domain create", () => {
-  test("serializes and validates the node knowledge type", () => {
-    const factual = parseNodeFile("fact.md", serializeNode({ id: "fact", body: "A fact.", type: "factual" }));
+  test("serializes and validates knowledge types and threshold flags", () => {
+    const factual = parseNodeFile("fact.md", serializeNode({ id: "fact", body: "A fact.", type: "factual", threshold: true }));
     expect(factual.node.knowledge_type).toBe("factual");
+    expect(factual.node.threshold).toBe(true);
+    expect(parseNodeFile("legacy.md", serializeNode({ id: "legacy", body: "x" })).node.threshold).toBe(false);
     const dd = tempDataDir();
     expect(() => authorDomain(dd, "demo", { nodes: [{ id: "bad", body: "x", type: "taxonomy" }] }, "create"))
       .toThrow(/type must be factual, conceptual, or procedural/);
+    expect(() => authorDomain(dd, "other", { nodes: [{ id: "bad", body: "x", threshold: "yes" }] }, "create"))
+      .toThrow(/threshold must be a boolean/);
   });
 
   test("creates a loadable domain from JSON specs", () => {

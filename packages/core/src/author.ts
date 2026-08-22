@@ -17,6 +17,8 @@ export interface NodeSpec {
   tags?: string[];
   /** Defaults to conceptual for v1-compatible authored nodes. */
   type?: KnowledgeType;
+  /** Whether this is a threshold concept deserving extra authoring attention. */
+  threshold?: boolean;
   body: string;
   requires?: string[];
   see_also?: string[];
@@ -41,6 +43,8 @@ function validateSpecShape(raw: unknown): NodeSpec[] {
         throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be a string`);
     if (o.type !== undefined && o.type !== "factual" && o.type !== "conceptual" && o.type !== "procedural")
       throw new AuthorError(`nodes[${i}] (${o.id}): type must be factual, conceptual, or procedural`);
+    if (o.threshold !== undefined && typeof o.threshold !== "boolean")
+      throw new AuthorError(`nodes[${i}] (${o.id}): threshold must be a boolean`);
     for (const k of ["aliases", "tags", "requires", "see_also"] as const)
       if (o[k] !== undefined && (!Array.isArray(o[k]) || !(o[k] as unknown[]).every((s) => typeof s === "string")))
         throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be an array of strings`);
@@ -56,6 +60,7 @@ export function serializeNode(spec: NodeSpec): string {
   if (spec.tags !== undefined && spec.tags.length > 0)
     fm.push(`tags: [${spec.tags.join(", ")}]`);
   if (spec.type !== undefined) fm.push(`type: ${spec.type}`);
+  if (spec.threshold === true) fm.push("threshold: true");
   const parts = [
     `---\n${fm.join("\n")}\n---`,
     `# ${spec.title ?? spec.id}`,
