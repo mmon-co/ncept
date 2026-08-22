@@ -6,7 +6,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
+    "ai": "latest",
+    "@ai-sdk/anthropic": "latest",
     "ts-fsrs": "^4.0.0",
     "yaml": "^2.5.0"
   },

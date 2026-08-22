@@ -1,9 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { generateText, type LanguageModel } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 
 /**
- * LLM adapter: the Anthropic API via the official SDK. Credentials resolve
- * from the environment (ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / an
- * `ant auth login` profile).
+ * LLM adapter: the Vercel AI SDK, so the backend is swappable. Models are
+ * named "provider:model-id"; Anthropic is bundled, other providers are one
+ * dependency + one registry entry away.
  *
  * Env overrides: CONCEPT_MODEL (default model), CONCEPT_FAST_MODEL (model for
  * cheap grading/summary calls; unset = default model).
@@ -12,12 +13,29 @@ export interface LlmOptions {
   model?: string;
 }
 
-export const DEFAULT_MODEL = "claude-opus-5";
+export const DEFAULT_MODEL = "anthropic:claude-opus-5";
 
-let _client: Anthropic | null = null;
-function client(): Anthropic {
-  if (_client === null) _client = new Anthropic();
-  return _client;
+type ProviderFactory = (modelId: string) => LanguageModel;
+
+const providers = new Map<string, ProviderFactory>();
+
+/** Register an extra backend, e.g. registerProvider("openai", createOpenAI()). */
+export function registerProvider(prefix: string, factory: ProviderFactory): void {
+  providers.set(prefix, factory);
+}
+
+registerProvider("anthropic", (id) => createAnthropic()(id));
+
+/** Resolve a "provider:model-id" string to an AI SDK model. */
+export function resolveModel(name?: string): LanguageModel {
+  const spec = name ?? defaultModel();
+  const sep = spec.indexOf(":");
+  if (sep === -1) return providers.get("anthropic")!(spec);
+  const prefix = spec.slice(0, sep);
+  const factory = providers.get(prefix);
+  if (factory === undefined)
+    throw new Error(`unknown model provider '${prefix}' (registered: ${[...providers.keys()].join(", ")})`);
+  return factory(spec.slice(sep + 1));
 }
 
 export function defaultModel(): string {
@@ -34,19 +52,12 @@ export async function complete(
   user: string,
   opts: LlmOptions = {},
 ): Promise<string> {
-  const response = await client().messages.create({
-    model: opts.model ?? defaultModel(),
-    max_tokens: 16000,
+  const { text } = await generateText({
+    model: resolveModel(opts.model),
     system,
-    messages: [{ role: "user", content: user }],
+    prompt: user,
   });
-  if (response.stop_reason === "refusal")
-    throw new Error("model declined the request (stop_reason: refusal)");
-  return response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
+  return text.trim();
 }
 
 /**
