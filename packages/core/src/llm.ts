@@ -26,6 +26,11 @@ export function registerProvider(prefix: string, factory: ProviderFactory): void
 
 registerProvider("anthropic", (id) => createAnthropic()(id));
 
+/** Provider prefixes resolveModel can currently serve. */
+export function registeredProviders(): string[] {
+  return [...providers.keys()];
+}
+
 /** Resolve a "provider:model-id" string to an AI SDK model. */
 export function resolveModel(name?: string): LanguageModel {
   const spec = name ?? defaultModel();
