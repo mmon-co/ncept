@@ -8,7 +8,7 @@ describe("sqlite cache", () => {
   test("rebuild from ground truth reproduces identical derived state", () => {
     const dd = tempDataDir();
     writeTestDomain(dd);
-    appendEvents(dd, [ev(), ev({ ts: "2026-08-03T09:00:00.000Z", nodes: ["c"], kind: "demonstrated-guided" })]);
+    appendEvents(dd, [ev(), ev({ ts: "2026-08-03T09:00:00.000Z", nodes: ["c"], kind: "used", support: "guided" })]);
     appendCardEntries(dd, [
       { type: "card", id: "k1", ts: "2026-08-01T10:00:00.000Z", front: "What is beta?", back: "Builds on alpha", domain: "math", nodes: ["b"] },
       { type: "review", card_id: "k1", ts: "2026-08-02T10:00:00.000Z", grade: "good", response_ms: 4200 },

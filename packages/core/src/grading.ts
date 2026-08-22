@@ -1,9 +1,9 @@
 import type { Card, EvidenceEvent, EvidenceKind, Grade } from "./types";
 import { VOCAB_VERSION } from "./types";
 
-/** Spec: grade -> evidence kind. Failing a fact probes it; passing is recognition-level. */
+/** SRS asks for retrieval: passing is recalled; no recall is the explicit floor. */
 export function gradeToKind(grade: Grade): EvidenceKind {
-  return grade === "again" ? "failed" : "recognized";
+  return grade === "again" ? "not-recalled" : "recalled";
 }
 
 /** Evidence events for a review of a node-linked card (empty when unlinked). */
@@ -12,6 +12,7 @@ export function reviewEvidence(
   grade: Grade,
   ts: string,
   observation?: string,
+  latencyMs?: number,
 ): EvidenceEvent[] {
   if (card.nodes.length === 0 || card.domain === undefined) return [];
   return [
@@ -24,7 +25,9 @@ export function reviewEvidence(
       kind: gradeToKind(grade),
       source: "card-review",
       source_ref: `card:${card.id}`,
+      native_outcome: grade,
       ...(observation !== undefined ? { observation } : {}),
+      ...(latencyMs !== undefined ? { latency_ms: latencyMs } : {}),
     },
   ];
 }

@@ -17,7 +17,7 @@ const P = DEFAULT_PARAMS;
 describe("mastery fold", () => {
   test("determinism: same log + params -> identical headers", () => {
     const g = graphs();
-    const events = [ev(), ev({ ts: "2026-08-02T12:00:00.000Z", kind: "failed", nodes: ["c"] })].map(validateEvent);
+    const events = [ev(), ev({ ts: "2026-08-02T12:00:00.000Z", kind: "not-recalled", nodes: ["c"] })].map(validateEvent);
     const h1 = foldMastery(events, g, P);
     const h2 = foldMastery(events, g, P);
     expect(JSON.stringify(h1)).toBe(JSON.stringify(h2));
@@ -29,6 +29,58 @@ describe("mastery fold", () => {
     expect(h!.estimate).toBeGreaterThan(P.initial.estimate);
     expect(h!.uncertainty).toBeLessThan(P.initial.uncertainty);
     expect(h!.last_evidenced).toBe("2026-08-01T12:00:00.000Z");
+  });
+
+  test("recognized evidence is structurally capped below mastery", () => {
+    const g = graphs();
+    const events = Array.from({ length: 100 }, (_, i) =>
+      validateEvent(ev({ ts: `2026-08-${String((i % 27) + 1).padStart(2, "0")}T12:00:00.000Z`, nodes: ["d"], kind: "recognized" })),
+    );
+    const [h] = foldMastery(events, g, P).filter((x) => x.node === "d");
+    expect(h!.estimate).toBeLessThan(P.mastery_threshold);
+    expect(h!.estimate).toBeLessThanOrEqual(P.evidence.recognized.target);
+  });
+
+  test("success targets remain hard ceilings under aggressive tuning", () => {
+    const tuned = structuredClone(P);
+    tuned.evidence.recognized.weight = 20;
+    tuned.support_weight.guided = 20;
+    const headers = foldMastery(
+      [validateEvent(ev({ nodes: ["c"], kind: "recognized", support: "guided" }))],
+      graphs(),
+      tuned,
+    );
+    expect(headers.find((h) => h.node === "c")!.estimate).toBeLessThanOrEqual(tuned.evidence.recognized.target);
+    expect(headers.find((h) => h.node === "b")!.estimate).toBeLessThanOrEqual(tuned.evidence.recognized.target);
+  });
+
+  test("a lower success rung cannot erase stronger evidence", () => {
+    const g = graphs();
+    const strong = Array.from({ length: 30 }, (_, i) =>
+      validateEvent(ev({ ts: `2026-08-${String((i % 27) + 1).padStart(2, "0")}T12:00:00.000Z`, nodes: ["d"], kind: "generalized" })),
+    );
+    const before = foldMastery(strong, g, P).find((h) => h.node === "d")!;
+    const after = foldMastery([...strong, validateEvent(ev({ ts: "2026-09-01T12:00:00.000Z", nodes: ["d"], kind: "recognized" }))], g, P)
+      .find((h) => h.node === "d")!;
+    expect(after.estimate).toBe(before.estimate);
+    expect(after.uncertainty).toBeLessThan(0.1); // it still contributes certainty after staleness growth
+  });
+
+  test("support discounts estimate but keeps the observation's uncertainty signal", () => {
+    const g = graphs();
+    const unaided = foldMastery([validateEvent(ev({ nodes: ["d"], kind: "used", support: "unaided" }))], g, P)[0]!;
+    const guided = foldMastery([validateEvent(ev({ nodes: ["d"], kind: "used", support: "guided" }))], g, P)[0]!;
+    expect(guided.estimate).toBeLessThan(unaided.estimate);
+    expect(guided.uncertainty).toBe(unaided.uncertainty);
+  });
+
+  test("mistake severity distinguishes mild slips from misconception pulls", () => {
+    const g = graphs();
+    const slip = foldMastery([validateEvent(ev({ nodes: ["d"], kind: "mistake", coarseness: "topic", severity: "slip" }))], g, P)[0]!;
+    const misconception = foldMastery([validateEvent(ev({ nodes: ["d"], kind: "mistake", coarseness: "topic", severity: "misconception", misconception_id: "bad-rule" }))], g, P)[0]!;
+    expect(slip.estimate).toBeLessThan(P.initial.estimate);
+    expect(misconception.estimate).toBeLessThan(slip.estimate);
+    expect(slip.uncertainty).toBeLessThan(P.initial.uncertainty);
   });
 
   test("downstream success re-evidences ancestors, attenuated per hop", () => {
@@ -48,7 +100,7 @@ describe("mastery fold", () => {
     const after = foldMastery(
       [
         validateEvent(ev({ nodes: ["c"] })),
-        validateEvent(ev({ ts: "2026-08-02T12:00:00.000Z", nodes: ["a"], kind: "failed" })),
+        validateEvent(ev({ ts: "2026-08-02T12:00:00.000Z", nodes: ["a"], kind: "not-recalled" })),
       ],
       g,
       P,

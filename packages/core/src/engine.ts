@@ -4,6 +4,7 @@ import {
   type EvidenceEvent,
   type MasteryHeader,
   type Params,
+  type SuccessKind,
 } from "./types";
 import { walkAncestors, walkDescendants } from "./graph";
 
@@ -31,16 +32,45 @@ function grow(s: NodeState, toMs: number, p: Params): void {
   }
 }
 
-function applyDirect(s: NodeState, kind: EvidenceEvent["kind"], p: Params): void {
-  const ep = p.evidence[kind];
-  s.estimate = clamp01(s.estimate + ep.weight * (ep.target - s.estimate));
+function supportWeight(ev: EvidenceEvent, p: Params): number {
+  return p.support_weight[ev.support ?? "unaided"];
+}
+
+function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
+  if (ev.kind === "mistake") {
+    const m = p.evidence.mistake;
+    const coarse = m.coarseness[ev.coarseness!];
+    const severity = m.severity[ev.severity!];
+    const weight = m.base_effect.weight * coarse.effect * severity.effect * supportWeight(ev, p);
+    const shrink = m.base_effect.shrink * coarse.shrink * severity.shrink;
+    s.estimate = clamp01(s.estimate - weight * s.estimate);
+    s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - shrink));
+    return;
+  }
+  const ep = p.evidence[ev.kind];
+  const weight = ep.weight * supportWeight(ev, p);
+  const success = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
+  const next = success
+    ? Math.min(ep.target, clamp01(s.estimate + weight * (ep.target - s.estimate)))
+    : clamp01(s.estimate + weight * (ep.target - s.estimate));
+  // Success targets are hard ceilings for what that rung can establish; a
+  // weaker positive observation also cannot revoke stronger prior evidence.
+  // Floors remain able to lower the estimate.
+  s.estimate = success ? Math.max(s.estimate, next) : next;
   s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - ep.shrink));
 }
 
-function applySuccessPropagation(s: NodeState, kind: EvidenceEvent["kind"], factor: number, p: Params): void {
+function applySuccessPropagation(
+  s: NodeState,
+  kind: SuccessKind,
+  factor: number,
+  support: number,
+  p: Params,
+): void {
   const ep = p.evidence[kind];
-  const w = ep.weight * factor;
-  s.estimate = clamp01(s.estimate + w * (1 - s.estimate));
+  const w = ep.weight * factor * support;
+  const next = Math.min(ep.target, clamp01(s.estimate + w * (ep.target - s.estimate)));
+  s.estimate = Math.max(s.estimate, next);
   s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - ep.shrink * factor));
 }
 
@@ -58,7 +88,7 @@ export function foldMastery(
   graphs: Map<string, DomainGraph>,
   p: Params,
 ): MasteryHeader[] {
-  const states = new Map<string, NodeState>(); // key: domain\u0000node
+  const states = new Map<string, NodeState>(); // key = domain + NUL + node
   const key = (domain: string, node: string) => `${domain}\u0000${node}`;
   const get = (domain: string, node: string): NodeState => {
     const k = key(domain, node);
@@ -77,11 +107,11 @@ export function foldMastery(
   for (const ev of sorted) {
     const ts = Date.parse(ev.ts);
     const graph = graphs.get(ev.domain);
-    const isSuccess = SUCCESS_KINDS.includes(ev.kind);
+    const isSuccess = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
     for (const node of ev.nodes) {
       const s = get(ev.domain, node);
       grow(s, ts, p);
-      applyDirect(s, ev.kind, p);
+      applyDirect(s, ev, p);
       s.last = ts;
 
       if (graph === undefined || !graph.nodes.has(node)) continue;
@@ -90,7 +120,7 @@ export function foldMastery(
         for (const [anc, { factor }] of [...up.entries()].sort()) {
           const as = get(ev.domain, anc);
           grow(as, ts, p);
-          applySuccessPropagation(as, ev.kind, factor, p);
+          applySuccessPropagation(as, ev.kind as SuccessKind, factor, supportWeight(ev, p), p);
           as.last = ts;
         }
       } else {

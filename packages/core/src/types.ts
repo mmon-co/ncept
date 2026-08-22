@@ -1,13 +1,23 @@
-export const VOCAB_VERSION = 1;
+export const VOCAB_VERSION = 2;
 
+/** Universal learner-state observations. Conditions live on the event, not here. */
 export const EVIDENCE_KINDS = [
-  "demonstrated-unaided",
-  "demonstrated-guided",
   "recognized",
-  "failed",
-  "misconception-observed",
+  "recalled",
+  "used",
+  "generalized",
+  "not-recalled",
+  "mistake",
 ] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
+export type SuccessKind = "recognized" | "recalled" | "used" | "generalized";
+export type MistakeCoarseness = "node" | "topic";
+export type MistakeSeverity = "slip" | "misconception" | "unknown";
+export type Support = "unaided" | "guided";
+
+/** Kinds whose direct evidence points toward their configured mastery ceiling. */
+export const SUCCESS_KINDS: readonly SuccessKind[] = ["recognized", "recalled", "used", "generalized"];
+export const FAILURE_KINDS: readonly EvidenceKind[] = ["not-recalled", "mistake"];
 
 export const EVIDENCE_SOURCES = [
   "lesson",
@@ -17,18 +27,6 @@ export const EVIDENCE_SOURCES = [
   "manual",
 ] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
-
-/** Kinds whose direct evidence points toward mastery (target = 1). */
-export const SUCCESS_KINDS: readonly EvidenceKind[] = [
-  "demonstrated-unaided",
-  "demonstrated-guided",
-  "recognized",
-];
-/** Kinds whose direct evidence points away from mastery (target = 0). */
-export const FAILURE_KINDS: readonly EvidenceKind[] = [
-  "failed",
-  "misconception-observed",
-];
 
 export interface EvidenceEvent {
   v: 1;
@@ -40,6 +38,19 @@ export interface EvidenceEvent {
   source: EvidenceSource;
   source_ref?: string; // transcript / card id / artifact path
   observation?: string; // freeform text destined for dossiers; never numeric input
+  /** Conditions captured for later retuning; only support is initially folded. */
+  support?: Support;
+  latency_ms?: number;
+  confidence?: number;
+  /** Native source result, e.g. option id or SOLO judgement. */
+  native_outcome?: string;
+  /** Required for mistake observations. */
+  coarseness?: MistakeCoarseness;
+  severity?: MistakeSeverity;
+  /** Required for node-coarse mistakes. */
+  confused_with?: string;
+  /** Required for misconception-severity mistakes. */
+  misconception_id?: string;
 }
 
 export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
@@ -128,15 +139,29 @@ export interface MasteryHeader {
 }
 
 export interface EvidenceParams {
-  target: 0 | 1;
+  /** The asymptotic ceiling/floor approached by this observation. */
+  target: number;
   weight: number; // fraction of the gap to close
   shrink: number; // fractional uncertainty reduction
+}
+
+export interface MistakeMultiplier {
+  effect: number;
+  shrink: number;
+}
+
+export interface MistakeParams {
+  base_effect: { weight: number; shrink: number };
+  coarseness: Record<MistakeCoarseness, MistakeMultiplier>;
+  severity: Record<MistakeSeverity, MistakeMultiplier>;
 }
 
 export interface Params {
   version: number;
   initial: { estimate: number; uncertainty: number };
-  evidence: Record<EvidenceKind, EvidenceParams>;
+  evidence: Record<SuccessKind | "not-recalled", EvidenceParams> & { mistake: MistakeParams };
+  /** Guided evidence remains the same observation, discounted by this multiplier. */
+  support_weight: Record<Support, number>;
   uncertainty_growth_per_day: number;
   min_uncertainty: number;
   mastery_threshold: number;

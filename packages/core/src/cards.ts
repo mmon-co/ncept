@@ -49,8 +49,8 @@ export function validateCardEntry(raw: unknown): CardLogEntry {
         );
       if (o.answer !== undefined && typeof o.answer !== "string")
         throw new CardValidationError("review.answer must be a string");
-      if (o.response_ms !== undefined && typeof o.response_ms !== "number")
-        throw new CardValidationError("review.response_ms must be a number");
+      if (o.response_ms !== undefined && (typeof o.response_ms !== "number" || !Number.isFinite(o.response_ms) || o.response_ms < 0))
+        throw new CardValidationError("review.response_ms must be a non-negative finite number");
       if (o.observation !== undefined && typeof o.observation !== "string")
         throw new CardValidationError("review.observation must be a string");
       return o as unknown as ReviewRecord;

@@ -19,6 +19,12 @@ interface RawFinding {
   node: string;
   kind: string;
   observation?: string;
+  support?: string;
+  native_outcome?: string;
+  coarseness?: string;
+  severity?: string;
+  confused_with?: string;
+  misconception_id?: string;
 }
 
 function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
@@ -26,13 +32,29 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
   return raw.map((f, i) => {
     if (typeof f !== "object" || f === null) throw new Error(`finding ${i}: not an object`);
     const o = f as Record<string, unknown>;
+    const allowed = new Set(["node", "kind", "observation", "support", "native_outcome", "coarseness", "severity", "confused_with", "misconception_id"]);
+    for (const key of Object.keys(o)) {
+      if (!allowed.has(key)) throw new Error(`finding ${i}: unknown field '${key}'`);
+    }
     if (typeof o.node !== "string" || !g.nodes.has(o.node))
       throw new Error(`finding ${i}: 'node' must be one of the listed node ids`);
     if (!EVIDENCE_KINDS.includes(o.kind as never))
       throw new Error(`finding ${i}: 'kind' must be one of [${EVIDENCE_KINDS.join(", ")}]`);
-    if (o.observation !== undefined && typeof o.observation !== "string")
-      throw new Error(`finding ${i}: 'observation' must be a string`);
-    return o as unknown as RawFinding;
+    for (const key of ["observation", "support", "native_outcome", "coarseness", "severity", "confused_with", "misconception_id"]) {
+      if (o[key] !== undefined && typeof o[key] !== "string")
+        throw new Error(`finding ${i}: '${key}' must be a string`);
+    }
+    return {
+      node: o.node,
+      kind: o.kind as string,
+      ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
+      ...(o.support !== undefined ? { support: o.support as string } : {}),
+      ...(o.native_outcome !== undefined ? { native_outcome: o.native_outcome as string } : {}),
+      ...(o.coarseness !== undefined ? { coarseness: o.coarseness as string } : {}),
+      ...(o.severity !== undefined ? { severity: o.severity as string } : {}),
+      ...(o.confused_with !== undefined ? { confused_with: o.confused_with as string } : {}),
+      ...(o.misconception_id !== undefined ? { misconception_id: o.misconception_id as string } : {}),
+    };
   });
 }
 
@@ -54,6 +76,12 @@ function toEvents(
       source,
       source_ref: sourceRef,
       ...(f.observation !== undefined ? { observation: f.observation } : {}),
+      ...(f.support !== undefined ? { support: f.support } : {}),
+      ...(f.native_outcome !== undefined ? { native_outcome: f.native_outcome } : {}),
+      ...(f.coarseness !== undefined ? { coarseness: f.coarseness } : {}),
+      ...(f.severity !== undefined ? { severity: f.severity } : {}),
+      ...(f.confused_with !== undefined ? { confused_with: f.confused_with } : {}),
+      ...(f.misconception_id !== undefined ? { misconception_id: f.misconception_id } : {}),
     }),
   );
 }
@@ -61,24 +89,26 @@ function toEvents(
 const CLASSIFY_RULES = `
 You are the evaluator of a tutoring system. You classify observations about a
 learner into CATEGORICAL evidence only. Rules:
-- Output a JSON array of findings: {"node": "<id>", "kind": "<kind>", "observation": "<specifics>"}.
+- Output a JSON array of findings. Each finding has {"node": "<id>", "kind":
+  "<kind>", "observation": "<specifics>", ...conditions}.
 - "node" MUST be an id from the provided node list. Only tag nodes DIRECTLY
   observed — never infer prerequisites; propagation is computed mechanically.
-- "kind" MUST be one of: demonstrated-unaided (applied correctly with no help),
-  demonstrated-guided (applied correctly with guidance), recognized (recalled or
-  identified but did not apply), failed (attempted and got it wrong),
-  misconception-observed (a specific wrong belief surfaced).
-- Grade a free response with SOLO internally, then compile it into the kinds:
-  an attempted prestructural response is failed; isolated correct recall or
-  identification (unistructural/multistructural) is recognized; relational
-  correct application is demonstrated-guided or demonstrated-unaided according
-  to support; extended-abstract transfer/generalization is
-  demonstrated-unaided; a specific wrong belief is misconception-observed.
-- "observation" carries the specifics (what exactly they did, quirks,
-  misconception details). Never include numbers, scores, degrees, or SOLO
-  labels.
-- Emit NOTHING for concepts that simply were not touched.
-- Return [] when nothing was demonstrated.`;
+- Compile response structure into the universal observations: recognized (picked
+  out from options), recalled (produced a fact/statement), used (correctly
+  applied it), generalized (transferred or abstracted it), or not-recalled (no
+  meaningful retrieval). Free-response SOLO-style judging maps relational use
+  to used and extended-abstract transfer to generalized.
+- A wrong attempted answer is kind mistake and MUST include coarseness (node for
+  whole-concept confusion, topic for a local error) and severity
+  (slip|misconception|unknown). Node-coarse mistakes MUST include confused_with;
+  misconception mistakes MUST include misconception_id. Use unknown rather than
+  inventing a diagnosis.
+- Include support: unaided|guided whenever the transcript shows it. native_outcome
+  may preserve the source's own judgement (such as a SOLO level). latency and
+  confidence are not inferred by this evaluator.
+- "observation" carries specifics; never include numbers, scores, or degrees.
+- Emit NOTHING for concepts that simply were not touched. Return [] when nothing
+  was demonstrated.`;
 
 /** Post-session transcript evaluation (spec: evaluator / post-lesson evaluation). */
 export async function evaluateTranscript(
@@ -89,13 +119,14 @@ export async function evaluateTranscript(
   ts: string,
   opts: LlmOptions = {},
 ): Promise<EvidenceEvent[]> {
-  const findings = await completeJson(
+  return completeJson(
     CLASSIFY_RULES,
     `Domain nodes:\n${nodeCatalog(g)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
-    (raw) => parseFindings(raw, g),
+    // Event validation is inside completeJson so an invalid structured mistake
+    // triggers the normal repair retry instead of escaping after generation.
+    (raw) => toEvents(parseFindings(raw, g), g.domain, source, sourceRef, ts),
     opts,
   );
-  return toEvents(findings, g.domain, source, sourceRef, ts);
 }
 
 /**
@@ -110,20 +141,20 @@ export async function evaluateArtifact(
   ts: string,
   opts: LlmOptions = {},
 ): Promise<EvidenceEvent[]> {
-  const findings = await completeJson(
+  return completeJson(
     CLASSIFY_RULES +
       `
 Additional rules for self-produced artifacts:
-- The learner produced this on their own: correct use of a concept is
-  demonstrated-unaided.
+- The learner produced this on their own: correct application is used with
+  support: unaided.
 - ABSENCE of a concept from the artifact is NOT evidence — emit nothing for it.
-- Errors may be sloppiness: only emit failed/misconception-observed when the
-  artifact clearly shows misunderstanding rather than a typo or shortcut.`,
+- Errors may be sloppiness: emit mistake only when the artifact clearly shows
+  misunderstanding rather than a typo or shortcut; use severity unknown unless
+  a slip or named misconception is actually evidenced.`,
     `Domain nodes:\n${nodeCatalog(g)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
-    (raw) => parseFindings(raw, g),
+    (raw) => toEvents(parseFindings(raw, g), g.domain, "artifact", sourceRef, ts),
     opts,
   );
-  return toEvents(findings, g.domain, "artifact", sourceRef, ts);
 }
 
 /** LLM fuzzy grader for --auto review mode. Returns grade + optional observation. */
@@ -157,6 +188,25 @@ Grade on semantic correctness, not exact wording. Never output anything but the 
   return { ...res, grade: nudgeByTime(res.grade, responseMs) };
 }
 
+/** Render all recorded evidence and structured diagnostics for dossier input. */
+export function dossierEvidenceLines(events: EvidenceEvent[]): string {
+  return events
+    .map((e) => {
+      const conditions = [
+        e.support !== undefined ? `support=${e.support}` : undefined,
+        e.latency_ms !== undefined ? `latency_ms=${e.latency_ms}` : undefined,
+        e.confidence !== undefined ? `confidence=${e.confidence}` : undefined,
+        e.native_outcome !== undefined ? `native_outcome=${e.native_outcome}` : undefined,
+        e.coarseness !== undefined ? `coarseness=${e.coarseness}` : undefined,
+        e.severity !== undefined ? `severity=${e.severity}` : undefined,
+        e.confused_with !== undefined ? `confused_with=${e.confused_with}` : undefined,
+        e.misconception_id !== undefined ? `misconception_id=${e.misconception_id}` : undefined,
+      ].filter((value): value is string => value !== undefined);
+      return `- [${e.ts} ${e.kind} via ${e.source}${conditions.length > 0 ? `; ${conditions.join(", ")}` : ""}] ${e.observation ?? "(no notes)"}`;
+    })
+    .join("\n");
+}
+
 /**
  * Dossier consolidation (spec): merge observations into the curated dossier,
  * preserving misconception specifics. Non-destructive: events stay in the log,
@@ -176,9 +226,7 @@ export async function consolidateDossier(
     (e) => e.domain === g.domain && e.nodes.includes(nodeId),
   );
   const current = fromScratch ? null : readDossier(dd, g.domain, nodeId);
-  const evidenceLines = relevant
-    .map((e) => `- [${e.ts} ${e.kind} via ${e.source}] ${e.observation ?? "(no notes)"}`)
-    .join("\n");
+  const evidenceLines = dossierEvidenceLines(relevant);
   if (relevant.length === 0 && current === null) return null;
 
   const text = await complete(
