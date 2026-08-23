@@ -262,6 +262,29 @@ function revisions(dd: DataDir, id: CourseId): PublishedCourseVersion[] {
     .map((entry) => loadPublishedCourse(dd, id, entry.name)).sort((a, b) => compare(a.version, b.version));
 }
 
+/** Package state used by the desk; availability is limited to locally known revisions. */
+export interface CourseReadState {
+  course_id: CourseId;
+  domain: string;
+  version: string | null;
+  update_available: boolean;
+  draft: boolean;
+}
+
+export function courseReadState(dd: DataDir, domain: string): CourseReadState {
+  const local = ensureLocalCourse(dd, domain);
+  const binding = loadBindings(dd).bindings.find((item) => item.domain === domain);
+  if (binding === undefined) return { course_id: local.id, domain, version: null, update_available: false, draft: true };
+  const latest = revisions(dd, binding.course_id).at(-1)?.version;
+  return {
+    course_id: binding.course_id,
+    domain,
+    version: binding.version,
+    update_available: latest !== undefined && compare(latest, binding.version) > 0,
+    draft: false,
+  };
+}
+
 /** Enforce course-local identity: criteria/types never change in place; structure is minor, prose is patch. */
 export function validateCourseRevision(previous: PublishedCourseVersion, next: PublishedCourseVersion): void {
   if (previous.course_id !== next.course_id) throw new CourseError("course artifact identity cannot change");

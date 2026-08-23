@@ -35,6 +35,14 @@ test("learner tag algebra and materialized programme closures are membership-onl
   expect([...evaluateTagExpression(dd, { tag: "user:focus" }).keys()]).toHaveLength(2);
   expect([...evaluateTagExpression(dd, { difference: [{ tag: "user:focus" }, { tag: "user:later" }] }).values()]).toEqual([a]);
 
+  // A marquee selection is a literal, pinned set: it composes without
+  // manufacturing a learner tag and keeps its exact scoped identities.
+  saveView(dd, "selection", { name: "Selection", expression: { nodes: [a, c] } });
+  expect([...evaluateTagExpression(dd, { nodes: [a, c] }).values()]).toEqual([a, c]);
+  expect([...evaluateTagExpression(dd, { union: [{ nodes: [a, c] }, { tag: "user:later" }] }).values()]).toEqual([a, c, b]);
+  expect([...evaluateTagExpression(dd, { intersection: [{ nodes: [a, c] }, { tag: "user:focus" }] }).values()]).toEqual([a]);
+  expect([...evaluateTagExpression(dd, { difference: [{ nodes: [a, c] }, { tag: "user:focus" }] }).values()]).toEqual([c]);
+
   const snapshot = createMaterializedTag(dd, "toward-c", { kind: "programme-closure", target: c });
   expect(snapshot.members).toEqual([a, b, c]);
   // A later adopted edge changes a re-run, not the existing denominator.
@@ -57,5 +65,7 @@ test("views reject unknown ground nodes and undefined tags", () => {
   const course = ensureLocalCourse(dd, "math");
   expect(() => applyUserTag(dd, "focus", { course_id: course.id, node_id: "missing" })).toThrow(/unknown ground node/);
   expect(() => saveView(dd, "bad", { name: "Bad", expression: { tag: "user:missing" } })).toThrow(/unknown tag/);
+  expect(() => saveView(dd, "literal-bad", { name: "Bad literal", expression: { nodes: [{ course_id: course.id, node_id: "missing" }] } })).toThrow(/unknown ground node/);
+  expect(() => saveView(dd, "literal-dupe", { name: "Duplicate literal", expression: { nodes: [{ course_id: course.id, node_id: "a" }, { course_id: course.id, node_id: "a" }] } })).toThrow(/duplicate members/);
   expect(foldMastery([validateEvent(ev({ domain: "math", nodes: ["user:focus"] }))], new Map([["math", loadDomainGraph(dd, "math")]]), DEFAULT_PARAMS)).toEqual([]);
 });

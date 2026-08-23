@@ -13,6 +13,8 @@ export interface ScopedNodeRef {
 
 /** Set algebra is deliberately data-only: membership is never an inference input. */
 export type TagExpression =
+  /** A pinned extensional selection; unlike a snapshot tag it has no query or refresh. */
+  | { nodes: ScopedNodeRef[] }
   | { tag: string }
   | { union: TagExpression[] }
   | { intersection: TagExpression[] }
@@ -70,6 +72,12 @@ function parseExpression(value: unknown, label = "expression"): TagExpression {
   const keys = Object.keys(raw);
   if (keys.length !== 1) throw new ViewError(`${label} must have exactly one set operation`);
   if (typeof raw.tag === "string") return { tag: raw.tag };
+  if (keys[0] === "nodes") {
+    if (!Array.isArray(raw.nodes)) throw new ViewError(`${label}.nodes must be an array`);
+    const nodes = raw.nodes.map((item, index) => parseRef(item, `${label}.nodes[${index}]`));
+    if (new Set(nodes.map(key)).size !== nodes.length) throw new ViewError(`${label}.nodes has duplicate members`);
+    return { nodes };
+  }
   const list = (op: "union" | "intersection"): TagExpression => {
     if (!Array.isArray(raw[op]) || raw[op].length === 0) throw new ViewError(`${label}.${op} must be a non-empty array`);
     return { [op]: raw[op].map((item, index) => parseExpression(item, `${label}.${op}[${index}]`)) } as TagExpression;
@@ -222,6 +230,15 @@ export function membersForTag(dd: DataDir, tag: string, store = loadViewStore(dd
 }
 
 export function evaluateTagExpression(dd: DataDir, expression: TagExpression, store = loadViewStore(dd)): Map<string, ScopedNodeRef> {
+  if ("nodes" in expression) {
+    // Like frozen snapshot members, pinned selection refs survive overlay removal
+    // as unavailable members; an explicit abandonment removes them from views.
+    const scopes = courseScopes(dd);
+    return byKey(expression.nodes.filter((ref) => {
+      const scope = scopes.get(ref.course_id);
+      return scope === undefined || !abandonedNodes(dd, scope.domain).has(ref.node_id);
+    }));
+  }
   if ("tag" in expression) return membersForTag(dd, expression.tag, store);
   if ("union" in expression) return byKey(expression.union.flatMap((child) => [...evaluateTagExpression(dd, child, store).values()]));
   if ("intersection" in expression) {
@@ -232,11 +249,12 @@ export function evaluateTagExpression(dd: DataDir, expression: TagExpression, st
   return byKey([...from!.entries()].filter(([member]) => !remove!.has(member)).map(([, ref]) => ref));
 }
 
-function assertKnownTags(dd: DataDir, expression: TagExpression, store: ViewStore): void {
+function assertKnownExpression(dd: DataDir, expression: TagExpression, store: ViewStore): void {
+  if ("nodes" in expression) { expression.nodes.forEach((ref) => assertGround(dd, ref)); return; }
   if ("tag" in expression) { membersForTag(dd, expression.tag, store); return; }
-  if ("union" in expression) expression.union.forEach((child) => assertKnownTags(dd, child, store));
-  else if ("intersection" in expression) expression.intersection.forEach((child) => assertKnownTags(dd, child, store));
-  else expression.difference.forEach((child) => assertKnownTags(dd, child, store));
+  if ("union" in expression) expression.union.forEach((child) => assertKnownExpression(dd, child, store));
+  else if ("intersection" in expression) expression.intersection.forEach((child) => assertKnownExpression(dd, child, store));
+  else expression.difference.forEach((child) => assertKnownExpression(dd, child, store));
 }
 
 export function applyUserTag(dd: DataDir, id: string, ref: ScopedNodeRef, present = true): void {
@@ -297,7 +315,7 @@ export function saveView(dd: DataDir, id: string, input: { name: string; express
   if (typeof input.name !== "string" || input.name.trim() === "") throw new ViewError("view name must be non-empty");
   const store = loadViewStore(dd);
   const view: SavedView = { id, name: input.name.trim(), expression: parseExpression(input.expression) };
-  assertKnownTags(dd, view.expression, store);
+  assertKnownExpression(dd, view.expression, store);
   const index = store.views.findIndex((item) => item.id === id);
   if (index === -1) store.views.push(view);
   else store.views[index] = view;
