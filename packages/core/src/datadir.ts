@@ -5,6 +5,7 @@ import { readEvents } from "./events";
 import { listDomains, loadDomainGraph } from "./graph";
 import { ensureLocalCourse, loadBindings, recoverBindingTransaction } from "./courses";
 import { loadViewStore } from "./views";
+import { loadSpecStore } from "./specs";
 
 /** V2 adds opaque course artifacts, immutable revisions, and user bindings; node ids remain course-local. */
 export const STORE_FORMAT_VERSION = 2;
@@ -20,6 +21,8 @@ export interface DataDir {
   bindingsFile: string;
   /** Learner-owned tag memberships, materialized scopes, and saved set views. */
   viewsFile: string;
+  /** User-level mastery specs, resolutions, coverage judgments, and splices. Never exported as a course package. */
+  specsFile: string;
   /** Durable journal for the two-directory binding install transaction. */
   bindingTransactionFile: string;
   /** Transaction-only staging/backup directories, deliberately outside user domains. */
@@ -45,6 +48,7 @@ export function resolveDataDir(root?: string): DataDir {
     overlayDir: join(r, "overlay"),
     bindingsFile: join(r, "overlay", "course-bindings.yaml"),
     viewsFile: join(r, "overlay", "views.yaml"),
+    specsFile: join(r, "overlay", "specs.yaml"),
     bindingTransactionFile: join(r, "overlay", "course-binding-transaction.yaml"),
     bindingTransactionsDir: join(r, "overlay", "course-binding-transactions"),
     eventsFile: join(r, "events.jsonl"),
@@ -122,6 +126,7 @@ export function ensureDataDir(dd: DataDir): void {
   // one standing personal namespace even before it adopts a hub artifact.
   loadBindings(dd);
   loadViewStore(dd);
+  loadSpecStore(dd);
 }
 
 export function domainDir(dd: DataDir, domain: string): string { return join(dd.domainsDir, domain); }

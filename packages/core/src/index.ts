@@ -13,3 +13,4 @@ export * from "./evaluator";
 export * from "./author";
 export * from "./courses";
 export * from "./views";
+export * from "./specs";
