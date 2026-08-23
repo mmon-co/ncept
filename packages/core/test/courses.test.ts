@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import YAML from "yaml";
 import {
   bindCourse,
+  confirmCorrespondence,
   ensureDataDir,
   ensureLocalCourse,
   loadBindings,
@@ -10,12 +12,118 @@ import {
   loadDomainGraphRaw,
   loadPublishedCourse,
   publishCourse,
+  readHeaders,
+  rebuildCache,
+  resolveCorrespondences,
   resolveDataDir,
+  writeCourseDerivation,
 } from "../src";
 import { authorDomain } from "../src/author";
 import { tempDataDir, writeNode } from "./helpers";
 
 describe("course-local artifacts", () => {
+  test("derivation writer rejects duplicate lineage and links", () => {
+    const dd = tempDataDir();
+    authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
+    authorDomain(dd, "derived", { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] }, "create");
+    const base = ensureLocalCourse(dd, "base");
+    const derived = ensureLocalCourse(dd, "derived");
+    const link = { from: { course_id: base.id, node: "base" }, to: { course_id: derived.id, node: "derived" }, weight: 0.5 };
+    expect(() => writeCourseDerivation(dd, "derived", { based_on: [base.id, base.id], correspondences: [link] })).toThrow(/duplicate based_on/);
+    expect(() => writeCourseDerivation(dd, "derived", { based_on: [base.id], correspondences: [link, link] })).toThrow(/duplicate correspondences/);
+  });
+
+  test("malformed derivations fail closed and a failed second adoption rolls back", () => {
+    const dd = tempDataDir();
+    authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
+    const base = ensureLocalCourse(dd, "base");
+    publishCourse(dd, "base", "1.0.0");
+    bindCourse(dd, base.id, "1.0.0", "base-copy");
+    authorDomain(dd, "derived", { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] }, "create");
+    const derived = ensureLocalCourse(dd, "derived");
+    writeCourseDerivation(dd, "derived", {
+      based_on: [base.id],
+      correspondences: [{ from: { course_id: base.id, node: "base" }, to: { course_id: derived.id, node: "derived" }, weight: 0.5 }],
+    });
+    publishCourse(dd, "derived", "1.0.0");
+    const revisionPath = join(dd.coursesDir, derived.id, "versions", "1.0.0", "revision.yaml");
+    const revision = YAML.parse(readFileSync(revisionPath, "utf8")) as { derivation: { correspondences: { from: { node: string }; to: { node: string } }[] } };
+    revision.derivation.correspondences[0]!.to.node = "missing";
+    writeFileSync(revisionPath, YAML.stringify(revision));
+    expect(() => loadPublishedCourse(dd, derived.id, "1.0.0")).toThrow(/unknown local node/);
+    // A foreign endpoint cannot be proven until both artifacts are adopted;
+    // the prospective store validation must still undo this attempted install.
+    revision.derivation.correspondences[0]!.to.node = "derived";
+    revision.derivation.correspondences[0]!.from.node = "missing-foreign";
+    writeFileSync(revisionPath, YAML.stringify(revision));
+    expect(() => bindCourse(dd, derived.id, "1.0.0", "derived-copy")).toThrow(/unknown pinned node/);
+    expect(loadBindings(dd).bindings.map((binding) => binding.domain)).toEqual(["base-copy"]);
+    expect(existsSync(join(dd.domainsDir, "derived-copy"))).toBe(false);
+  });
+
+  test("conflicting authored weights reject the second adoption regardless of order", () => {
+    const dd = tempDataDir();
+    authorDomain(dd, "first", { nodes: [{ id: "first", type: "conceptual", body: "First." }] }, "create");
+    authorDomain(dd, "second", { nodes: [{ id: "second", type: "conceptual", body: "Second." }] }, "create");
+    const first = ensureLocalCourse(dd, "first");
+    const second = ensureLocalCourse(dd, "second");
+    writeCourseDerivation(dd, "first", {
+      based_on: [second.id],
+      correspondences: [{ from: { course_id: first.id, node: "first" }, to: { course_id: second.id, node: "second" }, weight: 0.4 }],
+    });
+    writeCourseDerivation(dd, "second", {
+      based_on: [first.id],
+      correspondences: [{ from: { course_id: first.id, node: "first" }, to: { course_id: second.id, node: "second" }, weight: 0.6 }],
+    });
+    publishCourse(dd, "first", "1.0.0");
+    publishCourse(dd, "second", "1.0.0");
+    bindCourse(dd, first.id, "1.0.0", "first-copy");
+    expect(() => bindCourse(dd, second.id, "1.0.0", "second-copy")).toThrow(/conflicting authored correspondence weights/);
+    expect(loadBindings(dd).bindings.map((binding) => binding.domain)).toEqual(["first-copy"]);
+    expect(existsSync(join(dd.domainsDir, "second-copy"))).toBe(false);
+  });
+
+  test("published derivation metadata ships author-declared correspondences", () => {
+    const dd = tempDataDir();
+    authorDomain(dd, "base", { nodes: [{ id: "rule", type: "conceptual", body: "Base rule." }] }, "create");
+    const base = ensureLocalCourse(dd, "base");
+    publishCourse(dd, "base", "1.0.0");
+    authorDomain(dd, "derived", { nodes: [{ id: "rule", type: "conceptual", body: "Derived rule." }] }, "create");
+    const derived = ensureLocalCourse(dd, "derived");
+    writeCourseDerivation(dd, "derived", {
+      based_on: [base.id],
+      correspondences: [{ from: { course_id: base.id, node: "rule" }, to: { course_id: derived.id, node: "rule" }, weight: 0.6 }],
+    });
+    publishCourse(dd, "derived", "1.0.0");
+    bindCourse(dd, base.id, "1.0.0", "base-copy");
+    bindCourse(dd, derived.id, "1.0.0", "derived-copy");
+    expect(resolveCorrespondences(dd)).toEqual([{ from: { domain: "base-copy", node: "rule" }, to: { domain: "derived-copy", node: "rule" }, weight: 0.6 }]);
+  });
+
+  test("confirmed correspondences resolve course-local endpoints and replay derived mastery", () => {
+    const dd = tempDataDir();
+    authorDomain(dd, "source", { nodes: [{ id: "same", type: "conceptual", body: "Source concept." }] }, "create");
+    authorDomain(dd, "target", { nodes: [{ id: "same", type: "conceptual", body: "Target concept." }] }, "create");
+    const source = ensureLocalCourse(dd, "source");
+    const target = ensureLocalCourse(dd, "target");
+    publishCourse(dd, "source", "1.0.0");
+    publishCourse(dd, "target", "1.0.0");
+    bindCourse(dd, source.id, "1.0.0", "source-copy");
+    bindCourse(dd, target.id, "1.0.0", "target-copy");
+    const link = { from: { course_id: source.id, node: "same" }, to: { course_id: target.id, node: "same" }, weight: 0.4 };
+    confirmCorrespondence(dd, link);
+    expect(resolveCorrespondences(dd)).toEqual([{ from: { domain: "source-copy", node: "same" }, to: { domain: "target-copy", node: "same" }, weight: 0.4 }]);
+    const bindingsBeforeInvalidConfirmation = readFileSync(dd.bindingsFile, "utf8");
+    expect(() => confirmCorrespondence(dd, {
+      from: { course_id: source.id, node: "missing" }, to: { course_id: target.id, node: "same" }, weight: 0.4,
+    })).toThrow(/unknown pinned node/);
+    expect(readFileSync(dd.bindingsFile, "utf8")).toBe(bindingsBeforeInvalidConfirmation);
+    writeFileSync(dd.eventsFile, `${JSON.stringify({ v: 1, vocab_version: 2, ts: "2026-08-01T12:00:00.000Z", domain: "source-copy", nodes: ["same"], kind: "used", source: "manual" })}\n`);
+    rebuildCache(dd);
+    expect(readHeaders(dd, "target-copy")[0]?.estimate).toBeGreaterThan(0.1);
+    expect(() => confirmCorrespondence(dd, { ...link, weight: 2 })).toThrow(/weight/);
+  });
+
   test("publishes immutable versions and enforces local criterion/revision rules", () => {
     const dd = tempDataDir();
     authorDomain(dd, "linear-algebra", {

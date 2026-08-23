@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import YAML from "yaml";
 import { domainDir, type DataDir } from "./datadir";
 import { assertAcyclic, buildLinkIndex, GraphError, loadDomainGraphRaw, parseNodeFile } from "./graph";
-import type { GraphEdge, GraphNode } from "./types";
+import type { CorrespondenceLink, GraphEdge, GraphNode, ResolvedCorrespondenceLink } from "./types";
 
 /** Opaque registry-style artifact handle. It deliberately carries no course semantics. */
 export type CourseId = `course-${string}`;
@@ -20,6 +20,8 @@ export interface PublishedCourseVersion {
   /** Directory alias at publication time; attachment payloads use it only for validation. */
   domain: string;
   version: string;
+  /** Versioned author declaration for a course derived from other artifacts. */
+  derivation: { based_on: CourseId[]; correspondences: CorrespondenceLink[] };
   nodes: { id: string; criterion: string; knowledge_type: string; deprecated: boolean }[];
   edges: { from: string; to: string; type: string }[];
 }
@@ -30,8 +32,8 @@ export interface CourseBinding {
   /** The installed local working copy; retained while historical evidence refers to it. */
   domain: string;
   abandoned_nodes: string[];
-  /** Owned by the correspondence layer; deliberately opaque at this boundary. */
-  correspondence_confirmations: unknown[];
+  /** Learner-confirmed directed cross-course links, stored in the overlay. */
+  correspondence_confirmations: CorrespondenceLink[];
 }
 
 export interface Bindings {
@@ -91,6 +93,50 @@ export function loadLocalCourse(dd: DataDir, domain: string): LocalCourse {
   return { id: raw.id, domain };
 }
 
+/** Declare the versioned lineage and directed links a derived course ships with. */
+export function writeCourseDerivation(dd: DataDir, domain: string, raw: unknown): void {
+  const local = ensureLocalCourse(dd, domain);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CourseError("course derivation must be an object");
+  const value = raw as Record<string, unknown>;
+  if (!Array.isArray(value.based_on) || !Array.isArray(value.correspondences))
+    throw new CourseError("course derivation needs based_on and correspondences arrays");
+  value.based_on.forEach(assertCourseId);
+  if (new Set(value.based_on).size !== value.based_on.length)
+    throw new CourseError("course derivation has duplicate based_on course ids");
+  const links = value.correspondences.map(validateCorrespondence);
+  if (new Set(links.map(correspondenceKey)).size !== links.length)
+    throw new CourseError("course derivation has duplicate correspondences");
+  for (const link of links) {
+    if (link.from.course_id !== local.id && link.to.course_id !== local.id)
+      throw new CourseError("course derivation correspondence must reference this course");
+    const foreign = link.from.course_id === local.id ? link.to.course_id : link.from.course_id;
+    if (!value.based_on.includes(foreign)) throw new CourseError(`course derivation needs based_on ${foreign}`);
+  }
+  writeFileSync(localCourseFile(dd, domain), YAML.stringify({
+    id: local.id, domain, based_on: [...value.based_on].sort(),
+    correspondences: links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))),
+  }));
+}
+
+function localDerivation(dd: DataDir, domain: string): { based_on: CourseId[]; correspondences: CorrespondenceLink[] } {
+  const raw = YAML.parse(readFileSync(localCourseFile(dd, domain), "utf8")) ?? {};
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CourseError("course metadata must be an object");
+  const value = raw as Record<string, unknown>;
+  const based_on = value.based_on === undefined ? [] : value.based_on;
+  const correspondences = value.correspondences === undefined ? [] : value.correspondences;
+  if (!Array.isArray(based_on)) throw new CourseError("course based_on must be an array");
+  based_on.forEach(assertCourseId);
+  if (!Array.isArray(correspondences)) throw new CourseError("course correspondences must be an array");
+  const links = correspondences.map(validateCorrespondence);
+  const seen = new Set<string>();
+  for (const link of links) {
+    const key = correspondenceKey(link);
+    if (seen.has(key)) throw new CourseError("duplicate course correspondence");
+    seen.add(key);
+  }
+  return { based_on: [...based_on].sort(), correspondences: links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))) };
+}
+
 function snapshot(dd: DataDir, domain: string, version: string): PublishedCourseVersion {
   const local = ensureLocalCourse(dd, domain);
   const graph = loadDomainGraphRaw(dd, domain);
@@ -98,6 +144,7 @@ function snapshot(dd: DataDir, domain: string, version: string): PublishedCourse
     course_id: local.id,
     domain,
     version,
+    derivation: localDerivation(dd, domain),
     nodes: [...graph.nodes.values()].map((node) => ({
       id: node.id,
       criterion: node.criterion,
@@ -116,6 +163,15 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   const value = raw as Record<string, unknown>;
   if (value.course_id !== id || typeof value.domain !== "string" || value.domain === "" || value.version !== version || !Array.isArray(value.nodes) || !Array.isArray(value.edges))
     throw new CourseError(`${path}: invalid immutable course revision`);
+  const rawDerivation = value.derivation === undefined ? { based_on: [], correspondences: [] } : value.derivation;
+  if (typeof rawDerivation !== "object" || rawDerivation === null || Array.isArray(rawDerivation)) throw new CourseError(`${path}: invalid course derivation`);
+  const derivation = rawDerivation as Record<string, unknown>;
+  if (!Array.isArray(derivation.based_on) || !Array.isArray(derivation.correspondences)) throw new CourseError(`${path}: invalid course derivation`);
+  derivation.based_on.forEach(assertCourseId);
+  const basedOn = [...derivation.based_on].sort();
+  if (new Set(basedOn).size !== basedOn.length) throw new CourseError(`${path}: duplicate based_on course`);
+  const correspondences = derivation.correspondences.map(validateCorrespondence).sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b)));
+  if (new Set(correspondences.map(correspondenceKey)).size !== correspondences.length) throw new CourseError(`${path}: duplicate course correspondence`);
   if (value.nodes.length === 0) throw new CourseError(`${path}: published course must contain nodes`);
   const nodeIds = new Set<string>();
   const nodes = value.nodes.map((rawNode, index) => {
@@ -128,6 +184,18 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
     nodeIds.add(node.id);
     return { id: node.id, criterion: node.criterion, knowledge_type: node.knowledge_type, deprecated: node.deprecated };
   });
+  // A declaration is self-contained enough to reject malformed immutable
+  // packages before adoption: it must describe this revision's own node and
+  // identify every foreign artifact in its declared lineage.
+  for (const link of correspondences) {
+    if (link.from.course_id !== id && link.to.course_id !== id)
+      throw new CourseError(`${path}: course correspondence is unrelated to this course`);
+    const own = link.from.course_id === id ? link.from : link.to;
+    const foreign = link.from.course_id === id ? link.to.course_id : link.from.course_id;
+    if (!nodeIds.has(own.node)) throw new CourseError(`${path}: course correspondence references an unknown local node '${own.node}'`);
+    if (!basedOn.includes(foreign as CourseId))
+      throw new CourseError(`${path}: course correspondence is missing based_on metadata for ${foreign}`);
+  }
   const edgeIds = new Set<string>();
   const edges = value.edges.map((rawEdge, index) => {
     if (typeof rawEdge !== "object" || rawEdge === null || Array.isArray(rawEdge)) throw new CourseError(`${path}: edges[${index}] must be an object`);
@@ -141,7 +209,7 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   });
   try { assertAcyclic(edges as GraphEdge[]); }
   catch (error) { throw new CourseError(`${path}: ${error instanceof Error ? error.message : String(error)}`); }
-  return { course_id: id, domain: value.domain, version, nodes, edges };
+  return { course_id: id, domain: value.domain, version, derivation: { based_on: basedOn, correspondences }, nodes, edges };
 }
 
 function snapshotGraph(dd: DataDir, id: CourseId, version: string): { nodes: Map<string, GraphNode>; edges: GraphEdge[] } {
@@ -254,6 +322,30 @@ export function publishCourse(dd: DataDir, domain: string, version: string): Pub
   return next;
 }
 
+function correspondenceKey(link: CorrespondenceLink): string {
+  return `${link.from.course_id}\u0000${link.from.node}\u0000${link.to.course_id}\u0000${link.to.node}`;
+}
+
+function validateCorrespondence(raw: unknown): CorrespondenceLink {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CourseError("correspondence must be an object");
+  const link = raw as Record<string, unknown>;
+  const endpoint = (value: unknown, label: string): { course_id: CourseId; node: string } => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new CourseError(`correspondence ${label} must be an object`);
+    const endpoint = value as Record<string, unknown>;
+    assertCourseId(endpoint.course_id);
+    if (typeof endpoint.node !== "string" || endpoint.node.trim() === "") throw new CourseError(`correspondence ${label} node must be a non-empty string`);
+    return { course_id: endpoint.course_id, node: endpoint.node };
+  };
+  const from = endpoint(link.from, "from");
+  const to = endpoint(link.to, "to");
+  if (from.course_id === to.course_id) throw new CourseError("correspondence endpoints must belong to different courses");
+  if (typeof link.weight !== "number" || !Number.isFinite(link.weight) || link.weight <= 0 || link.weight > 1)
+    throw new CourseError("correspondence weight must be a finite number in (0, 1]");
+  if (Object.keys(link).some((key) => key !== "from" && key !== "to" && key !== "weight"))
+    throw new CourseError("correspondence has unknown fields");
+  return { from, to, weight: link.weight };
+}
+
 function validateBindings(raw: unknown): Bindings {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CourseError("bindings must be an object");
   const value = raw as Record<string, unknown>;
@@ -272,7 +364,13 @@ function validateBindings(raw: unknown): Bindings {
     if (!Array.isArray(binding.correspondence_confirmations)) throw new CourseError("binding correspondence_confirmations must be an array");
     if (seen.has(binding.course_id)) throw new CourseError(`multiple bindings for ${binding.course_id}`);
     seen.add(binding.course_id);
-    return binding as unknown as CourseBinding;
+    return {
+      course_id: binding.course_id,
+      version: binding.version,
+      domain: binding.domain,
+      abandoned_nodes: [...binding.abandoned_nodes],
+      correspondence_confirmations: binding.correspondence_confirmations.map(validateCorrespondence),
+    };
   });
   return { v: 1, personal_namespace: value.personal_namespace, bindings };
 }
@@ -368,10 +466,12 @@ export function validateCourseStore(dd: DataDir): void {
   }
   const bindings = loadBindings(dd);
   const domains = new Set<string>();
+  const revisionsByCourse = new Map<CourseId, PublishedCourseVersion>();
   for (const binding of bindings.bindings) {
     if (domains.has(binding.domain)) throw new CourseError(`multiple bindings use domain '${binding.domain}'`);
     domains.add(binding.domain);
     const revision = loadPublishedCourse(dd, binding.course_id, binding.version);
+    revisionsByCourse.set(binding.course_id, revision);
     const ids = new Set(revision.nodes.map((node) => node.id));
     for (const id of binding.abandoned_nodes)
       if (!ids.has(id)) throw new CourseError(`binding ${binding.course_id}@${binding.version} abandons unknown node '${id}'`);
@@ -384,6 +484,99 @@ export function validateCourseStore(dd: DataDir): void {
     if (!sameGraphAsRevision(installed, revision))
       throw new CourseError(`binding ${binding.course_id}@${binding.version} does not match its pinned revision`);
   }
+  const authoredGrades = new Map<string, number>();
+  for (const [, revision] of revisionsByCourse) for (const link of revision.derivation.correspondences) {
+    for (const endpoint of [link.from, link.to]) {
+      const endpointRevision = revisionsByCourse.get(endpoint.course_id as CourseId);
+      if (endpointRevision !== undefined && !endpointRevision.nodes.some((node) => node.id === endpoint.node))
+        throw new CourseError("author correspondence references an unknown pinned node");
+    }
+    const key = correspondenceKey(link);
+    const prior = authoredGrades.get(key);
+    if (prior !== undefined && prior !== link.weight)
+      throw new CourseError(`conflicting authored correspondence weights for ${key}`);
+    authoredGrades.set(key, link.weight);
+  }
+  const seenLinks = new Set<string>();
+  for (const binding of bindings.bindings) for (const link of binding.correspondence_confirmations) {
+    const from = revisionsByCourse.get(link.from.course_id as CourseId);
+    const to = revisionsByCourse.get(link.to.course_id as CourseId);
+    if (from === undefined || to === undefined) throw new CourseError("correspondence endpoints must be adopted courses");
+    if (!from.nodes.some((node) => node.id === link.from.node) || !to.nodes.some((node) => node.id === link.to.node))
+      throw new CourseError("correspondence references an unknown pinned node");
+    const key = correspondenceKey(link);
+    if (seenLinks.has(key)) throw new CourseError("duplicate correspondence");
+    seenLinks.add(key);
+  }
+}
+
+/** All confirmed learner links, in deterministic endpoint order. */
+export function listCorrespondences(dd: DataDir): CorrespondenceLink[] {
+  const links = loadBindings(dd).bindings.flatMap((binding) => binding.correspondence_confirmations);
+  return links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b)));
+}
+
+/** Resolve confirmed course identities to the currently installed local aliases. */
+export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[] {
+  validateCourseStore(dd);
+  const bindings = loadBindings(dd).bindings;
+  const domains = new Map(bindings.map((binding) => [binding.course_id, binding.domain]));
+  // Author declarations are immutable revision metadata. They are active only
+  // when both artifacts are adopted; user confirmations remain in the overlay.
+  const authored = bindings.flatMap((binding) => loadPublishedCourse(dd, binding.course_id, binding.version).derivation.correspondences)
+    .filter((link) => domains.has(link.from.course_id as CourseId) && domains.has(link.to.course_id as CourseId));
+  // An explicit learner confirmation may revise an author-provided starting
+  // grade for the same directed endpoints.
+  const links = [...listCorrespondences(dd), ...authored];
+  const seen = new Set<string>();
+  return links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))).flatMap((link) => {
+    const key = correspondenceKey(link);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{
+      from: { domain: domains.get(link.from.course_id as CourseId)!, node: link.from.node },
+      to: { domain: domains.get(link.to.course_id as CourseId)!, node: link.to.node },
+      weight: link.weight,
+    }];
+  });
+}
+
+/** Persist one user-confirmed link; its effect is derived solely by cache replay. */
+export function confirmCorrespondence(dd: DataDir, raw: unknown): CorrespondenceLink {
+  const link = validateCorrespondence(raw);
+  const bindings = loadBindings(dd);
+  const source = bindings.bindings.find((binding) => binding.course_id === link.from.course_id);
+  const target = bindings.bindings.find((binding) => binding.course_id === link.to.course_id);
+  if (source === undefined || target === undefined)
+    throw new CourseError("correspondence endpoints must be adopted courses");
+  if (bindings.bindings.some((binding) => binding.correspondence_confirmations.some((item) => correspondenceKey(item) === correspondenceKey(link))))
+    throw new CourseError("duplicate correspondence");
+  // Reject invalid endpoints against the prospective store before persisting
+  // anything. The post-write store validation remains a comprehensive guard.
+  const sourceRevision = loadPublishedCourse(dd, source.course_id, source.version);
+  const targetRevision = loadPublishedCourse(dd, target.course_id, target.version);
+  if (!sourceRevision.nodes.some((node) => node.id === link.from.node) ||
+      !targetRevision.nodes.some((node) => node.id === link.to.node))
+    throw new CourseError("correspondence references an unknown pinned node");
+  target.correspondence_confirmations.push(link);
+  const links = target.correspondence_confirmations;
+  writeBindings(dd, bindings);
+  try { validateCourseStore(dd); } catch (error) { target.correspondence_confirmations = links.filter((item) => item !== link); writeBindings(dd, bindings); throw error; }
+  return link;
+}
+
+/** Remove a confirmed directed link. This never edits evidence records. */
+export function removeCorrespondence(dd: DataDir, raw: unknown): void {
+  const link = validateCorrespondence(raw);
+  const bindings = loadBindings(dd);
+  let removed = false;
+  for (const binding of bindings.bindings) {
+    const before = binding.correspondence_confirmations.length;
+    binding.correspondence_confirmations = binding.correspondence_confirmations.filter((item) => correspondenceKey(item) !== correspondenceKey(link));
+    removed ||= before !== binding.correspondence_confirmations.length;
+  }
+  if (!removed) throw new CourseError("unknown correspondence");
+  writeBindings(dd, bindings);
 }
 
 function assertDomain(domain: string): void {
@@ -590,6 +783,9 @@ export function bindCourse(dd: DataDir, courseId: CourseId, version: string, dom
     // Ensure the installed directory is exactly the revision just pinned, not
     // merely a matching artifact id written by a caller.
     if (!sameGraphAsRevision(loadDomainGraphRaw(dd, domain), revision)) throw new CourseError("installed course differs from selected revision");
+    // Validate the prospective complete package/binding set while the install
+    // journal can still restore both the old directory and binding bytes.
+    validateCourseStore(dd);
   } catch (error) {
     bindings.bindings = bindings.bindings.filter((item) => item !== binding);
     writeBindings(dd, bindings);

@@ -23,6 +23,14 @@ describe("mastery fold", () => {
     expect(JSON.stringify(h1)).toBe(JSON.stringify(h2));
   });
 
+  test("stale or foreign evidence rows remain history without manufacturing headers", () => {
+    const headers = foldMastery([
+      validateEvent(ev({ domain: "gone", nodes: ["node"] })),
+      validateEvent(ev({ domain: "math", nodes: ["gone"] })),
+    ], graphs(), P);
+    expect(headers).toEqual([]);
+  });
+
   test("direct evidence moves estimate toward target and shrinks uncertainty", () => {
     const g = graphs();
     const [h] = foldMastery([validateEvent(ev({ nodes: ["d"] }))], g, P).filter((x) => x.node === "d");
@@ -92,6 +100,127 @@ describe("mastery fold", () => {
     expect(get("a").estimate).toBeGreaterThan(P.initial.estimate);
     expect(get("c").estimate).toBeGreaterThan(get("b").estimate);
     expect(get("b").estimate).toBeGreaterThan(get("a").estimate);
+  });
+
+  test("directed graded correspondences transfer without synthesizing reverse evidence", () => {
+    const source = graphs().get("math")!;
+    const target = structuredClone(source);
+    target.domain = "physics";
+    const links = [{ from: { domain: "math", node: "d" }, to: { domain: "physics", node: "a" }, weight: 0.5 }];
+    const headers = foldMastery([validateEvent(ev({ domain: "math", nodes: ["d"], kind: "used" }))], new Map([
+      ["math", source], ["physics", target],
+    ]), P, links);
+    const transferred = headers.find((header) => header.domain === "physics" && header.node === "a")!;
+    const direct = headers.find((header) => header.domain === "math" && header.node === "d")!;
+    expect(transferred.estimate).toBeGreaterThan(P.initial.estimate);
+    expect(transferred.estimate).toBeLessThan(direct.estimate);
+    // Transfer relation is deliberately uncertain; direct target evidence may
+    // subsequently reduce this state without a synthetic target event.
+    expect(transferred.uncertainty).toBe(P.initial.uncertainty);
+    expect(headers.some((header) => header.domain === "physics" && header.node === "d")).toBe(false);
+  });
+
+  test("zero attenuation disables paths without creating evidenced headers or correspondence bridges", () => {
+    const source = graphs().get("math")!;
+    const target = structuredClone(source);
+    target.domain = "physics";
+    const tuned = structuredClone(P);
+    tuned.propagation.success_up.dependency = 0;
+    tuned.propagation.success_up["strong-relevance"] = 0;
+    const headers = foldMastery(
+      [validateEvent(ev({ nodes: ["c"], kind: "used" }))],
+      new Map([["math", source], ["physics", target]]),
+      tuned,
+      [{ from: { domain: "math", node: "a" }, to: { domain: "physics", node: "a" }, weight: 0.5 }],
+    );
+    expect(headers.map(({ domain, node }) => `${domain}/${node}`)).toEqual(["math/c"]);
+  });
+
+  test("an equally strong local path wins a tie with transferred evidence", () => {
+    const math = graphs().get("math")!;
+    const other = structuredClone(math);
+    other.domain = "aaa";
+    const header = foldMastery(
+      [validateEvent(ev({ nodes: ["c"], kind: "used" }))],
+      new Map([["math", math], ["aaa", other]]),
+      P,
+      [
+        { from: { domain: "math", node: "c" }, to: { domain: "aaa", node: "c" }, weight: 0.5 },
+        { from: { domain: "aaa", node: "c" }, to: { domain: "math", node: "a" }, weight: 0.5 },
+      ],
+    ).find((item) => item.domain === "math" && item.node === "a")!;
+    // math/c -> math/b -> math/a and the two-link transfer path both have
+    // factor 0.25. The ordinary local support should preserve its certainty.
+    expect(header.uncertainty).toBeLessThan(P.initial.uncertainty);
+  });
+
+  test("non-binary rounding ties still prefer a local effective path", () => {
+    const math = graphs().get("math")!;
+    math.edges = [
+      { from: "d", to: "c", type: "dependency" },
+      { from: "c", to: "b", type: "strong-relevance" },
+      { from: "b", to: "a", type: "dependency" },
+    ];
+    const other = structuredClone(math);
+    other.domain = "aaa";
+    const tuned = structuredClone(P);
+    tuned.propagation.max_hops = 3;
+    tuned.propagation.success_up.dependency = 0.1;
+    tuned.propagation.success_up["strong-relevance"] = 0.3;
+    const header = foldMastery(
+      [validateEvent(ev({ nodes: ["d"], kind: "used" }))],
+      new Map([["math", math], ["aaa", other]]),
+      tuned,
+      [
+        // 0.1 * 0.1 * 0.3, mathematically equal to the local
+        // 0.1 * 0.3 * 0.1 path but not necessarily bit-identical.
+        { from: { domain: "math", node: "d" }, to: { domain: "aaa", node: "d" }, weight: 0.1 },
+        { from: { domain: "aaa", node: "c" }, to: { domain: "math", node: "a" }, weight: 0.3 },
+      ],
+    ).find((item) => item.domain === "math" && item.node === "a")!;
+    expect(header.uncertainty).toBeLessThan(tuned.initial.uncertainty);
+  });
+
+  test("later transfer does not erase certainty established by direct target evidence", () => {
+    const source = graphs().get("math")!;
+    const target = structuredClone(source);
+    target.domain = "physics";
+    const direct = validateEvent(ev({ domain: "physics", nodes: ["a"], kind: "used" }));
+    const transferred = validateEvent(ev({ ts: "2026-08-02T12:00:00.000Z", domain: "math", nodes: ["d"], kind: "used" }));
+    const header = foldMastery(
+      [direct, transferred],
+      new Map([["math", source], ["physics", target]]),
+      P,
+      [{ from: { domain: "math", node: "d" }, to: { domain: "physics", node: "a" }, weight: 0.5 }],
+    ).find((item) => item.domain === "physics" && item.node === "a")!;
+    expect(header.uncertainty).toBeLessThan(P.initial.uncertainty);
+  });
+
+  test("effective-graph walks cross local and correspondence paths without looping cycles", () => {
+    const source = graphs().get("math")!;
+    const target = structuredClone(source);
+    target.domain = "physics";
+    const third = structuredClone(source);
+    third.domain = "chemistry";
+    const links = [
+      // c reaches a through its local prerequisite chain, then crosses into
+      // physics c and continues through that course's prerequisites.
+      { from: { domain: "math", node: "a" }, to: { domain: "physics", node: "c" }, weight: 0.5 },
+      // A second directed correspondence demonstrates a multi-course path.
+      { from: { domain: "physics", node: "a" }, to: { domain: "chemistry", node: "d" }, weight: 0.5 },
+      // Cyclic input is bounded and does not manufacture another source hit.
+      { from: { domain: "chemistry", node: "d" }, to: { domain: "math", node: "c" }, weight: 1 },
+    ];
+    const tuned = structuredClone(P);
+    tuned.propagation.max_hops = 6;
+    const headers = foldMastery([validateEvent(ev({ domain: "math", nodes: ["c"], kind: "used" }))], new Map([
+      ["math", source], ["physics", target], ["chemistry", third],
+    ]), tuned, links);
+    expect(headers.find((header) => header.domain === "physics" && header.node === "a")?.estimate).toBeGreaterThan(P.initial.estimate);
+    expect(headers.find((header) => header.domain === "chemistry" && header.node === "d")?.estimate).toBeGreaterThan(P.initial.estimate);
+    expect(JSON.stringify(headers)).toBe(JSON.stringify(foldMastery([validateEvent(ev({ domain: "math", nodes: ["c"], kind: "used" }))], new Map([
+      ["math", source], ["physics", target], ["chemistry", third],
+    ]), tuned, links)));
   });
 
   test("upstream failure bumps descendant uncertainty weaker than success-up, estimate untouched", () => {

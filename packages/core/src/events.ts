@@ -80,6 +80,10 @@ function eventObject(raw: unknown): EventObject {
     );
   if (o.source_ref !== undefined && typeof o.source_ref !== "string")
     throw new EventValidationError("source_ref must be a string");
+  // Inferred observations are auditable record mining, never synthetic
+  // transfer evidence. Keep the supporting learner record with the event.
+  if (o.source === "record-mining" && (typeof o.source_ref !== "string" || o.source_ref.trim() === ""))
+    throw new EventValidationError("record-mining evidence requires a non-empty source_ref");
   if (o.observation !== undefined && typeof o.observation !== "string")
     throw new EventValidationError("observation must be a string");
   if (o.support !== undefined && o.support !== "unaided" && o.support !== "guided")

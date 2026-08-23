@@ -26,6 +26,8 @@ export const EVIDENCE_SOURCES = [
   "free-question",
   "assignment",
   "calibration",
+  /** User-confirmed inference from a cited session, artifact, or dossier. */
+  "record-mining",
   "manual",
 ] as const;
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
@@ -57,6 +59,30 @@ export interface EvidenceEvent {
 
 export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
 export type EdgeType = (typeof EDGE_TYPES)[number];
+
+/** A node reference is meaningful only beside its opaque course artifact id. */
+export interface CourseNodeRef {
+  course_id: string;
+  node: string;
+}
+
+/**
+ * Learner-confirmed, directed cross-course relation. It intentionally is not a
+ * GraphEdge: authored graph edges remain local to one course.
+ */
+export interface CorrespondenceLink {
+  from: CourseNodeRef;
+  to: CourseNodeRef;
+  /** Confidence/strength in (0, 1]; scales transferred fold effects. */
+  weight: number;
+}
+
+/** A correspondence after course ids have been resolved to installed aliases. */
+export interface ResolvedCorrespondenceLink {
+  from: { domain: string; node: string };
+  to: { domain: string; node: string };
+  weight: number;
+}
 
 export const KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
 export type KnowledgeType = (typeof KNOWLEDGE_TYPES)[number];

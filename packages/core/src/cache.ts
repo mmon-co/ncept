@@ -8,6 +8,7 @@ import { materializeCards, readCardLog, reviewsByCard } from "./cards";
 import { foldMastery } from "./engine";
 import { loadParams } from "./params";
 import { deriveSchedulerState } from "./scheduler";
+import { resolveCorrespondences } from "./courses";
 
 const SCHEMA = `
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -45,7 +46,9 @@ export function rebuildCache(dd: DataDir): { headers: number; cards: number } {
   for (const d of listDomains(dd)) graphs.set(d, loadDomainGraph(dd, d));
 
   const events = readEvents(dd);
-  const headers = foldMastery(events, graphs, params);
+  // Confirmed correspondences are ground truth in the learner overlay. They
+  // alter only this replayed state; no transfer event is ever appended.
+  const headers = foldMastery(events, graphs, params, resolveCorrespondences(dd));
 
   const cardLog = readCardLog(dd);
   const cards = materializeCards(cardLog);

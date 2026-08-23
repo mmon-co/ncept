@@ -4,16 +4,22 @@ import {
   type EvidenceEvent,
   type MasteryHeader,
   type Params,
+  type ResolvedCorrespondenceLink,
   type SuccessKind,
 } from "./types";
 import { walkAncestors, walkDescendants } from "./graph";
 
 const MS_PER_DAY = 86_400_000;
+// Path products of user-configured decimal factors can differ by one ULP solely
+// from edge order. Treat those as the same effective grade/provenance tie.
+const FACTOR_EPSILON = 1e-12;
 
 interface NodeState {
   estimate: number;
   uncertainty: number;
   last: number | null; // epoch ms of last update
+  /** Direct target evidence must not be made less certain by later transfer. */
+  directlyEvidenced: boolean;
 }
 
 function clamp01(x: number): number {
@@ -80,13 +86,26 @@ function applyFailurePropagation(s: NodeState, factor: number, p: Params): void 
 }
 
 /**
- * Deterministic fold: (events, params, graphs) -> mastery headers.
+ * A correspondence is relation metadata, not an observation of its target.
+ * It therefore moves the estimate with its graded weight but deliberately
+ * retains high uncertainty; direct target evidence can then dominate quickly.
+ */
+function applyTransferredSuccess(s: NodeState, kind: SuccessKind, factor: number, support: number, p: Params): void {
+  const ep = p.evidence[kind];
+  const next = Math.min(ep.target, clamp01(s.estimate + ep.weight * factor * support * (ep.target - s.estimate)));
+  s.estimate = Math.max(s.estimate, next);
+  s.uncertainty = Math.max(s.uncertainty, p.initial.uncertainty);
+}
+
+/**
+ * Deterministic fold: (events, params, graphs, confirmed links) -> mastery headers.
  * Uses only event timestamps, never the wall clock, so replays are exact.
  */
 export function foldMastery(
   events: EvidenceEvent[],
   graphs: Map<string, DomainGraph>,
   p: Params,
+  correspondences: ResolvedCorrespondenceLink[] = [],
 ): MasteryHeader[] {
   const states = new Map<string, NodeState>(); // key = domain + NUL + node
   const key = (domain: string, node: string) => `${domain}\u0000${node}`;
@@ -94,7 +113,7 @@ export function foldMastery(
     const k = key(domain, node);
     let s = states.get(k);
     if (s === undefined) {
-      s = { estimate: p.initial.estimate, uncertainty: p.initial.uncertainty, last: null };
+      s = { estimate: p.initial.estimate, uncertainty: p.initial.uncertainty, last: null, directlyEvidenced: false };
       states.set(k, s);
     }
     return s;
@@ -103,37 +122,87 @@ export function foldMastery(
   const sorted = [...events].sort((a, b) =>
     a.ts === b.ts ? 0 : Date.parse(a.ts) - Date.parse(b.ts),
   );
+  interface Path { domain: string; node: string; factor: number; hops: number; transferred: boolean; }
+  const adjacency = (success: boolean): Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]> => {
+    const result = new Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]>();
+    const add = (from: string, edge: { domain: string; node: string; factor: number; transferred: boolean }) =>
+      result.set(from, [...(result.get(from) ?? []), edge]);
+    for (const [domain, graph] of graphs) for (const edge of graph.edges) {
+      const factor = success ? p.propagation.success_up[edge.type] : p.propagation.failure_down[edge.type];
+      // Success travels from a demonstrated dependent to its prerequisites;
+      // failure travels in the reverse direction to cast downstream suspicion.
+      add(key(domain, success ? edge.from : edge.to), { domain, node: success ? edge.to : edge.from, factor, transferred: false });
+    }
+    for (const link of correspondences) {
+      if (!graphs.get(link.from.domain)?.nodes.has(link.from.node) || !graphs.get(link.to.domain)?.nodes.has(link.to.node)) continue;
+      add(key(link.from.domain, link.from.node), { domain: link.to.domain, node: link.to.node, factor: link.weight, transferred: true });
+    }
+    for (const edges of result.values()) edges.sort((a, b) =>
+      `${a.domain}\u0000${a.node}`.localeCompare(`${b.domain}\u0000${b.node}`),
+    );
+    return result;
+  };
+  const successAdjacency = adjacency(true);
+  const failureAdjacency = adjacency(false);
+
+  /** Strongest bounded effective-graph path per target; cycles cannot re-evidence a node. */
+  const walkEffective = (domain: string, node: string, success: boolean): Path[] => {
+    const best = new Map<string, Path>();
+    const start: Path = { domain, node, factor: 1, hops: 0, transferred: false };
+    best.set(key(domain, node), start);
+    const queue = [start];
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index]!;
+      if (current.hops >= p.propagation.max_hops) continue;
+      for (const edge of (success ? successAdjacency : failureAdjacency).get(key(current.domain, current.node)) ?? []) {
+        const candidate: Path = {
+          domain: edge.domain, node: edge.node, factor: current.factor * edge.factor,
+          hops: current.hops + 1, transferred: current.transferred || edge.transferred,
+        };
+        // A zero attenuation disables this path. It must not create a header or
+        // become a bridge to a later correspondence edge.
+        if (candidate.factor <= 0) continue;
+        const candidateKey = key(candidate.domain, candidate.node);
+        const prior = best.get(candidateKey);
+        if (prior !== undefined) {
+          const tiedFactor = Math.abs(prior.factor - candidate.factor) <= FACTOR_EPSILON;
+          const priorIsBetter = prior.factor > candidate.factor + FACTOR_EPSILON ||
+            (tiedFactor && (prior.hops < candidate.hops ||
+              (prior.hops === candidate.hops && (!prior.transferred || candidate.transferred))));
+          if (priorIsBetter) continue;
+        }
+        best.set(candidateKey, candidate);
+        queue.push(candidate);
+      }
+    }
+    best.delete(key(domain, node));
+    return [...best.values()].sort((a, b) => key(a.domain, a.node).localeCompare(key(b.domain, b.node)));
+  };
 
   for (const ev of sorted) {
     const ts = Date.parse(ev.ts);
     const graph = graphs.get(ev.domain);
     const isSuccess = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
     for (const node of ev.nodes) {
-      // Tags and other views are selectors, not graph nodes. Evidence can
-      // attach only to a current ground node; stale/foreign log rows remain
-      // readable history but cannot manufacture mastery state.
+      // Historical logs remain readable after a course/node disappears, but
+      // stale evidence must never manufacture a derived header.
       if (graph === undefined || !graph.nodes.has(node)) continue;
       const s = get(ev.domain, node);
       grow(s, ts, p);
       applyDirect(s, ev, p);
       s.last = ts;
-
-      if (isSuccess) {
-        const up = walkAncestors(graph, node, p.propagation.success_up, p.propagation.max_hops);
-        for (const [anc, { factor }] of [...up.entries()].sort()) {
-          const as = get(ev.domain, anc);
-          grow(as, ts, p);
-          applySuccessPropagation(as, ev.kind as SuccessKind, factor, supportWeight(ev, p), p);
-          as.last = ts;
-        }
-      } else {
-        const down = walkDescendants(graph, node, p.propagation.failure_down, p.propagation.max_hops);
-        for (const [desc, { factor }] of [...down.entries()].sort()) {
-          const ds = get(ev.domain, desc);
-          grow(ds, ts, p);
-          applyFailurePropagation(ds, factor, p);
-          ds.last = ts;
-        }
+      s.directlyEvidenced = true;
+      for (const path of walkEffective(ev.domain, node, isSuccess)) {
+        const target = get(path.domain, path.node);
+        grow(target, ts, p);
+        if (isSuccess) {
+          if (path.transferred) {
+            const priorUncertainty = target.uncertainty;
+            applyTransferredSuccess(target, ev.kind as SuccessKind, path.factor, supportWeight(ev, p), p);
+            if (target.directlyEvidenced) target.uncertainty = priorUncertainty;
+          } else applySuccessPropagation(target, ev.kind as SuccessKind, path.factor, supportWeight(ev, p), p);
+        } else applyFailurePropagation(target, path.factor, p);
+        target.last = ts;
       }
     }
   }
