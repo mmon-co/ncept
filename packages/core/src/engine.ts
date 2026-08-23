@@ -7,7 +7,7 @@ import {
   type ResolvedCorrespondenceLink,
   type SuccessKind,
 } from "./types";
-import { walkAncestors, walkDescendants } from "./graph";
+import { walkAncestors } from "./graph";
 
 const MS_PER_DAY = 86_400_000;
 // Path products of user-configured decimal factors can differ by one ULP solely

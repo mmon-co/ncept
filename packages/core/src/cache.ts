@@ -2,7 +2,8 @@ import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
 import type { DataDir } from "./datadir";
 import type { DomainGraph, MasteryHeader, Params } from "./types";
-import { listDomains, loadDomainGraph } from "./graph";
+import { loadDomainGraph } from "./graph";
+import { adoptedDomains } from "./courses";
 import { readEvents } from "./events";
 import { materializeCards, readCardLog, reviewsByCard } from "./cards";
 import { foldMastery } from "./engine";
@@ -43,7 +44,10 @@ CREATE TABLE scheduler (
 export function rebuildCache(dd: DataDir): { headers: number; cards: number } {
   const params = loadParams(dd);
   const graphs = new Map<string, DomainGraph>();
-  for (const d of listDomains(dd)) graphs.set(d, loadDomainGraph(dd, d));
+  // Only the learner's adopted course set supplies inference assertions.
+  // Historical events for unadopted courses remain append-only records, but
+  // cannot manufacture current derived mastery until their course is adopted.
+  for (const d of adoptedDomains(dd)) graphs.set(d, loadDomainGraph(dd, d));
 
   const events = readEvents(dd);
   // Confirmed correspondences are ground truth in the learner overlay. They

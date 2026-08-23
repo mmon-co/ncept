@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import YAML from "yaml";
 import { domainDir, type DataDir } from "./datadir";
-import { assertAcyclic, buildLinkIndex, GraphError, loadDomainGraphRaw, parseNodeFile } from "./graph";
+import { assertAcyclic, buildLinkIndex, GraphError, listDomains, loadDomainGraphRaw, parseNodeFile } from "./graph";
 import type { CorrespondenceLink, GraphEdge, GraphNode, ResolvedCorrespondenceLink } from "./types";
 
 /** Opaque registry-style artifact handle. It deliberately carries no course semantics. */
@@ -384,6 +384,44 @@ export function loadBindings(dd: DataDir): Bindings {
   return validateBindings(YAML.parse(readFileSync(dd.bindingsFile, "utf8")) ?? {});
 }
 function writeBindings(dd: DataDir, bindings: Bindings): void { writeFileSync(dd.bindingsFile, YAML.stringify(bindings)); }
+
+/**
+ * The personal namespace and each installed binding form the learner's adopted
+ * course set. Unpublished local working copies remain personal material until
+ * they are packaged; published source copies are not silently adopted merely
+ * because they happen to be present in the local store.
+ */
+export function adoptedDomains(dd: DataDir): string[] {
+  const bindings = loadBindings(dd);
+  const boundDomains = new Set(bindings.bindings.map((binding) => binding.domain));
+  return listDomains(dd).filter((domain) => {
+    if (boundDomains.has(domain)) return true;
+    const local = ensureLocalCourse(dd, domain);
+    if (local.id === bindings.personal_namespace) return true;
+    return !existsSync(join(dd.coursesDir, local.id, "versions"));
+  });
+}
+
+/** Binding-local abandonment changes presentation and routing, never graph assertions. */
+export function abandonedNodes(dd: DataDir, domain: string): Set<string> {
+  const binding = loadBindings(dd).bindings.find((item) => item.domain === domain);
+  return new Set(binding?.abandoned_nodes ?? []);
+}
+
+/** Toggle a node in an adopted artifact without touching its evidence or edges. */
+export function setNodeAbandoned(dd: DataDir, domain: string, node: string, abandoned = true): CourseBinding {
+  const bindings = loadBindings(dd);
+  const binding = bindings.bindings.find((item) => item.domain === domain);
+  if (binding === undefined) throw new CourseError(`domain '${domain}' is not an adopted course binding`);
+  const revision = loadPublishedCourse(dd, binding.course_id, binding.version);
+  if (!revision.nodes.some((item) => item.id === node)) throw new CourseError(`unknown node '${node}' in adopted course '${domain}'`);
+  const ids = new Set(binding.abandoned_nodes);
+  if (abandoned) ids.add(node);
+  else ids.delete(node);
+  binding.abandoned_nodes = [...ids].sort();
+  writeBindings(dd, bindings);
+  return binding;
+}
 
 interface BindingTransaction {
   v: 1;

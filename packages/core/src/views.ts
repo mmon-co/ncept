@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import { ensureLocalCourse, loadBindings, type CourseId } from "./courses";
+import { abandonedNodes, adoptedDomains, ensureLocalCourse, loadBindings, type CourseId } from "./courses";
 import { loadDomainGraph } from "./graph";
 import type { DataDir } from "./datadir";
 
@@ -141,13 +141,21 @@ function writeStore(dd: DataDir, store: ViewStore): void {
 }
 
 /** One live representative per course; a binding wins over an authoring copy. */
-export interface CourseScope { course_id: CourseId; domain: string; nodes: Set<string>; edges: { from: string; to: string; type: string }[]; }
+export interface CourseScope {
+  course_id: CourseId;
+  domain: string;
+  /** All adopted ground nodes; abandonment never erases this identity or edges. */
+  nodes: Set<string>;
+  /** Nodes visible in views and eligible as routing/query targets. */
+  visible_nodes: Set<string>;
+  edges: { from: string; to: string; type: string }[];
+}
 
 export function courseScopes(dd: DataDir): Map<CourseId, CourseScope> {
   const preferred = new Map(loadBindings(dd).bindings.map((binding) => [binding.course_id, binding.domain]));
   const candidates = new Map<CourseId, { domain: string; preferred: boolean }[]>();
   if (!existsSync(dd.domainsDir)) return new Map();
-  for (const domain of readdirSync(dd.domainsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()) {
+  for (const domain of adoptedDomains(dd)) {
     const local = ensureLocalCourse(dd, domain);
     const values = candidates.get(local.id) ?? [];
     values.push({ domain, preferred: preferred.get(local.id) === domain });
@@ -157,7 +165,9 @@ export function courseScopes(dd: DataDir): Map<CourseId, CourseScope> {
   for (const [course_id, values] of candidates) {
     const domain = values.sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.domain.localeCompare(b.domain))[0]!.domain;
     const graph = loadDomainGraph(dd, domain);
-    out.set(course_id, { course_id, domain, nodes: new Set(graph.nodes.keys()), edges: graph.edges });
+    const nodes = new Set(graph.nodes.keys());
+    const hidden = abandonedNodes(dd, domain);
+    out.set(course_id, { course_id, domain, nodes, visible_nodes: new Set([...nodes].filter((node) => !hidden.has(node))), edges: graph.edges });
   }
   return out;
 }
@@ -186,13 +196,13 @@ export function membersForTag(dd: DataDir, tag: string, store = loadViewStore(dd
     const course_id = tag.slice("course:".length) as CourseId;
     const scope = scopes.get(course_id);
     if (scope === undefined) throw new ViewError(`unknown tag '${tag}'`);
-    return byKey([...scope.nodes].map((node_id) => ({ course_id, node_id })));
+    return byKey([...scope.visible_nodes].map((node_id) => ({ course_id, node_id })));
   }
   if (tag.startsWith("user:")) {
     const id = tag.slice("user:".length);
     if (!Object.hasOwn(store.user_tags, id)) throw new ViewError(`unknown tag '${tag}'`);
     const known = groundNodes(dd);
-    return byKey(store.user_tags[id]!.filter((ref) => known.has(key(ref))));
+    return byKey(store.user_tags[id]!.filter((ref) => known.has(key(ref)) && scopes.get(ref.course_id)?.visible_nodes.has(ref.node_id)));
   }
   if (tag.startsWith("snapshot:")) {
     const id = tag.slice("snapshot:".length);
@@ -201,7 +211,12 @@ export function membersForTag(dd: DataDir, tag: string, store = loadViewStore(dd
     // A snapshot is its stored set, not the current graph's intersection.
     // Temporarily unavailable members remain in the denominator until an
     // explicit refresh re-runs the query and reports its diff.
-    return byKey(snapshot.members);
+    // Graph-overlay removals remain as unavailable frozen members; a binding
+    // abandonment is different user intent and must disappear from every view.
+    return byKey(snapshot.members.filter((ref) => {
+      const scope = scopes.get(ref.course_id);
+      return scope === undefined || !abandonedNodes(dd, scope.domain).has(ref.node_id);
+    }));
   }
   throw new ViewError(`unknown tag '${tag}'`);
 }
@@ -238,6 +253,7 @@ export function applyUserTag(dd: DataDir, id: string, ref: ScopedNodeRef, presen
 function queryMembers(dd: DataDir, query: ProgrammeClosureQuery): ScopedNodeRef[] {
   assertGround(dd, query.target);
   const scope = courseScopes(dd).get(query.target.course_id)!;
+  if (!scope.visible_nodes.has(query.target.node_id)) throw new ViewError(`abandoned node ${query.target.course_id}/${query.target.node_id} cannot be a routing target`);
   const seen = new Set<string>([query.target.node_id]);
   const queue = [query.target.node_id];
   while (queue.length > 0) {
@@ -247,7 +263,7 @@ function queryMembers(dd: DataDir, query: ProgrammeClosureQuery): ScopedNodeRef[
       queue.push(edge.to);
     }
   }
-  return [...seen].sort().map((node_id) => ({ course_id: query.target.course_id, node_id }));
+  return [...seen].filter((node_id) => scope.visible_nodes.has(node_id)).sort().map((node_id) => ({ course_id: query.target.course_id, node_id }));
 }
 
 export function createMaterializedTag(dd: DataDir, id: string, query: ProgrammeClosureQuery): MaterializedTag {
