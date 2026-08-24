@@ -1,3 +1,5 @@
+import type { ScopedNodeRef } from "./views";
+
 export const VOCAB_VERSION = 2;
 
 /** Universal learner-state observations. Conditions live on the event, not here. */
@@ -165,14 +167,16 @@ export interface CardDef {
   front: string;
   back: string;
   domain?: string;
-  nodes?: string[]; // graph nodes this card evidences
+  nodes?: string[]; // legacy local ids; graph nodes this card evidences
+  /** Stable node associations; new writes include these beside legacy nodes. */
+  node_refs?: ScopedNodeRef[];
 }
 
 export interface CardUpdate {
   type: "card-update";
   id: string;
   ts: string;
-  patch: Partial<Pick<CardDef, "front" | "back" | "nodes" | "domain">> & {
+  patch: Partial<Pick<CardDef, "front" | "back" | "nodes" | "node_refs" | "domain">> & {
     suspended?: boolean;
   };
 }
@@ -196,6 +200,7 @@ export interface Card {
   back: string;
   domain?: string;
   nodes: string[];
+  node_refs?: ScopedNodeRef[];
   suspended: boolean;
   created: string;
 }

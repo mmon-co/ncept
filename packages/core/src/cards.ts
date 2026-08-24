@@ -28,6 +28,9 @@ export function validateCardEntry(raw: unknown): CardLogEntry {
         throw new CardValidationError("card.front/back must be strings");
       if (o.nodes !== undefined && (!Array.isArray(o.nodes) || !o.nodes.every((n) => typeof n === "string")))
         throw new CardValidationError("card.nodes must be an array of node ids");
+      if (o.node_refs !== undefined && (!Array.isArray(o.node_refs) || !o.node_refs.every((ref) =>
+        typeof ref === "object" && ref !== null && typeof (ref as { course_id?: unknown }).course_id === "string" && typeof (ref as { node_id?: unknown }).node_id === "string")))
+        throw new CardValidationError("card.node_refs must be scoped node refs");
       if (o.domain !== undefined && typeof o.domain !== "string")
         throw new CardValidationError("card.domain must be a string");
       return o as unknown as CardDef;
@@ -95,6 +98,7 @@ export function materializeCards(log: CardLogEntry[]): Map<string, Card> {
         back: e.back,
         domain: e.domain,
         nodes: e.nodes ?? [],
+        ...(e.node_refs === undefined ? {} : { node_refs: e.node_refs }),
         suspended: false,
         created: e.ts,
       });
@@ -104,6 +108,7 @@ export function materializeCards(log: CardLogEntry[]): Map<string, Card> {
       if (e.patch.front !== undefined) c.front = e.patch.front;
       if (e.patch.back !== undefined) c.back = e.patch.back;
       if (e.patch.nodes !== undefined) c.nodes = e.patch.nodes;
+      if (e.patch.node_refs !== undefined) c.node_refs = e.patch.node_refs;
       if (e.patch.domain !== undefined) c.domain = e.patch.domain;
       if (e.patch.suspended !== undefined) c.suspended = e.patch.suspended;
     }

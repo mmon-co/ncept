@@ -298,7 +298,7 @@ describe("course-local artifacts", () => {
     writeFileSync(join(dd.root, "format_version"), "1\n");
     ensureDataDir(resolveDataDir(dd.root));
     const migrated = resolveDataDir(dd.root);
-    expect(readFileSync(join(migrated.root, "format_version"), "utf8")).toBe("2\n");
+    expect(readFileSync(join(migrated.root, "format_version"), "utf8")).toBe("3\n");
     expect(readFileSync(migrated.eventsFile, "utf8")).toContain('"same-local-name"');
     expect(existsSync(join(migrated.domainsDir, "legacy", "course.yaml"))).toBe(true);
     expect(loadBindings(migrated).bindings).toEqual([]);
