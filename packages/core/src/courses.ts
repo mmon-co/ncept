@@ -13,6 +13,8 @@ export interface LocalCourse {
   id: CourseId;
   /** Human-facing local working-copy name. Node ids are only local to this course. */
   domain: string;
+  /** A curriculum is a package kind, never a ranking category. */
+  kind?: "course" | "curriculum";
 }
 
 export interface PublishedCourseVersion {
@@ -20,6 +22,7 @@ export interface PublishedCourseVersion {
   /** Directory alias at publication time; attachment payloads use it only for validation. */
   domain: string;
   version: string;
+  kind: "course" | "curriculum";
   /** Versioned author declaration for a course derived from other artifacts. */
   derivation: { based_on: CourseId[]; correspondences: CorrespondenceLink[] };
   nodes: { id: string; criterion: string; knowledge_type: string; deprecated: boolean }[];
@@ -34,6 +37,8 @@ export interface CourseBinding {
   abandoned_nodes: string[];
   /** Learner-confirmed directed cross-course links, stored in the overlay. */
   correspondence_confirmations: CorrespondenceLink[];
+  /** Explicit partial import: retained source node ids, dependency-closed. */
+  fragment_nodes?: string[];
 }
 
 export interface Bindings {
@@ -77,7 +82,8 @@ export function ensureLocalCourse(dd: DataDir, domain: string): LocalCourse {
     const raw = YAML.parse(readFileSync(path, "utf8")) ?? {};
     assertCourseId(raw.id);
     if (raw.domain !== domain) throw new CourseError(`${path}: domain must be '${domain}'`);
-    return { id: raw.id, domain };
+    if (raw.kind !== undefined && raw.kind !== "course" && raw.kind !== "curriculum") throw new CourseError(`${path}: kind must be course or curriculum`);
+    return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }) };
   }
   const result: LocalCourse = { id: opaqueId(), domain };
   writeFileSync(path, YAML.stringify(result));
@@ -90,7 +96,8 @@ export function loadLocalCourse(dd: DataDir, domain: string): LocalCourse {
   const raw = YAML.parse(readFileSync(path, "utf8")) ?? {};
   assertCourseId(raw.id);
   if (raw.domain !== domain) throw new CourseError(`${path}: domain must be '${domain}'`);
-  return { id: raw.id, domain };
+  if (raw.kind !== undefined && raw.kind !== "course" && raw.kind !== "curriculum") throw new CourseError(`${path}: kind must be course or curriculum`);
+  return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }) };
 }
 
 /** Declare the versioned lineage and directed links a derived course ships with. */
@@ -113,7 +120,7 @@ export function writeCourseDerivation(dd: DataDir, domain: string, raw: unknown)
     if (!value.based_on.includes(foreign)) throw new CourseError(`course derivation needs based_on ${foreign}`);
   }
   writeFileSync(localCourseFile(dd, domain), YAML.stringify({
-    id: local.id, domain, based_on: [...value.based_on].sort(),
+    id: local.id, domain, ...(local.kind === undefined ? {} : { kind: local.kind }), based_on: [...value.based_on].sort(),
     correspondences: links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))),
   }));
 }
@@ -144,6 +151,7 @@ function snapshot(dd: DataDir, domain: string, version: string): PublishedCourse
     course_id: local.id,
     domain,
     version,
+    kind: local.kind ?? "course",
     derivation: localDerivation(dd, domain),
     nodes: [...graph.nodes.values()].map((node) => ({
       id: node.id,
@@ -161,7 +169,7 @@ function edgeKey(edge: { from: string; to: string; type: string }): string { ret
 function validateRevision(raw: unknown, id: CourseId, version: string, path: string): PublishedCourseVersion {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CourseError(`${path}: revision must be an object`);
   const value = raw as Record<string, unknown>;
-  if (value.course_id !== id || typeof value.domain !== "string" || value.domain === "" || value.version !== version || !Array.isArray(value.nodes) || !Array.isArray(value.edges))
+  if (value.course_id !== id || typeof value.domain !== "string" || value.domain === "" || value.version !== version || !Array.isArray(value.nodes) || !Array.isArray(value.edges) || (value.kind !== undefined && value.kind !== "course" && value.kind !== "curriculum"))
     throw new CourseError(`${path}: invalid immutable course revision`);
   const rawDerivation = value.derivation === undefined ? { based_on: [], correspondences: [] } : value.derivation;
   if (typeof rawDerivation !== "object" || rawDerivation === null || Array.isArray(rawDerivation)) throw new CourseError(`${path}: invalid course derivation`);
@@ -209,7 +217,7 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   });
   try { assertAcyclic(edges as GraphEdge[]); }
   catch (error) { throw new CourseError(`${path}: ${error instanceof Error ? error.message : String(error)}`); }
-  return { course_id: id, domain: value.domain, version, derivation: { based_on: basedOn, correspondences }, nodes, edges };
+  return { course_id: id, domain: value.domain, version, kind: value.kind ?? "course", derivation: { based_on: basedOn, correspondences }, nodes, edges };
 }
 
 function snapshotGraph(dd: DataDir, id: CourseId, version: string): { nodes: Map<string, GraphNode>; edges: GraphEdge[] } {
@@ -255,18 +263,118 @@ export function loadPublishedCourse(dd: DataDir, id: CourseId, version: string):
   return revision;
 }
 
-function revisions(dd: DataDir, id: CourseId): PublishedCourseVersion[] {
+/** Complete immutable revisions, ordered oldest to newest. */
+export function listPublishedVersions(dd: DataDir, id: CourseId): PublishedCourseVersion[] {
+  assertCourseId(id);
   const root = join(dd.coursesDir, id, "versions");
   if (!existsSync(root)) return [];
   return readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory() && SEMVER_RE.test(entry.name))
     .map((entry) => loadPublishedCourse(dd, id, entry.name)).sort((a, b) => compare(a.version, b.version));
+}
+/** Local-first catalogue: intentionally contains no rank, service count, or endorsement. */
+export function listPublishedCourses(dd: DataDir): { course_id: CourseId; versions: PublishedCourseVersion[] }[] {
+  if (!existsSync(dd.coursesDir)) return [];
+  return readdirSync(dd.coursesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && COURSE_ID_RE.test(entry.name))
+    .map((entry) => ({ course_id: entry.name as CourseId, versions: listPublishedVersions(dd, entry.name as CourseId) }))
+    .filter((item) => item.versions.length > 0).sort((a, b) => a.course_id.localeCompare(b.course_id));
+}
+function revisions(dd: DataDir, id: CourseId): PublishedCourseVersion[] { return listPublishedVersions(dd, id); }
+export interface CourseRevisionDiff { from: string; to: string; added_nodes: string[]; deprecated_nodes: string[]; added_edges: { from: string; to: string; type: string }[]; removed_edges: { from: string; to: string; type: string }[]; derivation_changed: boolean; }
+export function diffCourseRevisions(previous: PublishedCourseVersion, next: PublishedCourseVersion): CourseRevisionDiff {
+  if (previous.course_id !== next.course_id) throw new CourseError("cannot diff different course artifacts");
+  const oldNodes = new Map(previous.nodes.map((node) => [node.id, node]));
+  const oldEdges = new Map(previous.edges.map((edge) => [edgeKey(edge), edge])); const nextEdges = new Map(next.edges.map((edge) => [edgeKey(edge), edge]));
+  return { from: previous.version, to: next.version, added_nodes: next.nodes.filter((node) => !oldNodes.has(node.id)).map((node) => node.id), deprecated_nodes: next.nodes.filter((node) => oldNodes.get(node.id)?.deprecated === false && node.deprecated).map((node) => node.id), added_edges: [...nextEdges].filter(([key]) => !oldEdges.has(key)).map(([, edge]) => edge), removed_edges: [...oldEdges].filter(([key]) => !nextEdges.has(key)).map(([, edge]) => edge), derivation_changed: JSON.stringify(previous.derivation) !== JSON.stringify(next.derivation) };
+}
+export type PublishBump = "initial" | "patch" | "minor";
+export interface PublishPreview { version: string; bump: PublishBump; revision: PublishedCourseVersion; }
+/** Validate a requested constrained bump without writing it. */
+export function previewCoursePublish(dd: DataDir, domain: string, requested?: "patch" | "minor"): PublishPreview {
+  const local = ensureLocalCourse(dd, domain), prior = revisions(dd, local.id).at(-1);
+  if (prior === undefined) {
+    if (requested !== undefined) throw new CourseError("the first publication is 1.0.0, not a patch or minor bump");
+    return { version: "1.0.0", bump: "initial", revision: snapshot(dd, domain, "1.0.0") };
+  }
+  const [major, minor, patch] = parts(prior.version);
+  const attempt = (bump: "patch" | "minor") => {
+    const version = bump === "patch" ? `${major}.${minor}.${patch + 1}` : `${major}.${minor + 1}.0`;
+    const revision = snapshot(dd, domain, version); validateCourseRevision(prior, revision); return { version, bump, revision };
+  };
+  if (requested !== undefined) return attempt(requested);
+  try { return attempt("patch"); } catch { return attempt("minor"); }
+}
+/** Every currently valid constrained bump, useful for an explicit picker. */
+export function listPublishPreviews(dd: DataDir, domain: string): PublishPreview[] {
+  const local = ensureLocalCourse(dd, domain);
+  if (revisions(dd, local.id).length === 0) return [previewCoursePublish(dd, domain)];
+  // An incompatible draft has no patch/minor preview. Return an empty picker
+  // rather than throwing so the caller can still offer a fresh artifact.
+  return (["patch", "minor"] as const).flatMap((bump) => { try { return [previewCoursePublish(dd, domain, bump)]; } catch { return []; } });
+}
+/** Clone the mutable source into a fresh opaque artifact and publish its first immutable revision. */
+export interface NewArtifactDerivationPreview {
+  source_course_id: CourseId;
+  based_on: CourseId[];
+  correspondences: { from: { course_id: string; node: string }; to: { course_id: string; node: string }; weight: number }[];
+}
+interface ForkSource { course: LocalCourse; kind: "course" | "curriculum"; derivation: { based_on: CourseId[]; correspondences: CorrespondenceLink[] }; }
+/** An adopted alias has only minimal local metadata; its pinned revision remains the source of truth for a fork. */
+function forkSource(dd: DataDir, sourceDomain: string): ForkSource {
+  const course = ensureLocalCourse(dd, sourceDomain);
+  const binding = loadBindings(dd).bindings.find((item) => item.domain === sourceDomain);
+  if (binding === undefined) return { course, kind: course.kind ?? "course", derivation: localDerivation(dd, sourceDomain) };
+  const revision = loadPublishedCourse(dd, binding.course_id, binding.version);
+  const derivation = binding.fragment_nodes === undefined ? revision.derivation : {
+    based_on: revision.derivation.based_on,
+    correspondences: revision.derivation.correspondences.filter((link) => {
+      const own = link.from.course_id === course.id ? link.from : link.to;
+      return binding.fragment_nodes!.includes(own.node);
+    }),
+  };
+  return { course, kind: revision.kind, derivation };
+}
+/** The lineage that a fresh artifact will publish; its own endpoint is labelled for review. */
+export function previewNewCourseDerivation(dd: DataDir, sourceDomain: string): NewArtifactDerivationPreview {
+  const source = forkSource(dd, sourceDomain), derivation = source.derivation;
+  return {
+    source_course_id: source.course.id, based_on: [...new Set([source.course.id, ...derivation.based_on])].sort(),
+    correspondences: derivation.correspondences.map((link) => {
+      const endpoint = (value: { course_id: string; node: string }): { course_id: string; node: string } =>
+        ({ ...value, course_id: value.course_id === source.course.id ? "new-artifact" : value.course_id });
+      return { from: endpoint(link.from), to: endpoint(link.to), weight: link.weight };
+    }),
+  };
+}
+
+export function publishNewCourseArtifact(dd: DataDir, sourceDomain: string, newDomain: string): PublishedCourseVersion {
+  assertDomain(newDomain);
+  const source = domainDir(dd, sourceDomain), destination = domainDir(dd, newDomain);
+  if (!existsSync(source)) throw new CourseError(`no such course working copy: ${sourceDomain}`);
+  if (existsSync(destination)) throw new CourseError(`new course domain '${newDomain}' already exists`);
+  cpSync(source, destination, { recursive: true, dereference: false });
+  try {
+    const sourceData = forkSource(dd, sourceDomain);
+    const local: LocalCourse = { id: opaqueId(), domain: newDomain, kind: sourceData.kind };
+    writeFileSync(localCourseFile(dd, newDomain), YAML.stringify(local));
+    const transform = (link: CorrespondenceLink): CorrespondenceLink => ({
+      from: { ...link.from, course_id: link.from.course_id === sourceData.course.id ? local.id : link.from.course_id },
+      to: { ...link.to, course_id: link.to.course_id === sourceData.course.id ? local.id : link.to.course_id }, weight: link.weight,
+    });
+    writeCourseDerivation(dd, newDomain, { based_on: [...new Set([sourceData.course.id, ...sourceData.derivation.based_on])], correspondences: sourceData.derivation.correspondences.map(transform) });
+    normalizePackageAttachments(destination, newDomain, loadDomainGraphRaw(dd, newDomain).nodes);
+    return publishCourse(dd, newDomain, "1.0.0");
+  } catch (error) { rmSync(destination, { recursive: true, force: true }); throw error; }
 }
 
 /** Package state used by the desk; availability is limited to locally known revisions. */
 export interface CourseReadState {
   course_id: CourseId;
   domain: string;
+  /** Installed binding version, retained for existing desk clients. */
   version: string | null;
+  binding_version: string | null;
+  /** Latest immutable revision authored by this local working copy. */
+  published_version: string | null;
   update_available: boolean;
   draft: boolean;
 }
@@ -274,20 +382,19 @@ export interface CourseReadState {
 export function courseReadState(dd: DataDir, domain: string): CourseReadState {
   const local = ensureLocalCourse(dd, domain);
   const binding = loadBindings(dd).bindings.find((item) => item.domain === domain);
-  if (binding === undefined) return { course_id: local.id, domain, version: null, update_available: false, draft: true };
+  const published_version = revisions(dd, local.id).at(-1)?.version ?? null;
+  if (binding === undefined) return { course_id: local.id, domain, version: null, binding_version: null, published_version, update_available: false, draft: true };
   const latest = revisions(dd, binding.course_id).at(-1)?.version;
   return {
-    course_id: binding.course_id,
-    domain,
-    version: binding.version,
-    update_available: latest !== undefined && compare(latest, binding.version) > 0,
-    draft: false,
+    course_id: binding.course_id, domain, version: binding.version, binding_version: binding.version, published_version,
+    update_available: binding.fragment_nodes === undefined && latest !== undefined && compare(latest, binding.version) > 0, draft: false,
   };
 }
 
 /** Enforce course-local identity: criteria/types never change in place; structure is minor, prose is patch. */
 export function validateCourseRevision(previous: PublishedCourseVersion, next: PublishedCourseVersion): void {
   if (previous.course_id !== next.course_id) throw new CourseError("course artifact identity cannot change");
+  if (previous.kind !== next.kind) throw new CourseError("course package kind cannot change; publish a new course artifact");
   if (compare(next.version, previous.version) <= 0) throw new CourseError(`course version must advance from ${previous.version}`);
   const [oldMajor, oldMinor] = parts(previous.version);
   const [newMajor, newMinor] = parts(next.version);
@@ -307,7 +414,7 @@ export function validateCourseRevision(previous: PublishedCourseVersion, next: P
   const nextEdges = new Set(next.edges.map((edge) => `${edge.from}\0${edge.to}\0${edge.type}`));
   const structural = addedNode || oldEdges.size !== nextEdges.size || [...oldEdges].some((edge) => !nextEdges.has(edge));
   if (structural && newMinor === oldMinor) throw new CourseError("adding nodes or changing edges requires a minor version bump");
-  if (!structural && newMinor !== oldMinor) throw new CourseError("body or metadata changes require a patch version bump");
+  if (!structural && newMinor !== oldMinor) throw new CourseError("body, derivation, or metadata changes require a patch version bump");
 }
 
 /** Copy a complete local course into an immutable, version-pinned artifact. */
@@ -340,6 +447,12 @@ export function publishCourse(dd: DataDir, domain: string, version: string): Pub
   } catch (error) {
     rmSync(stage, { recursive: true, force: true });
     if (installed) rmSync(destination, { recursive: true, force: true });
+    // Failed first publication must not leave an empty artifact that hides the
+    // working copy from the desk as if it had a completed immutable revision.
+    const versions = join(dd.coursesDir, next.course_id, "versions");
+    const artifact = join(dd.coursesDir, next.course_id);
+    if (existsSync(versions) && readdirSync(versions).length === 0) rmSync(versions, { recursive: true, force: true });
+    if (existsSync(artifact) && readdirSync(artifact).length === 0) rmSync(artifact, { recursive: true, force: true });
     throw error;
   }
   return next;
@@ -393,6 +506,11 @@ function validateBindings(raw: unknown): Bindings {
       domain: binding.domain,
       abandoned_nodes: [...binding.abandoned_nodes],
       correspondence_confirmations: binding.correspondence_confirmations.map(validateCorrespondence),
+      ...(binding.fragment_nodes === undefined ? {} : (() => {
+        if (!Array.isArray(binding.fragment_nodes) || binding.fragment_nodes.length === 0 || !binding.fragment_nodes.every((id) => typeof id === "string" && id !== ""))
+          throw new CourseError("fragment_nodes must be non-empty node ids");
+        return { fragment_nodes: [...new Set(binding.fragment_nodes)].sort() };
+      })()),
     };
   });
   return { v: 1, personal_namespace: value.personal_namespace, bindings };
@@ -421,9 +539,15 @@ export function adoptedDomains(dd: DataDir): string[] {
     if (boundDomains.has(domain)) return true;
     const local = ensureLocalCourse(dd, domain);
     if (local.id === bindings.personal_namespace) return true;
-    return !existsSync(join(dd.coursesDir, local.id, "versions"));
+    return revisions(dd, local.id).length === 0;
   });
 }
+
+/** The visible source nodes for a complete binding or an explicit fragment. */
+function bindingNodeIds(dd: DataDir, binding: CourseBinding): Set<string> {
+  return new Set(binding.fragment_nodes ?? loadPublishedCourse(dd, binding.course_id, binding.version).nodes.map((node) => node.id));
+}
+function bindingHasNode(dd: DataDir, binding: CourseBinding, node: string): boolean { return bindingNodeIds(dd, binding).has(node); }
 
 /** Binding-local abandonment changes presentation and routing, never graph assertions. */
 export function abandonedNodes(dd: DataDir, domain: string): Set<string> {
@@ -436,8 +560,7 @@ export function setNodeAbandoned(dd: DataDir, domain: string, node: string, aban
   const bindings = loadBindings(dd);
   const binding = bindings.bindings.find((item) => item.domain === domain);
   if (binding === undefined) throw new CourseError(`domain '${domain}' is not an adopted course binding`);
-  const revision = loadPublishedCourse(dd, binding.course_id, binding.version);
-  if (!revision.nodes.some((item) => item.id === node)) throw new CourseError(`unknown node '${node}' in adopted course '${domain}'`);
+  if (!bindingHasNode(dd, binding, node)) throw new CourseError(`unknown or unimported node '${node}' in adopted course '${domain}'`);
   const ids = new Set(binding.abandoned_nodes);
   if (abandoned) ids.add(node);
   else ids.delete(node);
@@ -505,11 +628,16 @@ export function recoverBindingTransaction(dd: DataDir): void {
   rmSync(dd.bindingTransactionFile, { force: true });
 }
 
-function sameGraphAsRevision(graph: { nodes: Map<string, GraphNode>; edges: GraphEdge[] }, revision: PublishedCourseVersion): boolean {
+function sameGraphAsRevision(graph: { nodes: Map<string, GraphNode>; edges: GraphEdge[] }, revision: PublishedCourseVersion, fragmentNodes?: string[]): boolean {
+  const selected = fragmentNodes === undefined ? undefined : new Set(fragmentNodes);
   const nodes = [...graph.nodes.values()].map((node) => ({ id: node.id, criterion: node.criterion, knowledge_type: node.knowledge_type, deprecated: node.deprecated }))
     .sort((a, b) => a.id.localeCompare(b.id));
+  const expectedNodes = (selected === undefined ? revision.nodes : revision.nodes.filter((node) => selected.has(node.id)))
+    .sort((a, b) => a.id.localeCompare(b.id));
   const edges = graph.edges.map((edge) => ({ ...edge })).sort((a, b) => edgeKey(a).localeCompare(edgeKey(b)));
-  return JSON.stringify(nodes) === JSON.stringify(revision.nodes) && JSON.stringify(edges) === JSON.stringify(revision.edges);
+  const expectedEdges = (selected === undefined ? revision.edges : revision.edges.filter((edge) => selected.has(edge.from) && selected.has(edge.to)))
+    .sort((a, b) => edgeKey(a).localeCompare(edgeKey(b)));
+  return JSON.stringify(nodes) === JSON.stringify(expectedNodes) && JSON.stringify(edges) === JSON.stringify(expectedEdges);
 }
 
 /** Validate every immutable package and every pinned user binding before a store is accepted. */
@@ -528,25 +656,38 @@ export function validateCourseStore(dd: DataDir): void {
   const bindings = loadBindings(dd);
   const domains = new Set<string>();
   const revisionsByCourse = new Map<CourseId, PublishedCourseVersion>();
+  const bindingsByCourse = new Map(bindings.bindings.map((binding) => [binding.course_id, binding]));
   for (const binding of bindings.bindings) {
     if (domains.has(binding.domain)) throw new CourseError(`multiple bindings use domain '${binding.domain}'`);
     domains.add(binding.domain);
     const revision = loadPublishedCourse(dd, binding.course_id, binding.version);
     revisionsByCourse.set(binding.course_id, revision);
-    const ids = new Set(revision.nodes.map((node) => node.id));
+    const ids = bindingNodeIds(dd, binding);
     for (const id of binding.abandoned_nodes)
-      if (!ids.has(id)) throw new CourseError(`binding ${binding.course_id}@${binding.version} abandons unknown node '${id}'`);
+      if (!ids.has(id)) throw new CourseError(`binding ${binding.course_id}@${binding.version} abandons unknown node or unimported node '${id}'`);
     const local = loadLocalCourse(dd, binding.domain);
     if (local.id !== binding.course_id)
       throw new CourseError(`binding ${binding.course_id}@${binding.version} points at domain '${binding.domain}' owned by ${local.id}`);
     let installed;
     try { installed = loadDomainGraphRaw(dd, binding.domain); }
     catch (error) { throw new CourseError(`binding ${binding.course_id}@${binding.version} has invalid installed graph: ${error instanceof Error ? error.message : String(error)}`); }
-    if (!sameGraphAsRevision(installed, revision))
+    if (binding.fragment_nodes !== undefined) {
+      const available = new Set(revision.nodes.map((node) => node.id));
+      if (binding.fragment_nodes.some((node) => !available.has(node))) throw new CourseError(`fragment binding ${binding.course_id} selects an unknown node`);
+      const selected = new Set(binding.fragment_nodes);
+      for (const edge of revision.edges) if (edge.type === "dependency" && selected.has(edge.from) && !selected.has(edge.to))
+        throw new CourseError(`fragment binding ${binding.course_id} omits dependency '${edge.to}'`);
+    }
+    if (!sameGraphAsRevision(installed, revision, binding.fragment_nodes))
       throw new CourseError(`binding ${binding.course_id}@${binding.version} does not match its pinned revision`);
   }
   const authoredGrades = new Map<string, number>();
   for (const [, revision] of revisionsByCourse) for (const link of revision.derivation.correspondences) {
+    const fromBinding = bindingsByCourse.get(link.from.course_id as CourseId), toBinding = bindingsByCourse.get(link.to.course_id as CourseId);
+    // A fragment deliberately does not activate authored links for omitted
+    // endpoints; no overlay state may point at a node it did not install.
+    if ((fromBinding?.fragment_nodes !== undefined && !bindingHasNode(dd, fromBinding, link.from.node)) ||
+        (toBinding?.fragment_nodes !== undefined && !bindingHasNode(dd, toBinding, link.to.node))) continue;
     for (const endpoint of [link.from, link.to]) {
       const endpointRevision = revisionsByCourse.get(endpoint.course_id as CourseId);
       if (endpointRevision !== undefined && !endpointRevision.nodes.some((node) => node.id === endpoint.node))
@@ -563,8 +704,10 @@ export function validateCourseStore(dd: DataDir): void {
     const from = revisionsByCourse.get(link.from.course_id as CourseId);
     const to = revisionsByCourse.get(link.to.course_id as CourseId);
     if (from === undefined || to === undefined) throw new CourseError("correspondence endpoints must be adopted courses");
-    if (!from.nodes.some((node) => node.id === link.from.node) || !to.nodes.some((node) => node.id === link.to.node))
-      throw new CourseError("correspondence references an unknown pinned node");
+    const fromBinding = bindingsByCourse.get(link.from.course_id as CourseId)!;
+    const toBinding = bindingsByCourse.get(link.to.course_id as CourseId)!;
+    if (!bindingHasNode(dd, fromBinding, link.from.node) || !bindingHasNode(dd, toBinding, link.to.node))
+      throw new CourseError("correspondence references an unknown pinned node or unimported node");
     const key = correspondenceKey(link);
     if (seenLinks.has(key)) throw new CourseError("duplicate correspondence");
     seenLinks.add(key);
@@ -584,8 +727,10 @@ export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[
   const domains = new Map(bindings.map((binding) => [binding.course_id, binding.domain]));
   // Author declarations are immutable revision metadata. They are active only
   // when both artifacts are adopted; user confirmations remain in the overlay.
+  const byCourse = new Map(bindings.map((binding) => [binding.course_id, binding]));
   const authored = bindings.flatMap((binding) => loadPublishedCourse(dd, binding.course_id, binding.version).derivation.correspondences)
-    .filter((link) => domains.has(link.from.course_id as CourseId) && domains.has(link.to.course_id as CourseId));
+    .filter((link) => domains.has(link.from.course_id as CourseId) && domains.has(link.to.course_id as CourseId) &&
+      bindingHasNode(dd, byCourse.get(link.from.course_id as CourseId)!, link.from.node) && bindingHasNode(dd, byCourse.get(link.to.course_id as CourseId)!, link.to.node));
   // An explicit learner confirmation may revise an author-provided starting
   // grade for the same directed endpoints.
   const links = [...listCorrespondences(dd), ...authored];
@@ -616,9 +761,9 @@ export function confirmCorrespondence(dd: DataDir, raw: unknown): Correspondence
   // anything. The post-write store validation remains a comprehensive guard.
   const sourceRevision = loadPublishedCourse(dd, source.course_id, source.version);
   const targetRevision = loadPublishedCourse(dd, target.course_id, target.version);
-  if (!sourceRevision.nodes.some((node) => node.id === link.from.node) ||
-      !targetRevision.nodes.some((node) => node.id === link.to.node))
-    throw new CourseError("correspondence references an unknown pinned node");
+  if (!sourceRevision.nodes.some((node) => node.id === link.from.node) || !targetRevision.nodes.some((node) => node.id === link.to.node) ||
+      !bindingHasNode(dd, source, link.from.node) || !bindingHasNode(dd, target, link.to.node))
+    throw new CourseError("correspondence references an unknown pinned node or unimported node");
   target.correspondence_confirmations.push(link);
   const links = target.correspondence_confirmations;
   writeBindings(dd, bindings);
@@ -668,6 +813,7 @@ export function validatePortablePackage(root: string, domain: string, nodes: Map
   if (existsSync(context)) {
     const value = attachmentObject(context);
     if (value.version !== 1 || value.domain !== domain || !Array.isArray(value.teaching_notes)) throw new CourseError(`${context}: invalid course context`);
+    if (value.description !== undefined && (typeof value.description !== "string" || value.description.trim() === "")) throw new CourseError(`${context}: course description must be a non-empty string`);
     if (value.character !== undefined && (typeof value.character !== "object" || value.character === null || Array.isArray(value.character))) throw new CourseError(`${context}: invalid course character`);
     if (value.character !== undefined) {
       const fields = Object.entries(value.character as Record<string, unknown>)
@@ -777,7 +923,7 @@ function normalizePackageAttachments(root: string, domain: string, nodes: Map<st
 }
 
 /** Install the exact snapshot in a sibling and only then replace the requested local working copy. */
-function installPublishedCourse(dd: DataDir, courseId: CourseId, version: string, domain: string): { commit: () => void; rollback: () => void } {
+function installPublishedCourse(dd: DataDir, courseId: CourseId, version: string, domain: string, fragmentNodes?: string[]): { commit: () => void; rollback: () => void } {
   recoverBindingTransaction(dd);
   const source = courseVersionDir(dd, courseId, version);
   const destination = domainDir(dd, domain);
@@ -795,6 +941,16 @@ function installPublishedCourse(dd: DataDir, courseId: CourseId, version: string
     for (const entry of readdirSync(source)) {
       if (entry === "revision.yaml" || entry === ".complete") continue;
       cpSync(join(source, entry), join(staging, entry), { recursive: true, dereference: false });
+    }
+    if (fragmentNodes !== undefined) {
+      const selected = new Set(fragmentNodes);
+      for (const file of readdirSync(staging)) if (file.endsWith(".md")) {
+        const parsed = parseNodeFile(join(staging, file), readFileSync(join(staging, file), "utf8"));
+        if (!selected.has(parsed.node.id)) rmSync(join(staging, file), { force: true });
+      }
+      // Portable attachments can name omitted nodes; omit them rather than
+      // misattributing or mutating package-owned content in a fragment.
+      for (const name of ["course-context.json", "item-bank.json", "content"]) rmSync(join(staging, name), { recursive: true, force: true });
     }
     writeFileSync(join(staging, "course.yaml"), YAML.stringify({ id: courseId, domain }));
     loadPublishedCourse(dd, courseId, version);
@@ -828,6 +984,19 @@ function installPublishedCourse(dd: DataDir, courseId: CourseId, version: string
   }
 }
 
+/** Atomically update a pinned installation while retaining learner-only overlay choices. */
+export function rebindCourse(dd: DataDir, courseId: CourseId, version: string): CourseBinding {
+  const revision = loadPublishedCourse(dd, courseId, version), bindings = loadBindings(dd);
+  const binding = bindings.bindings.find((item) => item.course_id === courseId);
+  if (binding === undefined) throw new CourseError(`course ${courseId} is not adopted`);
+  if (binding.fragment_nodes !== undefined) throw new CourseError("fragment imports are pinned; import a new fragment to change its version");
+  if (compare(version, binding.version) <= 0) throw new CourseError(`course ${courseId} is already at ${binding.version} or newer`);
+  const installation = installPublishedCourse(dd, courseId, version, binding.domain), previousVersion = binding.version;
+  try { binding.version = version; writeBindings(dd, bindings); if (!sameGraphAsRevision(loadDomainGraphRaw(dd, binding.domain), revision)) throw new CourseError("installed course differs from selected revision"); validateCourseStore(dd); }
+  catch (error) { binding.version = previousVersion; writeBindings(dd, bindings); installation.rollback(); throw error; }
+  installation.commit(); return binding;
+}
+
 /** Adopt exactly one immutable revision per artifact into this user's overlay. */
 export function bindCourse(dd: DataDir, courseId: CourseId, version: string, domain: string): CourseBinding {
   assertDomain(domain);
@@ -836,6 +1005,7 @@ export function bindCourse(dd: DataDir, courseId: CourseId, version: string, dom
   const existing = bindings.bindings.find((binding) => binding.course_id === courseId);
   if (existing !== undefined) throw new CourseError(`course ${courseId} is already bound at ${existing.version}`);
   if (bindings.bindings.some((binding) => binding.domain === domain)) throw new CourseError(`domain '${domain}' is already bound to another course`);
+  if (existsSync(domainDir(dd, domain))) throw new CourseError(`domain '${domain}' belongs to an existing working copy; choose a new local alias when adopting`);
   const binding: CourseBinding = { course_id: courseId, version, domain, abandoned_nodes: [], correspondence_confirmations: [] };
   const installation = installPublishedCourse(dd, courseId, version, domain);
   try {
@@ -852,6 +1022,48 @@ export function bindCourse(dd: DataDir, courseId: CourseId, version: string, dom
     writeBindings(dd, bindings);
     installation.rollback();
     throw error;
+  }
+  installation.commit();
+  return binding;
+}
+
+/**
+ * Install selected source nodes under their original opaque course namespace.
+ * Dependency closure is added explicitly; it is reported back to the caller
+ * rather than silently represented as a complete package adoption.
+ */
+export function importCourseFragment(dd: DataDir, courseId: CourseId, version: string, domain: string, requestedNodes: string[]): CourseBinding {
+  assertDomain(domain);
+  if (!Array.isArray(requestedNodes) || requestedNodes.length === 0 || !requestedNodes.every((node) => typeof node === "string" && node !== ""))
+    throw new CourseError("fragment import needs one or more selected nodes");
+  const revision = loadPublishedCourse(dd, courseId, version);
+  const known = new Set(revision.nodes.map((node) => node.id));
+  const selected = new Set(requestedNodes);
+  if ([...selected].some((node) => !known.has(node))) throw new CourseError("fragment selection contains an unknown source node");
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // The copied markdown must resolve every retained wikilink. Dependencies
+    // are required semantics; relevance targets are retained too rather than
+    // rewriting immutable source prose during import.
+    for (const edge of revision.edges) if (selected.has(edge.from) && !selected.has(edge.to)) {
+      selected.add(edge.to); changed = true;
+    }
+  }
+  const fragment_nodes = [...selected].sort();
+  const bindings = loadBindings(dd);
+  if (bindings.bindings.some((binding) => binding.course_id === courseId))
+    throw new CourseError(`course ${courseId} is already adopted; fragments retain this source namespace and cannot coexist with its full binding`);
+  if (bindings.bindings.some((binding) => binding.domain === domain)) throw new CourseError(`domain '${domain}' is already bound to another course`);
+  if (existsSync(domainDir(dd, domain))) throw new CourseError(`domain '${domain}' belongs to an existing working copy; choose a new local alias when importing a fragment`);
+  const binding: CourseBinding = { course_id: courseId, version, domain, abandoned_nodes: [], correspondence_confirmations: [], fragment_nodes };
+  const installation = installPublishedCourse(dd, courseId, version, domain, fragment_nodes);
+  try {
+    bindings.bindings.push(binding); writeBindings(dd, bindings);
+    if (!sameGraphAsRevision(loadDomainGraphRaw(dd, domain), revision, fragment_nodes)) throw new CourseError("installed fragment differs from selected revision");
+    validateCourseStore(dd);
+  } catch (error) {
+    bindings.bindings = bindings.bindings.filter((item) => item !== binding); writeBindings(dd, bindings); installation.rollback(); throw error;
   }
   installation.commit();
   return binding;

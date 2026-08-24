@@ -24,7 +24,7 @@ test("confirmed user specs retain criterion bindings and version-pinned, confirm
   writeTestDomain(dd);
   const local = ensureLocalCourse(dd, "math");
   publishCourse(dd, "math", "1.0.0");
-  bindCourse(dd, local.id, "1.0.0", "math");
+  bindCourse(dd, local.id, "1.0.0", "math-copy");
 
   createSpec(dd, {
     id: "linear-start", title: "Linear algebra start", tags: ["near-term"],
@@ -65,12 +65,11 @@ test("ordinary creation cannot forge induction provenance and direct bindings va
 });
 
 test("coverage mappings must exist in the immutable pinned revision", () => {
-  const dd = tempDataDir(); writeTestDomain(dd); const course = ensureLocalCourse(dd, "math"); publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math");
-  // A mutable local addition is visible for binding but absent from the pinned package.
+  const dd = tempDataDir(); writeTestDomain(dd); const course = ensureLocalCourse(dd, "math"); publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math-copy");
+  // Source edits cannot leak into a separate immutable installation.
   authorDomain(dd, "math", { nodes: [{ id: "after-publish", criterion: "Later", type: "conceptual", body: "Added after publication." }] }, "add");
   createSpec(dd, { id: "revision-check", title: "Revision check", tags: ["private"], criteria: [{ id: "one", kind: "anonymous", text: "Later" }], connections: [] }); confirmSpec(dd, "revision-check");
-  bindCriterion(dd, "revision-check", { id: "later-binding", criterion_id: "one", node: { course_id: course.id, node_id: "after-publish" }, resolution: "bound" });
-  expect(() => createCoverageReport(dd, "revision-check", { id: "bad-revision", target: { course_id: course.id, version: "1.0.0" }, judged_by: "user", judgments: [{ criterion_id: "one", status: "covered", rationale: "not in revision" }] })).toThrow(/pinned target revision/);
+  expect(() => bindCriterion(dd, "revision-check", { id: "later-binding", criterion_id: "one", node: { course_id: course.id, node_id: "after-publish" }, resolution: "bound" })).toThrow(/unknown/);
 });
 
 test("generation uses the standing personal namespace and splicing abandons only old spec bindings", () => {
@@ -86,7 +85,7 @@ test("generation uses the standing personal namespace and splicing abandons only
   const replacement = induceSpliceSpec(dd, "old", { id: "new", title: "New section", criterion_ids: ["one"] });
   const fresh = generateCriterion(dd, replacement.id, { id: "new-node", criterion_id: "one", node: { id: "personal-two", title: "Personal two", criterion: "Do the thing", type: "conceptual", body: "A different personal explanation." } });
   // Coverage is version-pinned; use math solely as the reviewed target here.
-  publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math");
+  publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math-copy");
   const target = bindCriterion(dd, "new", { id: "new-target", criterion_id: "one", node: { course_id: course.id, node_id: "a" }, resolution: "bound" });
   const coverage = createCoverageReport(dd, "new", { id: "new-coverage", target: { course_id: course.id, version: "1.0.0" }, judged_by: "user", judgments: [{ criterion_id: "one", status: "covered", rationale: "Replacement meets it." }] });
   confirmCoverageReport(dd, coverage.id);
@@ -118,7 +117,7 @@ test("generation preflights duplicate bindings and splice completion rejects inc
   expect(existsSync(`${dd.domainsDir}/personal/orphan.md`)).toBe(false);
   const replacement = induceSpliceSpec(dd, "source", { id: "replacement", title: "Replacement", criterion_ids: ["one"] });
   const fresh = generateCriterion(dd, replacement.id, { id: "fresh-binding", criterion_id: "one", node: { id: "one-new", type: "conceptual", body: "new", criterion: "One" } });
-  publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math");
+  publishCourse(dd, "math", "1.0.0"); bindCourse(dd, course.id, "1.0.0", "math-copy");
   expect(() => createCoverageReport(dd, replacement.id, { id: "unrelated-report", target: { course_id: course.id, version: "1.0.0" }, judged_by: "user", judgments: [{ criterion_id: "one", status: "covered", rationale: "wrong target" }] })).toThrow(/pinned target/);
   const target = bindCriterion(dd, replacement.id, { id: "target-binding", criterion_id: "one", node: { course_id: course.id, node_id: "a" }, resolution: "bound" });
   const report = createCoverageReport(dd, replacement.id, { id: "replacement-report", target: { course_id: course.id, version: "1.0.0" }, judged_by: "user", judgments: [{ criterion_id: "one", status: "covered", rationale: "yes" }] }); confirmCoverageReport(dd, report.id);
