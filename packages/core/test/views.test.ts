@@ -59,6 +59,22 @@ test("learner tag algebra and materialized programme closures are membership-onl
   expect(after).toEqual(before);
 });
 
+test("structural graph queries remain membership-only and epistemic terms cannot become live views", () => {
+  const dd = tempDataDir();
+  writeTestDomain(dd);
+  const course = ensureLocalCourse(dd, "math");
+  const a = { course_id: course.id, node_id: "a" };
+  const b = { course_id: course.id, node_id: "b" };
+  const c = { course_id: course.id, node_id: "c" };
+  expect([...evaluateTagExpression(dd, { prereqs: c }).values()]).toEqual([a, b, c]);
+  expect([...evaluateTagExpression(dd, { dependents: a }).values()]).toEqual([a, b, c]);
+  expect([...evaluateTagExpression(dd, { route: { from: c, to: a } }).values()]).toEqual([a, b, c]);
+  expect([...evaluateTagExpression(dd, { frontier: { nodes: [b] } }).values()]).toEqual([a]);
+  expect(() => saveView(dd, "epistemic", { name: "Epistemic", expression: { mastered: true } })).toThrow(/must be frozen/);
+  const frozen = createMaterializedTag(dd, "toward-b", { kind: "query", expression: { prereqs: b } });
+  expect(frozen.members).toEqual([a, b]);
+});
+
 test("views reject unknown ground nodes and undefined tags", () => {
   const dd = tempDataDir();
   writeTestDomain(dd);
