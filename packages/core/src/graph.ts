@@ -10,6 +10,7 @@ import type {
   KnowledgeType,
 } from "./types";
 import { type DataDir, domainDir, dossierFile, graphEditsFile } from "./datadir";
+import { applyContentModifications } from "./modifications";
 
 export class GraphError extends Error {}
 
@@ -174,6 +175,7 @@ export function loadDomainGraph(dd: DataDir, domain: string): DomainGraph {
       });
   }
   const graph = applyGraphEdits({ domain, nodes, edges }, loadGraphEdits(dd, domain));
+  applyContentModifications(dd, domain, graph);
   assertAcyclic(graph.edges);
   return graph;
 }

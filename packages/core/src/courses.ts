@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import YAML from "yaml";
 import { domainDir, type DataDir } from "./datadir";
-import { assertAcyclic, buildLinkIndex, GraphError, listDomains, loadDomainGraphRaw, parseNodeFile } from "./graph";
+import { assertAcyclic, buildLinkIndex, GraphError, listDomains, loadDomainGraph, loadDomainGraphRaw, parseNodeFile } from "./graph";
+import { serializeNode } from "./author";
 import type { CorrespondenceLink, GraphEdge, GraphNode, ResolvedCorrespondenceLink } from "./types";
 
 /** Opaque registry-style artifact handle. It deliberately carries no course semantics. */
@@ -46,6 +47,8 @@ export interface Bindings {
   /** One standing namespace for locally generated nodes, rather than scope-sized courses. */
   personal_namespace: CourseId;
   bindings: CourseBinding[];
+  /** Learner links may also join the personal namespace and unpublished drafts. */
+  correspondence_confirmations?: CorrespondenceLink[];
 }
 
 export class CourseError extends Error {}
@@ -146,7 +149,7 @@ function localDerivation(dd: DataDir, domain: string): { based_on: CourseId[]; c
 
 function snapshot(dd: DataDir, domain: string, version: string): PublishedCourseVersion {
   const local = ensureLocalCourse(dd, domain);
-  const graph = loadDomainGraphRaw(dd, domain);
+  const graph = loadDomainGraph(dd, domain);
   return {
     course_id: local.id,
     domain,
@@ -435,6 +438,18 @@ export function publishCourse(dd: DataDir, domain: string, version: string): Pub
       if (entry === "course.yaml") continue;
       cpSync(join(domainDir(dd, domain), entry), join(stage, entry), { recursive: true, dereference: false });
     }
+    // A locally-owned draft may have direct patches. Package the composed
+    // graph, never the unmodified source files, so publication is faithful to
+    // what the learner reviewed while adopted bindings remain immutable.
+    for (const entry of readdirSync(stage)) if (entry.endsWith(".md")) rmSync(join(stage, entry));
+    const composed = loadDomainGraph(dd, domain);
+    for (const node of composed.nodes.values()) {
+      let body = node.body.replace(/^#\s+.*(?:\r?\n|$)/m, "").trim();
+      body = body.replace(/\n*##\s+(?:Requires|See also|See-also)\s*[\s\S]*$/i, "").trim();
+      const spec = { id: node.id, title: node.title, criterion: node.criterion, aliases: node.aliases, tags: node.tags, type: node.knowledge_type, threshold: node.threshold, deprecated: node.deprecated, body: body || node.title,
+        requires: composed.edges.filter((edge) => edge.from === node.id && edge.type === "dependency").map((edge) => edge.to), see_also: composed.edges.filter((edge) => edge.from === node.id && edge.type === "strong-relevance").map((edge) => edge.to) };
+      writeFileSync(join(stage, `${node.id}.md`), serializeNode(spec));
+    }
     writeFileSync(join(stage, "revision.yaml"), YAML.stringify(next));
     mkdirSync(join(dd.coursesDir, next.course_id, "versions"), { recursive: true });
     // A rename is atomic within the store filesystem and no mutation path ever reopens this directory.
@@ -513,7 +528,11 @@ function validateBindings(raw: unknown): Bindings {
       })()),
     };
   });
-  return { v: 1, personal_namespace: value.personal_namespace, bindings };
+  const correspondence_confirmations = value.correspondence_confirmations === undefined ? undefined : (() => {
+    if (!Array.isArray(value.correspondence_confirmations)) throw new CourseError("correspondence_confirmations must be an array");
+    return value.correspondence_confirmations.map(validateCorrespondence);
+  })();
+  return { v: 1, personal_namespace: value.personal_namespace, bindings, ...(correspondence_confirmations === undefined ? {} : { correspondence_confirmations }) };
 }
 
 export function loadBindings(dd: DataDir): Bindings {
@@ -699,37 +718,39 @@ export function validateCourseStore(dd: DataDir): void {
       throw new CourseError(`conflicting authored correspondence weights for ${key}`);
     authoredGrades.set(key, link.weight);
   }
+  // Confirmed learner links are overlay state and may join published bindings,
+  // the standing personal namespace, or an unpublished working copy. Resolve
+  // endpoints against the installed graph, never against publication status.
+  const aliases = new Map<CourseId, string>();
+  for (const domain of adoptedDomains(dd)) aliases.set(ensureLocalCourse(dd, domain).id, domain);
   const seenLinks = new Set<string>();
-  for (const binding of bindings.bindings) for (const link of binding.correspondence_confirmations) {
-    const from = revisionsByCourse.get(link.from.course_id as CourseId);
-    const to = revisionsByCourse.get(link.to.course_id as CourseId);
-    if (from === undefined || to === undefined) throw new CourseError("correspondence endpoints must be adopted courses");
-    const fromBinding = bindingsByCourse.get(link.from.course_id as CourseId)!;
-    const toBinding = bindingsByCourse.get(link.to.course_id as CourseId)!;
-    if (!bindingHasNode(dd, fromBinding, link.from.node) || !bindingHasNode(dd, toBinding, link.to.node))
-      throw new CourseError("correspondence references an unknown pinned node or unimported node");
-    const key = correspondenceKey(link);
-    if (seenLinks.has(key)) throw new CourseError("duplicate correspondence");
-    seenLinks.add(key);
+  for (const link of listCorrespondences(dd)) {
+    const fromDomain = aliases.get(link.from.course_id as CourseId), toDomain = aliases.get(link.to.course_id as CourseId);
+    if (fromDomain === undefined || toDomain === undefined) throw new CourseError("correspondence endpoints must be installed course namespaces");
+    if (!loadDomainGraph(dd, fromDomain).nodes.has(link.from.node) || !loadDomainGraph(dd, toDomain).nodes.has(link.to.node))
+      throw new CourseError("correspondence references an unknown local node");
+    const key = correspondenceKey(link); if (seenLinks.has(key)) throw new CourseError("duplicate correspondence"); seenLinks.add(key);
   }
 }
 
 /** All confirmed learner links, in deterministic endpoint order. */
 export function listCorrespondences(dd: DataDir): CorrespondenceLink[] {
-  const links = loadBindings(dd).bindings.flatMap((binding) => binding.correspondence_confirmations);
-  return links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b)));
+  const bindings = loadBindings(dd);
+  const links = [...(bindings.correspondence_confirmations ?? []), ...bindings.bindings.flatMap((binding) => binding.correspondence_confirmations)];
+  return [...new Map(links.map((link) => [correspondenceKey(link), link])).values()].sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b)));
 }
 
 /** Resolve confirmed course identities to the currently installed local aliases. */
 export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[] {
   validateCourseStore(dd);
   const bindings = loadBindings(dd).bindings;
-  const domains = new Map(bindings.map((binding) => [binding.course_id, binding.domain]));
+  const domains = new Map<CourseId, string>();
+  for (const domain of adoptedDomains(dd)) domains.set(ensureLocalCourse(dd, domain).id, domain);
   // Author declarations are immutable revision metadata. They are active only
   // when both artifacts are adopted; user confirmations remain in the overlay.
   const byCourse = new Map(bindings.map((binding) => [binding.course_id, binding]));
   const authored = bindings.flatMap((binding) => loadPublishedCourse(dd, binding.course_id, binding.version).derivation.correspondences)
-    .filter((link) => domains.has(link.from.course_id as CourseId) && domains.has(link.to.course_id as CourseId) &&
+    .filter((link) => byCourse.has(link.from.course_id as CourseId) && byCourse.has(link.to.course_id as CourseId) &&
       bindingHasNode(dd, byCourse.get(link.from.course_id as CourseId)!, link.from.node) && bindingHasNode(dd, byCourse.get(link.to.course_id as CourseId)!, link.to.node));
   // An explicit learner confirmation may revise an author-provided starting
   // grade for the same directed endpoints.
@@ -751,23 +772,18 @@ export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[
 export function confirmCorrespondence(dd: DataDir, raw: unknown): CorrespondenceLink {
   const link = validateCorrespondence(raw);
   const bindings = loadBindings(dd);
-  const source = bindings.bindings.find((binding) => binding.course_id === link.from.course_id);
-  const target = bindings.bindings.find((binding) => binding.course_id === link.to.course_id);
-  if (source === undefined || target === undefined)
-    throw new CourseError("correspondence endpoints must be adopted courses");
-  if (bindings.bindings.some((binding) => binding.correspondence_confirmations.some((item) => correspondenceKey(item) === correspondenceKey(link))))
-    throw new CourseError("duplicate correspondence");
-  // Reject invalid endpoints against the prospective store before persisting
-  // anything. The post-write store validation remains a comprehensive guard.
-  const sourceRevision = loadPublishedCourse(dd, source.course_id, source.version);
-  const targetRevision = loadPublishedCourse(dd, target.course_id, target.version);
-  if (!sourceRevision.nodes.some((node) => node.id === link.from.node) || !targetRevision.nodes.some((node) => node.id === link.to.node) ||
-      !bindingHasNode(dd, source, link.from.node) || !bindingHasNode(dd, target, link.to.node))
-    throw new CourseError("correspondence references an unknown pinned node or unimported node");
-  target.correspondence_confirmations.push(link);
-  const links = target.correspondence_confirmations;
-  writeBindings(dd, bindings);
-  try { validateCourseStore(dd); } catch (error) { target.correspondence_confirmations = links.filter((item) => item !== link); writeBindings(dd, bindings); throw error; }
+  if (listCorrespondences(dd).some((item) => correspondenceKey(item) === correspondenceKey(link))) throw new CourseError("duplicate correspondence");
+  const aliases = new Map<CourseId, string>();
+  for (const domain of adoptedDomains(dd)) aliases.set(ensureLocalCourse(dd, domain).id, domain);
+  const fromDomain = aliases.get(link.from.course_id as CourseId), toDomain = aliases.get(link.to.course_id as CourseId);
+  if (fromDomain === undefined || toDomain === undefined) throw new CourseError("correspondence endpoints must be installed course namespaces");
+  const fromBinding = bindings.bindings.find((binding) => binding.course_id === link.from.course_id);
+  const toBinding = bindings.bindings.find((binding) => binding.course_id === link.to.course_id);
+  if ((fromBinding?.fragment_nodes !== undefined && !bindingHasNode(dd, fromBinding, link.from.node)) || (toBinding?.fragment_nodes !== undefined && !bindingHasNode(dd, toBinding, link.to.node))) throw new CourseError("correspondence references an unimported node");
+  if (!loadDomainGraph(dd, fromDomain).nodes.has(link.from.node) || !loadDomainGraph(dd, toDomain).nodes.has(link.to.node))
+    throw new CourseError("correspondence references an unknown pinned node");
+  bindings.correspondence_confirmations = [...(bindings.correspondence_confirmations ?? []), link]; writeBindings(dd, bindings);
+  try { validateCourseStore(dd); } catch (error) { bindings.correspondence_confirmations = bindings.correspondence_confirmations.filter((item) => item !== link); writeBindings(dd, bindings); throw error; }
   return link;
 }
 
@@ -776,6 +792,9 @@ export function removeCorrespondence(dd: DataDir, raw: unknown): void {
   const link = validateCorrespondence(raw);
   const bindings = loadBindings(dd);
   let removed = false;
+  const rootBefore = bindings.correspondence_confirmations?.length ?? 0;
+  bindings.correspondence_confirmations = (bindings.correspondence_confirmations ?? []).filter((item) => correspondenceKey(item) !== correspondenceKey(link));
+  removed ||= rootBefore !== bindings.correspondence_confirmations.length;
   for (const binding of bindings.bindings) {
     const before = binding.correspondence_confirmations.length;
     binding.correspondence_confirmations = binding.correspondence_confirmations.filter((item) => correspondenceKey(item) !== correspondenceKey(link));

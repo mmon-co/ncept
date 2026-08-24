@@ -23,6 +23,8 @@ export interface DataDir {
   viewsFile: string;
   /** User-level mastery specs, resolutions, coverage judgments, and splices. Never exported as a course package. */
   specsFile: string;
+  /** Learner-confirmed graph/content patches and notebook move records. */
+  modificationsFile: string;
   /** Durable journal for the two-directory binding install transaction. */
   bindingTransactionFile: string;
   /** Transaction-only staging/backup directories, deliberately outside user domains. */
@@ -49,6 +51,7 @@ export function resolveDataDir(root?: string): DataDir {
     bindingsFile: join(r, "overlay", "course-bindings.yaml"),
     viewsFile: join(r, "overlay", "views.yaml"),
     specsFile: join(r, "overlay", "specs.yaml"),
+    modificationsFile: join(r, "overlay", "modifications.yaml"),
     bindingTransactionFile: join(r, "overlay", "course-binding-transaction.yaml"),
     bindingTransactionsDir: join(r, "overlay", "course-binding-transactions"),
     eventsFile: join(r, "events.jsonl"),

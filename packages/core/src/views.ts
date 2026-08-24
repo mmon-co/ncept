@@ -2,6 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
 import { abandonedNodes, adoptedDomains, ensureLocalCourse, loadBindings, type CourseId } from "./courses";
+import { retiredNodes } from "./modifications";
 import { loadDomainGraph } from "./graph";
 import type { DataDir } from "./datadir";
 
@@ -174,7 +175,7 @@ export function courseScopes(dd: DataDir): Map<CourseId, CourseScope> {
     const domain = values.sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.domain.localeCompare(b.domain))[0]!.domain;
     const graph = loadDomainGraph(dd, domain);
     const nodes = new Set(graph.nodes.keys());
-    const hidden = abandonedNodes(dd, domain);
+    const hidden = new Set([...abandonedNodes(dd, domain), ...retiredNodes(dd, course_id)]);
     out.set(course_id, { course_id, domain, nodes, visible_nodes: new Set([...nodes].filter((node) => !hidden.has(node))), edges: graph.edges });
   }
   return out;
