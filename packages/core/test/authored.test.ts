@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import YAML from "yaml";
 import {
   applyAuthoredChangeSet,
+  authoredPatchChangeSet,
   assertAuthoredPath,
   validateAuthoredChangeSet,
   validateAuthoredTree,
@@ -59,6 +60,25 @@ describe("authored prospective validation", () => {
     const next = applyAuthoredChangeSet(tree, validated);
     expect([...next.files.keys()].sort()).toEqual(["a.md", "b.md", "c.md", "course.yaml"]);
     expect(tree.files.has("c.md")).toBe(false);
+  });
+
+  test("turns a confirmed graph patch into an authored tree change", () => {
+    const tree = courseTree();
+    const change = authoredPatchChangeSet(tree, "abc123", {
+      kind: "add-node",
+      node: { id: "c", title: "C", body: "New node.", tags: ["glue"], requires: ["b"] },
+    });
+    const next = applyAuthoredChangeSet(tree, change);
+    expect(new TextDecoder().decode(next.files.get("c.md"))).toContain("tags: [glue]");
+    expect(new TextDecoder().decode(next.files.get("c.md"))).toContain("[[b]]");
+    expect(tree.files.has("c.md")).toBe(false);
+  });
+
+  test("rejects an authored graph patch that would introduce a cycle", () => {
+    expect(() => authoredPatchChangeSet(courseTree(), "abc123", {
+      kind: "add-edge",
+      edge: { from: "a", to: "b", type: "dependency" },
+    })).toThrow(/cycle/);
   });
 
   test("requires curriculum identity and owned graph metadata to agree", () => {

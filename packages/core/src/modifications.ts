@@ -95,12 +95,16 @@ function applySplice(body: string, section: string, replacement: string): string
 /** Apply validated operations to an in-memory graph; callers decide ownership and persistence. */
 export function applyPatchOperations(operations: Iterable<PatchOperation>, graph: { nodes: Map<string, any>; edges: GraphEdge[] }): void {
   for (const op of operations) {
-    if (op.kind === "add-node" && !graph.nodes.has(op.node.id)) graph.nodes.set(op.node.id, { ...op.node, criterion: op.node.criterion ?? op.node.id, deprecated: op.node.deprecated ?? false, aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], knowledge_type: op.node.type ?? "conceptual", threshold: op.node.threshold ?? false, body: `# ${op.node.title ?? op.node.id}\n\n${op.node.body}`, file: undefined });
+    if (op.kind === "add-node" && !graph.nodes.has(op.node.id)) {
+      graph.nodes.set(op.node.id, { ...op.node, criterion: op.node.criterion ?? op.node.id, deprecated: op.node.deprecated ?? false, aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], knowledge_type: op.node.type ?? "conceptual", threshold: op.node.threshold ?? false, body: `# ${op.node.title ?? op.node.id}\n\n${op.node.body}`, file: undefined });
+      graph.edges.push(...(op.node.requires ?? []).map((to) => ({ from: op.node.id, to, type: "dependency" as const })));
+      graph.edges.push(...(op.node.see_also ?? []).map((to) => ({ from: op.node.id, to, type: "strong-relevance" as const })));
+    }
     if (op.kind === "remove-node") { graph.nodes.delete(op.node_id); graph.edges = graph.edges.filter((edge) => edge.from !== op.node_id && edge.to !== op.node_id); }
     if (op.kind === "add-edge" && !graph.edges.some((edge) => edge.from === op.edge.from && edge.to === op.edge.to && edge.type === op.edge.type)) graph.edges.push(op.edge);
     if (op.kind === "remove-edge") graph.edges = graph.edges.filter((edge) => edge.from !== op.edge.from || edge.to !== op.edge.to || edge.type !== op.edge.type);
     if (op.kind === "splice-section") { const node = graph.nodes.get(op.node_id); if (node !== undefined) node.body = applySplice(node.body, op.section, op.replacement); }
-    if (op.kind === "replace-node") { const node = graph.nodes.get(op.node_id); if (node !== undefined) Object.assign(node, { ...op.node, id: op.node_id, criterion: op.node.criterion ?? op.node_id, knowledge_type: op.node.type ?? "conceptual", aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], threshold: op.node.threshold ?? false, deprecated: op.node.deprecated ?? false, body: `# ${op.node.title ?? op.node_id}\n\n${op.node.body}`, file: node.file }); }
+    if (op.kind === "replace-node") { const node = graph.nodes.get(op.node_id); if (node !== undefined) { Object.assign(node, { ...op.node, id: op.node_id, criterion: op.node.criterion ?? op.node_id, knowledge_type: op.node.type ?? "conceptual", aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], threshold: op.node.threshold ?? false, deprecated: op.node.deprecated ?? false, body: `# ${op.node.title ?? op.node_id}\n\n${op.node.body}`, file: node.file }); graph.edges = graph.edges.filter((edge) => edge.from !== op.node_id); graph.edges.push(...(op.node.requires ?? []).map((to) => ({ from: op.node_id, to, type: "dependency" as const })), ...(op.node.see_also ?? []).map((to) => ({ from: op.node_id, to, type: "strong-relevance" as const }))); } }
   }
 }
 /** Apply confirmed patches only at read time; originals and package snapshots stay immutable. */
@@ -112,6 +116,7 @@ function validateOp(dd: DataDir, domain: string, op: PatchOperation): void {
   if (op.kind === "add-node") { if (known.has(op.node.id)) throw new ModificationError(`node '${op.node.id}' already exists`); if (!op.node.body?.trim()) throw new ModificationError("added node needs a body"); }
   if (op.kind === "remove-node" || op.kind === "replace-node" || op.kind === "splice-section") if (!known.has(op.node_id)) throw new ModificationError(`unknown node '${op.node_id}'`);
   if (op.kind === "replace-node" && op.node.id !== op.node_id) throw new ModificationError("replace-node cannot change a node id");
+  if (op.kind === "add-node" || op.kind === "replace-node") for (const target of [...(op.node.requires ?? []), ...(op.node.see_also ?? [])]) if (!known.has(target) && target !== op.node.id) throw new ModificationError(`patch node references unknown node '${target}'`);
   if (op.kind === "add-edge" || op.kind === "remove-edge") { if (!known.has(op.edge.from) || !known.has(op.edge.to)) throw new ModificationError("patch edge references an unknown node"); }
 }
 /** Confirm one proposed operation. Landing is never implicit: adopted packages use overlay, drafts use direct. */
