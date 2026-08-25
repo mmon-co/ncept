@@ -60,8 +60,17 @@ export interface SavedView {
   id: string;
   name: string;
   expression: TagExpression;
+  revisions?: ViewRevision[];
   /** D3 freezes rewrite epistemic terms into literal `{nodes}` branches. */
   frozen?: FrozenViewProvenance[];
+}
+
+export interface ViewRevision {
+  revision: number;
+  saved_at: string;
+  name: string;
+  expression: TagExpression;
+  conversation_id?: string;
 }
 
 export interface ViewStore {
@@ -187,7 +196,17 @@ function parseStore(value: unknown): ViewStore {
         return { query: parseExpression(rawFrozen.query, `views[${index}].frozen[${frozenIndex}].query`), initialized_at: rawFrozen.initialized_at, members, path: (rawFrozen.path ?? []) as number[] };
       });
     })();
-    return { id: view.id, name: view.name.trim(), expression: parseExpression(view.expression, `views[${index}].expression`), ...(frozen === undefined ? {} : { frozen }) };
+    const revisions = view.revisions === undefined ? undefined : (() => {
+      if (!Array.isArray(view.revisions)) throw new ViewError(`views[${index}].revisions must be an array`);
+      return view.revisions.map((item, revisionIndex): ViewRevision => {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) throw new ViewError(`views[${index}].revisions[${revisionIndex}] is invalid`);
+        const revision = item as Record<string, unknown>;
+        if (revision.revision !== revisionIndex + 1 || typeof revision.saved_at !== "string" || Number.isNaN(Date.parse(revision.saved_at)) || typeof revision.name !== "string" || revision.name.trim() === "" || (revision.conversation_id !== undefined && typeof revision.conversation_id !== "string"))
+          throw new ViewError(`views[${index}].revisions[${revisionIndex}] is invalid`);
+        return { revision: revisionIndex + 1, saved_at: revision.saved_at, name: revision.name.trim(), expression: parseExpression(revision.expression, `views[${index}].revisions[${revisionIndex}].expression`), ...(revision.conversation_id === undefined ? {} : { conversation_id: revision.conversation_id }) };
+      });
+    })();
+    return { id: view.id, name: view.name.trim(), expression: parseExpression(view.expression, `views[${index}].expression`), ...(revisions === undefined ? {} : { revisions }), ...(frozen === undefined ? {} : { frozen }) };
   });
   if (new Set(views.map((view) => view.id)).size !== views.length) throw new ViewError("duplicate view id");
   return { v: 1, user_tags, materialized_tags, views };
@@ -441,11 +460,15 @@ export function refreshMaterializedTag(dd: DataDir, id: string, frozenMembers?: 
   return { tag, added, removed };
 }
 
-export function saveView(dd: DataDir, id: string, input: { name: string; expression: TagExpression; frozen?: FrozenViewProvenance[] }): SavedView {
+export function saveView(dd: DataDir, id: string, input: { name: string; expression: TagExpression; frozen?: FrozenViewProvenance[]; conversation_id?: string }): SavedView {
   assertId(id, "view id");
   if (typeof input.name !== "string" || input.name.trim() === "") throw new ViewError("view name must be non-empty");
   const store = loadViewStore(dd);
-  const view: SavedView = { id, name: input.name.trim(), expression: parseExpression(input.expression), ...(input.frozen === undefined ? {} : { frozen: input.frozen.map((item, index) => ({ query: parseExpression(item.query, `frozen[${index}].query`), initialized_at: item.initialized_at, members: item.members.map((member, memberIndex) => parseRef(member, `frozen[${index}].members[${memberIndex}]`)), path: [...item.path] })) }) };
+  if (input.conversation_id !== undefined && input.conversation_id.trim() === "") throw new ViewError("view conversation id must be non-empty");
+  const prior = store.views.find((item) => item.id === id);
+  const expression = parseExpression(input.expression);
+  const revision: ViewRevision = { revision: (prior?.revisions?.length ?? 0) + 1, saved_at: new Date().toISOString(), name: input.name.trim(), expression, ...(input.conversation_id === undefined ? {} : { conversation_id: input.conversation_id }) };
+  const view: SavedView = { id, name: input.name.trim(), expression, revisions: [...(prior?.revisions ?? []), revision], ...(input.frozen === undefined ? {} : { frozen: input.frozen.map((item, index) => ({ query: parseExpression(item.query, `frozen[${index}].query`), initialized_at: item.initialized_at, members: item.members.map((member, memberIndex) => parseRef(member, `frozen[${index}].members[${memberIndex}]`)), path: [...item.path] })) }) };
   assertKnownExpression(dd, view.expression, store);
   view.frozen?.forEach((item) => { if (Number.isNaN(Date.parse(item.initialized_at))) throw new ViewError("frozen initialized_at must be an ISO date"); item.members.forEach((member) => assertGround(dd, member)); });
   const index = store.views.findIndex((item) => item.id === id);

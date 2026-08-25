@@ -7,6 +7,7 @@ import {
   evaluateTagExpression,
   foldMastery,
   graphEditsFile,
+  getSavedView,
   loadDomainGraph,
   membersForTag,
   refreshMaterializedTag,
@@ -84,4 +85,18 @@ test("views reject unknown ground nodes and undefined tags", () => {
   expect(() => saveView(dd, "literal-bad", { name: "Bad literal", expression: { nodes: [{ course_id: course.id, node_id: "missing" }] } })).toThrow(/unknown ground node/);
   expect(() => saveView(dd, "literal-dupe", { name: "Duplicate literal", expression: { nodes: [{ course_id: course.id, node_id: "a" }, { course_id: course.id, node_id: "a" }] } })).toThrow(/duplicate members/);
   expect(foldMastery([validateEvent(ev({ domain: "math", nodes: ["user:focus"] }))], new Map([["math", loadDomainGraph(dd, "math")]]), DEFAULT_PARAMS)).toEqual([]);
+});
+
+test("view saves retain lightweight query revisions and conversation provenance", () => {
+  const dd = tempDataDir();
+  writeTestDomain(dd);
+  const course = ensureLocalCourse(dd, "math");
+  const a = { course_id: course.id, node_id: "a" };
+  const b = { course_id: course.id, node_id: "b" };
+  saveView(dd, "focus", { name: "Focus", expression: { nodes: [a] }, conversation_id: "s-one" });
+  saveView(dd, "focus", { name: "Focus next", expression: { nodes: [a, b] }, conversation_id: "s-two" });
+  expect(getSavedView(dd, "focus").revisions).toMatchObject([
+    { revision: 1, name: "Focus", expression: { nodes: [a] }, conversation_id: "s-one" },
+    { revision: 2, name: "Focus next", expression: { nodes: [a, b] }, conversation_id: "s-two" },
+  ]);
 });
