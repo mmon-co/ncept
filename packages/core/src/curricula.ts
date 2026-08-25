@@ -108,9 +108,10 @@ function pin(raw: unknown, label = "package pin"): PackagePin {
   if (typeof value.course_id !== "string" || !value.course_id.startsWith("course-") || typeof value.version !== "string" || !SEMVER.test(value.version)) throw new CurriculumError(`${label} must name course_id and semver version`);
   return { course_id: value.course_id as CourseId, version: value.version };
 }
-function pins(raw: unknown, label = "package bases"): PackagePin[] {
+function pins(raw: unknown, label = "package bases", order: "canonical" | "declared" = "canonical"): PackagePin[] {
   if (!Array.isArray(raw)) throw new CurriculumError(`${label} must be an array`);
-  const result = raw.map((item) => pin(item, label)).sort((a, b) => `${a.course_id}@${a.version}`.localeCompare(`${b.course_id}@${b.version}`));
+  const result = raw.map((item) => pin(item, label));
+  if (order === "canonical") result.sort((a, b) => `${a.course_id}@${a.version}`.localeCompare(`${b.course_id}@${b.version}`));
   if (new Set(result.map((item) => item.course_id)).size !== result.length) throw new CurriculumError(`${label} cannot pin multiple versions of one course`);
   return result;
 }
@@ -189,7 +190,7 @@ function draft(raw: unknown): CurriculumDraft {
     if (new Set(decisions.map((decision) => decision.modification_id)).size !== decisions.length) throw new CurriculumError("duplicate base update decision");
     return { source_course_id: review.source_course_id as CourseId, source_version: review.source_version, base, latest_version: review.latest_version, decisions, created_at: review.created_at };
   })();
-  return { id: value.id, domain: value.domain, title: value.title, bases: pins(value.bases), tags: tags(value.tags), modifications: modifications(value.modifications), correspondences: correspondences(value.correspondences ?? []), slots: slots.sort((a, b) => a.id.localeCompare(b.id)), created_at: value.created_at, updated_at: value.updated_at, ...(base_update_review === undefined ? {} : { base_update_review }) };
+  return { id: value.id, domain: value.domain, title: value.title, bases: pins(value.bases, "curriculum bases", "declared"), tags: tags(value.tags), modifications: modifications(value.modifications), correspondences: correspondences(value.correspondences ?? []), slots: slots.sort((a, b) => a.id.localeCompare(b.id)), created_at: value.created_at, updated_at: value.updated_at, ...(base_update_review === undefined ? {} : { base_update_review }) };
 }
 function store(dd: DataDir): CurriculumStore {
   if (!existsSync(dd.curriculaFile)) return { v: 1, drafts: [], bindings: [] };
@@ -282,7 +283,7 @@ export function generateCurriculumSlot(dd: DataDir, curriculum: string, slotId: 
 }
 export function curriculumReadiness(dd: DataDir, id: string): { ready: boolean; unresolved_slots: CurriculumSlot[]; members: PackagePin[] } {
   const item = getCurriculumDraft(dd, id), unresolved_slots = item.slots.filter((slot) => slot.resolved === undefined);
-  const members = [...item.bases, ...item.slots.flatMap((slot) => slot.resolved === undefined ? [] : [slot.resolved])].sort((a, b) => `${a.course_id}@${a.version}`.localeCompare(`${b.course_id}@${b.version}`));
+  const members = [...item.bases, ...item.slots.flatMap((slot) => slot.resolved === undefined ? [] : [slot.resolved])];
   return { ready: unresolved_slots.length === 0, unresolved_slots, members };
 }
 /** Publish an immutable remix: pins + package mod layer + authored owned graph. Slots never enter the artifact. */
