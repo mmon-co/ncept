@@ -26,3 +26,7 @@ _Avoid_: Domain, draft ID
 **Adopted curriculum identity**:
 The exact published curriculum revision installed for a learner, encoded by the existing binding identifier as `course_id@version`.
 _Avoid_: Bare course ID, owned domain
+
+**Course revision**:
+An immutable published version of a course, including its graph, Materials, and other attachments. Materials do not version independently; changing them is part of updating the course.
+_Avoid_: Material version, attachment version
