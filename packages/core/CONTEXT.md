@@ -14,3 +14,15 @@ _Avoid_: Domain, curriculum
 **Curriculum**:
 A presented package kind that composes pinned course members with package modifications, an owned patch graph, and tags. Lazy slots may exist only in a draft; published curricula have concrete members.
 _Avoid_: Course, specification, synthetic course
+
+**Curriculum draft identity**:
+A user-chosen curriculum identifier interpreted only in the draft namespace. Its namespace must remain explicit in types and routes.
+_Avoid_: Bare curriculum ID
+
+**Published curriculum identity**:
+An opaque course identifier for the published artifact. An exact published revision pairs that identifier with its semantic version.
+_Avoid_: Domain, draft ID
+
+**Adopted curriculum identity**:
+The exact published curriculum revision installed for a learner, encoded by the existing binding identifier as `course_id@version`.
+_Avoid_: Bare course ID, owned domain
