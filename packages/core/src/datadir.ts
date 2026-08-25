@@ -12,6 +12,12 @@ export const STORE_FORMAT_VERSION = 3;
 
 export interface DataDir {
   root: string;
+  /** Private Git repository containing only user-authored source material. */
+  authoredDir: string;
+  /** Application-owned metadata for isolated authored edit efforts. */
+  authoringEffortsDir: string;
+  /** Disposable Git worktrees for authored edit efforts and clean integration. */
+  authoringWorktreesDir: string;
   /** Mutable local course working copies, retained under the historical name for API compatibility. */
   domainsDir: string;
   /** Immutable published course artifact snapshots, keyed by opaque course id then version. */
@@ -47,6 +53,9 @@ export function resolveDataDir(root?: string): DataDir {
   const r = root ?? process.env.CONCEPT_DATA_DIR ?? join(process.env.HOME ?? ".", ".concept");
   return {
     root: r,
+    authoredDir: join(r, "authored"),
+    authoringEffortsDir: join(r, "authoring-efforts"),
+    authoringWorktreesDir: join(r, "authoring-worktrees"),
     domainsDir: join(r, "domains"),
     coursesDir: join(r, "courses"),
     overlayDir: join(r, "overlay"),
