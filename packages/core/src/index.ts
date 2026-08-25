@@ -15,3 +15,4 @@ export * from "./courses";
 export * from "./views";
 export * from "./specs";
 export * from "./modifications";
+export * from "./curricula";

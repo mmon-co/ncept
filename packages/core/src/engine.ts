@@ -135,7 +135,11 @@ export function foldMastery(
     }
     for (const link of correspondences) {
       if (!graphs.get(link.from.domain)?.nodes.has(link.from.node) || !graphs.get(link.to.domain)?.nodes.has(link.to.node)) continue;
-      add(key(link.from.domain, link.from.node), { domain: link.to.domain, node: link.to.node, factor: link.weight, transferred: true });
+      if (link.relation === undefined) add(key(link.from.domain, link.from.node), { domain: link.to.domain, node: link.to.node, factor: link.weight, transferred: true });
+      else {
+        const type = link.relation === "depends-on" ? "dependency" : "strong-relevance", factor = success ? p.propagation.success_up[type] : p.propagation.failure_down[type];
+        add(key(success ? link.from.domain : link.to.domain, success ? link.from.node : link.to.node), { domain: success ? link.to.domain : link.from.domain, node: success ? link.to.node : link.from.node, factor, transferred: false });
+      }
     }
     for (const edges of result.values()) edges.sort((a, b) =>
       `${a.domain}\u0000${a.node}`.localeCompare(`${b.domain}\u0000${b.node}`),

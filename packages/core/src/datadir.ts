@@ -25,6 +25,8 @@ export interface DataDir {
   specsFile: string;
   /** Learner-confirmed graph/content patches and notebook move records. */
   modificationsFile: string;
+  /** Draft curricula and adopted slipcases; never copied into published packages. */
+  curriculaFile: string;
   /** Durable journal for the two-directory binding install transaction. */
   bindingTransactionFile: string;
   /** Transaction-only staging/backup directories, deliberately outside user domains. */
@@ -52,6 +54,7 @@ export function resolveDataDir(root?: string): DataDir {
     viewsFile: join(r, "overlay", "views.yaml"),
     specsFile: join(r, "overlay", "specs.yaml"),
     modificationsFile: join(r, "overlay", "modifications.yaml"),
+    curriculaFile: join(r, "overlay", "curricula.yaml"),
     bindingTransactionFile: join(r, "overlay", "course-binding-transaction.yaml"),
     bindingTransactionsDir: join(r, "overlay", "course-binding-transactions"),
     eventsFile: join(r, "events.jsonl"),

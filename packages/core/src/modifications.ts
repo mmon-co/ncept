@@ -25,7 +25,8 @@ const edge = (value: unknown): GraphEdge => {
   if (typeof x.from !== "string" || !x.from || typeof x.to !== "string" || !x.to || (x.type !== "dependency" && x.type !== "strong-relevance")) throw new ModificationError("patch edge is invalid");
   return { from: x.from, to: x.to, type: x.type };
 };
-function operation(raw: unknown): PatchOperation {
+/** Canonical parser shared by learner and immutable package patch declarations. */
+export function parsePatchOperation(raw: unknown): PatchOperation {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ModificationError("patch operation must be an object");
   const x = raw as Record<string, unknown>;
   if (x.kind === "add-node" && typeof x.node === "object" && x.node !== null) return { kind: x.kind, node: x.node as NodeSpec };
@@ -45,7 +46,7 @@ function store(dd: DataDir): Store {
     if (typeof rawItem !== "object" || rawItem === null || Array.isArray(rawItem)) throw new ModificationError("invalid modification"); const item = rawItem as Record<string, unknown>;
     if (typeof item.id !== "string" || !ID.test(item.id) || typeof item.domain !== "string" || !item.domain || (item.landing !== "overlay" && item.landing !== "direct" && item.landing !== "notebook" && item.landing !== "package") || (item.status !== "confirmed" && item.status !== "reverted") || typeof item.created_at !== "string" || Number.isNaN(Date.parse(item.created_at))) throw new ModificationError("invalid modification");
     if (item.materialized_direct !== undefined && typeof item.materialized_direct !== "boolean") throw new ModificationError("invalid direct modification state");
-    return { id: item.id, domain: item.domain, landing: item.landing, status: item.status, created_at: item.created_at, ...(item.materialized_direct === true ? { materialized_direct: true } : {}), operation: operation(item.operation) };
+    return { id: item.id, domain: item.domain, landing: item.landing, status: item.status, created_at: item.created_at, ...(item.materialized_direct === true ? { materialized_direct: true } : {}), operation: parsePatchOperation(item.operation) };
   });
   const moves = x.moves.map((rawItem): NotebookMove => {
     if (typeof rawItem !== "object" || rawItem === null || Array.isArray(rawItem)) throw new ModificationError("invalid notebook move"); const item = rawItem as Record<string, unknown>;
@@ -91,10 +92,9 @@ function applySplice(body: string, section: string, replacement: string): string
   if (match === null) return `${body.trim()}\n\n## ${section}\n\n${replacement}\n`;
   const start = match.index! + match[0].length; const rest = body.slice(start); const next = rest.search(/^#{2,6}\s+/m); return `${body.slice(0, start)}\n\n${replacement.trim()}\n${next < 0 ? "" : rest.slice(next)}`;
 }
-/** Apply confirmed patches only at read time; originals and package snapshots stay immutable. */
-export function applyContentModifications(dd: DataDir, domain: string, graph: { nodes: Map<string, any>; edges: GraphEdge[] }): void {
-  for (const item of active(dd, domain)) {
-    const op = item.operation;
+/** Apply validated operations to an in-memory graph; callers decide ownership and persistence. */
+export function applyPatchOperations(operations: Iterable<PatchOperation>, graph: { nodes: Map<string, any>; edges: GraphEdge[] }): void {
+  for (const op of operations) {
     if (op.kind === "add-node" && !graph.nodes.has(op.node.id)) graph.nodes.set(op.node.id, { ...op.node, criterion: op.node.criterion ?? op.node.id, deprecated: op.node.deprecated ?? false, aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], knowledge_type: op.node.type ?? "conceptual", threshold: op.node.threshold ?? false, body: `# ${op.node.title ?? op.node.id}\n\n${op.node.body}`, file: undefined });
     if (op.kind === "remove-node") { graph.nodes.delete(op.node_id); graph.edges = graph.edges.filter((edge) => edge.from !== op.node_id && edge.to !== op.node_id); }
     if (op.kind === "add-edge" && !graph.edges.some((edge) => edge.from === op.edge.from && edge.to === op.edge.to && edge.type === op.edge.type)) graph.edges.push(op.edge);
@@ -102,6 +102,10 @@ export function applyContentModifications(dd: DataDir, domain: string, graph: { 
     if (op.kind === "splice-section") { const node = graph.nodes.get(op.node_id); if (node !== undefined) node.body = applySplice(node.body, op.section, op.replacement); }
     if (op.kind === "replace-node") { const node = graph.nodes.get(op.node_id); if (node !== undefined) Object.assign(node, { ...op.node, id: op.node_id, criterion: op.node.criterion ?? op.node_id, knowledge_type: op.node.type ?? "conceptual", aliases: op.node.aliases ?? [], tags: op.node.tags ?? [], threshold: op.node.threshold ?? false, deprecated: op.node.deprecated ?? false, body: `# ${op.node.title ?? op.node_id}\n\n${op.node.body}`, file: node.file }); }
   }
+}
+/** Apply confirmed patches only at read time; originals and package snapshots stay immutable. */
+export function applyContentModifications(dd: DataDir, domain: string, graph: { nodes: Map<string, any>; edges: GraphEdge[] }): void {
+  applyPatchOperations(active(dd, domain).map((item) => item.operation), graph);
 }
 function validateOp(dd: DataDir, domain: string, op: PatchOperation): void {
   const graph = loadDomainGraph(dd, domain); const known = graph.nodes;
@@ -120,7 +124,7 @@ export function ensureNotebookDomain(dd: DataDir): string {
 }
 
 export function confirmModification(dd: DataDir, input: { id: string; domain: string; operation: unknown; landing?: Modification["landing"] }): Modification {
-  if (!ID.test(input.id)) throw new ModificationError("modification id must be kebab-case"); const op = operation(input.operation); validateOp(dd, input.domain, op);
+  if (!ID.test(input.id)) throw new ModificationError("modification id must be kebab-case"); const op = parsePatchOperation(input.operation); validateOp(dd, input.domain, op);
   const bindings = loadBindings(dd); const landing: Modification["landing"] = input.landing ?? (bindings.bindings.some((binding) => binding.domain === input.domain) ? "overlay" : "direct");
   const value = store(dd); if (value.modifications.some((item) => item.id === input.id)) throw new ModificationError(`modification '${input.id}' already exists`);
   const item: Modification = { id: input.id, domain: input.domain, landing, operation: op, status: "confirmed", created_at: new Date().toISOString() }; value.modifications.push(item);

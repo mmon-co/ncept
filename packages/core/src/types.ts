@@ -84,6 +84,8 @@ export interface ResolvedCorrespondenceLink {
   from: { domain: string; node: string };
   to: { domain: string; node: string };
   weight: number;
+  /** Package assertions retain graph semantics; learner/authored correspondences omit this. */
+  relation?: "depends-on" | "reinforces";
 }
 
 export const KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;

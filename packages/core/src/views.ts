@@ -455,6 +455,11 @@ export function saveView(dd: DataDir, id: string, input: { name: string; express
   return view;
 }
 
+export function removeSavedView(dd: DataDir, id: string): void {
+  assertId(id, "view id"); const store = loadViewStore(dd), index = store.views.findIndex((item) => item.id === id);
+  if (index === -1) throw new ViewError(`unknown view '${id}'`); store.views.splice(index, 1); writeStore(dd, store);
+}
+
 export function getSavedView(dd: DataDir, id: string): SavedView {
   assertId(id, "view id");
   const view = loadViewStore(dd).views.find((item) => item.id === id);

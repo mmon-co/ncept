@@ -6,6 +6,7 @@ import { domainDir, type DataDir } from "./datadir";
 import { assertAcyclic, buildLinkIndex, GraphError, listDomains, loadDomainGraph, loadDomainGraphRaw, parseNodeFile } from "./graph";
 import { serializeNode } from "./author";
 import type { CorrespondenceLink, GraphEdge, GraphNode, ResolvedCorrespondenceLink } from "./types";
+import { activeCurriculumCorrespondences, adoptCurriculum, packageDefinition, validatePackageDefinition, type PackageDefinition } from "./curricula";
 
 /** Opaque registry-style artifact handle. It deliberately carries no course semantics. */
 export type CourseId = `course-${string}`;
@@ -16,6 +17,8 @@ export interface LocalCourse {
   domain: string;
   /** A curriculum is a package kind, never a ranking category. */
   kind?: "course" | "curriculum";
+  /** Immutable-package declaration for the next publication; this graph remains package-owned. */
+  package?: PackageDefinition;
 }
 
 export interface PublishedCourseVersion {
@@ -24,6 +27,8 @@ export interface PublishedCourseVersion {
   domain: string;
   version: string;
   kind: "course" | "curriculum";
+  /** Pins, package tags, and version-addressable patches; the revision graph is owned. */
+  package: PackageDefinition;
   /** Versioned author declaration for a course derived from other artifacts. */
   derivation: { based_on: CourseId[]; correspondences: CorrespondenceLink[] };
   nodes: { id: string; criterion: string; knowledge_type: string; deprecated: boolean }[];
@@ -86,7 +91,8 @@ export function ensureLocalCourse(dd: DataDir, domain: string): LocalCourse {
     assertCourseId(raw.id);
     if (raw.domain !== domain) throw new CourseError(`${path}: domain must be '${domain}'`);
     if (raw.kind !== undefined && raw.kind !== "course" && raw.kind !== "curriculum") throw new CourseError(`${path}: kind must be course or curriculum`);
-    return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }) };
+    const package_ = raw.package === undefined ? undefined : packageDefinition(raw.package);
+    return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }), ...(package_ === undefined ? {} : { package: package_ }) };
   }
   const result: LocalCourse = { id: opaqueId(), domain };
   writeFileSync(path, YAML.stringify(result));
@@ -100,7 +106,8 @@ export function loadLocalCourse(dd: DataDir, domain: string): LocalCourse {
   assertCourseId(raw.id);
   if (raw.domain !== domain) throw new CourseError(`${path}: domain must be '${domain}'`);
   if (raw.kind !== undefined && raw.kind !== "course" && raw.kind !== "curriculum") throw new CourseError(`${path}: kind must be course or curriculum`);
-  return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }) };
+  const package_ = raw.package === undefined ? undefined : packageDefinition(raw.package);
+  return { id: raw.id, domain, ...(raw.kind === undefined ? {} : { kind: raw.kind }), ...(package_ === undefined ? {} : { package: package_ }) };
 }
 
 /** Declare the versioned lineage and directed links a derived course ships with. */
@@ -123,9 +130,19 @@ export function writeCourseDerivation(dd: DataDir, domain: string, raw: unknown)
     if (!value.based_on.includes(foreign)) throw new CourseError(`course derivation needs based_on ${foreign}`);
   }
   writeFileSync(localCourseFile(dd, domain), YAML.stringify({
-    id: local.id, domain, ...(local.kind === undefined ? {} : { kind: local.kind }), based_on: [...value.based_on].sort(),
+    id: local.id, domain, ...(local.kind === undefined ? {} : { kind: local.kind }), ...(local.package === undefined ? {} : { package: local.package }), based_on: [...value.based_on].sort(),
     correspondences: links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))),
   }));
+}
+
+/** Set the package declaration without discarding independent derivation provenance. */
+export function writeCoursePackage(dd: DataDir, domain: string, raw: unknown, kind: "course" | "curriculum" = "course"): LocalCourse {
+  const local = ensureLocalCourse(dd, domain);
+  const package_ = packageDefinition(raw);
+  const derivation = localDerivation(dd, domain);
+  const next: LocalCourse = { id: local.id, domain, kind, package: package_ };
+  writeFileSync(localCourseFile(dd, domain), YAML.stringify({ id: next.id, domain, kind, package: package_, based_on: derivation.based_on, correspondences: derivation.correspondences }));
+  return next;
 }
 
 function localDerivation(dd: DataDir, domain: string): { based_on: CourseId[]; correspondences: CorrespondenceLink[] } {
@@ -155,6 +172,7 @@ function snapshot(dd: DataDir, domain: string, version: string): PublishedCourse
     domain,
     version,
     kind: local.kind ?? "course",
+    package: local.package ?? { bases: [], tags: [], modifications: [], correspondences: [], flavor: "flattened" },
     derivation: localDerivation(dd, domain),
     nodes: [...graph.nodes.values()].map((node) => ({
       id: node.id,
@@ -174,6 +192,9 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   const value = raw as Record<string, unknown>;
   if (value.course_id !== id || typeof value.domain !== "string" || value.domain === "" || value.version !== version || !Array.isArray(value.nodes) || !Array.isArray(value.edges) || (value.kind !== undefined && value.kind !== "course" && value.kind !== "curriculum"))
     throw new CourseError(`${path}: invalid immutable course revision`);
+  let package_: PackageDefinition;
+  try { package_ = value.package === undefined ? { bases: [], tags: [], modifications: [], correspondences: [], flavor: "flattened" } : packageDefinition(value.package); }
+  catch (error) { throw new CourseError(`${path}: invalid package declaration: ${error instanceof Error ? error.message : String(error)}`); }
   const rawDerivation = value.derivation === undefined ? { based_on: [], correspondences: [] } : value.derivation;
   if (typeof rawDerivation !== "object" || rawDerivation === null || Array.isArray(rawDerivation)) throw new CourseError(`${path}: invalid course derivation`);
   const derivation = rawDerivation as Record<string, unknown>;
@@ -183,7 +204,7 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   if (new Set(basedOn).size !== basedOn.length) throw new CourseError(`${path}: duplicate based_on course`);
   const correspondences = derivation.correspondences.map(validateCorrespondence).sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b)));
   if (new Set(correspondences.map(correspondenceKey)).size !== correspondences.length) throw new CourseError(`${path}: duplicate course correspondence`);
-  if (value.nodes.length === 0) throw new CourseError(`${path}: published course must contain nodes`);
+  if (value.nodes.length === 0 && ((value.kind ?? "course") !== "curriculum" || package_.bases.length === 0)) throw new CourseError(`${path}: published course must contain nodes or pinned members`);
   const nodeIds = new Set<string>();
   const nodes = value.nodes.map((rawNode, index) => {
     if (typeof rawNode !== "object" || rawNode === null || Array.isArray(rawNode)) throw new CourseError(`${path}: nodes[${index}] must be an object`);
@@ -220,7 +241,7 @@ function validateRevision(raw: unknown, id: CourseId, version: string, path: str
   });
   try { assertAcyclic(edges as GraphEdge[]); }
   catch (error) { throw new CourseError(`${path}: ${error instanceof Error ? error.message : String(error)}`); }
-  return { course_id: id, domain: value.domain, version, kind: value.kind ?? "course", derivation: { based_on: basedOn, correspondences }, nodes, edges };
+  return { course_id: id, domain: value.domain, version, kind: value.kind ?? "course", package: package_, derivation: { based_on: basedOn, correspondences }, nodes, edges };
 }
 
 function snapshotGraph(dd: DataDir, id: CourseId, version: string): { nodes: Map<string, GraphNode>; edges: GraphEdge[] } {
@@ -263,6 +284,8 @@ export function loadPublishedCourse(dd: DataDir, id: CourseId, version: string):
   if (JSON.stringify(nodes) !== JSON.stringify(revision.nodes) || JSON.stringify(edges) !== JSON.stringify(revision.edges))
     throw new CourseError(`${path}: package snapshot does not match its immutable revision`);
   validatePortablePackage(courseVersionDir(dd, id, version), revision.domain, graph.nodes);
+  try { validatePackageDefinition(dd, revision.package); }
+  catch (error) { throw new CourseError(`${path}: invalid pinned package base: ${error instanceof Error ? error.message : String(error)}`); }
   return revision;
 }
 
@@ -282,12 +305,12 @@ export function listPublishedCourses(dd: DataDir): { course_id: CourseId; versio
     .filter((item) => item.versions.length > 0).sort((a, b) => a.course_id.localeCompare(b.course_id));
 }
 function revisions(dd: DataDir, id: CourseId): PublishedCourseVersion[] { return listPublishedVersions(dd, id); }
-export interface CourseRevisionDiff { from: string; to: string; added_nodes: string[]; deprecated_nodes: string[]; added_edges: { from: string; to: string; type: string }[]; removed_edges: { from: string; to: string; type: string }[]; derivation_changed: boolean; }
+export interface CourseRevisionDiff { from: string; to: string; added_nodes: string[]; deprecated_nodes: string[]; added_edges: { from: string; to: string; type: string }[]; removed_edges: { from: string; to: string; type: string }[]; derivation_changed: boolean; package_changed: boolean; }
 export function diffCourseRevisions(previous: PublishedCourseVersion, next: PublishedCourseVersion): CourseRevisionDiff {
   if (previous.course_id !== next.course_id) throw new CourseError("cannot diff different course artifacts");
   const oldNodes = new Map(previous.nodes.map((node) => [node.id, node]));
   const oldEdges = new Map(previous.edges.map((edge) => [edgeKey(edge), edge])); const nextEdges = new Map(next.edges.map((edge) => [edgeKey(edge), edge]));
-  return { from: previous.version, to: next.version, added_nodes: next.nodes.filter((node) => !oldNodes.has(node.id)).map((node) => node.id), deprecated_nodes: next.nodes.filter((node) => oldNodes.get(node.id)?.deprecated === false && node.deprecated).map((node) => node.id), added_edges: [...nextEdges].filter(([key]) => !oldEdges.has(key)).map(([, edge]) => edge), removed_edges: [...oldEdges].filter(([key]) => !nextEdges.has(key)).map(([, edge]) => edge), derivation_changed: JSON.stringify(previous.derivation) !== JSON.stringify(next.derivation) };
+  return { from: previous.version, to: next.version, added_nodes: next.nodes.filter((node) => !oldNodes.has(node.id)).map((node) => node.id), deprecated_nodes: next.nodes.filter((node) => oldNodes.get(node.id)?.deprecated === false && node.deprecated).map((node) => node.id), added_edges: [...nextEdges].filter(([key]) => !oldEdges.has(key)).map(([, edge]) => edge), removed_edges: [...oldEdges].filter(([key]) => !nextEdges.has(key)).map(([, edge]) => edge), derivation_changed: JSON.stringify(previous.derivation) !== JSON.stringify(next.derivation), package_changed: JSON.stringify(previous.package) !== JSON.stringify(next.package) };
 }
 export type PublishBump = "initial" | "patch" | "minor";
 export interface PublishPreview { version: string; bump: PublishBump; revision: PublishedCourseVersion; }
@@ -450,6 +473,8 @@ export function publishCourse(dd: DataDir, domain: string, version: string): Pub
         requires: composed.edges.filter((edge) => edge.from === node.id && edge.type === "dependency").map((edge) => edge.to), see_also: composed.edges.filter((edge) => edge.from === node.id && edge.type === "strong-relevance").map((edge) => edge.to) };
       writeFileSync(join(stage, `${node.id}.md`), serializeNode(spec));
     }
+    // Base references are checked before this immutable revision becomes visible.
+    validatePackageDefinition(dd, next.package);
     writeFileSync(join(stage, "revision.yaml"), YAML.stringify(next));
     mkdirSync(join(dd.coursesDir, next.course_id, "versions"), { recursive: true });
     // A rename is atomic within the store filesystem and no mutation path ever reopens this directory.
@@ -754,7 +779,7 @@ export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[
       bindingHasNode(dd, byCourse.get(link.from.course_id as CourseId)!, link.from.node) && bindingHasNode(dd, byCourse.get(link.to.course_id as CourseId)!, link.to.node));
   // An explicit learner confirmation may revise an author-provided starting
   // grade for the same directed endpoints.
-  const links = [...listCorrespondences(dd), ...authored];
+  const links: Array<CorrespondenceLink & { relation?: "depends-on" | "reinforces" }> = [...listCorrespondences(dd), ...activeCurriculumCorrespondences(dd), ...authored];
   const seen = new Set<string>();
   return links.sort((a, b) => correspondenceKey(a).localeCompare(correspondenceKey(b))).flatMap((link) => {
     const key = correspondenceKey(link);
@@ -764,6 +789,7 @@ export function resolveCorrespondences(dd: DataDir): ResolvedCorrespondenceLink[
       from: { domain: domains.get(link.from.course_id as CourseId)!, node: link.from.node },
       to: { domain: domains.get(link.to.course_id as CourseId)!, node: link.to.node },
       weight: link.weight,
+      ...(link.relation === undefined ? {} : { relation: link.relation }),
     }];
   });
 }
@@ -1017,9 +1043,14 @@ export function rebindCourse(dd: DataDir, courseId: CourseId, version: string): 
 }
 
 /** Adopt exactly one immutable revision per artifact into this user's overlay. */
-export function bindCourse(dd: DataDir, courseId: CourseId, version: string, domain: string): CourseBinding {
+export function bindCourse(dd: DataDir, courseId: CourseId, version: string, domain: string, compositionOwned = false): CourseBinding {
   assertDomain(domain);
   const revision = loadPublishedCourse(dd, courseId, version);
+  if (!compositionOwned && revision.package.flavor === "remix" && revision.package.bases.length > 0) {
+    const aliases = Object.fromEntries(revision.package.bases.map((base, index) => [base.course_id, `${domain}-member-${index + 1}`]));
+    aliases[courseId] = domain;
+    return adoptCurriculum(dd, courseId, version, aliases).owned;
+  }
   const bindings = loadBindings(dd);
   const existing = bindings.bindings.find((binding) => binding.course_id === courseId);
   if (existing !== undefined) throw new CourseError(`course ${courseId} is already bound at ${existing.version}`);
@@ -1056,6 +1087,7 @@ export function importCourseFragment(dd: DataDir, courseId: CourseId, version: s
   if (!Array.isArray(requestedNodes) || requestedNodes.length === 0 || !requestedNodes.every((node) => typeof node === "string" && node !== ""))
     throw new CourseError("fragment import needs one or more selected nodes");
   const revision = loadPublishedCourse(dd, courseId, version);
+  if (revision.kind === "curriculum" && revision.package.bases.length > 0) throw new CourseError("curriculum members are adopted through its slipcase");
   const known = new Set(revision.nodes.map((node) => node.id));
   const selected = new Set(requestedNodes);
   if ([...selected].some((node) => !known.has(node))) throw new CourseError("fragment selection contains an unknown source node");
