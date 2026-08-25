@@ -16,3 +16,4 @@ export * from "./views";
 export * from "./specs";
 export * from "./modifications";
 export * from "./curricula";
+export * from "./authored";

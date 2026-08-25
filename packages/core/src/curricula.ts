@@ -176,7 +176,7 @@ function slot(raw: unknown): CurriculumSlot {
   if ((resolved === undefined) !== (value.resolution === undefined)) throw new CurriculumError("slot resolution needs both member and action");
   return { id: value.id, title: value.title, tags: tags(value.tags ?? [], "slot tags"), criteria, connections, ...(boundary_connections === undefined ? {} : { boundary_connections }), ...(resolved === undefined ? {} : { resolved, resolution: value.resolution as "coverage-bind" | "generate" }) };
 }
-function draft(raw: unknown): CurriculumDraft {
+export function parseCurriculumDraft(raw: unknown): CurriculumDraft {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new CurriculumError("curriculum draft must be an object");
   const value = raw as Record<string, unknown>;
   if (typeof value.id !== "string" || !ID.test(value.id) || typeof value.domain !== "string" || !ID.test(value.domain) || typeof value.title !== "string" || !value.title.trim() || typeof value.created_at !== "string" || typeof value.updated_at !== "string") throw new CurriculumError("invalid curriculum draft");
@@ -196,7 +196,7 @@ function store(dd: DataDir): CurriculumStore {
   if (!existsSync(dd.curriculaFile)) return { v: 1, drafts: [], bindings: [] };
   const raw = YAML.parse(readFileSync(dd.curriculaFile, "utf8")) ?? {};
   if (typeof raw !== "object" || raw === null || Array.isArray(raw) || (raw as Record<string, unknown>).v !== 1 || !Array.isArray((raw as Record<string, unknown>).drafts) || !Array.isArray((raw as Record<string, unknown>).bindings)) throw new CurriculumError("invalid curricula store");
-  const value = raw as Record<string, unknown>, drafts = (value.drafts as unknown[]).map(draft);
+  const value = raw as Record<string, unknown>, drafts = (value.drafts as unknown[]).map(parseCurriculumDraft);
   const bindings = (value.bindings as unknown[]).map((item): CurriculumBinding => {
     if (typeof item !== "object" || item === null || Array.isArray(item)) throw new CurriculumError("invalid curriculum binding");
     const x = item as Record<string, unknown>;
@@ -239,11 +239,11 @@ export function listCurriculumDrafts(dd: DataDir): CurriculumDraft[] { return st
 export function getCurriculumDraft(dd: DataDir, id: string): CurriculumDraft { const result = store(dd).drafts.find((item) => item.id === id); if (result === undefined) throw new CurriculumError(`unknown curriculum '${id}'`); return copy(result); }
 export function createCurriculumDraft(dd: DataDir, raw: Omit<CurriculumDraft, "created_at" | "updated_at" | "slots"> & { slots?: CurriculumSlot[] }): CurriculumDraft {
   const value = store(dd); if (value.drafts.some((item) => item.id === raw.id)) throw new CurriculumError(`curriculum '${raw.id}' already exists`);
-  const now = new Date().toISOString(); const next = draft({ ...raw, slots: raw.slots ?? [], created_at: now, updated_at: now }); value.drafts.push(next); save(dd, value); return copy(next);
+  const now = new Date().toISOString(); const next = parseCurriculumDraft({ ...raw, slots: raw.slots ?? [], created_at: now, updated_at: now }); value.drafts.push(next); save(dd, value); return copy(next);
 }
 export function updateCurriculumDraft(dd: DataDir, id: string, raw: Omit<CurriculumDraft, "id" | "created_at" | "updated_at">): CurriculumDraft {
   const value = store(dd), index = value.drafts.findIndex((item) => item.id === id); if (index < 0) throw new CurriculumError(`unknown curriculum '${id}'`);
-  const prior = value.drafts[index]!; const next = draft({ ...raw, id, created_at: prior.created_at, updated_at: new Date().toISOString() }); value.drafts[index] = next; save(dd, value); return copy(next);
+  const prior = value.drafts[index]!; const next = parseCurriculumDraft({ ...raw, id, created_at: prior.created_at, updated_at: new Date().toISOString() }); value.drafts[index] = next; save(dd, value); return copy(next);
 }
 export function setCurriculumSlot(dd: DataDir, curriculum: string, raw: CurriculumSlot): CurriculumDraft {
   const current = getCurriculumDraft(dd, curriculum), slots = current.slots.filter((item) => item.id !== raw.id); slots.push(slot(raw)); return updateCurriculumDraft(dd, curriculum, { ...current, slots });
