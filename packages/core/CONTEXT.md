@@ -4,16 +4,17 @@ The core context owns the portable learning model. Local application behavior ma
 
 ## Language
 
-**Package**:
-The portable model behind courses and curricula: pinned bases, modifications, an owned patch graph, and package tags. Package is a model term, not a presented interface kind.
-
 **Course**:
-A presentation tag on a Graph set. The interface interprets the tagged set as a pedagogical work and centers the learning structure and Materials selected by that set.
-_Avoid_: Domain, graph-owning model kind
+A versioned portable namespace containing identified nodes, identified edges, and their Pedagogical metadata. References to contained entities are qualified by an exact Course revision.
+_Avoid_: Domain, learner scope
 
 **Curriculum**:
-A presentation tag on a Graph set. The interface interprets the tagged set as a curriculum without giving it a distinct graph representation.
-_Avoid_: Specification, synthetic course, graph-owning model kind
+A Patch carrying the curriculum tag. The interface and lifecycle interpret that tag specially without giving Curriculum a distinct content representation.
+_Avoid_: Course, specification, synthetic course
+
+**Patch**:
+A portable delta over a set of base Course revisions, containing additional, deleted, and modified nodes and edges. A Curriculum is a specially tagged Patch; a user modification begins as a self-authored Patch and may later be reified as its own Course.
+_Avoid_: Learner progress, mutable base Course
 
 **Curriculum draft identity**:
 A user-chosen curriculum identifier interpreted only in the draft namespace. Its namespace must remain explicit in types and routes.
@@ -28,16 +29,16 @@ The exact published curriculum revision installed for a learner, encoded by the 
 _Avoid_: Bare course ID, owned domain
 
 **Course revision**:
-An immutable published version of a course, including its graph, Materials, and other attachments. Materials do not version independently; changing them is part of updating the course.
+A published version of a Course, including its nodes, edges, Materials, and other Pedagogical metadata. Materials do not version independently; changing them is part of updating the Course.
 _Avoid_: Material version, attachment version
 
 **Structure graph**:
-The portable graph of learning nodes, relationships, and associated course Materials. Courses present structure graphs; curricula and other scopes may relate or select graphs and subgraphs without adding learner progress to them.
+The portable topology resolved from Course nodes and edges, optionally transformed by Patches. It contains no learner progress.
 _Avoid_: Learner graph, progress graph
 
 **Metadata set**:
 An identified collection of properties attached to identified nodes and/or edges. Keeping metadata separate from topology allows application contexts to compose or omit properties without fabricating graph entities.
 
-**Graph set**:
-A tagged set of identified nodes, identified edges, and Metadata sets. Course and Curriculum are presentation tags on Graph sets rather than distinct graph-owning model kinds.
-_Avoid_: Synthetic course, curriculum graph type
+**Pedagogical metadata**:
+Non-user-associated content attached to Course or Patch nodes and edges and released with that content. Materials may be Pedagogical metadata; mastery, learner Artifacts, and other progress-like data are not.
+_Avoid_: Learner state, user tag
