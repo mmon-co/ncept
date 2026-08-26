@@ -16,6 +16,10 @@ _Avoid_: Course, specification, synthetic course
 The sole identified and versioned portable content unit. A Patch names exact base Patch revisions and a delta of nodes, edges, Pedagogical metadata, and Patch metadata; a root Patch has no bases and expresses its complete graph as the delta from the empty graph.
 _Avoid_: Learner progress, mutable base, separate Course model
 
+**Patch identity**:
+An opaque, registry-neutral package identity. The same Patch release may be obtained from the Hub, GitHub, or another registry without changing its identity.
+_Avoid_: Hub URL, Git remote, local directory
+
 **Reification**:
 Creating a new root Patch with a new opaque identity, no bases, and the same resolved graph content as the source Patch. Citations may retain hints about the former bases and likely duplication, but those hints do not reconcile content for a user.
 _Avoid_: Mutating the source Patch, automatic base update
@@ -23,6 +27,10 @@ _Avoid_: Mutating the source Patch, automatic base update
 **Patch revision**:
 An exact immutable Git commit of a Patch repository, including its tracked base-reference metadata, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same commit model; Materials do not version independently from their owning Patch.
 _Avoid_: Material version, Course revision
+
+**Base manifest**:
+The package-manifest-like tracked metadata declaring a Patch's base Patch dependencies. Registries resolve those identities to releases independently of Git commit ancestry.
+_Avoid_: Git parent, installed local path
 
 **Patch metadata**:
 Composable, queryable metadata attached to a Patch itself under the `patch:` namespace. Labels such as `course`, `curriculum`, and `author`, along with titles and Citations, are Patch metadata rather than hierarchy or distinct core models.
@@ -37,16 +45,16 @@ The portable topology resolved from a Patch revision's bases and delta. It conta
 _Avoid_: Learner graph, progress graph
 
 **Node**:
-An identified portable vertex in a Structure graph, stable within its owning Patch repository across commits. An exact Node reference qualifies that identity with a Patch revision; what the Node teaches is expressed by attached Pedagogical metadata.
+An identified portable vertex in a Structure graph, stable within its owning Patch repository across releases when the author intentionally retains its UUID. An exact Node reference first resolves a Patch release and then looks up that UUID; minting another UUID is deletion of the old identity and addition of a new one.
 _Avoid_: Lesson, mastery state
 
 **Patch resolution**:
-The deterministic dependency order computed from exact base Patch revisions declared in tracked repository metadata; these content dependencies are unrelated to Git commit parents. Resolution applies bases before dependents and the Personal scope last. Reaching incompatible commits of one Patch identity or likely duplication suggested by Citations is surfaced for explicit user reconciliation.
-_Avoid_: Arbitrary base order, global deduplication
+The deterministic dependency order computed from the Base manifest, unrelated to Git commit parents. Resolution applies dependencies before dependents, applies otherwise parallel enabled Patches in the user's declared order, and applies the Personal scope last. Multiple enabled Patches that contribute to one Node are applied in that order by default rather than normalized to one source.
+_Avoid_: Git ancestry order, global deduplication, canonical entity revision
 
 **Effective node provenance**:
-The blame-like Patch commit that most recently added a Node or changed its node-attached Pedagogical metadata. A node-scoped Lesson uses this provenance as the Patch context for its Observations; unrelated commits, edge-only changes, and Patch-level metadata changes do not alter it.
-_Avoid_: Enclosing Personal scope, mutable Patch name
+The exact enabled Patch release applied last to a Node's Pedagogical metadata in the resolved graph used by a Lesson. The Lesson records that release as its Observation context without normalizing equivalent references across releases.
+_Avoid_: Enclosing Personal scope, canonical entity revision
 
 **Node replacement**:
 Removing an old Node identity and its incident Edges, then adding a new Node identity and new Edges. Because a Node is only an identifier, content changes are Metadata-set changes rather than in-place Node replacement.
