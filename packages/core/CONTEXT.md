@@ -8,12 +8,12 @@ The core context owns the portable learning model. Local application behavior ma
 The portable model behind courses and curricula: pinned bases, modifications, an owned patch graph, and package tags. Package is a model term, not a presented interface kind.
 
 **Course**:
-A presented package kind for a pedagogical work. It may be authored, derived, or remixed, and its interface centers content the work owns.
-_Avoid_: Domain, curriculum
+A presentation tag on a Graph set. The interface interprets the tagged set as a pedagogical work and centers the learning structure and Materials selected by that set.
+_Avoid_: Domain, graph-owning model kind
 
 **Curriculum**:
-A presented package kind that composes pinned course members with package modifications, an owned patch graph, and tags. Lazy slots may exist only in a draft; published curricula have concrete members.
-_Avoid_: Course, specification, synthetic course
+A presentation tag on a Graph set. The interface interprets the tagged set as a curriculum without giving it a distinct graph representation.
+_Avoid_: Specification, synthetic course, graph-owning model kind
 
 **Curriculum draft identity**:
 A user-chosen curriculum identifier interpreted only in the draft namespace. Its namespace must remain explicit in types and routes.
@@ -34,3 +34,10 @@ _Avoid_: Material version, attachment version
 **Structure graph**:
 The portable graph of learning nodes, relationships, and associated course Materials. Courses present structure graphs; curricula and other scopes may relate or select graphs and subgraphs without adding learner progress to them.
 _Avoid_: Learner graph, progress graph
+
+**Metadata set**:
+An identified collection of properties attached to identified nodes and/or edges. Keeping metadata separate from topology allows application contexts to compose or omit properties without fabricating graph entities.
+
+**Graph set**:
+A tagged set of identified nodes, identified edges, and Metadata sets. Course and Curriculum are presentation tags on Graph sets rather than distinct graph-owning model kinds.
+_Avoid_: Synthetic course, curriculum graph type
