@@ -57,8 +57,12 @@ The deterministic application order computed from ordered Base manifests and exa
 _Avoid_: Git ancestry order, global deduplication, canonical entity revision
 
 **Patch mask**:
-An ordinary delta operation suppressing an exact contribution identified by Patch release and entity. A mask may target entity existence or a delta contribution to that entity; Reconciliation Patches use the same mask representation as every other Patch.
+An ordinary delta operation suppressing an exact contribution identified by Patch release and entity. A mask may target entity existence or a delta contribution to that entity; its target is an exact external requirement rather than a base, so a Reconciliation Patch compiles only inside a scope that supplies the target.
 _Avoid_: User metadata override, automatic source migration
+
+**Semantic delta**:
+The explicit, normalized graph operations tracked in a Patch repository: Node and Edge additions, exact contribution masks, and Metadata changes. Authoring tools may expose resolved editable files, but Git differences do not define the Semantic delta because content bases are independent of Git ancestry.
+_Avoid_: Git diff as graph semantics, implicit multi-base merge
 
 **Effective node provenance**:
 The exact enabled Patch release applied last to a Node's Pedagogical metadata in the resolved graph used by a Lesson. The Lesson records that release as its Observation context without normalizing equivalent references across releases.
