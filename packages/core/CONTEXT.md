@@ -21,7 +21,7 @@ Creating a new root Patch with a new opaque identity, no bases, and the same res
 _Avoid_: Mutating the source Patch, automatic base update
 
 **Patch revision**:
-An exact immutable version of a Patch, including its base revision references, delta, Patch metadata, Materials, and other Pedagogical metadata. Materials do not version independently from their owning Patch.
+An exact immutable commit of a Patch, including its base revision references, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same revision model; Materials do not version independently from their owning Patch.
 _Avoid_: Material version, Course revision
 
 **Patch metadata**:
@@ -36,8 +36,16 @@ _Avoid_: Base Patch, graph edge, Observation provenance, authoritative reconcili
 The portable topology resolved from a Patch revision's bases and delta. It contains no learner progress.
 _Avoid_: Learner graph, progress graph
 
+**Node**:
+An identified portable vertex in a Structure graph. What the Node teaches is expressed by its attached Pedagogical metadata; a Node is not a Lesson or learner activity.
+_Avoid_: Lesson, mastery state
+
+**Patch resolution**:
+The deterministic dependency order that applies exact base Patch revisions before their dependents, with the Personal scope as the terminal Patch for a learner. Incompatible revisions of one Patch identity and likely duplication suggested by Citations are surfaced for explicit user reconciliation rather than silently merged.
+_Avoid_: Arbitrary base order, global deduplication
+
 **Effective node provenance**:
-The exact Patch revision whose delta most recently modified a node in a resolved Structure graph. A node-scoped Lesson uses this provenance as the Patch context for its Observations.
+The last Patch revision in dependency order whose delta added a Node or changed its node-attached Pedagogical metadata. A node-scoped Lesson uses this provenance as the Patch context for its Observations; edge-only and Patch-level metadata changes do not alter it.
 _Avoid_: Enclosing Personal scope, mutable Patch name
 
 **Metadata set**:
