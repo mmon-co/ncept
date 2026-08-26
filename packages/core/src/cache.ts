@@ -1,5 +1,5 @@
-import { Database } from "bun:sqlite";
 import { existsSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import type { DataDir } from "./datadir";
 import type { DomainGraph, MasteryHeader, Params } from "./types";
 import { loadDomainGraph } from "./graph";
@@ -60,7 +60,7 @@ export function rebuildCache(dd: DataDir): { headers: number; cards: number } {
 
   for (const p of [dd.cacheFile, dd.cacheFile + "-wal", dd.cacheFile + "-shm"])
     if (existsSync(p)) rmSync(p);
-  const db = new Database(dd.cacheFile, { create: true });
+  const db = new DatabaseSync(dd.cacheFile);
   try {
     db.exec(SCHEMA);
     db.exec("BEGIN");
@@ -99,9 +99,9 @@ export function rebuildCache(dd: DataDir): { headers: number; cards: number } {
   }
 }
 
-export function openCache(dd: DataDir): Database {
+export function openCache(dd: DataDir): DatabaseSync {
   if (!existsSync(dd.cacheFile)) rebuildCache(dd);
-  return new Database(dd.cacheFile, { readonly: true });
+  return new DatabaseSync(dd.cacheFile, { readOnly: true });
 }
 
 /** Stable textual dump of all derived rows — used to verify rebuild determinism. */
@@ -129,7 +129,13 @@ export function readHeaders(dd: DataDir, domain?: string): MasteryHeader[] {
     const rows = domain
       ? db.prepare("SELECT * FROM headers WHERE domain = ? ORDER BY node").all(domain)
       : db.prepare("SELECT * FROM headers ORDER BY domain, node").all();
-    return rows as MasteryHeader[];
+    return rows.map((row) => ({
+      domain: String(row.domain),
+      node: String(row.node),
+      estimate: Number(row.estimate),
+      uncertainty: Number(row.uncertainty),
+      last_evidenced: row.last_evidenced === null ? null : String(row.last_evidenced),
+    }));
   } finally {
     db.close();
   }
