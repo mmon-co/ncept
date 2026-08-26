@@ -29,12 +29,16 @@ Composable, queryable metadata attached to a Patch itself. Labels such as `cours
 _Avoid_: Content-kind hierarchy, edit authority
 
 **Citation**:
-Typed Patch metadata relating a Patch to another source, including reification, derivation, explicit influence, or user feedback. A Citation may provide reconciliation evidence but never performs user-scoped deduplication by itself.
-_Avoid_: Base Patch, authoritative reconciliation
+Inert, typed Patch metadata relating a Patch to an exact Patch revision, entity, external source, or user feedback. A Citation may describe reification, derivation, influence, or an entity mapping, but never changes graph topology or performs user-scoped reconciliation by itself.
+_Avoid_: Base Patch, graph edge, Observation provenance, authoritative reconciliation
 
 **Structure graph**:
 The portable topology resolved from a Patch revision's bases and delta. It contains no learner progress.
 _Avoid_: Learner graph, progress graph
+
+**Effective node provenance**:
+The exact Patch revision whose delta most recently modified a node in a resolved Structure graph. A node-scoped Lesson uses this provenance as the Patch context for its Observations.
+_Avoid_: Enclosing Personal scope, mutable Patch name
 
 **Metadata set**:
 An identified collection of properties attached to an identified Patch, node, and/or edge. Keeping metadata separate from topology allows application contexts to compose or omit properties without fabricating graph entities.
