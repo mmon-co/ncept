@@ -30,3 +30,7 @@ _Avoid_: Bare course ID, owned domain
 **Course revision**:
 An immutable published version of a course, including its graph, Materials, and other attachments. Materials do not version independently; changing them is part of updating the course.
 _Avoid_: Material version, attachment version
+
+**Structure graph**:
+The portable graph of learning nodes, relationships, and associated course Materials. Courses present structure graphs; curricula and other scopes may relate or select graphs and subgraphs without adding learner progress to them.
+_Avoid_: Learner graph, progress graph
