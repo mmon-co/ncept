@@ -13,24 +13,28 @@ A Patch whose Patch metadata includes the curriculum label. The application quer
 _Avoid_: Course, specification, synthetic course
 
 **Patch**:
-The sole identified and versioned portable content unit. A Patch names exact base Patch revisions and a delta of nodes, edges, Pedagogical metadata, and Patch metadata; a root Patch has no bases and expresses its complete graph as the delta from the empty graph.
+The sole identified and versioned portable content unit. A Patch declares an ordered list of base Patch requirements and a delta of nodes, edges, Pedagogical metadata, and Patch metadata; a root Patch has no bases and expresses its complete graph as the delta from the empty graph.
 _Avoid_: Learner progress, mutable base, separate Course model
 
 **Patch identity**:
 An opaque, registry-neutral package identity. The same Patch release may be obtained from the Hub, GitHub, or another registry without changing its identity.
 _Avoid_: Hub URL, Git remote, local directory
 
+**Patch release**:
+A registry-visible version pointing to an exact Patch commit and immutable content digest. Copies from different registries are the same release only when identity, version, commit, and digest verify; conflicting content is a registry integrity error.
+_Avoid_: Mutable branch head, registry-specific identity
+
 **Reification**:
 Creating a new root Patch with a new opaque identity, no bases, and the same resolved graph content as the source Patch. Citations may retain hints about the former bases and likely duplication, but those hints do not reconcile content for a user.
 _Avoid_: Mutating the source Patch, automatic base update
 
 **Patch revision**:
-An exact immutable Git commit of a Patch repository, including its tracked base-reference metadata, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same commit model; Materials do not version independently from their owning Patch.
+An exact immutable Git commit of a Patch repository, including its Base manifest, lockfile, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same commit model; Materials do not version independently from their owning Patch.
 _Avoid_: Material version, Course revision
 
 **Base manifest**:
-The package-manifest-like tracked metadata declaring a Patch's base Patch dependencies. Registries resolve those identities to releases independently of Git commit ancestry.
-_Avoid_: Git parent, installed local path
+The package-manifest-like tracked metadata declaring a Patch's base requirements as an ordered list. Registries resolve its identity and release constraints independently of Git commit ancestry; a committed lockfile pins the exact releases, commits or content digests, and registry locations used by resolution.
+_Avoid_: Git parent, unordered dependency set, installed local path
 
 **Patch metadata**:
 Composable, queryable metadata attached to a Patch itself under the `patch:` namespace. Labels such as `course`, `curriculum`, and `author`, along with titles and Citations, are Patch metadata rather than hierarchy or distinct core models.
@@ -49,8 +53,12 @@ An identified portable vertex in a Structure graph, stable within its owning Pat
 _Avoid_: Lesson, mastery state
 
 **Patch resolution**:
-The deterministic dependency order computed from the Base manifest, unrelated to Git commit parents. Resolution applies dependencies before dependents, applies otherwise parallel enabled Patches in the user's declared order, and applies the Personal scope last. Multiple enabled Patches that contribute to one Node are applied in that order by default rather than normalized to one source.
+The deterministic application order computed from ordered Base manifests and exact lockfiles, unrelated to Git commit parents. Resolution applies each Patch's bases in declared order before its delta and applies the Personal scope last. Multiple Patches that contribute to one Node are applied in that order by default rather than normalized to one source.
 _Avoid_: Git ancestry order, global deduplication, canonical entity revision
+
+**Patch mask**:
+An ordinary delta operation suppressing an exact contribution identified by Patch release and entity. A mask may target entity existence or a delta contribution to that entity; Reconciliation Patches use the same mask representation as every other Patch.
+_Avoid_: User metadata override, automatic source migration
 
 **Effective node provenance**:
 The exact enabled Patch release applied last to a Node's Pedagogical metadata in the resolved graph used by a Lesson. The Lesson records that release as its Observation context without normalizing equivalent references across releases.
