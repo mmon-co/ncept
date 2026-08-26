@@ -17,7 +17,7 @@ The sole identified and versioned portable content unit. A Patch names exact bas
 _Avoid_: Learner progress, mutable base, separate Course model
 
 **Reification**:
-Creating a new root Patch with a new opaque identity, no bases, and the same resolved graph content as the source Patch. Patch metadata may retain hints about the former bases and likely duplication, but those hints do not reconcile content for a user.
+Creating a new root Patch with a new opaque identity, no bases, and the same resolved graph content as the source Patch. Citations may retain hints about the former bases and likely duplication, but those hints do not reconcile content for a user.
 _Avoid_: Mutating the source Patch, automatic base update
 
 **Patch revision**:
@@ -25,8 +25,12 @@ An exact immutable version of a Patch, including its base revision references, d
 _Avoid_: Material version, Course revision
 
 **Patch metadata**:
-Composable, queryable metadata attached to a Patch itself. Labels such as `course`, `curriculum`, and `author`, along with titles and reconciliation hints, are Patch metadata rather than hierarchy or distinct core models.
+Composable, queryable metadata attached to a Patch itself. Labels such as `course`, `curriculum`, and `author`, along with titles and Citations, are Patch metadata rather than hierarchy or distinct core models.
 _Avoid_: Content-kind hierarchy, edit authority
+
+**Citation**:
+Typed Patch metadata relating a Patch to another source, including reification, derivation, explicit influence, or user feedback. A Citation may provide reconciliation evidence but never performs user-scoped deduplication by itself.
+_Avoid_: Base Patch, authoritative reconciliation
 
 **Structure graph**:
 The portable topology resolved from a Patch revision's bases and delta. It contains no learner progress.
