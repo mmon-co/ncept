@@ -21,7 +21,7 @@ Creating a new root Patch with a new opaque identity, no bases, and the same res
 _Avoid_: Mutating the source Patch, automatic base update
 
 **Patch revision**:
-An exact immutable commit of a Patch, including its base revision references, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same revision model; Materials do not version independently from their owning Patch.
+An exact immutable Git commit of a Patch repository, including its tracked base-reference metadata, delta, Patch metadata, Materials, and other Pedagogical metadata. Local, remote, public, and private Patches use the same commit model; Materials do not version independently from their owning Patch.
 _Avoid_: Material version, Course revision
 
 **Patch metadata**:
@@ -37,16 +37,20 @@ The portable topology resolved from a Patch revision's bases and delta. It conta
 _Avoid_: Learner graph, progress graph
 
 **Node**:
-An identified portable vertex in a Structure graph. What the Node teaches is expressed by its attached Pedagogical metadata; a Node is not a Lesson or learner activity.
+An identified portable vertex in a Structure graph, stable within its owning Patch repository across commits. An exact Node reference qualifies that identity with a Patch revision; what the Node teaches is expressed by attached Pedagogical metadata.
 _Avoid_: Lesson, mastery state
 
 **Patch resolution**:
-The deterministic dependency order that applies exact base Patch revisions before their dependents, with the Personal scope as the terminal Patch for a learner. Reaching multiple versions of one Patch identity is a conflict rather than a newest-version choice; likely duplication suggested by Citations is likewise surfaced for explicit user reconciliation.
+The deterministic dependency order computed from exact base Patch revisions declared in tracked repository metadata; these content dependencies are unrelated to Git commit parents. Resolution applies bases before dependents and the Personal scope last. Reaching incompatible commits of one Patch identity or likely duplication suggested by Citations is surfaced for explicit user reconciliation.
 _Avoid_: Arbitrary base order, global deduplication
 
 **Effective node provenance**:
-The last Patch revision in dependency order whose delta added a Node or changed its node-attached Pedagogical metadata. A node-scoped Lesson uses this provenance as the Patch context for its Observations; edge-only and Patch-level metadata changes do not alter it.
+The blame-like Patch commit that most recently added a Node or changed its node-attached Pedagogical metadata. A node-scoped Lesson uses this provenance as the Patch context for its Observations; unrelated commits, edge-only changes, and Patch-level metadata changes do not alter it.
 _Avoid_: Enclosing Personal scope, mutable Patch name
+
+**Node replacement**:
+Removing an old Node identity and its incident Edges, then adding a new Node identity and new Edges. Because a Node is only an identifier, content changes are Metadata-set changes rather than in-place Node replacement.
+_Avoid_: Mutating Node identity, replacing an exact Node revision
 
 **Metadata set**:
 An identified collection of properties attached to an identified Patch, node, and/or edge. Keeping metadata separate from topology allows application contexts to compose or omit properties without fabricating graph entities.
