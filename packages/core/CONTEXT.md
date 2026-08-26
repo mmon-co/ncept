@@ -25,11 +25,11 @@ An exact immutable commit of a Patch, including its base revision references, de
 _Avoid_: Material version, Course revision
 
 **Patch metadata**:
-Composable, queryable metadata attached to a Patch itself. Labels such as `course`, `curriculum`, and `author`, along with titles and Citations, are Patch metadata rather than hierarchy or distinct core models.
+Composable, queryable metadata attached to a Patch itself under the `patch:` namespace. Labels such as `course`, `curriculum`, and `author`, along with titles and Citations, are Patch metadata rather than hierarchy or distinct core models.
 _Avoid_: Content-kind hierarchy, edit authority
 
 **Citation**:
-Inert, typed Patch metadata relating a Patch to an exact Patch revision, entity, external source, or user feedback. A Citation may describe reification, derivation, influence, or an entity mapping, but never changes graph topology or performs user-scoped reconciliation by itself.
+Inert, typed Patch metadata relating a Patch to an exact Patch revision, entity, external source, or user feedback. A `reified_from` Citation carries both its exact source revision and complete entity mapping; Citations never change graph topology or perform user-scoped reconciliation by themselves.
 _Avoid_: Base Patch, graph edge, Observation provenance, authoritative reconciliation
 
 **Structure graph**:
@@ -41,7 +41,7 @@ An identified portable vertex in a Structure graph. What the Node teaches is exp
 _Avoid_: Lesson, mastery state
 
 **Patch resolution**:
-The deterministic dependency order that applies exact base Patch revisions before their dependents, with the Personal scope as the terminal Patch for a learner. Incompatible revisions of one Patch identity and likely duplication suggested by Citations are surfaced for explicit user reconciliation rather than silently merged.
+The deterministic dependency order that applies exact base Patch revisions before their dependents, with the Personal scope as the terminal Patch for a learner. Reaching multiple versions of one Patch identity is a conflict rather than a newest-version choice; likely duplication suggested by Citations is likewise surfaced for explicit user reconciliation.
 _Avoid_: Arbitrary base order, global deduplication
 
 **Effective node provenance**:
