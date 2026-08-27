@@ -22,6 +22,22 @@ interface NodeState {
   directlyEvidenced: boolean;
 }
 
+interface PropagationPath {
+  domain: string;
+  node: string;
+  factor: number;
+  hops: number;
+  transferred: boolean;
+}
+
+function stateKey(domain: string, node: string): string {
+  return `${domain}\u0000${node}`;
+}
+
+function isSuccessKind(kind: EvidenceEvent["kind"]): kind is SuccessKind {
+  return SUCCESS_KINDS.some((successKind) => successKind === kind);
+}
+
 function clamp01(x: number): number {
   return Math.min(1, Math.max(0, x));
 }
@@ -45,8 +61,12 @@ function supportWeight(ev: EvidenceEvent, p: Params): number {
 function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
   if (ev.kind === "mistake") {
     const m = p.evidence.mistake;
-    const coarse = m.coarseness[ev.coarseness!];
-    const severity = m.severity[ev.severity!];
+    const coarseness = ev.coarseness;
+    const severityName = ev.severity;
+    if (coarseness === undefined || severityName === undefined)
+      throw new Error("mistake evidence must be validated before folding");
+    const coarse = m.coarseness[coarseness];
+    const severity = m.severity[severityName];
     const weight = m.base_effect.weight * coarse.effect * severity.effect * supportWeight(ev, p);
     const shrink = m.base_effect.shrink * coarse.shrink * severity.shrink;
     s.estimate = clamp01(s.estimate - weight * s.estimate);
@@ -55,7 +75,7 @@ function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
   }
   const ep = p.evidence[ev.kind];
   const weight = ep.weight * supportWeight(ev, p);
-  const success = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
+  const success = isSuccessKind(ev.kind);
   const next = success
     ? Math.min(ep.target, clamp01(s.estimate + weight * (ep.target - s.estimate)))
     : clamp01(s.estimate + weight * (ep.target - s.estimate));
@@ -64,6 +84,26 @@ function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
   // Floors remain able to lower the estimate.
   s.estimate = success ? Math.max(s.estimate, next) : next;
   s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - ep.shrink));
+}
+
+function applyPropagation(
+  target: NodeState,
+  event: EvidenceEvent,
+  path: PropagationPath,
+  params: Params,
+): void {
+  if (!isSuccessKind(event.kind)) {
+    applyFailurePropagation(target, path.factor, params);
+    return;
+  }
+  const support = supportWeight(event, params);
+  if (!path.transferred) {
+    applySuccessPropagation(target, event.kind, path.factor, support, params);
+    return;
+  }
+  const priorUncertainty = target.uncertainty;
+  applyTransferredSuccess(target, event.kind, path.factor, support, params);
+  if (target.directlyEvidenced) target.uncertainty = priorUncertainty;
 }
 
 function applySuccessPropagation(
@@ -117,9 +157,8 @@ export function foldMastery(
   correspondences: ResolvedCorrespondenceLink[] = [],
 ): MasteryHeader[] {
   const states = new Map<string, NodeState>(); // key = domain + NUL + node
-  const key = (domain: string, node: string) => `${domain}\u0000${node}`;
   const get = (domain: string, node: string): NodeState => {
-    const k = key(domain, node);
+    const k = stateKey(domain, node);
     let s = states.get(k);
     if (s === undefined) {
       s = {
@@ -136,13 +175,6 @@ export function foldMastery(
   const sorted = [...events].sort((a, b) =>
     a.ts === b.ts ? 0 : Date.parse(a.ts) - Date.parse(b.ts),
   );
-  interface Path {
-    domain: string;
-    node: string;
-    factor: number;
-    hops: number;
-    transferred: boolean;
-  }
   const adjacency = (
     success: boolean,
   ): Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]> => {
@@ -161,7 +193,7 @@ export function foldMastery(
           : p.propagation.failure_down[edge.type];
         // Success travels from a demonstrated dependent to its prerequisites;
         // failure travels in the reverse direction to cast downstream suspicion.
-        add(key(domain, success ? edge.from : edge.to), {
+        add(stateKey(domain, success ? edge.from : edge.to), {
           domain,
           node: success ? edge.to : edge.from,
           factor,
@@ -175,7 +207,7 @@ export function foldMastery(
       )
         continue;
       if (link.relation === undefined)
-        add(key(link.from.domain, link.from.node), {
+        add(stateKey(link.from.domain, link.from.node), {
           domain: link.to.domain,
           node: link.to.node,
           factor: link.weight,
@@ -185,7 +217,10 @@ export function foldMastery(
         const type = link.relation === "depends-on" ? "dependency" : "strong-relevance",
           factor = success ? p.propagation.success_up[type] : p.propagation.failure_down[type];
         add(
-          key(success ? link.from.domain : link.to.domain, success ? link.from.node : link.to.node),
+          stateKey(
+            success ? link.from.domain : link.to.domain,
+            success ? link.from.node : link.to.node,
+          ),
           {
             domain: success ? link.to.domain : link.from.domain,
             node: success ? link.to.node : link.from.node,
@@ -205,18 +240,19 @@ export function foldMastery(
   const failureAdjacency = adjacency(false);
 
   /** Strongest bounded effective-graph path per target; cycles cannot re-evidence a node. */
-  const walkEffective = (domain: string, node: string, success: boolean): Path[] => {
-    const best = new Map<string, Path>();
-    const start: Path = { domain, node, factor: 1, hops: 0, transferred: false };
-    best.set(key(domain, node), start);
+  const walkEffective = (domain: string, node: string, success: boolean): PropagationPath[] => {
+    const best = new Map<string, PropagationPath>();
+    const start: PropagationPath = { domain, node, factor: 1, hops: 0, transferred: false };
+    best.set(stateKey(domain, node), start);
     const queue = [start];
     for (let index = 0; index < queue.length; index++) {
-      const current = queue[index]!;
+      const current = queue.at(index);
+      if (current === undefined) break;
       if (current.hops >= p.propagation.max_hops) continue;
       for (const edge of (success ? successAdjacency : failureAdjacency).get(
-        key(current.domain, current.node),
+        stateKey(current.domain, current.node),
       ) ?? []) {
-        const candidate: Path = {
+        const candidate: PropagationPath = {
           domain: edge.domain,
           node: edge.node,
           factor: current.factor * edge.factor,
@@ -226,7 +262,7 @@ export function foldMastery(
         // A zero attenuation disables this path. It must not create a header or
         // become a bridge to a later correspondence edge.
         if (candidate.factor <= 0) continue;
-        const candidateKey = key(candidate.domain, candidate.node);
+        const candidateKey = stateKey(candidate.domain, candidate.node);
         const prior = best.get(candidateKey);
         if (prior !== undefined) {
           const tiedFactor = Math.abs(prior.factor - candidate.factor) <= FACTOR_EPSILON;
@@ -241,16 +277,16 @@ export function foldMastery(
         queue.push(candidate);
       }
     }
-    best.delete(key(domain, node));
+    best.delete(stateKey(domain, node));
     return [...best.values()].sort((a, b) =>
-      key(a.domain, a.node).localeCompare(key(b.domain, b.node)),
+      stateKey(a.domain, a.node).localeCompare(stateKey(b.domain, b.node)),
     );
   };
 
   for (const ev of sorted) {
     const ts = Date.parse(ev.ts);
     const graph = graphs.get(ev.domain);
-    const isSuccess = SUCCESS_KINDS.includes(ev.kind as SuccessKind);
+    const isSuccess = isSuccessKind(ev.kind);
     for (const node of ev.nodes) {
       // Historical logs remain readable after a course/node disappears, but
       // stale evidence must never manufacture a derived header.
@@ -263,34 +299,18 @@ export function foldMastery(
       for (const path of walkEffective(ev.domain, node, isSuccess)) {
         const target = get(path.domain, path.node);
         grow(target, ts, p);
-        if (isSuccess) {
-          if (path.transferred) {
-            const priorUncertainty = target.uncertainty;
-            applyTransferredSuccess(
-              target,
-              ev.kind as SuccessKind,
-              path.factor,
-              supportWeight(ev, p),
-              p,
-            );
-            if (target.directlyEvidenced) target.uncertainty = priorUncertainty;
-          } else
-            applySuccessPropagation(
-              target,
-              ev.kind as SuccessKind,
-              path.factor,
-              supportWeight(ev, p),
-              p,
-            );
-        } else applyFailurePropagation(target, path.factor, p);
+        applyPropagation(target, ev, path, p);
         target.last = ts;
       }
     }
   }
 
   const headers: MasteryHeader[] = [];
-  for (const [k, s] of [...states.entries()].sort()) {
-    const [domain, node] = k.split("\u0000") as [string, string];
+  for (const [k, s] of [...states.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const separator = k.indexOf("\u0000");
+    if (separator === -1) throw new Error("invalid internal mastery-state key");
+    const domain = k.slice(0, separator);
+    const node = k.slice(separator + 1);
     headers.push({
       domain,
       node,
@@ -310,7 +330,7 @@ export function effectiveUncertainty(h: MasteryHeader, nowMs: number, p: Params)
 }
 
 export interface HeaderLookup {
-  get(domain: string, node: string): MasteryHeader | undefined;
+  get(domain: string, node: string): MasteryHeader;
 }
 
 export function headerLookup(headers: MasteryHeader[], p: Params): HeaderLookup {
@@ -344,8 +364,8 @@ export function unmetPrerequisites(
     Number.MAX_SAFE_INTEGER,
   );
   const unmet: string[] = [];
-  for (const [id] of [...anc.entries()].sort()) {
-    const h = lookup.get(g.domain, id)!;
+  for (const [id] of [...anc.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const h = lookup.get(g.domain, id);
     if (h.estimate < p.mastery_threshold) unmet.push(id);
   }
   return unmet;
@@ -377,7 +397,7 @@ export function probeCandidates(
   }
   const out: ProbeCandidate[] = [];
   for (const id of [...g.nodes.keys()].sort()) {
-    const h = lookup.get(g.domain, id)!;
+    const h = lookup.get(g.domain, id);
     const u = effectiveUncertainty(h, nowMs, p);
     const deps = dependents.get(id) ?? 0;
     out.push({
@@ -405,7 +425,7 @@ export function programmeTo(
   if (!g.nodes.has(target)) throw new Error(`unknown node: ${target}`);
   const needed = new Set<string>(
     unmetPrerequisites(g, lookup, target, p).filter(
-      (id) => lookup.get(g.domain, id)!.estimate < p.mastery_threshold,
+      (id) => lookup.get(g.domain, id).estimate < p.mastery_threshold,
     ),
   );
   needed.add(target);
@@ -414,7 +434,11 @@ export function programmeTo(
   for (const id of needed) deps.set(id, []);
   for (const e of g.edges) {
     if (e.type !== "dependency") continue;
-    if (needed.has(e.from) && needed.has(e.to)) deps.get(e.from)!.push(e.to);
+    if (needed.has(e.from) && needed.has(e.to)) {
+      const nodeDependencies = deps.get(e.from);
+      if (nodeDependencies === undefined) throw new Error("invalid internal programme node");
+      nodeDependencies.push(e.to);
+    }
   }
   const order: string[] = [];
   const mark = new Map<string, 1 | 2>();
