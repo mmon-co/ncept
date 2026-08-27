@@ -83,7 +83,13 @@ test("root resolution preserves stable identities, tags, and contribution proven
   expect(resolved.patchOrder).toEqual([revision.ref]);
   expect(resolved.nodes).toEqual([{ id: "node-a" }]);
   expect(resolved.tags).toEqual([
-    { name: "patch:course", nodes: ["node-a"], edges: [], metadataSets: ["metadata-a"] },
+    {
+      name: "patch:course",
+      authority: "patch",
+      nodes: ["node-a"],
+      edges: [],
+      metadataSets: ["metadata-a"],
+    },
   ]);
   expect(resolved.provenance.nodes["node-a"]).toEqual([{ patch: revision.ref, operationIndex: 0 }]);
 });

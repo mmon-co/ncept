@@ -16,6 +16,7 @@ import type {
   ResolvedGraph,
   StructureEdge,
   StructureNode,
+  GraphTag,
   TaggedSet,
 } from "./model";
 import { exactPatchRefKey, sameExactPatchRef } from "./model";
@@ -328,6 +329,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
+  const tags = new Map<string, GraphTag>();
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
   const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
@@ -370,10 +372,10 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     metadataPropertyProvenance[id] = merged.provenance;
   }
 
-  const tags = new Map<string, TaggedSet>();
   for (const contribution of tagContributions) {
-    const tag = {
+    const tag: GraphTag = {
       ...contribution,
+      authority: "patch",
       nodes: contribution.nodes.filter((id) => nodes.has(id)),
       edges: contribution.edges.filter((id) => edges.has(id)),
       metadataSets: contribution.metadataSets.filter((id) => metadataSets.has(id)),
@@ -390,6 +392,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
       tags.set(`patch:${revision.ref.identity}:${label}`, {
         name: `patch:${revision.ref.identity}:${label}`,
+        authority: "patch",
         nodes: sorted(nodes.values())
           .filter((node) =>
             nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),

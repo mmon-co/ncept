@@ -112,6 +112,12 @@ export interface ExactContributionMask {
   readonly property?: string;
 }
 
+export type GraphTagAuthority = "patch" | "platform" | "user";
+
+export interface GraphTag extends TaggedSet {
+  readonly authority: GraphTagAuthority;
+}
+
 export type SemanticOperation =
   | { readonly kind: "add-node"; readonly node: StructureNode }
   | { readonly kind: "add-edge"; readonly edge: StructureEdge }
@@ -161,7 +167,7 @@ export interface ResolvedGraph {
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];
-  readonly tags: readonly TaggedSet[];
+  readonly tags: readonly GraphTag[];
   readonly provenance: {
     readonly nodes: Readonly<Record<NodeId, readonly ContributionProvenance[]>>;
     readonly edges: Readonly<Record<EdgeId, readonly ContributionProvenance[]>>;
@@ -247,6 +253,7 @@ export interface VisualProjectionInput {
 
 export interface GraphCompilationInput {
   readonly bundle: ClosedPatchBundle;
+  readonly attachedTags?: readonly GraphTag[];
   readonly query?: GraphQuery;
   readonly learner: LearnerProjection;
   readonly annotations: Readonly<Partial<Record<NodeId, readonly string[]>>>;
