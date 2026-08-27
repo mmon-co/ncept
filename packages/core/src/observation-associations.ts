@@ -43,16 +43,14 @@ function sortedAssociations(
   return [...associations].sort((left, right) => left.observation.localeCompare(right.observation));
 }
 
-function commitId(
-  userGraphRevision: ExactPatchRef,
-  parent: ObservationAssociationCommitId | undefined,
-  associations: readonly ObservationAssociation[],
+export function observationAssociationCommitId(
+  commit: Omit<ObservationAssociationCommit, "id">,
 ): ObservationAssociationCommitId {
   const bytes = JSON.stringify({
     version: 1,
-    userGraphRevision,
-    ...(parent === undefined ? {} : { parent }),
-    associations,
+    userGraphRevision: commit.userGraphRevision,
+    ...(commit.parent === undefined ? {} : { parent: commit.parent }),
+    associations: commit.associations,
   });
   return `association-${createHash("sha256").update(bytes).digest("hex")}`;
 }
@@ -63,12 +61,15 @@ function makeCommit(
   associations: Iterable<ObservationAssociation>,
 ): ObservationAssociationCommit {
   const sorted = sortedAssociations(associations);
-  return {
-    version: 1,
-    id: commitId(userGraphRevision, parent, sorted),
+  const content = {
+    version: 1 as const,
     userGraphRevision,
     ...(parent === undefined ? {} : { parent }),
     associations: sorted,
+  };
+  return {
+    ...content,
+    id: observationAssociationCommitId(content),
   };
 }
 
