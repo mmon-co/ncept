@@ -20,7 +20,23 @@ export interface BaseRequirement {
 export interface LockedBase {
   readonly requirement: BaseRequirement;
   readonly exact: ExactPatchRef;
-  readonly acquisition: string;
+  readonly acquisition: PatchAcquisition;
+}
+
+export type PatchAcquisition =
+  | { readonly kind: "authored"; readonly identity: PatchId }
+  | {
+      readonly kind: "hub";
+      readonly identity: PatchId;
+      readonly version: string;
+    };
+
+export function exactPatchRefKey(ref: ExactPatchRef): string {
+  return `${ref.identity}\0${ref.version ?? ""}\0${ref.commit}\0${ref.digest}`;
+}
+
+export function sameExactPatchRef(left: ExactPatchRef, right: ExactPatchRef): boolean {
+  return exactPatchRefKey(left) === exactPatchRefKey(right);
 }
 
 export interface PatchLock {

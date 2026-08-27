@@ -122,7 +122,11 @@ test("a Personal Notebook is effective content while learner absence stays disti
         {
           requirement: { identity: course.ref.identity, release: "1.0.0" },
           exact: course.ref,
-          acquisition: "hub:linear-algebra",
+          acquisition: {
+            kind: "hub",
+            identity: course.ref.identity,
+            version: "1.0.0",
+          },
         },
       ],
     },
@@ -180,4 +184,121 @@ test("a Personal Notebook is effective content while learner absence stays disti
     kind: "no-evidence",
     stale: false,
   });
+});
+
+test("metadata precedence uses the whole exact Patch ref when commits happen to match", () => {
+  const first: PatchRevision = {
+    ...revision,
+    delta: {
+      operations: [
+        { kind: "add-node", node: { id: "node-shared" } },
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-first",
+            subjects: [{ kind: "node", id: "node-shared" }],
+            properties: { "display:label": "First" },
+          },
+        },
+      ],
+    },
+  };
+  const second: PatchRevision = {
+    ...revision,
+    ref: { ...revision.ref, identity: "patch-second", digest: `sha256:${"c".repeat(64)}` },
+    delta: {
+      operations: [
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-second",
+            subjects: [{ kind: "node", id: "node-shared" }],
+            properties: { "display:label": "Second" },
+          },
+        },
+        { kind: "add-node", node: { id: "node-shared" } },
+      ],
+    },
+  };
+  const personal: PatchRevision = {
+    ...revision,
+    ref: { ...revision.ref, identity: "patch-personal", digest: `sha256:${"d".repeat(64)}` },
+    bases: [
+      { identity: first.ref.identity, release: "1.0.0" },
+      { identity: second.ref.identity, release: "1.0.0" },
+    ],
+    lock: {
+      entries: [
+        {
+          requirement: { identity: first.ref.identity, release: "1.0.0" },
+          exact: first.ref,
+          acquisition: {
+            kind: "hub",
+            identity: first.ref.identity,
+            version: first.ref.version!,
+          },
+        },
+        {
+          requirement: { identity: second.ref.identity, release: "1.0.0" },
+          exact: second.ref,
+          acquisition: {
+            kind: "hub",
+            identity: second.ref.identity,
+            version: second.ref.version!,
+          },
+        },
+      ],
+    },
+    delta: { operations: [] },
+  };
+
+  const graph = compileGraph({
+    bundle: { terminal: personal.ref, revisions: [first, second, personal] },
+    learner: { kind: "absent" },
+    annotations: {},
+  });
+
+  expect(graph.nodes[0]?.label).toBe("Second");
+});
+
+test("lesson provenance ignores later pedagogical metadata that does not replace the lesson", () => {
+  const course = revision;
+  const personal: PatchRevision = {
+    ...revision,
+    ref: { ...revision.ref, identity: "patch-personal", digest: `sha256:${"e".repeat(64)}` },
+    bases: [{ identity: course.ref.identity, release: "1.0.0" }],
+    lock: {
+      entries: [
+        {
+          requirement: { identity: course.ref.identity, release: "1.0.0" },
+          exact: course.ref,
+          acquisition: {
+            kind: "hub",
+            identity: course.ref.identity,
+            version: "1.0.0",
+          },
+        },
+      ],
+    },
+    delta: {
+      operations: [
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-notebook-note",
+            subjects: [{ kind: "node", id: "node-vectors" }],
+            properties: { "pedagogy:notebook": true },
+          },
+        },
+      ],
+    },
+  };
+
+  const graph = compileGraph({
+    bundle: { terminal: personal.ref, revisions: [course, personal] },
+    learner: { kind: "absent" },
+    annotations: {},
+  });
+
+  expect(graph.nodes.find((node) => node.id === "node-vectors")?.contentSource).toEqual(course.ref);
 });

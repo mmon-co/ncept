@@ -10,6 +10,7 @@ import type {
   VisualNodeAppearance,
   VisualProjectionInput,
 } from "./model";
+import { exactPatchRefKey } from "./model";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
   return orderMetadata(
@@ -30,13 +31,13 @@ function metadataForEdge(graph: SelectedGraph, edge: EdgeId): MetadataSet[] {
 }
 
 function orderMetadata(graph: SelectedGraph, sets: readonly MetadataSet[]): MetadataSet[] {
-  const patchOrder = new Map(graph.patchOrder.map((ref, index) => [ref.commit, index]));
+  const patchOrder = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   return [...sets].sort((left, right) => {
     const leftSource = graph.provenance.metadataSets[left.id]?.at(-1);
     const rightSource = graph.provenance.metadataSets[right.id]?.at(-1);
     const byPatch =
-      (patchOrder.get(leftSource?.patch.commit ?? "") ?? -1) -
-      (patchOrder.get(rightSource?.patch.commit ?? "") ?? -1);
+      (patchOrder.get(leftSource === undefined ? "" : exactPatchRefKey(leftSource.patch)) ?? -1) -
+      (patchOrder.get(rightSource === undefined ? "" : exactPatchRefKey(rightSource.patch)) ?? -1);
     if (byPatch !== 0) return byPatch;
     const byOperation = (leftSource?.operationIndex ?? -1) - (rightSource?.operationIndex ?? -1);
     return byOperation === 0 ? left.id.localeCompare(right.id) : byOperation;
@@ -82,8 +83,8 @@ function rankNodes(graph: SelectedGraph, roles: ReadonlyMap<EdgeId, string>): Ma
 }
 
 function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
-  const metadata = metadataForNode(graph, node).filter((set) =>
-    Object.keys(set.properties).some((key) => key.startsWith("pedagogy:")),
+  const metadata = metadataForNode(graph, node).filter(
+    (set) => typeof set.properties["pedagogy:lesson"] === "string",
   );
   const last = metadata.flatMap((set) => graph.provenance.metadataSets[set.id] ?? []).at(-1);
   return last?.patch ?? graph.provenance.nodes[node]?.at(-1)?.patch ?? graph.terminal;

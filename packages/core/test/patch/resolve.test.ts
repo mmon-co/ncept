@@ -80,12 +80,12 @@ test("a Personal Patch applies its exact root bases in manifest order and itself
         {
           requirement: { identity: first.ref.identity, release: "1.0.0" },
           exact: first.ref,
-          acquisition: "hub:first",
+          acquisition: { kind: "hub", identity: first.ref.identity, version: "1.0.0" },
         },
         {
           requirement: { identity: second.ref.identity, release: "1.0.0" },
           exact: second.ref,
-          acquisition: "hub:second",
+          acquisition: { kind: "hub", identity: second.ref.identity, version: "1.0.0" },
         },
       ],
     },
@@ -102,4 +102,30 @@ test("a Personal Patch applies its exact root bases in manifest order and itself
     { id: "node-notebook" },
     { id: "node-second" },
   ]);
+});
+
+test("a Personal Patch rejects an exact lock that does not satisfy its manifest coordinate", () => {
+  const course = root([]);
+  const personal = {
+    ...root([]),
+    ref: { ...root([]).ref, identity: "patch-personal" as const },
+    bases: [{ identity: "patch-expected" as const, release: "1.0.0" }],
+    lock: {
+      entries: [
+        {
+          requirement: { identity: "patch-expected" as const, release: "1.0.0" },
+          exact: course.ref,
+          acquisition: {
+            kind: "hub" as const,
+            identity: course.ref.identity,
+            version: course.ref.version!,
+          },
+        },
+      ],
+    },
+  } satisfies PatchRevision;
+
+  expect(() =>
+    resolvePatchBundle({ terminal: personal.ref, revisions: [course, personal] }),
+  ).toThrow(/does not satisfy/);
 });

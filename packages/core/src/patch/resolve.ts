@@ -2,7 +2,6 @@ import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
-  ExactPatchRef,
   MetadataSet,
   MetadataSetId,
   NodeId,
@@ -14,22 +13,16 @@ import type {
   StructureNode,
   TaggedSet,
 } from "./model";
-
-function sameRef(left: ExactPatchRef, right: ExactPatchRef): boolean {
-  return (
-    left.identity === right.identity &&
-    left.version === right.version &&
-    left.commit === right.commit &&
-    left.digest === right.digest
-  );
-}
+import { sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
-  const terminal = bundle.revisions.find((revision) => sameRef(revision.ref, bundle.terminal));
+  const terminal = bundle.revisions.find((revision) =>
+    sameExactPatchRef(revision.ref, bundle.terminal),
+  );
   if (terminal === undefined)
     throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   const orderedRevisions = terminal.bases.map((requirement) => {
@@ -43,7 +36,15 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
         "invalid-bundle",
         `Personal Patch base ${requirement.identity}@${requirement.release} is not locked`,
       );
-    const revision = bundle.revisions.find((candidate) => sameRef(candidate.ref, locked.exact));
+    const exactRelease = locked.exact.version ?? `commit:${locked.exact.commit}`;
+    if (locked.exact.identity !== requirement.identity || exactRelease !== requirement.release)
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `exact lock ${locked.exact.identity}@${exactRelease} does not satisfy ${requirement.identity}@${requirement.release}`,
+      );
+    const revision = bundle.revisions.find((candidate) =>
+      sameExactPatchRef(candidate.ref, locked.exact),
+    );
     if (revision === undefined)
       throw new PatchCompileError(
         "invalid-bundle",
@@ -77,26 +78,39 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     revision.delta.operations.forEach((operation, operationIndex) => {
       const provenance = { patch: revision.ref, operationIndex };
       if (operation.kind === "add-node") {
-        if (nodes.has(operation.node.id))
-          throw new PatchCompileError("duplicate-entity", `duplicate node '${operation.node.id}'`);
         nodes.set(operation.node.id, operation.node);
-        nodeProvenance[operation.node.id] = [provenance];
+        (nodeProvenance[operation.node.id] ??= []).push(provenance);
       } else if (operation.kind === "add-edge") {
-        if (edges.has(operation.edge.id))
-          throw new PatchCompileError("duplicate-entity", `duplicate edge '${operation.edge.id}'`);
-        edges.set(operation.edge.id, operation.edge);
-        edgeProvenance[operation.edge.id] = [provenance];
-      } else if (operation.kind === "add-metadata-set") {
-        if (metadataSets.has(operation.metadataSet.id))
+        const existing = edges.get(operation.edge.id);
+        if (
+          existing !== undefined &&
+          (existing.from !== operation.edge.from || existing.to !== operation.edge.to)
+        )
           throw new PatchCompileError(
             "duplicate-entity",
-            `duplicate metadata set '${operation.metadataSet.id}'`,
+            `conflicting edge '${operation.edge.id}'`,
+          );
+        edges.set(operation.edge.id, operation.edge);
+        (edgeProvenance[operation.edge.id] ??= []).push(provenance);
+      } else if (operation.kind === "add-metadata-set") {
+        const existing = metadataSets.get(operation.metadataSet.id);
+        if (
+          existing !== undefined &&
+          JSON.stringify(existing) !== JSON.stringify(operation.metadataSet)
+        )
+          throw new PatchCompileError(
+            "duplicate-entity",
+            `conflicting metadata set '${operation.metadataSet.id}'`,
           );
         metadataSets.set(operation.metadataSet.id, operation.metadataSet);
-        metadataProvenance[operation.metadataSet.id] = [provenance];
+        (metadataProvenance[operation.metadataSet.id] ??= []).push(provenance);
       } else {
-        if (tags.has(operation.tag.name))
-          throw new PatchCompileError("duplicate-entity", `duplicate tag '${operation.tag.name}'`);
+        const existing = tags.get(operation.tag.name);
+        if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(operation.tag))
+          throw new PatchCompileError(
+            "duplicate-entity",
+            `conflicting tag '${operation.tag.name}'`,
+          );
         tags.set(operation.tag.name, operation.tag);
       }
     });
