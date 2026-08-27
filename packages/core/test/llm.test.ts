@@ -19,6 +19,15 @@ const specs = [
   ["claude-sonnet-5", { provider: "anthropic", modelId: "claude-sonnet-5" }],
 ] as const;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error("expected JSON object request body");
+  return value;
+}
+
 test("model specs parse and format canonically without losing nested IDs or tags", () => {
   for (const [input, parsed] of specs) {
     expect(parseModelSpec(input)).toEqual(parsed);
@@ -58,42 +67,47 @@ test("OpenRouter serializes effort through chat completions and uses its own key
     body: Record<string, unknown>;
     authorization: string | null;
   }> = [];
-  globalThis.fetch = async (input, init) => {
-    const request = new Request(input, init);
-    requests.push({
-      url: request.url,
-      body: JSON.parse(await request.text()) as Record<string, unknown>,
-      authorization: request.headers.get("authorization"),
-    });
-    return Response.json({
-      id: "chatcmpl-test",
-      object: "chat.completion",
-      created: 0,
-      model: "openai/gpt-5.1",
-      choices: [
-        { index: 0, message: { role: "assistant", content: "done" }, finish_reason: "stop" },
-      ],
-      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-    });
-  };
+  const mockFetch: typeof fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit | BunFetchRequestInit) => {
+      const request = new Request(input, init);
+      const body: unknown = JSON.parse(await request.text());
+      requests.push({
+        url: request.url,
+        body: record(body),
+        authorization: request.headers.get("authorization"),
+      });
+      return Response.json({
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        created: 0,
+        model: "openai/gpt-5.1",
+        choices: [
+          { index: 0, message: { role: "assistant", content: "done" }, finish_reason: "stop" },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    },
+    { preconnect() {} },
+  );
+  globalThis.fetch = mockFetch;
   try {
     process.env.OPENROUTER_API_KEY = "env-openrouter-key";
     process.env.OPENAI_API_KEY = "wrong-openai-key";
     registerConfiguredProviders();
-    await expect(
-      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
-    ).resolves.toBe("done");
+    expect(await complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).toBe(
+      "done",
+    );
 
     registerConfiguredProviders({ openrouter: "settings-openrouter-key" });
-    await expect(
-      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
-    ).resolves.toBe("done");
+    expect(await complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).toBe(
+      "done",
+    );
 
     delete process.env.OPENROUTER_API_KEY;
     registerConfiguredProviders();
-    await expect(
-      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
-    ).resolves.toBe("done");
+    expect(await complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).toBe(
+      "done",
+    );
 
     expect(requests).toHaveLength(3);
     for (const request of requests) {

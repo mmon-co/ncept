@@ -29,6 +29,10 @@ export interface ModelSpec {
   effort?: Effort;
 }
 
+function isEffort(value: string): value is Effort {
+  return EFFORTS.some((effort) => effort === value);
+}
+
 type JsonValue =
   | string
   | number
@@ -65,8 +69,9 @@ export function parseModelSpec(spec: string): ModelSpec {
   // legacy model literally named "medium" is not treated as bare Anthropic.
   let effort: Effort | undefined;
   const effortColon = modelId.lastIndexOf(":");
-  if (effortColon !== -1 && EFFORTS.includes(modelId.slice(effortColon + 1) as Effort)) {
-    effort = modelId.slice(effortColon + 1) as Effort;
+  const effortSuffix = modelId.slice(effortColon + 1);
+  if (effortColon !== -1 && isEffort(effortSuffix)) {
+    effort = effortSuffix;
     modelId = modelId.slice(0, effortColon);
   }
   if (provider === "" || modelId === "") throw new Error(`unparseable model spec '${spec}'`);
@@ -220,7 +225,7 @@ export async function complete(
   const providerOptions = effortProviderOptions(spec);
   const { text } = await generateText({
     model: resolveModelSpec(spec).model,
-    system,
+    instructions: system,
     prompt: user,
     ...(providerOptions !== undefined ? { providerOptions } : {}),
   });
