@@ -70,14 +70,21 @@ test("reification creates an independent root with equivalent identified graph c
         },
       ],
     },
-    metadata: { properties: { "patch:title": "Source" }, citations: [] },
+    metadata: {
+      properties: { "patch:title": "Source", "patch:curriculum": true },
+      citations: [],
+    },
   };
   const sourceBundle = { terminal: source.ref, revisions: [source, foundation] };
 
   const reified = reifyPatchBundle(sourceBundle, {
     identity: "patch-independent",
     metadata: {
-      properties: { "patch:title": "Independent", "patch:author": "Ada" },
+      properties: {
+        "patch:title": "Independent",
+        "patch:author": "Ada",
+        "patch:curriculum": true,
+      },
       citations: [],
     },
   });
@@ -100,13 +107,17 @@ test("reification creates an independent root with equivalent identified graph c
     nodes: resolvedTarget.nodes,
     edges: resolvedTarget.edges,
     metadataSets: resolvedTarget.metadataSets,
-    tags: resolvedTarget.tags,
+    tags: resolvedTarget.tags.filter((tag) => tag.name === "topic:complete"),
   }).toEqual({
     nodes: resolvedSource.nodes,
     edges: resolvedSource.edges,
     metadataSets: resolvedSource.metadataSets,
-    tags: resolvedSource.tags,
+    tags: resolvedSource.tags.filter((tag) => tag.name === "topic:complete"),
   });
+  expect(resolvedTarget.tags.map((tag) => tag.name)).toContain(
+    "patch:patch-independent:curriculum",
+  );
+  expect(resolvedTarget.tags.map((tag) => tag.name)).not.toContain("patch:patch-source:curriculum");
   expect(reified.metadata.citations).toEqual([
     {
       kind: "reified_from",

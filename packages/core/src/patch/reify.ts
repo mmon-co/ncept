@@ -18,6 +18,15 @@ export function reifyPatchBundle(
     );
 
   const graph = resolvePatchBundle(bundle);
+  const generatedPatchTags = new Set(
+    bundle.revisions.flatMap((revision) =>
+      Object.entries(revision.metadata.properties).flatMap(([key, value]) =>
+        key.startsWith("patch:") && value === true
+          ? [`patch:${revision.ref.identity}:${key.slice("patch:".length)}`]
+          : [],
+      ),
+    ),
+  );
   const operations: SemanticOperation[] = [
     ...graph.nodes.map((node) => ({ kind: "add-node" as const, node })),
     ...graph.edges.map((edge) => ({ kind: "add-edge" as const, edge })),
@@ -25,7 +34,9 @@ export function reifyPatchBundle(
       kind: "add-metadata-set" as const,
       metadataSet,
     })),
-    ...graph.tags.map((tag) => ({ kind: "define-tag" as const, tag })),
+    ...graph.tags
+      .filter((tag) => !generatedPatchTags.has(tag.name))
+      .map((tag) => ({ kind: "define-tag" as const, tag })),
   ];
 
   return {
