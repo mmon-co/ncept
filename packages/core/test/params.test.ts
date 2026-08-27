@@ -1,10 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import YAML from "yaml";
-import { DEFAULT_PARAMS, loadParams } from "../src/params";
+import { DEFAULT_PARAMS, loadParams, parseParams } from "../src/params";
 import { tempDataDir } from "./helpers";
 
 describe("params migration", () => {
+  test("parses partial unknown input into a complete Params value", () => {
+    const params = parseParams({ review: { max_cards_per_session: 7 }, ignored: true });
+    expect(params.review.max_cards_per_session).toBe(7);
+    expect(params.initial).toEqual(DEFAULT_PARAMS.initial);
+    expect(params).not.toHaveProperty("ignored");
+  });
+
+  test("reports malformed nested structures at the parsing boundary", () => {
+    expect(() => parseParams({ initial: "invalid" })).toThrow(/params initial must be an object/);
+    expect(() => parseParams({ evidence: { mistake: { severity: { slip: "invalid" } } } })).toThrow(
+      /params evidence\.mistake\.severity\.slip must be an object/,
+    );
+  });
+
   test("reads v1 tuning as v2 while preserving the recognition ceiling", () => {
     const dd = tempDataDir();
     const v1 = {
