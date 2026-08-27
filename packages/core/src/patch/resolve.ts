@@ -71,7 +71,10 @@ function lockedBases(revision: PatchRevision): LockedBase[] {
   });
 }
 
-function orderRevisions(bundle: ClosedPatchBundle): PatchRevision[] {
+function orderRevisions(bundle: ClosedPatchBundle): {
+  readonly revisions: PatchRevision[];
+  readonly closure: ReadonlyMap<string, ReadonlySet<string>>;
+} {
   const revisions = new Map<string, PatchRevision>();
   for (const revision of bundle.revisions) {
     const key = exactPatchRefKey(revision.ref);
@@ -90,6 +93,7 @@ function orderRevisions(bundle: ClosedPatchBundle): PatchRevision[] {
   const active = new Set<string>();
   const applied = new Set<string>();
   const ordered: PatchRevision[] = [];
+  const closure = new Map<string, ReadonlySet<string>>();
   const visit = (revision: PatchRevision): void => {
     const key = exactPatchRefKey(revision.ref);
     if (active.has(key))
@@ -107,23 +111,28 @@ function orderRevisions(bundle: ClosedPatchBundle): PatchRevision[] {
 
     selectedByIdentity.set(revision.ref.identity, revision.ref);
     active.add(key);
+    const dependencyClosure = new Set<string>();
     for (const locked of lockedBases(revision)) {
-      const dependency = revisions.get(exactPatchRefKey(locked.exact));
+      const dependencyKey = exactPatchRefKey(locked.exact);
+      const dependency = revisions.get(dependencyKey);
       if (dependency === undefined)
         throw new PatchCompileError(
           "unresolvable-dependency",
           `locked Patch revision ${locked.exact.identity}@${exactRelease(locked.exact)} is missing`,
         );
       visit(dependency);
+      for (const member of closure.get(dependencyKey) ?? []) dependencyClosure.add(member);
     }
     active.delete(key);
+    dependencyClosure.add(key);
+    closure.set(key, dependencyClosure);
     applied.add(key);
     ordered.push(revision);
   };
   visit(terminal);
   if (ordered.length !== revisions.size)
     throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
-  return ordered;
+  return { revisions: ordered, closure };
 }
 
 function subjectKey(subject: MetadataSet["subjects"][number]): string {
@@ -142,7 +151,8 @@ function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
 }
 
 export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
-  const orderedRevisions = orderRevisions(bundle);
+  const ordered = orderRevisions(bundle);
+  const orderedRevisions = ordered.revisions;
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
@@ -202,11 +212,26 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     for (const [key, value] of Object.entries(revision.metadata.properties)) {
       if (!key.startsWith("patch:") || value !== true) continue;
       const label = key.slice("patch:".length);
+      const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
       tags.set(`patch:${revision.ref.identity}:${label}`, {
         name: `patch:${revision.ref.identity}:${label}`,
-        nodes: sorted(nodes.values()).map((node) => node.id),
-        edges: sorted(edges.values()).map((edge) => edge.id),
-        metadataSets: sorted(metadataSets.values()).map((set) => set.id),
+        nodes: sorted(nodes.values())
+          .filter((node) =>
+            nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
+          )
+          .map((node) => node.id),
+        edges: sorted(edges.values())
+          .filter((edge) =>
+            edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
+          )
+          .map((edge) => edge.id),
+        metadataSets: sorted(metadataSets.values())
+          .filter((set) =>
+            metadataProvenance[set.id]?.some((source) =>
+              closure.has(exactPatchRefKey(source.patch)),
+            ),
+          )
+          .map((set) => set.id),
       });
     }
   }

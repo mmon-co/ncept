@@ -330,3 +330,33 @@ test("metadata contributions cannot change an identified set's attachment subjec
     expect((error as PatchCompileError).code).toBe("incompatible-contribution");
   }
 });
+
+test("a based Patch label selects its dependency closure without unrelated Personal bases", () => {
+  const course = based(
+    ref("patch-course", "1.0.0", "1"),
+    [],
+    [{ kind: "add-node", node: { id: "node-course" } }],
+  );
+  const unrelated = based(
+    ref("patch-unrelated", "1.0.0", "2"),
+    [],
+    [{ kind: "add-node", node: { id: "node-unrelated" } }],
+  );
+  const curriculum = {
+    ...based(ref("patch-curriculum", "1.0.0", "3"), [hubBase(course.ref)]),
+    metadata: { properties: { "patch:title": "Curriculum", "patch:curriculum": true } },
+  } satisfies PatchRevision;
+  const personal = based(ref("patch-personal", "1.0.0", "4"), [
+    hubBase(unrelated.ref),
+    hubBase(curriculum.ref),
+  ]);
+
+  const resolved = resolvePatchBundle({
+    terminal: personal.ref,
+    revisions: [personal, curriculum, course, unrelated],
+  });
+
+  expect(
+    resolved.tags.find((tag) => tag.name === `patch:${curriculum.ref.identity}:curriculum`),
+  ).toMatchObject({ nodes: ["node-course"] });
+});
