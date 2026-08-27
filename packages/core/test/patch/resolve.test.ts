@@ -40,6 +40,14 @@ function hubBase(exact: ExactPatchRef): LockedBase {
   };
 }
 
+function authoredBase(exact: ExactPatchRef): LockedBase {
+  return {
+    requirement: { identity: exact.identity, release: `commit:${exact.commit}` },
+    exact,
+    acquisition: { kind: "authored", identity: exact.identity },
+  };
+}
+
 function based(
   exact: ExactPatchRef,
   bases: readonly LockedBase[],
@@ -359,4 +367,161 @@ test("a based Patch label selects its dependency closure without unrelated Perso
   expect(
     resolved.tags.find((tag) => tag.name === `patch:${curriculum.ref.identity}:curriculum`),
   ).toMatchObject({ nodes: ["node-course"] });
+});
+
+test("exact masks suppress only their targeted entity and metadata contributions", () => {
+  const source = based(
+    ref("patch-source", "1.0.0", "5"),
+    [],
+    [
+      { kind: "add-node", node: { id: "node-removed" } },
+      { kind: "add-node", node: { id: "node-shared" } },
+      { kind: "add-node", node: { id: "node-other" } },
+      {
+        kind: "add-edge",
+        edge: { id: "edge-removed", from: "node-shared", to: "node-other" },
+      },
+      {
+        kind: "add-edge",
+        edge: { id: "edge-retained", from: "node-other", to: "node-shared" },
+      },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-shared" }],
+          properties: {
+            "display:label": "Source label",
+            "pedagogy:lesson": "Source lesson",
+          },
+        },
+      },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-other",
+          subjects: [{ kind: "node", id: "node-other" }],
+          properties: { "display:label": "Other" },
+        },
+      },
+    ],
+  );
+  const reconciliation = based(
+    { ...ref("patch-reconciliation", "1.0.0", "6"), version: undefined },
+    [],
+    [
+      {
+        kind: "mask-contribution",
+        mask: {
+          source: source.ref,
+          operationIndex: 0,
+          entity: { kind: "node", id: "node-removed" },
+        },
+      },
+      {
+        kind: "mask-contribution",
+        mask: {
+          source: source.ref,
+          operationIndex: 3,
+          entity: { kind: "edge", id: "edge-removed" },
+        },
+      },
+      {
+        kind: "mask-contribution",
+        mask: {
+          source: source.ref,
+          operationIndex: 5,
+          entity: { kind: "metadata-set", id: "metadata-shared" },
+          property: "display:label",
+        },
+      },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-shared" }],
+          properties: { "display:label": "Personal label" },
+        },
+      },
+    ],
+  );
+  const personal = based(ref("patch-personal", "1.0.0", "7"), [
+    hubBase(source.ref),
+    authoredBase(reconciliation.ref),
+  ]);
+
+  const resolved = resolvePatchBundle({
+    terminal: personal.ref,
+    revisions: [personal, reconciliation, source],
+  });
+
+  expect(resolved.nodes).toEqual([{ id: "node-other" }, { id: "node-shared" }]);
+  expect(resolved.edges).toEqual([
+    { id: "edge-retained", from: "node-other", to: "node-shared" },
+  ]);
+  expect(resolved.metadataSets).toEqual([
+    {
+      id: "metadata-other",
+      subjects: [{ kind: "node", id: "node-other" }],
+      properties: { "display:label": "Other" },
+    },
+    {
+      id: "metadata-shared",
+      subjects: [{ kind: "node", id: "node-shared" }],
+      properties: {
+        "display:label": "Personal label",
+        "pedagogy:lesson": "Source lesson",
+      },
+    },
+  ]);
+  expect(resolved.provenance.metadataProperties["metadata-shared"]?.["display:label"]).toEqual([
+    { patch: reconciliation.ref, operationIndex: 3 },
+  ]);
+  expect(resolved.provenance.metadataProperties["metadata-shared"]?.["pedagogy:lesson"]).toEqual([
+    { patch: source.ref, operationIndex: 5 },
+  ]);
+});
+
+test("a stale exact mask reports the Reconciliation Patch that must change", () => {
+  const oldSource = based(
+    ref("patch-source", "1.0.0", "8"),
+    [],
+    [{ kind: "add-node", node: { id: "node-shared" } }],
+  );
+  const newSource = based(
+    ref("patch-source", "2.0.0", "9"),
+    [],
+    [{ kind: "add-node", node: { id: "node-shared" } }],
+  );
+  const reconciliation = based(
+    { ...ref("patch-reconciliation", "1.0.0", "a"), version: undefined },
+    [],
+    [
+      {
+        kind: "mask-contribution",
+        mask: {
+          source: oldSource.ref,
+          operationIndex: 0,
+          entity: { kind: "node", id: "node-shared" },
+        },
+      },
+    ],
+  );
+  const personal = based(ref("patch-personal", "1.0.0", "b"), [
+    hubBase(newSource.ref),
+    authoredBase(reconciliation.ref),
+  ]);
+
+  try {
+    resolvePatchBundle({
+      terminal: personal.ref,
+      revisions: [personal, reconciliation, newSource],
+    });
+    throw new Error("expected the stale exact mask to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(PatchCompileError);
+    expect((error as PatchCompileError).code).toBe("stale-mask-target");
+    expect((error as Error).message).toContain(reconciliation.ref.identity);
+    expect((error as Error).message).toContain("patch-source@1.0.0 operation 0 node 'node-shared'");
+  }
 });
