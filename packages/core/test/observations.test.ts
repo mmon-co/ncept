@@ -2,13 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  appendObservation,
-  ensureDataDir,
-  readObservations,
-  resolveDataDir,
-  type LessonObservation,
-} from "../src";
+import { ensureDataDir, resolveDataDir } from "../src";
+import { appendObservation, readObservations, type LessonObservation } from "../src/observations";
 
 let root: string | undefined;
 
