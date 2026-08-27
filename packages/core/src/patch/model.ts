@@ -122,6 +122,9 @@ export interface ResolvedGraph {
     readonly nodes: Readonly<Record<NodeId, readonly ContributionProvenance[]>>;
     readonly edges: Readonly<Record<EdgeId, readonly ContributionProvenance[]>>;
     readonly metadataSets: Readonly<Record<MetadataSetId, readonly ContributionProvenance[]>>;
+    readonly metadataProperties: Readonly<
+      Record<MetadataSetId, Readonly<Record<string, readonly ContributionProvenance[]>>>
+    >;
   };
 }
 

@@ -169,15 +169,21 @@ test("a Personal Patch rejects an exact lock that does not satisfy its manifest 
 });
 
 test("ordered resolution applies an exact diamond dependency once and the terminal Patch last", () => {
-  const shared = based(ref("patch-shared", "1.0.0", "1"), [], [
-    { kind: "add-node", node: { id: "node-shared" } },
-  ]);
-  const first = based(ref("patch-first", "1.0.0", "2"), [hubBase(shared.ref)], [
-    { kind: "add-node", node: { id: "node-first" } },
-  ]);
-  const second = based(ref("patch-second", "1.0.0", "3"), [hubBase(shared.ref)], [
-    { kind: "add-node", node: { id: "node-second" } },
-  ]);
+  const shared = based(
+    ref("patch-shared", "1.0.0", "1"),
+    [],
+    [{ kind: "add-node", node: { id: "node-shared" } }],
+  );
+  const first = based(
+    ref("patch-first", "1.0.0", "2"),
+    [hubBase(shared.ref)],
+    [{ kind: "add-node", node: { id: "node-first" } }],
+  );
+  const second = based(
+    ref("patch-second", "1.0.0", "3"),
+    [hubBase(shared.ref)],
+    [{ kind: "add-node", node: { id: "node-second" } }],
+  );
   const curriculum = based(ref("patch-curriculum", "1.0.0", "4"), [
     hubBase(first.ref),
     hubBase(second.ref),
@@ -229,20 +235,24 @@ test("resolution rejects incompatible exact revisions and dependency cycles with
 });
 
 test("compatible property contributions merge in Patch order without dropping earlier properties", () => {
-  const foundation = based(ref("patch-foundation", "1.0.0", "c"), [], [
-    { kind: "add-node", node: { id: "node-shared" } },
-    {
-      kind: "add-metadata-set",
-      metadataSet: {
-        id: "metadata-shared",
-        subjects: [{ kind: "node", id: "node-shared" }],
-        properties: {
-          "display:label": "Foundation label",
-          "pedagogy:lesson": "The retained lesson",
+  const foundation = based(
+    ref("patch-foundation", "1.0.0", "c"),
+    [],
+    [
+      { kind: "add-node", node: { id: "node-shared" } },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-shared" }],
+          properties: {
+            "display:label": "Foundation label",
+            "pedagogy:lesson": "The retained lesson",
+          },
         },
       },
-    },
-  ]);
+    ],
+  );
   const contribution = based(
     ref("patch-contribution", "1.0.0", "d"),
     [hubBase(foundation.ref)],
@@ -281,18 +291,22 @@ test("compatible property contributions merge in Patch order without dropping ea
 });
 
 test("metadata contributions cannot change an identified set's attachment subjects", () => {
-  const foundation = based(ref("patch-foundation", "1.0.0", "e"), [], [
-    { kind: "add-node", node: { id: "node-first" } },
-    { kind: "add-node", node: { id: "node-second" } },
-    {
-      kind: "add-metadata-set",
-      metadataSet: {
-        id: "metadata-shared",
-        subjects: [{ kind: "node", id: "node-first" }],
-        properties: { "display:label": "First" },
+  const foundation = based(
+    ref("patch-foundation", "1.0.0", "e"),
+    [],
+    [
+      { kind: "add-node", node: { id: "node-first" } },
+      { kind: "add-node", node: { id: "node-second" } },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-first" }],
+          properties: { "display:label": "First" },
+        },
       },
-    },
-  ]);
+    ],
+  );
   const incompatible = based(
     ref("patch-incompatible", "1.0.0", "f"),
     [hubBase(foundation.ref)],
