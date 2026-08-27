@@ -99,11 +99,31 @@ export interface TaggedSet {
   readonly metadataSets: readonly MetadataSetId[];
 }
 
+export type PatchEntity =
+  | { readonly kind: "node"; readonly id: NodeId }
+  | { readonly kind: "edge"; readonly id: EdgeId }
+  | { readonly kind: "metadata-set"; readonly id: MetadataSetId };
+
+export interface ExactContributionMask {
+  readonly source: ExactPatchRef;
+  readonly operationIndex: number;
+  readonly entity: PatchEntity;
+  /** Omit to mask the entity contribution. Only Metadata-set contributions may name a property. */
+  readonly property?: string;
+}
+
+export type GraphTagAuthority = "patch" | "platform" | "user";
+
+export interface GraphTag extends TaggedSet {
+  readonly authority: GraphTagAuthority;
+}
+
 export type SemanticOperation =
   | { readonly kind: "add-node"; readonly node: StructureNode }
   | { readonly kind: "add-edge"; readonly edge: StructureEdge }
   | { readonly kind: "add-metadata-set"; readonly metadataSet: MetadataSet }
-  | { readonly kind: "define-tag"; readonly tag: TaggedSet };
+  | { readonly kind: "define-tag"; readonly tag: TaggedSet }
+  | { readonly kind: "mask-contribution"; readonly mask: ExactContributionMask };
 
 export interface SemanticDelta {
   readonly operations: readonly SemanticOperation[];
@@ -147,7 +167,7 @@ export interface ResolvedGraph {
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];
-  readonly tags: readonly TaggedSet[];
+  readonly tags: readonly GraphTag[];
   readonly provenance: {
     readonly nodes: Readonly<Record<NodeId, readonly ContributionProvenance[]>>;
     readonly edges: Readonly<Record<EdgeId, readonly ContributionProvenance[]>>;
@@ -233,6 +253,7 @@ export interface VisualProjectionInput {
 
 export interface GraphCompilationInput {
   readonly bundle: ClosedPatchBundle;
+  readonly attachedTags?: readonly GraphTag[];
   readonly query?: GraphQuery;
   readonly learner: LearnerProjection;
   readonly annotations: Readonly<Partial<Record<NodeId, readonly string[]>>>;

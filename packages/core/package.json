@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./observations": "./src/observations.ts",
     "./patch": "./src/patch/index.ts"
   },
   "dependencies": {
