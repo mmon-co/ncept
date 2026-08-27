@@ -49,7 +49,7 @@ export function deriveSchedulerState(
     due: card.due.toISOString(),
     stability: card.stability,
     difficulty: card.difficulty,
-    state: State[card.state] ?? String(card.state),
+    state: State[card.state],
     reps: card.reps,
     lapses: card.lapses,
     last_review: card.last_review ? card.last_review.toISOString() : null,
