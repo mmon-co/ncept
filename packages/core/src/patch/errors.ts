@@ -1,6 +1,9 @@
 export type PatchCompileErrorCode =
   | "invalid-bundle"
   | "unsupported-bases"
+  | "unresolvable-dependency"
+  | "incompatible-revision"
+  | "incompatible-contribution"
   | "duplicate-entity"
   | "dangling-edge"
   | "dangling-metadata"

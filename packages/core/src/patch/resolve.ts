@@ -1,71 +1,158 @@
 import { PatchCompileError } from "./errors";
 import type {
+  BaseRequirement,
   ClosedPatchBundle,
   ContributionProvenance,
+  EdgeId,
+  ExactPatchRef,
+  LockedBase,
   MetadataSet,
   MetadataSetId,
   NodeId,
-  EdgeId,
   PatchId,
   PatchMetadata,
+  PatchRevision,
   ResolvedGraph,
   StructureEdge,
   StructureNode,
   TaggedSet,
 } from "./model";
-import { sameExactPatchRef } from "./model";
+import { exactPatchRefKey, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
 }
 
-export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
-  const terminal = bundle.revisions.find((revision) =>
-    sameExactPatchRef(revision.ref, bundle.terminal),
-  );
-  if (terminal === undefined)
-    throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
-  const orderedRevisions = terminal.bases.map((requirement) => {
-    const locked = terminal.lock.entries.find(
-      (entry) =>
-        entry.requirement.identity === requirement.identity &&
-        entry.requirement.release === requirement.release,
-    );
-    if (locked === undefined)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `Personal Patch base ${requirement.identity}@${requirement.release} is not locked`,
-      );
-    const exactRelease = locked.exact.version ?? `commit:${locked.exact.commit}`;
-    if (locked.exact.identity !== requirement.identity || exactRelease !== requirement.release)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `exact lock ${locked.exact.identity}@${exactRelease} does not satisfy ${requirement.identity}@${requirement.release}`,
-      );
-    const revision = bundle.revisions.find((candidate) =>
-      sameExactPatchRef(candidate.ref, locked.exact),
-    );
-    if (revision === undefined)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `locked Patch revision ${locked.exact.identity}@${locked.exact.commit} is missing`,
-      );
-    if (revision.bases.length !== 0 || revision.lock.entries.length !== 0)
-      throw new PatchCompileError(
-        "unsupported-bases",
-        "Personal scope currently accepts only exact root Patch bases",
-      );
-    return revision;
-  });
-  if (terminal.lock.entries.length !== terminal.bases.length)
+function exactRelease(ref: ExactPatchRef): string {
+  return ref.version ?? `commit:${ref.commit}`;
+}
+
+function sameRequirement(left: BaseRequirement, right: BaseRequirement): boolean {
+  return left.identity === right.identity && left.release === right.release;
+}
+
+function lockedBases(revision: PatchRevision): LockedBase[] {
+  if (revision.lock.entries.length !== revision.bases.length)
     throw new PatchCompileError(
       "invalid-bundle",
-      "Personal Patch lock must contain exactly one entry for each ordered base",
+      `Patch ${revision.ref.identity} lock must contain exactly one entry for each ordered base`,
     );
-  if (bundle.revisions.length !== orderedRevisions.length + 1)
-    throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
-  orderedRevisions.push(terminal);
+  const used = new Set<number>();
+  return revision.bases.map((requirement) => {
+    const matches = revision.lock.entries.flatMap((entry, index) =>
+      sameRequirement(entry.requirement, requirement) ? [{ entry, index }] : [],
+    );
+    if (matches.length !== 1 || used.has(matches[0]!.index))
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `Patch ${revision.ref.identity} base ${requirement.identity}@${requirement.release} does not have one exact lock entry`,
+      );
+    const { entry, index } = matches[0]!;
+    used.add(index);
+    if (
+      entry.exact.identity !== requirement.identity ||
+      exactRelease(entry.exact) !== requirement.release
+    )
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `exact lock ${entry.exact.identity}@${exactRelease(entry.exact)} does not satisfy ${requirement.identity}@${requirement.release}`,
+      );
+    if (entry.acquisition.identity !== entry.exact.identity)
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `acquisition for ${requirement.identity}@${requirement.release} names a different Patch`,
+      );
+    if (entry.acquisition.kind === "hub" && entry.acquisition.version !== entry.exact.version)
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `Hub acquisition for ${requirement.identity}@${requirement.release} does not name its exact version`,
+      );
+    return entry;
+  });
+}
 
+function orderRevisions(bundle: ClosedPatchBundle): {
+  readonly revisions: PatchRevision[];
+  readonly closure: ReadonlyMap<string, ReadonlySet<string>>;
+} {
+  const revisions = new Map<string, PatchRevision>();
+  for (const revision of bundle.revisions) {
+    const key = exactPatchRefKey(revision.ref);
+    if (revisions.has(key))
+      throw new PatchCompileError(
+        "invalid-bundle",
+        `closed Patch bundle repeats exact revision ${revision.ref.identity}@${exactRelease(revision.ref)}`,
+      );
+    revisions.set(key, revision);
+  }
+  const terminal = revisions.get(exactPatchRefKey(bundle.terminal));
+  if (terminal === undefined)
+    throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+
+  const selectedByIdentity = new Map<PatchId, ExactPatchRef>();
+  const active = new Set<string>();
+  const applied = new Set<string>();
+  const ordered: PatchRevision[] = [];
+  const closure = new Map<string, ReadonlySet<string>>();
+  const visit = (revision: PatchRevision): void => {
+    const key = exactPatchRefKey(revision.ref);
+    if (active.has(key))
+      throw new PatchCompileError(
+        "dependency-cycle",
+        `Patch dependency cycle reaches ${revision.ref.identity}@${exactRelease(revision.ref)}`,
+      );
+    const selected = selectedByIdentity.get(revision.ref.identity);
+    if (selected !== undefined && !sameExactPatchRef(selected, revision.ref))
+      throw new PatchCompileError(
+        "incompatible-revision",
+        `Patch ${revision.ref.identity} resolves to both ${exactRelease(selected)} and ${exactRelease(revision.ref)}`,
+      );
+    if (applied.has(key)) return;
+
+    selectedByIdentity.set(revision.ref.identity, revision.ref);
+    active.add(key);
+    const dependencyClosure = new Set<string>();
+    for (const locked of lockedBases(revision)) {
+      const dependencyKey = exactPatchRefKey(locked.exact);
+      const dependency = revisions.get(dependencyKey);
+      if (dependency === undefined)
+        throw new PatchCompileError(
+          "unresolvable-dependency",
+          `locked Patch revision ${locked.exact.identity}@${exactRelease(locked.exact)} is missing`,
+        );
+      visit(dependency);
+      for (const member of closure.get(dependencyKey) ?? []) dependencyClosure.add(member);
+    }
+    active.delete(key);
+    dependencyClosure.add(key);
+    closure.set(key, dependencyClosure);
+    applied.add(key);
+    ordered.push(revision);
+  };
+  visit(terminal);
+  if (ordered.length !== revisions.size)
+    throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
+  return { revisions: ordered, closure };
+}
+
+function subjectKey(subject: MetadataSet["subjects"][number]): string {
+  return `${subject.kind}\0${subject.id}`;
+}
+
+function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
+  const leftKeys = [...new Set(left.subjects.map(subjectKey))].sort();
+  const rightKeys = [...new Set(right.subjects.map(subjectKey))].sort();
+  return (
+    leftKeys.length === left.subjects.length &&
+    rightKeys.length === right.subjects.length &&
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index])
+  );
+}
+
+export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
+  const ordered = orderRevisions(bundle);
+  const orderedRevisions = ordered.revisions;
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
@@ -73,8 +160,12 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
   const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
+  const metadataPropertyProvenance: Record<
+    MetadataSetId,
+    Record<string, ContributionProvenance[]>
+  > = {};
 
-  for (const revision of orderedRevisions)
+  for (const revision of orderedRevisions) {
     revision.delta.operations.forEach((operation, operationIndex) => {
       const provenance = { patch: revision.ref, operationIndex };
       if (operation.kind === "add-node") {
@@ -87,23 +178,27 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
           (existing.from !== operation.edge.from || existing.to !== operation.edge.to)
         )
           throw new PatchCompileError(
-            "duplicate-entity",
-            `conflicting edge '${operation.edge.id}'`,
+            "incompatible-contribution",
+            `edge '${operation.edge.id}' cannot change endpoints`,
           );
         edges.set(operation.edge.id, operation.edge);
         (edgeProvenance[operation.edge.id] ??= []).push(provenance);
       } else if (operation.kind === "add-metadata-set") {
-        const existing = metadataSets.get(operation.metadataSet.id);
-        if (
-          existing !== undefined &&
-          JSON.stringify(existing) !== JSON.stringify(operation.metadataSet)
-        )
+        const incoming = operation.metadataSet;
+        const existing = metadataSets.get(incoming.id);
+        if (existing !== undefined && !sameSubjects(existing, incoming))
           throw new PatchCompileError(
-            "duplicate-entity",
-            `conflicting metadata set '${operation.metadataSet.id}'`,
+            "incompatible-contribution",
+            `metadata set '${incoming.id}' cannot change attachment subjects`,
           );
-        metadataSets.set(operation.metadataSet.id, operation.metadataSet);
-        (metadataProvenance[operation.metadataSet.id] ??= []).push(provenance);
+        metadataSets.set(incoming.id, {
+          ...incoming,
+          properties: { ...existing?.properties, ...incoming.properties },
+        });
+        (metadataProvenance[incoming.id] ??= []).push(provenance);
+        const properties = (metadataPropertyProvenance[incoming.id] ??= {});
+        for (const key of Object.keys(incoming.properties))
+          (properties[key] ??= []).push(provenance);
       } else {
         const existing = tags.get(operation.tag.name);
         if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(operation.tag))
@@ -114,6 +209,32 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
         tags.set(operation.tag.name, operation.tag);
       }
     });
+    for (const [key, value] of Object.entries(revision.metadata.properties)) {
+      if (!key.startsWith("patch:") || value !== true) continue;
+      const label = key.slice("patch:".length);
+      const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
+      tags.set(`patch:${revision.ref.identity}:${label}`, {
+        name: `patch:${revision.ref.identity}:${label}`,
+        nodes: sorted(nodes.values())
+          .filter((node) =>
+            nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
+          )
+          .map((node) => node.id),
+        edges: sorted(edges.values())
+          .filter((edge) =>
+            edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
+          )
+          .map((edge) => edge.id),
+        metadataSets: sorted(metadataSets.values())
+          .filter((set) =>
+            metadataProvenance[set.id]?.some((source) =>
+              closure.has(exactPatchRefKey(source.patch)),
+            ),
+          )
+          .map((set) => set.id),
+      });
+    }
+  }
 
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))
@@ -155,6 +276,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       nodes: nodeProvenance,
       edges: edgeProvenance,
       metadataSets: metadataProvenance,
+      metadataProperties: metadataPropertyProvenance,
     },
   };
 }

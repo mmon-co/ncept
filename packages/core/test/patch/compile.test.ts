@@ -302,3 +302,48 @@ test("lesson provenance ignores later pedagogical metadata that does not replace
 
   expect(graph.nodes.find((node) => node.id === "node-vectors")?.contentSource).toEqual(course.ref);
 });
+
+test("property provenance keeps a merged lesson at the Patch that last changed that property", () => {
+  const foundation = revision;
+  const contribution: PatchRevision = {
+    ...revision,
+    ref: { ...revision.ref, identity: "patch-contribution", digest: `sha256:${"f".repeat(64)}` },
+    bases: [{ identity: foundation.ref.identity, release: "1.0.0" }],
+    lock: {
+      entries: [
+        {
+          requirement: { identity: foundation.ref.identity, release: "1.0.0" },
+          exact: foundation.ref,
+          acquisition: {
+            kind: "hub",
+            identity: foundation.ref.identity,
+            version: "1.0.0",
+          },
+        },
+      ],
+    },
+    delta: {
+      operations: [
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-vectors",
+            subjects: [{ kind: "node", id: "node-vectors" }],
+            properties: { "display:label": "Vectors, revised" },
+          },
+        },
+      ],
+    },
+  };
+
+  const graph = compileGraph({
+    bundle: { terminal: contribution.ref, revisions: [contribution, foundation] },
+    learner: { kind: "absent" },
+    annotations: {},
+  });
+
+  expect(graph.nodes.find((node) => node.id === "node-vectors")).toMatchObject({
+    label: "Vectors, revised",
+    contentSource: foundation.ref,
+  });
+});

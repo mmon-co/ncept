@@ -13,51 +13,67 @@ import type {
 import { exactPatchRefKey } from "./model";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
-  return orderMetadata(
-    graph,
-    graph.metadataSets.filter((set) =>
-      set.subjects.some((subject) => subject.kind === "node" && subject.id === node),
-    ),
+  return graph.metadataSets.filter((set) =>
+    set.subjects.some((subject) => subject.kind === "node" && subject.id === node),
   );
 }
 
 function metadataForEdge(graph: SelectedGraph, edge: EdgeId): MetadataSet[] {
-  return orderMetadata(
-    graph,
-    graph.metadataSets.filter((set) =>
-      set.subjects.some((subject) => subject.kind === "edge" && subject.id === edge),
-    ),
+  return graph.metadataSets.filter((set) =>
+    set.subjects.some((subject) => subject.kind === "edge" && subject.id === edge),
   );
 }
 
-function orderMetadata(graph: SelectedGraph, sets: readonly MetadataSet[]): MetadataSet[] {
+function property<T extends string | number>(
+  graph: SelectedGraph,
+  sets: readonly MetadataSet[],
+  key: string,
+  accepts: (value: unknown) => value is T,
+): { value: T; source: ExactPatchRef } | undefined {
   const patchOrder = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
-  return [...sets].sort((left, right) => {
-    const leftSource = graph.provenance.metadataSets[left.id]?.at(-1);
-    const rightSource = graph.provenance.metadataSets[right.id]?.at(-1);
-    const byPatch =
-      (patchOrder.get(leftSource === undefined ? "" : exactPatchRefKey(leftSource.patch)) ?? -1) -
-      (patchOrder.get(rightSource === undefined ? "" : exactPatchRefKey(rightSource.patch)) ?? -1);
-    if (byPatch !== 0) return byPatch;
-    const byOperation = (leftSource?.operationIndex ?? -1) - (rightSource?.operationIndex ?? -1);
-    return byOperation === 0 ? left.id.localeCompare(right.id) : byOperation;
-  });
+  let selected:
+    | { value: T; source: ExactPatchRef; patchIndex: number; operationIndex: number }
+    | undefined;
+  for (const set of sets) {
+    const value = set.properties[key];
+    const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+    if (!accepts(value) || source === undefined) continue;
+    const candidate = {
+      value,
+      source: source.patch,
+      patchIndex: patchOrder.get(exactPatchRefKey(source.patch)) ?? -1,
+      operationIndex: source.operationIndex,
+    };
+    if (
+      selected === undefined ||
+      candidate.patchIndex > selected.patchIndex ||
+      (candidate.patchIndex === selected.patchIndex &&
+        candidate.operationIndex > selected.operationIndex)
+    )
+      selected = candidate;
+  }
+  return selected;
 }
 
-function stringProperty(sets: readonly MetadataSet[], key: string): string | undefined {
-  for (let index = sets.length - 1; index >= 0; index--) {
-    const value = sets[index]?.properties[key];
-    if (typeof value === "string") return value;
-  }
-  return undefined;
+function stringProperty(
+  graph: SelectedGraph,
+  sets: readonly MetadataSet[],
+  key: string,
+): string | undefined {
+  return property(graph, sets, key, (value): value is string => typeof value === "string")?.value;
 }
 
-function numberProperty(sets: readonly MetadataSet[], key: string): number | undefined {
-  for (let index = sets.length - 1; index >= 0; index--) {
-    const value = sets[index]?.properties[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return undefined;
+function numberProperty(
+  graph: SelectedGraph,
+  sets: readonly MetadataSet[],
+  key: string,
+): number | undefined {
+  return property(
+    graph,
+    sets,
+    key,
+    (value): value is number => typeof value === "number" && Number.isFinite(value),
+  )?.value;
 }
 
 function rankNodes(graph: SelectedGraph, roles: ReadonlyMap<EdgeId, string>): Map<NodeId, number> {
@@ -83,11 +99,16 @@ function rankNodes(graph: SelectedGraph, roles: ReadonlyMap<EdgeId, string>): Ma
 }
 
 function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
-  const metadata = metadataForNode(graph, node).filter(
-    (set) => typeof set.properties["pedagogy:lesson"] === "string",
+  return (
+    property(
+      graph,
+      metadataForNode(graph, node),
+      "pedagogy:lesson",
+      (value): value is string => typeof value === "string",
+    )?.source ??
+    graph.provenance.nodes[node]?.at(-1)?.patch ??
+    graph.terminal
   );
-  const last = metadata.flatMap((set) => graph.provenance.metadataSets[set.id] ?? []).at(-1);
-  return last?.patch ?? graph.provenance.nodes[node]?.at(-1)?.patch ?? graph.terminal;
 }
 
 function appearance(input: VisualProjectionInput, node: NodeId): VisualNodeAppearance {
@@ -107,7 +128,8 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   const edgeRoles = new Map(
     input.graph.edges.map((edge) => [
       edge.id,
-      stringProperty(metadataForEdge(input.graph, edge.id), "graph:role") ?? "relation",
+      stringProperty(input.graph, metadataForEdge(input.graph, edge.id), "graph:role") ??
+        "relation",
     ]),
   );
   const ranks = rankNodes(input.graph, edgeRoles);
@@ -117,7 +139,7 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   });
   const nodes = input.graph.nodes.map((node) => {
     const sets = metadataForNode(input.graph, node.id);
-    const label = stringProperty(sets, "display:label");
+    const label = stringProperty(input.graph, sets, "display:label");
     if (label === undefined)
       throw new PatchCompileError(
         "missing-display-metadata",
@@ -138,7 +160,7 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   nodes.sort((left, right) => left.id.localeCompare(right.id));
   const edges = input.graph.edges.map((edge) => {
     const sets = metadataForEdge(input.graph, edge.id);
-    const strength = numberProperty(sets, "graph:strength");
+    const strength = numberProperty(input.graph, sets, "graph:strength");
     return {
       id: edge.id,
       from: edge.from,

@@ -63,6 +63,11 @@ export function selectGraph(graph: ResolvedGraph, query?: GraphQuery): SelectedG
           metadataIds.has(id as MetadataSetId),
         ),
       ) as ResolvedGraph["provenance"]["metadataSets"],
+      metadataProperties: Object.fromEntries(
+        Object.entries(graph.provenance.metadataProperties).filter(([id]) =>
+          metadataIds.has(id as MetadataSetId),
+        ),
+      ) as ResolvedGraph["provenance"]["metadataProperties"],
     },
   };
 }
