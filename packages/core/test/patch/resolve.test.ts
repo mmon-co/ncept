@@ -17,7 +17,7 @@ function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
     },
     bases: [],
     lock: { entries: [] },
-    metadata: { properties: { "patch:title": "Test" } },
+    metadata: { properties: { "patch:title": "Test" }, citations: [] },
     delta: { operations },
   };
 }
@@ -49,7 +49,7 @@ function based(
     ref: exact,
     bases: bases.map((base) => base.requirement),
     lock: { entries: bases },
-    metadata: { properties: { "patch:title": exact.identity } },
+    metadata: { properties: { "patch:title": exact.identity }, citations: [] },
     delta: { operations },
   };
 }
@@ -344,7 +344,10 @@ test("a based Patch label selects its dependency closure without unrelated Perso
   );
   const curriculum = {
     ...based(ref("patch-curriculum", "1.0.0", "3"), [hubBase(course.ref)]),
-    metadata: { properties: { "patch:title": "Curriculum", "patch:curriculum": true } },
+    metadata: {
+      properties: { "patch:title": "Curriculum", "patch:curriculum": true },
+      citations: [],
+    },
   } satisfies PatchRevision;
   const personal = based(ref("patch-personal", "1.0.0", "4"), [
     hubBase(unrelated.ref),
