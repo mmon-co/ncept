@@ -1,11 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Observation, ObservationId } from "./observations";
-import type {
-  ExactPatchRef,
-  LearnerNodeProjection,
-  NodeId,
-  ResolvedGraph,
-} from "./patch";
+import type { ExactPatchRef, LearnerNodeProjection, NodeId, ResolvedGraph } from "./patch";
 import { exactPatchRefKey, sameExactPatchRef } from "./patch";
 
 export type ObservationAssociationCommitId = `association-${string}`;
@@ -94,15 +89,15 @@ export function reassociateObservations(
   )
     ? input.reusable
     : undefined;
-  const byObservation = new Map(
-    (reusable?.associations ?? [])
-      .filter(
-        (association) =>
-          observationIds.has(association.observation) &&
-          associationSource(input.graph, association.node) !== undefined,
-      )
-      .map((association) => [association.observation, association]),
-  );
+  const byObservation = new Map<ObservationId, ObservationAssociation>();
+  for (const association of reusable?.associations ?? input.parent?.associations ?? []) {
+    const source = associationSource(input.graph, association.node);
+    if (!observationIds.has(association.observation) || source === undefined) continue;
+    byObservation.set(
+      association.observation,
+      reusable === undefined ? { ...association, source } : association,
+    );
+  }
 
   for (const observation of input.observations) {
     if (byObservation.has(observation.id)) continue;
@@ -120,11 +115,7 @@ export function reassociateObservations(
   const associations = sortedAssociations(byObservation.values());
   if (reusable !== undefined && sameAssociations(reusable.associations, associations))
     return reusable;
-  return makeCommit(
-    input.graph.terminal,
-    reusable?.id ?? input.parent?.id,
-    associations,
-  );
+  return makeCommit(input.graph.terminal, reusable?.id ?? input.parent?.id, associations);
 }
 
 export interface CorrectObservationAssociationInput {
@@ -164,7 +155,10 @@ export function reduceObservationAssociations(
   commit: ObservationAssociationCommit,
 ): Readonly<Partial<Record<NodeId, Extract<LearnerNodeProjection, { kind: "observed" }>>>> {
   const byId = new Map(observations.map((observation) => [observation.id, observation]));
-  const latest = new Map<NodeId, { observation: Observation; effect: ObservationAssociationEffect }>();
+  const latest = new Map<
+    NodeId,
+    { observation: Observation; effect: ObservationAssociationEffect }
+  >();
   for (const association of commit.associations) {
     const observation = byId.get(association.observation);
     if (observation === undefined) continue;
