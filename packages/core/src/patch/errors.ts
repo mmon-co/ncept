@@ -8,6 +8,7 @@ export type PatchCompileErrorCode =
   | "dangling-edge"
   | "dangling-metadata"
   | "dangling-tag"
+  | "stale-mask-target"
   | "unknown-tag"
   | "unsupported-query"
   | "missing-display-metadata"
