@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./observation-associations": "./src/observation-associations.ts",
     "./observations": "./src/observations.ts",
     "./patch": "./src/patch/index.ts"
   },

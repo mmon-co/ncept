@@ -47,10 +47,11 @@ function graph(terminal: ExactPatchRef): ResolvedGraph {
 }
 
 function observation(id: string, node: "node-first" | "node-second"): LessonObservation {
+  const sequence = id.endsWith("2") ? 2 : 1;
   return {
     version: 1,
     id: `observation-${id}`,
-    recordedAt: `2026-08-27T00:00:0${id}.000Z`,
+    recordedAt: `2026-08-27T00:00:0${sequence}.000Z`,
     kind: "lesson",
     node,
     effectivePatch: contentRef,
@@ -60,7 +61,7 @@ function observation(id: string, node: "node-first" | "node-second"): LessonObse
 test("reassociation preserves compatible history, adds missing forms, and reduces deterministically", () => {
   const first = observation("00000000-0000-4000-8000-000000000001", "node-first");
   const later = observation("00000000-0000-4000-8000-000000000002", "node-second");
-  const effects = new Map<string, ObservationAssociationEffect>([
+  const effects = new Map<LessonObservation["id"], ObservationAssociationEffect>([
     [first.id, { estimate: 0.8, uncertainty: 0.1 }],
     [later.id, { estimate: 0.6, uncertainty: 0.3 }],
   ]);
