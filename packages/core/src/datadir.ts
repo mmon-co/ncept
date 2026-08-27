@@ -47,6 +47,8 @@ export interface DataDir {
   bindingTransactionFile: string;
   /** Transaction-only staging/backup directories, deliberately outside user domains. */
   bindingTransactionsDir: string;
+  /** Append-only user Observations with exact content provenance. */
+  observationsFile: string;
   eventsFile: string;
   cardsFile: string;
   cacheFile: string;
@@ -76,6 +78,7 @@ export function resolveDataDir(root?: string): DataDir {
     curriculaFile: join(r, "overlay", "curricula.yaml"),
     bindingTransactionFile: join(r, "overlay", "course-binding-transaction.yaml"),
     bindingTransactionsDir: join(r, "overlay", "course-binding-transactions"),
+    observationsFile: join(r, "observations.jsonl"),
     eventsFile: join(r, "events.jsonl"),
     cardsFile: join(r, "cards.jsonl"),
     cacheFile: join(r, "cache.sqlite"),
