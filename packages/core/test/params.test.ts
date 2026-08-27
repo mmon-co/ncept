@@ -1,20 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import YAML from "yaml";
-import { DEFAULT_PARAMS, loadParams, parseParams } from "../src/params";
+import { DEFAULT_PARAMS, loadParams } from "../src/params";
 import { tempDataDir } from "./helpers";
 
 describe("params migration", () => {
   test("parses partial unknown input into a complete Params value", () => {
-    const params = parseParams({ review: { max_cards_per_session: 7 }, ignored: true });
+    const dd = tempDataDir();
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({ review: { max_cards_per_session: 7 }, ignored: true }),
+    );
+    const params = loadParams(dd);
     expect(params.review.max_cards_per_session).toBe(7);
     expect(params.initial).toEqual(DEFAULT_PARAMS.initial);
     expect(params).not.toHaveProperty("ignored");
   });
 
   test("reports malformed nested structures at the parsing boundary", () => {
-    expect(() => parseParams({ initial: "invalid" })).toThrow(/params initial must be an object/);
-    expect(() => parseParams({ evidence: { mistake: { severity: { slip: "invalid" } } } })).toThrow(
+    const malformedInitial = tempDataDir();
+    writeFileSync(malformedInitial.paramsFile, YAML.stringify({ initial: "invalid" }));
+    expect(() => loadParams(malformedInitial)).toThrow(/params initial must be an object/);
+
+    const malformedSeverity = tempDataDir();
+    writeFileSync(
+      malformedSeverity.paramsFile,
+      YAML.stringify({ evidence: { mistake: { severity: { slip: "invalid" } } } }),
+    );
+    expect(() => loadParams(malformedSeverity)).toThrow(
       /params evidence\.mistake\.severity\.slip must be an object/,
     );
   });

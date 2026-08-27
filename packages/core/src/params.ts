@@ -151,7 +151,7 @@ function nonNegativeInteger(path: string, value: unknown): number {
 }
 
 /** Merge partial tuning with defaults, migrate v1 input, and parse one honest Params value. */
-export function parseParams(raw: unknown): Params {
+function parseParams(raw: unknown): Params {
   const params = record("root", deepMerge(DEFAULT_PARAMS, migrateLegacyParams(raw)));
   if (params.version !== 2) throw new Error(`unsupported params version ${String(params.version)}`);
 
