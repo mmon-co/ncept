@@ -1,11 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  assertAcyclic,
-  GraphError,
-  loadDomainGraph,
-  parseNodeFile,
-} from "./graph";
+import { assertAcyclic, GraphError, loadDomainGraph, parseNodeFile } from "./graph";
 import { domainDir, type DataDir } from "./datadir";
 import { ensureLocalCourse } from "./courses";
 import type { GraphEdge, KnowledgeType } from "./types";
@@ -46,14 +41,24 @@ function validateSpecShape(raw: unknown): NodeSpec[] {
     for (const k of ["title", "criterion"] as const)
       if (o[k] !== undefined && (typeof o[k] !== "string" || o[k].trim() === ""))
         throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be a non-empty string`);
-    if (o.type !== undefined && o.type !== "factual" && o.type !== "conceptual" && o.type !== "procedural")
-      throw new AuthorError(`nodes[${i}] (${o.id}): type must be factual, conceptual, or procedural`);
+    if (
+      o.type !== undefined &&
+      o.type !== "factual" &&
+      o.type !== "conceptual" &&
+      o.type !== "procedural"
+    )
+      throw new AuthorError(
+        `nodes[${i}] (${o.id}): type must be factual, conceptual, or procedural`,
+      );
     if (o.threshold !== undefined && typeof o.threshold !== "boolean")
       throw new AuthorError(`nodes[${i}] (${o.id}): threshold must be a boolean`);
     if (o.deprecated !== undefined && typeof o.deprecated !== "boolean")
       throw new AuthorError(`nodes[${i}] (${o.id}): deprecated must be a boolean`);
     for (const k of ["aliases", "tags", "requires", "see_also"] as const)
-      if (o[k] !== undefined && (!Array.isArray(o[k]) || !(o[k] as unknown[]).every((s) => typeof s === "string")))
+      if (
+        o[k] !== undefined &&
+        (!Array.isArray(o[k]) || !(o[k] as unknown[]).every((s) => typeof s === "string"))
+      )
         throw new AuthorError(`nodes[${i}] (${o.id}): ${k} must be an array of strings`);
     return o as unknown as NodeSpec;
   });
@@ -67,16 +72,11 @@ export function serializeNode(spec: NodeSpec): string {
   if (spec.criterion !== undefined) fm.push(`criterion: ${JSON.stringify(spec.criterion)}`);
   if (spec.aliases !== undefined && spec.aliases.length > 0)
     fm.push(`aliases: [${spec.aliases.join(", ")}]`);
-  if (spec.tags !== undefined && spec.tags.length > 0)
-    fm.push(`tags: [${spec.tags.join(", ")}]`);
+  if (spec.tags !== undefined && spec.tags.length > 0) fm.push(`tags: [${spec.tags.join(", ")}]`);
   if (spec.type !== undefined) fm.push(`type: ${spec.type}`);
   if (spec.threshold === true) fm.push("threshold: true");
   if (spec.deprecated === true) fm.push("deprecated: true");
-  const parts = [
-    `---\n${fm.join("\n")}\n---`,
-    `# ${spec.title ?? spec.id}`,
-    spec.body.trim(),
-  ];
+  const parts = [`---\n${fm.join("\n")}\n---`, `# ${spec.title ?? spec.id}`, spec.body.trim()];
   if (spec.requires !== undefined && spec.requires.length > 0)
     parts.push(`## Requires\n${spec.requires.map((r) => `- [[${r}]]`).join("\n")}`);
   if (spec.see_also !== undefined && spec.see_also.length > 0)
@@ -115,8 +115,7 @@ export function authorDomain(
   const existing = mode === "add" ? loadDomainGraph(dd, domain) : undefined;
   const ids = new Set<string>(existing !== undefined ? existing.nodes.keys() : []);
   for (const s of specs) {
-    if (ids.has(s.id))
-      throw new AuthorError(`node id '${s.id}' already exists in ${domain}`);
+    if (ids.has(s.id)) throw new AuthorError(`node id '${s.id}' already exists in ${domain}`);
     ids.add(s.id);
   }
 

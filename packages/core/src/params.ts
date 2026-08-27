@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import YAML from "yaml";
-import type { Params } from "./types";
+import type { EvidenceParams, MistakeMultiplier, Params } from "./types";
 import type { DataDir } from "./datadir";
 
 /**
@@ -54,16 +54,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function deepMerge<T>(base: T, patch: unknown): T {
+function deepMerge(base: unknown, patch: unknown): unknown {
   // YAML parses an empty file or an empty mapping value (`evidence:`) as null.
   // Partial params have always treated those as absent rather than replacing a
   // required parameter object with null.
   if (patch === undefined || patch === null) return base;
-  if (!isRecord(base) || !isRecord(patch)) return patch as T;
+  if (!isRecord(base) || !isRecord(patch)) return patch;
   const merged: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(patch))
-    merged[key] = deepMerge(merged[key], value);
-  return merged as T;
+  for (const [key, value] of Object.entries(patch)) merged[key] = deepMerge(merged[key], value);
+  return merged;
 }
 
 /** Migrate v1 tuning in memory; params.yaml remains the user's original log. */
@@ -71,39 +70,48 @@ function migrateLegacyParams(raw: unknown): unknown {
   if (!isRecord(raw)) return raw;
   const legacy = isRecord(raw.evidence) ? raw.evidence : {};
   const legacyKeys = ["demonstrated-unaided", "demonstrated-guided", "failed"];
-  const isLegacy = raw.version === 1 ||
-    (raw.version === undefined && legacyKeys.some((key) => key in legacy));
+  const isLegacy =
+    raw.version === 1 || (raw.version === undefined && legacyKeys.some((key) => key in legacy));
   if (!isLegacy) return raw;
-  const unaided = isRecord(legacy["demonstrated-unaided"]) ? legacy["demonstrated-unaided"] : undefined;
-  const guided = isRecord(legacy["demonstrated-guided"]) ? legacy["demonstrated-guided"] : undefined;
+  const unaided = isRecord(legacy["demonstrated-unaided"])
+    ? legacy["demonstrated-unaided"]
+    : undefined;
+  const guided = isRecord(legacy["demonstrated-guided"])
+    ? legacy["demonstrated-guided"]
+    : undefined;
   const failed = isRecord(legacy.failed) ? legacy.failed : undefined;
   const recognized = isRecord(legacy.recognized) ? legacy.recognized : undefined;
   const unaidedWeight = unaided?.weight;
   const guidedWeight = guided?.weight;
-  const effectiveUnaidedWeight = typeof unaidedWeight === "number"
-    ? unaidedWeight
-    : DEFAULT_PARAMS.evidence.used.weight;
+  const effectiveUnaidedWeight =
+    typeof unaidedWeight === "number" ? unaidedWeight : DEFAULT_PARAMS.evidence.used.weight;
   return {
     ...raw,
     version: 2,
-    ...(effectiveUnaidedWeight !== 0 && typeof guidedWeight === "number" ? {
-      support_weight: { unaided: 1, guided: guidedWeight / effectiveUnaidedWeight },
-    } : {}),
+    ...(effectiveUnaidedWeight !== 0 && typeof guidedWeight === "number"
+      ? {
+          support_weight: { unaided: 1, guided: guidedWeight / effectiveUnaidedWeight },
+        }
+      : {}),
     evidence: {
       // Preserve tuning where a legacy kind has one unambiguous v2 analogue.
       // Targets are structural in D1 and therefore always use the v2 ceiling.
       recognized: { ...recognized, target: DEFAULT_PARAMS.evidence.recognized.target },
-      ...(unaided === undefined ? {} : {
-        used: { ...unaided, target: DEFAULT_PARAMS.evidence.used.target },
-      }),
-      ...(failed === undefined ? {} : {
-        mistake: {
-          base_effect: {
-            ...(failed.weight === undefined ? {} : { weight: failed.weight }),
-            ...(failed.shrink === undefined ? {} : { shrink: failed.shrink }),
-          },
-        },
-      }),
+      ...(unaided === undefined
+        ? {}
+        : {
+            used: { ...unaided, target: DEFAULT_PARAMS.evidence.used.target },
+          }),
+      ...(failed === undefined
+        ? {}
+        : {
+            mistake: {
+              base_effect: {
+                ...(failed.weight === undefined ? {} : { weight: failed.weight }),
+                ...(failed.shrink === undefined ? {} : { shrink: failed.shrink }),
+              },
+            },
+          }),
     },
   };
 }
@@ -114,63 +122,142 @@ function finite(path: string, value: unknown, min = 0, max = Number.POSITIVE_INF
   return value;
 }
 
-function validateParams(params: Params): Params {
+function record(path: string, value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`params ${path} must be an object`);
+  return value;
+}
+
+function evidenceParams(path: string, value: unknown): EvidenceParams {
+  const params = record(path, value);
+  return {
+    target: finite(`${path}.target`, params.target, 0, 1),
+    weight: finite(`${path}.weight`, params.weight),
+    shrink: finite(`${path}.shrink`, params.shrink, 0, 1),
+  };
+}
+
+function multiplier(path: string, value: unknown): MistakeMultiplier {
+  const params = record(path, value);
+  return {
+    effect: finite(`${path}.effect`, params.effect),
+    shrink: finite(`${path}.shrink`, params.shrink, 0, 1),
+  };
+}
+
+function nonNegativeInteger(path: string, value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    throw new Error(`params ${path} must be a non-negative safe integer`);
+  return value;
+}
+
+/** Merge partial tuning with defaults, migrate v1 input, and parse one honest Params value. */
+function parseParams(raw: unknown): Params {
+  const params = record("root", deepMerge(DEFAULT_PARAMS, migrateLegacyParams(raw)));
   if (params.version !== 2) throw new Error(`unsupported params version ${String(params.version)}`);
-  finite("initial.estimate", params.initial.estimate, 0, 1);
-  finite("initial.uncertainty", params.initial.uncertainty, 0, 1);
-  for (const kind of ["recognized", "recalled", "used", "generalized", "not-recalled"] as const) {
-    const evidence = params.evidence[kind];
-    finite(`evidence.${kind}.target`, evidence.target, 0, 1);
-    finite(`evidence.${kind}.weight`, evidence.weight);
-    finite(`evidence.${kind}.shrink`, evidence.shrink, 0, 1);
-  }
-  finite("evidence.mistake.base_effect.weight", params.evidence.mistake.base_effect.weight);
-  finite("evidence.mistake.base_effect.shrink", params.evidence.mistake.base_effect.shrink, 0, 1);
-  for (const [axis, values] of [
-    ["coarseness", params.evidence.mistake.coarseness],
-    ["severity", params.evidence.mistake.severity],
-  ] as const) {
-    for (const [name, multiplier] of Object.entries(values)) {
-      finite(`evidence.mistake.${axis}.${name}.effect`, multiplier.effect);
-      finite(`evidence.mistake.${axis}.${name}.shrink`, multiplier.shrink, 0, 1);
-    }
-  }
-  finite("support_weight.unaided", params.support_weight.unaided);
-  finite("support_weight.guided", params.support_weight.guided);
-  finite("uncertainty_growth_per_day", params.uncertainty_growth_per_day);
-  finite("min_uncertainty", params.min_uncertainty, 0, 1);
-  const threshold = finite("mastery_threshold", params.mastery_threshold, 0, 1);
-  if (params.evidence.recognized.target >= threshold)
+
+  const initial = record("initial", params.initial);
+  const evidence = record("evidence", params.evidence);
+  const mistake = record("evidence.mistake", evidence.mistake);
+  const baseEffect = record("evidence.mistake.base_effect", mistake.base_effect);
+  const coarseness = record("evidence.mistake.coarseness", mistake.coarseness);
+  const severity = record("evidence.mistake.severity", mistake.severity);
+  const supportWeight = record("support_weight", params.support_weight);
+  const propagation = record("propagation", params.propagation);
+  const successUp = record("propagation.success_up", propagation.success_up);
+  const failureDown = record("propagation.failure_down", propagation.failure_down);
+  const review = record("review", params.review);
+  const calibration = record("calibration", params.calibration);
+
+  const recognized = evidenceParams("evidence.recognized", evidence.recognized);
+  const masteryThreshold = finite("mastery_threshold", params.mastery_threshold, 0, 1);
+  if (recognized.target >= masteryThreshold)
     throw new Error("params evidence.recognized.target must be below mastery_threshold");
-  for (const direction of ["success_up", "failure_down"] as const) {
-    for (const edge of ["dependency", "strong-relevance"] as const)
-      finite(`propagation.${direction}.${edge}`, params.propagation[direction][edge], 0, 1);
-  }
-  finite("propagation.failure_bump", params.propagation.failure_bump, 0, 1);
-  if (!Number.isSafeInteger(params.propagation.max_hops) || params.propagation.max_hops < 0)
-    throw new Error("params propagation.max_hops must be a non-negative safe integer");
-  for (const [path, value] of [
-    ["review.max_cards_per_session", params.review.max_cards_per_session],
-    ["calibration.max_questions", params.calibration.max_questions],
-    ["calibration.round_size", params.calibration.round_size],
-  ] as const) {
-    if (!Number.isSafeInteger(value) || value < 0)
-      throw new Error(`params ${path} must be a non-negative safe integer`);
-  }
-  if (params.calibration.round_size < 1)
-    throw new Error("params calibration.round_size must be at least 1");
-  finite("calibration.stop_uncertainty", params.calibration.stop_uncertainty, 0, 1);
-  return params;
+
+  const roundSize = nonNegativeInteger("calibration.round_size", calibration.round_size);
+  if (roundSize < 1) throw new Error("params calibration.round_size must be at least 1");
+
+  return {
+    version: 2,
+    initial: {
+      estimate: finite("initial.estimate", initial.estimate, 0, 1),
+      uncertainty: finite("initial.uncertainty", initial.uncertainty, 0, 1),
+    },
+    evidence: {
+      recognized,
+      recalled: evidenceParams("evidence.recalled", evidence.recalled),
+      used: evidenceParams("evidence.used", evidence.used),
+      generalized: evidenceParams("evidence.generalized", evidence.generalized),
+      "not-recalled": evidenceParams("evidence.not-recalled", evidence["not-recalled"]),
+      mistake: {
+        base_effect: {
+          weight: finite("evidence.mistake.base_effect.weight", baseEffect.weight),
+          shrink: finite("evidence.mistake.base_effect.shrink", baseEffect.shrink, 0, 1),
+        },
+        coarseness: {
+          node: multiplier("evidence.mistake.coarseness.node", coarseness.node),
+          topic: multiplier("evidence.mistake.coarseness.topic", coarseness.topic),
+        },
+        severity: {
+          slip: multiplier("evidence.mistake.severity.slip", severity.slip),
+          misconception: multiplier(
+            "evidence.mistake.severity.misconception",
+            severity.misconception,
+          ),
+          unknown: multiplier("evidence.mistake.severity.unknown", severity.unknown),
+        },
+      },
+    },
+    support_weight: {
+      unaided: finite("support_weight.unaided", supportWeight.unaided),
+      guided: finite("support_weight.guided", supportWeight.guided),
+    },
+    uncertainty_growth_per_day: finite(
+      "uncertainty_growth_per_day",
+      params.uncertainty_growth_per_day,
+    ),
+    min_uncertainty: finite("min_uncertainty", params.min_uncertainty, 0, 1),
+    mastery_threshold: masteryThreshold,
+    propagation: {
+      success_up: {
+        dependency: finite("propagation.success_up.dependency", successUp.dependency, 0, 1),
+        "strong-relevance": finite(
+          "propagation.success_up.strong-relevance",
+          successUp["strong-relevance"],
+          0,
+          1,
+        ),
+      },
+      failure_down: {
+        dependency: finite("propagation.failure_down.dependency", failureDown.dependency, 0, 1),
+        "strong-relevance": finite(
+          "propagation.failure_down.strong-relevance",
+          failureDown["strong-relevance"],
+          0,
+          1,
+        ),
+      },
+      failure_bump: finite("propagation.failure_bump", propagation.failure_bump, 0, 1),
+      max_hops: nonNegativeInteger("propagation.max_hops", propagation.max_hops),
+    },
+    review: {
+      max_cards_per_session: nonNegativeInteger(
+        "review.max_cards_per_session",
+        review.max_cards_per_session,
+      ),
+    },
+    calibration: {
+      max_questions: nonNegativeInteger("calibration.max_questions", calibration.max_questions),
+      stop_uncertainty: finite("calibration.stop_uncertainty", calibration.stop_uncertainty, 0, 1),
+      round_size: roundSize,
+    },
+  };
 }
 
 export function loadParams(dd: DataDir): Params {
   if (!existsSync(dd.paramsFile)) return DEFAULT_PARAMS;
-  return validateParams(
-    deepMerge(DEFAULT_PARAMS, migrateLegacyParams(YAML.parse(readFileSync(dd.paramsFile, "utf8")))),
-  );
+  return parseParams(YAML.parse(readFileSync(dd.paramsFile, "utf8")));
 }
 
 export function writeDefaultParams(dd: DataDir): void {
-  if (!existsSync(dd.paramsFile))
-    writeFileSync(dd.paramsFile, YAML.stringify(DEFAULT_PARAMS));
+  if (!existsSync(dd.paramsFile)) writeFileSync(dd.paramsFile, YAML.stringify(DEFAULT_PARAMS));
 }

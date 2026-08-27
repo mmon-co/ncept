@@ -39,25 +39,40 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const encoder = new TextEncoder();
 
 function sameTarget(left: AuthoringTargetRef, right: AuthoringTargetRef): boolean {
-  return left.kind === right.kind && (left.kind === "workspace" || left.id === (right as { id: CourseId }).id);
+  return (
+    left.kind === right.kind &&
+    (left.kind === "workspace" || left.id === (right as { id: CourseId }).id)
+  );
 }
 
 export function assertAuthoredPath(path: string): void {
   if (
-    path === "" || path.startsWith("/") || path.includes("\\") ||
-    path.split("/").some((part) => part === "" || part === "." || part === ".." || part === ".git") ||
+    path === "" ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    path
+      .split("/")
+      .some((part) => part === "" || part === "." || part === ".." || part === ".git") ||
     posix.normalize(path) !== path
-  ) throw new AuthoredContentError(`unsafe authored path: ${JSON.stringify(path)}`);
+  )
+    throw new AuthoredContentError(`unsafe authored path: ${JSON.stringify(path)}`);
 }
 
 function text(files: ReadonlyMap<string, Uint8Array>, path: string): string {
   const bytes = files.get(path);
   if (bytes === undefined) throw new AuthoredContentError(`authored target is missing ${path}`);
-  try { return decoder.decode(bytes); }
-  catch { throw new AuthoredContentError(`${path} must be UTF-8 text`); }
+  try {
+    return decoder.decode(bytes);
+  } catch {
+    throw new AuthoredContentError(`${path} must be UTF-8 text`);
+  }
 }
 
-function courseMetadata(files: ReadonlyMap<string, Uint8Array>, expected: CourseId, expectedKind: "course" | "curriculum"): void {
+function courseMetadata(
+  files: ReadonlyMap<string, Uint8Array>,
+  expected: CourseId,
+  expectedKind: "course" | "curriculum",
+): void {
   const raw = YAML.parse(text(files, "course.yaml")) as unknown;
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     throw new AuthoredContentError("course.yaml must contain an object");
@@ -77,25 +92,36 @@ function validateGraph(files: ReadonlyMap<string, Uint8Array>): void {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([path, bytes]) => {
       let raw: string;
-      try { raw = decoder.decode(bytes); }
-      catch { throw new AuthoredContentError(`${path} must be UTF-8 text`); }
+      try {
+        raw = decoder.decode(bytes);
+      } catch {
+        throw new AuthoredContentError(`${path} must be UTF-8 text`);
+      }
       return parseNodeFile(path, raw);
     });
   const nodes = new Map<string, GraphNode>();
   for (const item of parsed) {
-    if (nodes.has(item.node.id)) throw new AuthoredContentError(`duplicate node id '${item.node.id}'`);
+    if (nodes.has(item.node.id))
+      throw new AuthoredContentError(`duplicate node id '${item.node.id}'`);
     nodes.set(item.node.id, item.node);
   }
   const index = buildLinkIndex(nodes.values());
   const resolve = (target: string, from: string): string => {
     const id = index.get(target.toLowerCase());
-    if (id === undefined) throw new AuthoredContentError(`node '${from}': unresolved wikilink [[${target}]]`);
+    if (id === undefined)
+      throw new AuthoredContentError(`node '${from}': unresolved wikilink [[${target}]]`);
     return id;
   };
   const edges: GraphEdge[] = [];
   for (const item of parsed) {
-    for (const target of item.requires) edges.push({ from: item.node.id, to: resolve(target, item.node.id), type: "dependency" });
-    for (const target of item.seeAlso) edges.push({ from: item.node.id, to: resolve(target, item.node.id), type: "strong-relevance" });
+    for (const target of item.requires)
+      edges.push({ from: item.node.id, to: resolve(target, item.node.id), type: "dependency" });
+    for (const target of item.seeAlso)
+      edges.push({
+        from: item.node.id,
+        to: resolve(target, item.node.id),
+        type: "strong-relevance",
+      });
   }
   assertAcyclic(edges);
 }
@@ -107,7 +133,11 @@ export function validateAuthoredTree(tree: AuthoredTree): void {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw))
       throw new AuthoredContentError("workspace.yaml must contain an object");
     const value = raw as Record<string, unknown>;
-    if (value.v !== 1 || typeof value.namespace_id !== "string" || !COURSE_ID.test(value.namespace_id))
+    if (
+      value.v !== 1 ||
+      typeof value.namespace_id !== "string" ||
+      !COURSE_ID.test(value.namespace_id)
+    )
       throw new AuthoredContentError("workspace.yaml must declare v: 1 and an opaque namespace_id");
   } else {
     courseMetadata(tree.files, tree.target.id, tree.target.kind);
@@ -132,22 +162,32 @@ function applyUnchecked(tree: AuthoredTree, change: AuthoredChangeSet): Authored
     touched.add(operation.path);
     if (operation.kind === "put") files.set(operation.path, operation.content.slice());
     else {
-      if (!files.has(operation.path)) throw new AuthoredContentError(`cannot remove missing authored path: ${operation.path}`);
+      if (!files.has(operation.path))
+        throw new AuthoredContentError(`cannot remove missing authored path: ${operation.path}`);
       files.delete(operation.path);
     }
   }
   return { target: tree.target, files };
 }
 
-export function validateAuthoredChangeSet(tree: AuthoredTree, change: AuthoredChangeSet): ValidatedAuthoredChangeSet {
-  if (!sameTarget(tree.target, change.target)) throw new AuthoredContentError("authored change target does not match the loaded tree");
-  if (change.baseRevision.trim() === "") throw new AuthoredContentError("authored change needs a base revision");
+export function validateAuthoredChangeSet(
+  tree: AuthoredTree,
+  change: AuthoredChangeSet,
+): ValidatedAuthoredChangeSet {
+  if (!sameTarget(tree.target, change.target))
+    throw new AuthoredContentError("authored change target does not match the loaded tree");
+  if (change.baseRevision.trim() === "")
+    throw new AuthoredContentError("authored change needs a base revision");
   validateAuthoredTree(applyUnchecked(tree, change));
   return change as ValidatedAuthoredChangeSet;
 }
 
-export function applyAuthoredChangeSet(tree: AuthoredTree, change: ValidatedAuthoredChangeSet): AuthoredTree {
-  if (!sameTarget(tree.target, change.target)) throw new AuthoredContentError("authored change target does not match the loaded tree");
+export function applyAuthoredChangeSet(
+  tree: AuthoredTree,
+  change: ValidatedAuthoredChangeSet,
+): AuthoredTree {
+  if (!sameTarget(tree.target, change.target))
+    throw new AuthoredContentError("authored change target does not match the loaded tree");
   return applyUnchecked(tree, change);
 }
 
@@ -163,31 +203,55 @@ function sameBytes(left: Uint8Array | undefined, right: Uint8Array): boolean {
   return left.every((byte, index) => byte === right[index]);
 }
 
-function assertPatchApplicable(operation: PatchOperation, nodes: ReadonlyMap<string, GraphNode>, edges: readonly GraphEdge[]): void {
+function assertPatchApplicable(
+  operation: PatchOperation,
+  nodes: ReadonlyMap<string, GraphNode>,
+  edges: readonly GraphEdge[],
+): void {
   if (operation.kind === "add-node") {
-    if (nodes.has(operation.node.id)) throw new AuthoredContentError(`node '${operation.node.id}' already exists`);
+    if (nodes.has(operation.node.id))
+      throw new AuthoredContentError(`node '${operation.node.id}' already exists`);
     if (!operation.node.body?.trim()) throw new AuthoredContentError("added node needs a body");
   }
-  if (operation.kind === "remove-node" || operation.kind === "replace-node" || operation.kind === "splice-section") {
-    if (!nodes.has(operation.node_id)) throw new AuthoredContentError(`unknown node '${operation.node_id}'`);
+  if (
+    operation.kind === "remove-node" ||
+    operation.kind === "replace-node" ||
+    operation.kind === "splice-section"
+  ) {
+    if (!nodes.has(operation.node_id))
+      throw new AuthoredContentError(`unknown node '${operation.node_id}'`);
   }
   if (operation.kind === "replace-node" && operation.node.id !== operation.node_id)
     throw new AuthoredContentError("replace-node cannot change a node id");
   if (operation.kind === "add-node" || operation.kind === "replace-node") {
     for (const target of [...(operation.node.requires ?? []), ...(operation.node.see_also ?? [])])
-      if (!nodes.has(target) && target !== operation.node.id) throw new AuthoredContentError(`patch node references unknown node '${target}'`);
+      if (!nodes.has(target) && target !== operation.node.id)
+        throw new AuthoredContentError(`patch node references unknown node '${target}'`);
   }
   if (operation.kind === "add-edge" || operation.kind === "remove-edge") {
     if (!nodes.has(operation.edge.from) || !nodes.has(operation.edge.to))
       throw new AuthoredContentError("patch edge references an unknown node");
-    if (operation.kind === "remove-edge" && !edges.some((edge) => edge.from === operation.edge.from && edge.to === operation.edge.to && edge.type === operation.edge.type))
+    if (
+      operation.kind === "remove-edge" &&
+      !edges.some(
+        (edge) =>
+          edge.from === operation.edge.from &&
+          edge.to === operation.edge.to &&
+          edge.type === operation.edge.type,
+      )
+    )
       throw new AuthoredContentError("cannot remove a missing edge");
   }
 }
 
 /** Convert one confirmed graph patch into a complete, validated authored-tree change. */
-export function authoredPatchChangeSet(tree: AuthoredTree, baseRevision: string, rawOperation: unknown): ValidatedAuthoredChangeSet {
-  if (tree.target.kind === "workspace") throw new AuthoredContentError("workspace targets do not have a course graph");
+export function authoredPatchChangeSet(
+  tree: AuthoredTree,
+  baseRevision: string,
+  rawOperation: unknown,
+): ValidatedAuthoredChangeSet {
+  if (tree.target.kind === "workspace")
+    throw new AuthoredContentError("workspace targets do not have a course graph");
   const parsed = [...tree.files.entries()]
     .filter(([path]) => !path.includes("/") && path.endsWith(".md"))
     .map(([path, content]) => ({ path, ...parseNodeFile(path, decoder.decode(content)) }));
@@ -196,12 +260,21 @@ export function authoredPatchChangeSet(tree: AuthoredTree, baseRevision: string,
   const index = buildLinkIndex(nodes.values());
   const resolve = (name: string, from: string) => {
     const id = index.get(name.toLowerCase());
-    if (id === undefined) throw new AuthoredContentError(`node '${from}': unresolved wikilink [[${name}]]`);
+    if (id === undefined)
+      throw new AuthoredContentError(`node '${from}': unresolved wikilink [[${name}]]`);
     return id;
   };
   const edges: GraphEdge[] = parsed.flatMap((item) => [
-    ...item.requires.map((name) => ({ from: item.node.id, to: resolve(name, item.node.id), type: "dependency" as const })),
-    ...item.seeAlso.map((name) => ({ from: item.node.id, to: resolve(name, item.node.id), type: "strong-relevance" as const })),
+    ...item.requires.map((name) => ({
+      from: item.node.id,
+      to: resolve(name, item.node.id),
+      type: "dependency" as const,
+    })),
+    ...item.seeAlso.map((name) => ({
+      from: item.node.id,
+      to: resolve(name, item.node.id),
+      type: "strong-relevance" as const,
+    })),
   ]);
   const operation = parsePatchOperation(rawOperation);
   assertPatchApplicable(operation, nodes, edges);
@@ -220,14 +293,20 @@ export function authoredPatchChangeSet(tree: AuthoredTree, baseRevision: string,
       threshold: node.threshold,
       deprecated: node.deprecated,
       body: prose(node.body) || node.title,
-      requires: graph.edges.filter((edge) => edge.from === node.id && edge.type === "dependency").map((edge) => edge.to),
-      see_also: graph.edges.filter((edge) => edge.from === node.id && edge.type === "strong-relevance").map((edge) => edge.to),
+      requires: graph.edges
+        .filter((edge) => edge.from === node.id && edge.type === "dependency")
+        .map((edge) => edge.to),
+      see_also: graph.edges
+        .filter((edge) => edge.from === node.id && edge.type === "strong-relevance")
+        .map((edge) => edge.to),
     };
     next.set(paths.get(node.id) ?? `${node.id}.md`, encoder.encode(serializeNode(spec)));
   }
   const operations: AuthoredOperation[] = [];
-  for (const item of parsed) if (!next.has(item.path)) operations.push({ kind: "remove", path: item.path });
-  for (const [path, content] of next) if (!sameBytes(tree.files.get(path), content)) operations.push({ kind: "put", path, content });
+  for (const item of parsed)
+    if (!next.has(item.path)) operations.push({ kind: "remove", path: item.path });
+  for (const [path, content] of next)
+    if (!sameBytes(tree.files.get(path), content)) operations.push({ kind: "put", path, content });
   return validateAuthoredChangeSet(tree, { target: tree.target, baseRevision, operations });
 }
 

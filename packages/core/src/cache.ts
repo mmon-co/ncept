@@ -83,13 +83,24 @@ export function rebuildCache(dd: DataDir): { headers: number; cards: number } {
     const insSched = db.prepare("INSERT INTO scheduler VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     for (const c of [...cards.values()].sort((a, b) => a.id.localeCompare(b.id))) {
       insCard.run(
-        c.id, c.front, c.back, c.domain ?? null,
-        JSON.stringify(c.nodes), c.suspended ? 1 : 0, c.created,
+        c.id,
+        c.front,
+        c.back,
+        c.domain ?? null,
+        JSON.stringify(c.nodes),
+        c.suspended ? 1 : 0,
+        c.created,
       );
       const s = deriveSchedulerState(c.id, c.created, reviews.get(c.id) ?? []);
       insSched.run(
-        s.card_id, s.due, s.stability, s.difficulty, s.state,
-        s.reps, s.lapses, s.last_review,
+        s.card_id,
+        s.due,
+        s.stability,
+        s.difficulty,
+        s.state,
+        s.reps,
+        s.lapses,
+        s.last_review,
       );
     }
     db.exec("COMMIT");
@@ -110,8 +121,9 @@ export function dumpCache(dd: DataDir): string {
   try {
     const parts: string[] = [];
     for (const table of ["meta", "headers", "nodes", "edges", "cards", "scheduler"]) {
-      const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[])
-        .map((c) => c.name);
+      const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+        (c) => c.name,
+      );
       const rows = db
         .prepare(`SELECT * FROM ${table} ORDER BY ${cols.map((c) => `"${c}"`).join(", ")}`)
         .all();

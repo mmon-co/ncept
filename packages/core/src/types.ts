@@ -18,7 +18,12 @@ export type MistakeSeverity = "slip" | "misconception" | "unknown";
 export type Support = "unaided" | "guided";
 
 /** Kinds whose direct evidence points toward their configured mastery ceiling. */
-export const SUCCESS_KINDS: readonly SuccessKind[] = ["recognized", "recalled", "used", "generalized"];
+export const SUCCESS_KINDS: readonly SuccessKind[] = [
+  "recognized",
+  "recalled",
+  "used",
+  "generalized",
+];
 export const FAILURE_KINDS: readonly EvidenceKind[] = ["not-recalled", "mistake"];
 
 export const EVIDENCE_SOURCES = [
@@ -153,7 +158,13 @@ export interface DomainGraph {
 }
 
 export interface GraphEdits {
-  add_nodes?: { id: string; title?: string; body?: string; knowledge_type?: KnowledgeType; threshold?: boolean }[];
+  add_nodes?: {
+    id: string;
+    title?: string;
+    body?: string;
+    knowledge_type?: KnowledgeType;
+    threshold?: boolean;
+  }[];
   remove_nodes?: string[];
   add_edges?: { from: string; to: string; type: EdgeType }[];
   remove_edges?: { from: string; to: string; type: EdgeType }[];

@@ -45,8 +45,13 @@ describe("grading", () => {
         native_outcome: grade,
       });
     }
-    const [failEv] = reviewEvidence(card, "again", "2026-08-02T00:00:00.000Z", "confused with Lyon");
-    expect(failEv!.observation).toBe("confused with Lyon");
+    const [failEv] = reviewEvidence(
+      card,
+      "again",
+      "2026-08-02T00:00:00.000Z",
+      "confused with Lyon",
+    );
+    expect(failEv?.observation).toBe("confused with Lyon");
     expect(gradeToKind("good")).toBe("recalled");
     // node-free card emits nothing
     expect(reviewEvidence({ ...card, nodes: [] }, "good", "2026-08-02T00:00:00.000Z")).toEqual([]);

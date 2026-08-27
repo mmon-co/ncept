@@ -42,165 +42,237 @@ const ALLOWED_KEYS = new Set([
   "misconception_id",
 ]);
 
-type EventObject = Record<string, unknown>;
-
-function legacyKind(kind: unknown): kind is (typeof LEGACY_KINDS)[number] {
-  return LEGACY_KINDS.includes(kind as never);
+interface ParsedEvent {
+  vocabVersion: unknown;
+  kind: unknown;
+  ts: string;
+  domain: string;
+  nodes: string[];
+  source: EvidenceSource;
+  source_ref?: string;
+  observation?: string;
+  support?: Support;
+  latency_ms?: number;
+  confidence?: number;
+  native_outcome?: string;
+  coarseness: unknown;
+  severity: unknown;
+  confused_with: unknown;
+  misconception_id: unknown;
+  hasMistakePayload: boolean;
 }
 
-function hasOwn(o: EventObject, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(o, key);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function eventObject(raw: unknown): EventObject {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
-    throw new EventValidationError("event must be an object");
-  const o = raw as EventObject;
-  for (const k of Object.keys(o)) {
-    if (!ALLOWED_KEYS.has(k))
+function isOneOf<const Choices extends readonly string[]>(
+  choices: Choices,
+  value: unknown,
+): value is Choices[number] {
+  return typeof value === "string" && choices.some((choice) => choice === value);
+}
+
+function display(value: unknown): string {
+  if (value === null || typeof value !== "object") return String(value);
+  return JSON.stringify(value);
+}
+
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => typeof item === "string" && item.length > 0)
+  );
+}
+
+function optionalString(value: unknown, path: string): string | undefined {
+  if (value !== undefined && typeof value !== "string")
+    throw new EventValidationError(`${path} must be a string`);
+  return value;
+}
+
+function optionalFinite(
+  value: unknown,
+  path: string,
+  min: number,
+  max = Number.POSITIVE_INFINITY,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max)
+    throw new EventValidationError(
+      max === Number.POSITIVE_INFINITY
+        ? `${path} must be a non-negative number`
+        : `${path} must be a number between ${min} and ${max}`,
+    );
+  return value;
+}
+
+function parseEvent(raw: unknown): ParsedEvent {
+  if (!isRecord(raw)) throw new EventValidationError("event must be an object");
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_KEYS.has(key))
       throw new EventValidationError(
-        `unknown key '${k}' (events are categorical; numeric or ad-hoc fields are not accepted)`,
+        `unknown key '${key}' (events are categorical; numeric or ad-hoc fields are not accepted)`,
       );
   }
-  if (o.v !== undefined && o.v !== 1)
-    throw new EventValidationError(`unsupported event version ${String(o.v)}`);
-  if (typeof o.ts !== "string" || Number.isNaN(Date.parse(o.ts)))
+  if (raw.v !== undefined && raw.v !== 1)
+    throw new EventValidationError(`unsupported event version ${display(raw.v)}`);
+  if (typeof raw.ts !== "string" || Number.isNaN(Date.parse(raw.ts)))
     throw new EventValidationError("ts must be an ISO-8601 timestamp string");
-  if (typeof o.domain !== "string" || o.domain.length === 0)
+  if (typeof raw.domain !== "string" || raw.domain.length === 0)
     throw new EventValidationError("domain must be a non-empty string");
-  if (
-    !Array.isArray(o.nodes) ||
-    o.nodes.length === 0 ||
-    !o.nodes.every((n) => typeof n === "string" && n.length > 0)
-  )
+  if (!isNonEmptyStringArray(raw.nodes))
     throw new EventValidationError("nodes must be a non-empty array of node ids");
-  if (!EVIDENCE_SOURCES.includes(o.source as never))
+  if (!isOneOf(EVIDENCE_SOURCES, raw.source))
     throw new EventValidationError(
-      `source '${String(o.source)}' not in vocabulary [${EVIDENCE_SOURCES.join(", ")}]`,
+      `source '${display(raw.source)}' not in vocabulary [${EVIDENCE_SOURCES.join(", ")}]`,
     );
-  if (o.source_ref !== undefined && typeof o.source_ref !== "string")
-    throw new EventValidationError("source_ref must be a string");
-  // Inferred observations are auditable record mining, never synthetic
-  // transfer evidence. Keep the supporting learner record with the event.
-  if (o.source === "record-mining" && (typeof o.source_ref !== "string" || o.source_ref.trim() === ""))
+  const sourceRef = optionalString(raw.source_ref, "source_ref");
+  if (raw.source === "record-mining" && (sourceRef === undefined || sourceRef.trim() === ""))
     throw new EventValidationError("record-mining evidence requires a non-empty source_ref");
-  if (o.observation !== undefined && typeof o.observation !== "string")
-    throw new EventValidationError("observation must be a string");
-  if (o.support !== undefined && o.support !== "unaided" && o.support !== "guided")
+  const observation = optionalString(raw.observation, "observation");
+  if (raw.support !== undefined && raw.support !== "unaided" && raw.support !== "guided")
     throw new EventValidationError("support must be unaided or guided");
-  if (o.latency_ms !== undefined && (typeof o.latency_ms !== "number" || !Number.isFinite(o.latency_ms) || o.latency_ms < 0))
-    throw new EventValidationError("latency_ms must be a non-negative number");
-  if (o.confidence !== undefined && (typeof o.confidence !== "number" || !Number.isFinite(o.confidence) || o.confidence < 0 || o.confidence > 1))
-    throw new EventValidationError("confidence must be a number between 0 and 1");
-  if (o.native_outcome !== undefined && typeof o.native_outcome !== "string")
-    throw new EventValidationError("native_outcome must be a string");
-  return o;
+  const latency = optionalFinite(raw.latency_ms, "latency_ms", 0);
+  const confidence = optionalFinite(raw.confidence, "confidence", 0, 1);
+  const nativeOutcome = optionalString(raw.native_outcome, "native_outcome");
+  return {
+    vocabVersion: raw.vocab_version,
+    kind: raw.kind,
+    ts: raw.ts,
+    domain: raw.domain,
+    nodes: raw.nodes,
+    source: raw.source,
+    ...(sourceRef === undefined ? {} : { source_ref: sourceRef }),
+    ...(observation === undefined ? {} : { observation }),
+    ...(raw.support === undefined ? {} : { support: raw.support }),
+    ...(latency === undefined ? {} : { latency_ms: latency }),
+    ...(confidence === undefined ? {} : { confidence }),
+    ...(nativeOutcome === undefined ? {} : { native_outcome: nativeOutcome }),
+    coarseness: raw.coarseness,
+    severity: raw.severity,
+    confused_with: raw.confused_with,
+    misconception_id: raw.misconception_id,
+    hasMistakePayload: ["coarseness", "severity", "confused_with", "misconception_id"].some((key) =>
+      Object.prototype.hasOwnProperty.call(raw, key),
+    ),
+  };
 }
 
 function mistakePayload(
-  o: EventObject,
+  event: ParsedEvent,
   kind: EvidenceKind,
   defaults: { coarseness?: MistakeCoarseness; severity?: MistakeSeverity } = {},
   allowUntouchedLegacy = false,
 ): Pick<EvidenceEvent, "coarseness" | "severity" | "confused_with" | "misconception_id"> {
-  const coarseness = o.coarseness ?? defaults.coarseness;
-  const severity = o.severity ?? defaults.severity;
-  const hasModernOverrides = ["coarseness", "severity", "confused_with", "misconception_id"].some((key) => hasOwn(o, key));
   if (kind !== "mistake") {
-    if (hasModernOverrides)
+    if (event.hasMistakePayload)
       throw new EventValidationError("mistake payload fields are only valid for kind 'mistake'");
     return {};
   }
+  const coarseness = event.coarseness ?? defaults.coarseness;
+  const severity = event.severity ?? defaults.severity;
   if (coarseness !== "node" && coarseness !== "topic")
     throw new EventValidationError("mistake coarseness must be node or topic");
   if (severity !== "slip" && severity !== "misconception" && severity !== "unknown")
     throw new EventValidationError("mistake severity must be slip, misconception, or unknown");
-  const payloadlessLegacy = allowUntouchedLegacy && !hasModernOverrides;
-  if (o.confused_with !== undefined && (typeof o.confused_with !== "string" || o.confused_with.length === 0))
+  const payloadlessLegacy = allowUntouchedLegacy && !event.hasMistakePayload;
+  const confusedWith = optionalString(event.confused_with, "confused_with");
+  const misconceptionId = optionalString(event.misconception_id, "misconception_id");
+  if (confusedWith === "")
     throw new EventValidationError("confused_with must be a non-empty string");
-  if (o.misconception_id !== undefined && (typeof o.misconception_id !== "string" || o.misconception_id.length === 0))
+  if (misconceptionId === "")
     throw new EventValidationError("misconception_id must be a non-empty string");
-  if (coarseness === "node" && o.confused_with === undefined && !payloadlessLegacy)
+  if (coarseness === "node" && confusedWith === undefined && !payloadlessLegacy)
     throw new EventValidationError("node-coarse mistakes need a confused_with payload");
-  if (severity === "misconception" && o.misconception_id === undefined && !payloadlessLegacy)
+  if (severity === "misconception" && misconceptionId === undefined && !payloadlessLegacy)
     throw new EventValidationError("misconception mistakes need a misconception_id payload");
   return {
     coarseness,
     severity,
-    ...(o.confused_with !== undefined ? { confused_with: o.confused_with as string } : {}),
-    ...(o.misconception_id !== undefined ? { misconception_id: o.misconception_id as string } : {}),
+    ...(confusedWith === undefined ? {} : { confused_with: confusedWith }),
+    ...(misconceptionId === undefined ? {} : { misconception_id: misconceptionId }),
   };
 }
 
 function buildEvent(
-  o: EventObject,
+  event: ParsedEvent,
   kind: EvidenceKind,
   vocabVersion: number,
   defaults: { support?: Support; coarseness?: MistakeCoarseness; severity?: MistakeSeverity } = {},
   allowUntouchedLegacy = false,
 ): EvidenceEvent {
-  const payload = mistakePayload(o, kind, defaults, allowUntouchedLegacy);
+  const support = event.support ?? defaults.support;
   return {
     v: 1,
     vocab_version: vocabVersion,
-    ts: o.ts as string,
-    domain: o.domain as string,
-    nodes: o.nodes as string[],
+    ts: event.ts,
+    domain: event.domain,
+    nodes: event.nodes,
     kind,
-    source: o.source as EvidenceSource,
-    ...(o.source_ref !== undefined ? { source_ref: o.source_ref as string } : {}),
-    ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
-    ...(o.support !== undefined ? { support: o.support as Support } : defaults.support !== undefined ? { support: defaults.support } : {}),
-    ...(o.latency_ms !== undefined ? { latency_ms: o.latency_ms as number } : {}),
-    ...(o.confidence !== undefined ? { confidence: o.confidence as number } : {}),
-    ...(o.native_outcome !== undefined ? { native_outcome: o.native_outcome as string } : {}),
-    ...payload,
+    source: event.source,
+    ...(event.source_ref === undefined ? {} : { source_ref: event.source_ref }),
+    ...(event.observation === undefined ? {} : { observation: event.observation }),
+    ...(support === undefined ? {} : { support }),
+    ...(event.latency_ms === undefined ? {} : { latency_ms: event.latency_ms }),
+    ...(event.confidence === undefined ? {} : { confidence: event.confidence }),
+    ...(event.native_outcome === undefined ? {} : { native_outcome: event.native_outcome }),
+    ...mistakePayload(event, kind, defaults, allowUntouchedLegacy),
   };
+}
+
+function validateCurrentEvent(event: ParsedEvent): EvidenceEvent {
+  if (event.vocabVersion !== VOCAB_VERSION)
+    throw new EventValidationError(
+      `unsupported vocab_version ${display(event.vocabVersion)} (current: ${VOCAB_VERSION})`,
+    );
+  if (!isOneOf(EVIDENCE_KINDS, event.kind))
+    throw new EventValidationError(
+      `kind '${display(event.kind)}' not in vocabulary [${EVIDENCE_KINDS.join(", ")}]`,
+    );
+  return buildEvent(event, event.kind, VOCAB_VERSION);
 }
 
 /** Validate a current canonical v2 event before it can be appended. */
 export function validateEvent(raw: unknown): EvidenceEvent {
-  const o = eventObject(raw);
-  if (o.vocab_version !== VOCAB_VERSION)
-    throw new EventValidationError(
-      `unsupported vocab_version ${String(o.vocab_version)} (current: ${VOCAB_VERSION})`,
-    );
-  if (!EVIDENCE_KINDS.includes(o.kind as never))
-    throw new EventValidationError(
-      `kind '${String(o.kind)}' not in vocabulary [${EVIDENCE_KINDS.join(", ")}]`,
-    );
-  return buildEvent(o, o.kind as EvidenceKind, VOCAB_VERSION);
+  return validateCurrentEvent(parseEvent(raw));
 }
 
 /** Read-only conversion of one persisted v1 row into the universal vocabulary. */
-function normalizeLegacyEvent(raw: unknown): EvidenceEvent {
-  const o = eventObject(raw);
-  if (o.vocab_version !== undefined && o.vocab_version !== 1)
+function normalizeLegacyEvent(event: ParsedEvent): EvidenceEvent {
+  if (event.vocabVersion !== undefined && event.vocabVersion !== 1)
     throw new EventValidationError(
-      `unsupported vocab_version ${String(o.vocab_version)} (current: ${VOCAB_VERSION})`,
+      `unsupported vocab_version ${display(event.vocabVersion)} (current: ${VOCAB_VERSION})`,
     );
-  if (!legacyKind(o.kind))
+  if (!isOneOf(LEGACY_KINDS, event.kind))
     throw new EventValidationError(
-      `kind '${String(o.kind)}' not in legacy vocabulary [${LEGACY_KINDS.join(", ")}]`,
+      `kind '${display(event.kind)}' not in legacy vocabulary [${LEGACY_KINDS.join(", ")}]`,
     );
-  switch (o.kind) {
+  switch (event.kind) {
     case "demonstrated-unaided":
-      return buildEvent(o, "used", 1, { support: "unaided" });
+      return buildEvent(event, "used", 1, { support: "unaided" });
     case "demonstrated-guided":
-      return buildEvent(o, "used", 1, { support: "guided" });
+      return buildEvent(event, "used", 1, { support: "guided" });
     case "failed":
-      return buildEvent(o, "mistake", 1, { coarseness: "node", severity: "unknown" }, true);
+      return buildEvent(event, "mistake", 1, { coarseness: "node", severity: "unknown" }, true);
     case "misconception-observed":
-      return buildEvent(o, "mistake", 1, { coarseness: "node", severity: "misconception" }, true);
+      return buildEvent(
+        event,
+        "mistake",
+        1,
+        { coarseness: "node", severity: "misconception" },
+        true,
+      );
     case "recognized":
-      return buildEvent(o, "recognized", 1);
+      return buildEvent(event, "recognized", 1);
   }
 }
 
 /** Validates all events first, then appends — a batch is all-or-nothing. */
 export function appendEvents(dd: DataDir, raws: unknown[]): EvidenceEvent[] {
   const events = raws.map(validateEvent);
-  const lines = events.map((e) => JSON.stringify(e) + "\n").join("");
+  const lines = events.map((event) => JSON.stringify(event) + "\n").join("");
   appendFileSync(dd.eventsFile, lines);
   return events;
 }
@@ -210,10 +282,10 @@ export function appendEvents(dd: DataDir, raws: unknown[]): EvidenceEvent[] {
  * store record that embeds historical observations, not only events.jsonl.
  */
 export function normalizeStoredEvent(raw: unknown): EvidenceEvent {
-  const o = eventObject(raw);
-  return o.vocab_version === 1 || o.vocab_version === undefined
-    ? normalizeLegacyEvent(o)
-    : validateEvent(o);
+  const event = parseEvent(raw);
+  return event.vocabVersion === 1 || event.vocabVersion === undefined
+    ? normalizeLegacyEvent(event)
+    : validateCurrentEvent(event);
 }
 
 export interface EventRecord {

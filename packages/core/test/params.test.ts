@@ -5,6 +5,33 @@ import { DEFAULT_PARAMS, loadParams } from "../src/params";
 import { tempDataDir } from "./helpers";
 
 describe("params migration", () => {
+  test("parses partial unknown input into a complete Params value", () => {
+    const dd = tempDataDir();
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({ review: { max_cards_per_session: 7 }, ignored: true }),
+    );
+    const params = loadParams(dd);
+    expect(params.review.max_cards_per_session).toBe(7);
+    expect(params.initial).toEqual(DEFAULT_PARAMS.initial);
+    expect(params).not.toHaveProperty("ignored");
+  });
+
+  test("reports malformed nested structures at the parsing boundary", () => {
+    const malformedInitial = tempDataDir();
+    writeFileSync(malformedInitial.paramsFile, YAML.stringify({ initial: "invalid" }));
+    expect(() => loadParams(malformedInitial)).toThrow(/params initial must be an object/);
+
+    const malformedSeverity = tempDataDir();
+    writeFileSync(
+      malformedSeverity.paramsFile,
+      YAML.stringify({ evidence: { mistake: { severity: { slip: "invalid" } } } }),
+    );
+    expect(() => loadParams(malformedSeverity)).toThrow(
+      /params evidence\.mistake\.severity\.slip must be an object/,
+    );
+  });
+
   test("reads v1 tuning as v2 while preserving the recognition ceiling", () => {
     const dd = tempDataDir();
     const v1 = {
@@ -25,8 +52,16 @@ describe("params migration", () => {
     expect(params.version).toBe(2);
     expect(params.initial.estimate).toBe(0.23);
     expect(params.review.max_cards_per_session).toBe(7);
-    expect(params.evidence.recognized).toEqual({ target: DEFAULT_PARAMS.evidence.recognized.target, weight: 0.27, shrink: 0.44 });
-    expect(params.evidence.used).toEqual({ target: DEFAULT_PARAMS.evidence.used.target, weight: 0.42, shrink: 0.51 });
+    expect(params.evidence.recognized).toEqual({
+      target: DEFAULT_PARAMS.evidence.recognized.target,
+      weight: 0.27,
+      shrink: 0.44,
+    });
+    expect(params.evidence.used).toEqual({
+      target: DEFAULT_PARAMS.evidence.used.target,
+      weight: 0.42,
+      shrink: 0.51,
+    });
     expect(params.evidence.mistake.base_effect).toEqual({ weight: 0.9, shrink: 0.8 });
     expect(params.evidence.recalled).toEqual(DEFAULT_PARAMS.evidence.recalled);
     expect(params.support_weight).toEqual({ unaided: 1, guided: 0.5 });
@@ -35,10 +70,13 @@ describe("params migration", () => {
 
   test("preserves a guided-only override in a partial v1 file", () => {
     const dd = tempDataDir();
-    writeFileSync(dd.paramsFile, YAML.stringify({
-      version: 1,
-      evidence: { "demonstrated-guided": { weight: 0.14 } },
-    }));
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({
+        version: 1,
+        evidence: { "demonstrated-guided": { weight: 0.14 } },
+      }),
+    );
     const params = loadParams(dd);
     expect(params.evidence.used.weight).toBe(DEFAULT_PARAMS.evidence.used.weight);
     expect(params.support_weight.guided).toBeCloseTo(0.4);
@@ -46,10 +84,13 @@ describe("params migration", () => {
 
   test("deep-merges partial mistake multiplier overrides", () => {
     const dd = tempDataDir();
-    writeFileSync(dd.paramsFile, YAML.stringify({
-      version: 2,
-      evidence: { mistake: { severity: { slip: { effect: 0.2 } } } },
-    }));
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({
+        version: 2,
+        evidence: { mistake: { severity: { slip: { effect: 0.2 } } } },
+      }),
+    );
     const slip = loadParams(dd).evidence.mistake.severity.slip;
     expect(slip.effect).toBe(0.2);
     expect(slip.shrink).toBe(DEFAULT_PARAMS.evidence.mistake.severity.slip.shrink);
@@ -61,7 +102,10 @@ describe("params migration", () => {
     expect(loadParams(legacy).evidence.mistake.base_effect.weight).toBe(0.8);
 
     const modern = tempDataDir();
-    writeFileSync(modern.paramsFile, YAML.stringify({ evidence: { recognized: { target: 0.55 } } }));
+    writeFileSync(
+      modern.paramsFile,
+      YAML.stringify({ evidence: { recognized: { target: 0.55 } } }),
+    );
     expect(loadParams(modern).evidence.recognized.target).toBe(0.55);
   });
 
@@ -77,10 +121,16 @@ describe("params migration", () => {
 
   test("preserves valid v2 recognition tuning but rejects targets that can establish mastery", () => {
     const dd = tempDataDir();
-    writeFileSync(dd.paramsFile, YAML.stringify({ version: 2, evidence: { recognized: { target: 0.55 } } }));
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({ version: 2, evidence: { recognized: { target: 0.55 } } }),
+    );
     expect(loadParams(dd).evidence.recognized.target).toBe(0.55);
 
-    writeFileSync(dd.paramsFile, YAML.stringify({ version: 2, evidence: { recognized: { target: 0.7 } } }));
+    writeFileSync(
+      dd.paramsFile,
+      YAML.stringify({ version: 2, evidence: { recognized: { target: 0.7 } } }),
+    );
     expect(() => loadParams(dd)).toThrow(/below mastery_threshold/);
   });
 
@@ -89,7 +139,10 @@ describe("params migration", () => {
     writeFileSync(dd.paramsFile, YAML.stringify({ version: 3 }));
     expect(() => loadParams(dd)).toThrow(/unsupported params version/);
 
-    writeFileSync(dd.paramsFile, "version: 2\nevidence:\n  mistake:\n    severity:\n      slip:\n        effect: nope\n");
+    writeFileSync(
+      dd.paramsFile,
+      "version: 2\nevidence:\n  mistake:\n    severity:\n      slip:\n        effect: nope\n",
+    );
     expect(() => loadParams(dd)).toThrow(/severity.slip.effect/);
 
     writeFileSync(dd.paramsFile, YAML.stringify({ version: 2, support_weight: { guided: -1 } }));

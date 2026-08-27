@@ -39,22 +39,32 @@ describe("node serialization", () => {
 
   test("preserves criteria containing YAML punctuation", () => {
     const criterion = "can explain ratio: numerator to denominator # precisely";
-    const parsed = parseNodeFile("ratio.md", serializeNode({ id: "ratio", criterion, body: "A ratio compares quantities." }));
+    const parsed = parseNodeFile(
+      "ratio.md",
+      serializeNode({ id: "ratio", criterion, body: "A ratio compares quantities." }),
+    );
     expect(parsed.node.criterion).toBe(criterion);
   });
 });
 
 describe("domain create", () => {
   test("serializes and validates knowledge types and threshold flags", () => {
-    const factual = parseNodeFile("fact.md", serializeNode({ id: "fact", body: "A fact.", type: "factual", threshold: true }));
+    const factual = parseNodeFile(
+      "fact.md",
+      serializeNode({ id: "fact", body: "A fact.", type: "factual", threshold: true }),
+    );
     expect(factual.node.knowledge_type).toBe("factual");
     expect(factual.node.threshold).toBe(true);
-    expect(parseNodeFile("legacy.md", serializeNode({ id: "legacy", body: "x" })).node.threshold).toBe(false);
+    expect(
+      parseNodeFile("legacy.md", serializeNode({ id: "legacy", body: "x" })).node.threshold,
+    ).toBe(false);
     const dd = tempDataDir();
-    expect(() => authorDomain(dd, "demo", { nodes: [{ id: "bad", body: "x", type: "taxonomy" }] }, "create"))
-      .toThrow(/type must be factual, conceptual, or procedural/);
-    expect(() => authorDomain(dd, "other", { nodes: [{ id: "bad", body: "x", threshold: "yes" }] }, "create"))
-      .toThrow(/threshold must be a boolean/);
+    expect(() =>
+      authorDomain(dd, "demo", { nodes: [{ id: "bad", body: "x", type: "taxonomy" }] }, "create"),
+    ).toThrow(/type must be factual, conceptual, or procedural/);
+    expect(() =>
+      authorDomain(dd, "other", { nodes: [{ id: "bad", body: "x", threshold: "yes" }] }, "create"),
+    ).toThrow(/threshold must be a boolean/);
   });
 
   test("creates a loadable domain from JSON specs", () => {
@@ -116,9 +126,9 @@ describe("domain add-nodes", () => {
       authorDomain(dd, "demo", { nodes: [{ id: "loop", body: "z", requires: ["gamma"] }] }, "add"),
     ).not.toThrow();
     // a batch that would close a cycle through existing edges
-    expect(() =>
-      authorDomain(dd, "missing", { nodes: [{ id: "x", body: "y" }] }, "add"),
-    ).toThrow(/no such domain/);
+    expect(() => authorDomain(dd, "missing", { nodes: [{ id: "x", body: "y" }] }, "add")).toThrow(
+      /no such domain/,
+    );
   });
 });
 
