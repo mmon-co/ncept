@@ -17,6 +17,7 @@ const revision: PatchRevision = {
       "patch:course": true,
       "patch:author": "Ada",
     },
+    citations: [],
   },
   delta: {
     operations: [
@@ -130,7 +131,7 @@ test("a Personal Notebook is effective content while learner absence stays disti
         },
       ],
     },
-    metadata: { properties: { "patch:title": "Personal" } },
+    metadata: { properties: { "patch:title": "Personal" }, citations: [] },
     delta: {
       operations: [
         {

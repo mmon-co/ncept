@@ -45,7 +45,32 @@ export interface PatchLock {
 
 export interface PatchMetadata {
   readonly properties: Readonly<Record<string, MetadataValue>>;
+  readonly citations: readonly Citation[];
 }
+
+export interface EntityMapping<Id extends string> {
+  readonly source: Id;
+  readonly target: Id;
+}
+
+export interface ReifiedEntityMapping {
+  readonly nodes: readonly EntityMapping<NodeId>[];
+  readonly edges: readonly EntityMapping<EdgeId>[];
+  readonly metadataSets: readonly EntityMapping<MetadataSetId>[];
+}
+
+export type Citation =
+  | {
+      readonly kind: "reified_from";
+      readonly source: ExactPatchRef;
+      readonly formerBases: readonly ExactPatchRef[];
+      readonly entities: ReifiedEntityMapping;
+    }
+  | {
+      readonly kind: "derived_from" | "based_on" | "inspired_by";
+      readonly source: ExactPatchRef;
+    }
+  | { readonly kind: "external_source"; readonly source: string };
 
 export interface StructureNode {
   readonly id: NodeId;
@@ -103,6 +128,11 @@ export interface PatchRevision {
 export interface ClosedPatchBundle {
   readonly terminal: ExactPatchRef;
   readonly revisions: readonly PatchRevision[];
+}
+
+export interface ReificationTarget {
+  readonly identity: PatchId;
+  readonly metadata: PatchMetadata;
 }
 
 export interface ContributionProvenance {
