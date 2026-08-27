@@ -155,7 +155,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     Record<string, ContributionProvenance[]>
   > = {};
 
-  for (const revision of orderedRevisions)
+  for (const revision of orderedRevisions) {
     revision.delta.operations.forEach((operation, operationIndex) => {
       const provenance = { patch: revision.ref, operationIndex };
       if (operation.kind === "add-node") {
@@ -199,6 +199,17 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
         tags.set(operation.tag.name, operation.tag);
       }
     });
+    for (const [key, value] of Object.entries(revision.metadata.properties)) {
+      if (!key.startsWith("patch:") || value !== true) continue;
+      const label = key.slice("patch:".length);
+      tags.set(`patch:${revision.ref.identity}:${label}`, {
+        name: `patch:${revision.ref.identity}:${label}`,
+        nodes: sorted(nodes.values()).map((node) => node.id),
+        edges: sorted(edges.values()).map((edge) => edge.id),
+        metadataSets: sorted(metadataSets.values()).map((set) => set.id),
+      });
+    }
+  }
 
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))
