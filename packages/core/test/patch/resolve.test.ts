@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { PatchCompileError, resolvePatchBundle, type PatchRevision } from "../../src/patch";
+import {
+  PatchCompileError,
+  resolvePatchBundle,
+  type ExactPatchRef,
+  type LockedBase,
+  type PatchRevision,
+} from "../../src/patch";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
@@ -12,6 +18,38 @@ function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
     bases: [],
     lock: { entries: [] },
     metadata: { properties: { "patch:title": "Test" } },
+    delta: { operations },
+  };
+}
+
+function ref(identity: `patch-${string}`, version: string, fill: string): ExactPatchRef {
+  return {
+    identity,
+    version,
+    commit: fill.repeat(40),
+    digest: `sha256:${fill.repeat(64)}`,
+  };
+}
+
+function hubBase(exact: ExactPatchRef): LockedBase {
+  if (exact.version === undefined) throw new Error("test Hub base needs a version");
+  return {
+    requirement: { identity: exact.identity, release: exact.version },
+    exact,
+    acquisition: { kind: "hub", identity: exact.identity, version: exact.version },
+  };
+}
+
+function based(
+  exact: ExactPatchRef,
+  bases: readonly LockedBase[],
+  operations: PatchRevision["delta"]["operations"] = [],
+): PatchRevision {
+  return {
+    ref: exact,
+    bases: bases.map((base) => base.requirement),
+    lock: { entries: bases },
+    metadata: { properties: { "patch:title": exact.identity } },
     delta: { operations },
   };
 }
@@ -128,4 +166,153 @@ test("a Personal Patch rejects an exact lock that does not satisfy its manifest 
   expect(() =>
     resolvePatchBundle({ terminal: personal.ref, revisions: [course, personal] }),
   ).toThrow(/does not satisfy/);
+});
+
+test("ordered resolution applies an exact diamond dependency once and the terminal Patch last", () => {
+  const shared = based(ref("patch-shared", "1.0.0", "1"), [], [
+    { kind: "add-node", node: { id: "node-shared" } },
+  ]);
+  const first = based(ref("patch-first", "1.0.0", "2"), [hubBase(shared.ref)], [
+    { kind: "add-node", node: { id: "node-first" } },
+  ]);
+  const second = based(ref("patch-second", "1.0.0", "3"), [hubBase(shared.ref)], [
+    { kind: "add-node", node: { id: "node-second" } },
+  ]);
+  const curriculum = based(ref("patch-curriculum", "1.0.0", "4"), [
+    hubBase(first.ref),
+    hubBase(second.ref),
+  ]);
+
+  const resolved = resolvePatchBundle({
+    terminal: curriculum.ref,
+    revisions: [second, curriculum, shared, first],
+  });
+
+  expect(resolved.patchOrder).toEqual([shared.ref, first.ref, second.ref, curriculum.ref]);
+  expect(resolved.provenance.nodes["node-shared"]).toEqual([
+    { patch: shared.ref, operationIndex: 0 },
+  ]);
+});
+
+test("resolution rejects incompatible exact revisions and dependency cycles with typed errors", () => {
+  const oldShared = based(ref("patch-shared", "1.0.0", "5"), []);
+  const newShared = based(ref("patch-shared", "2.0.0", "6"), []);
+  const first = based(ref("patch-first", "1.0.0", "7"), [hubBase(oldShared.ref)]);
+  const second = based(ref("patch-second", "1.0.0", "8"), [hubBase(newShared.ref)]);
+  const conflicting = based(ref("patch-conflicting", "1.0.0", "9"), [
+    hubBase(first.ref),
+    hubBase(second.ref),
+  ]);
+
+  try {
+    resolvePatchBundle({
+      terminal: conflicting.ref,
+      revisions: [conflicting, first, second, oldShared, newShared],
+    });
+    throw new Error("expected incompatible exact revisions to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(PatchCompileError);
+    expect((error as PatchCompileError).code).toBe("incompatible-revision");
+  }
+
+  const cycleARef = ref("patch-cycle-a", "1.0.0", "a");
+  const cycleBRef = ref("patch-cycle-b", "1.0.0", "b");
+  const cycleA = based(cycleARef, [hubBase(cycleBRef)]);
+  const cycleB = based(cycleBRef, [hubBase(cycleARef)]);
+  try {
+    resolvePatchBundle({ terminal: cycleA.ref, revisions: [cycleB, cycleA] });
+    throw new Error("expected a dependency cycle to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(PatchCompileError);
+    expect((error as PatchCompileError).code).toBe("dependency-cycle");
+  }
+});
+
+test("compatible property contributions merge in Patch order without dropping earlier properties", () => {
+  const foundation = based(ref("patch-foundation", "1.0.0", "c"), [], [
+    { kind: "add-node", node: { id: "node-shared" } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-shared",
+        subjects: [{ kind: "node", id: "node-shared" }],
+        properties: {
+          "display:label": "Foundation label",
+          "pedagogy:lesson": "The retained lesson",
+        },
+      },
+    },
+  ]);
+  const contribution = based(
+    ref("patch-contribution", "1.0.0", "d"),
+    [hubBase(foundation.ref)],
+    [
+      { kind: "add-node", node: { id: "node-shared" } },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-shared" }],
+          properties: { "display:label": "Contribution label" },
+        },
+      },
+    ],
+  );
+
+  const resolved = resolvePatchBundle({
+    terminal: contribution.ref,
+    revisions: [contribution, foundation],
+  });
+
+  expect(resolved.metadataSets).toEqual([
+    {
+      id: "metadata-shared",
+      subjects: [{ kind: "node", id: "node-shared" }],
+      properties: {
+        "display:label": "Contribution label",
+        "pedagogy:lesson": "The retained lesson",
+      },
+    },
+  ]);
+  expect(resolved.provenance.metadataSets["metadata-shared"]).toEqual([
+    { patch: foundation.ref, operationIndex: 1 },
+    { patch: contribution.ref, operationIndex: 1 },
+  ]);
+});
+
+test("metadata contributions cannot change an identified set's attachment subjects", () => {
+  const foundation = based(ref("patch-foundation", "1.0.0", "e"), [], [
+    { kind: "add-node", node: { id: "node-first" } },
+    { kind: "add-node", node: { id: "node-second" } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-shared",
+        subjects: [{ kind: "node", id: "node-first" }],
+        properties: { "display:label": "First" },
+      },
+    },
+  ]);
+  const incompatible = based(
+    ref("patch-incompatible", "1.0.0", "f"),
+    [hubBase(foundation.ref)],
+    [
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-shared",
+          subjects: [{ kind: "node", id: "node-second" }],
+          properties: { "display:label": "Second" },
+        },
+      },
+    ],
+  );
+
+  try {
+    resolvePatchBundle({ terminal: incompatible.ref, revisions: [foundation, incompatible] });
+    throw new Error("expected incompatible subjects to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(PatchCompileError);
+    expect((error as PatchCompileError).code).toBe("incompatible-contribution");
+  }
 });
