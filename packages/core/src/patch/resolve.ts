@@ -15,7 +15,7 @@ import type {
   ResolvedGraph,
   StructureEdge,
   StructureNode,
-  TaggedSet,
+  GraphTag,
 } from "./model";
 import { exactPatchRefKey, sameExactPatchRef } from "./model";
 
@@ -156,7 +156,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
-  const tags = new Map<string, TaggedSet>();
+  const tags = new Map<string, GraphTag>();
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
   const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
@@ -201,12 +201,13 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
           (properties[key] ??= []).push(provenance);
       } else {
         const existing = tags.get(operation.tag.name);
-        if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(operation.tag))
+        const incoming: GraphTag = { ...operation.tag, authority: "patch" };
+        if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(incoming))
           throw new PatchCompileError(
             "duplicate-entity",
             `conflicting tag '${operation.tag.name}'`,
           );
-        tags.set(operation.tag.name, operation.tag);
+        tags.set(operation.tag.name, incoming);
       }
     });
     for (const [key, value] of Object.entries(revision.metadata.properties)) {
@@ -215,6 +216,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
       tags.set(`patch:${revision.ref.identity}:${label}`, {
         name: `patch:${revision.ref.identity}:${label}`,
+        authority: "patch",
         nodes: sorted(nodes.values())
           .filter((node) =>
             nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),

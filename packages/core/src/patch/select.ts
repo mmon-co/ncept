@@ -18,7 +18,7 @@ function malformed(message: string): never {
   throw new PatchCompileError("malformed-query", message);
 }
 
-function parseQuery(value: unknown, label = "query"): GraphQuery {
+export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return malformed(`${label} must be an object`);
   const raw = value as Record<string, unknown>;
@@ -35,7 +35,7 @@ function parseQuery(value: unknown, label = "query"): GraphQuery {
     if (!Array.isArray(children) || children.length === 0)
       return malformed(`${label}.${operation} must be a non-empty array`);
     const parsed = children.map((child, index) =>
-      parseQuery(child, `${label}.${operation}[${index}]`),
+      parseGraphQuery(child, `${label}.${operation}[${index}]`),
     ) as [GraphQuery, ...GraphQuery[]];
     return operation === "union" ? { union: parsed } : { intersection: parsed };
   }
@@ -44,8 +44,8 @@ function parseQuery(value: unknown, label = "query"): GraphQuery {
       return malformed(`${label}.difference must contain exactly two terms`);
     return {
       difference: [
-        parseQuery(raw.difference[0], `${label}.difference[0]`),
-        parseQuery(raw.difference[1], `${label}.difference[1]`),
+        parseGraphQuery(raw.difference[0], `${label}.difference[0]`),
+        parseGraphQuery(raw.difference[1], `${label}.difference[1]`),
       ],
     };
   }
@@ -175,5 +175,5 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
 /** Select a valid attributed subgraph through the restricted tag algebra. */
 export function selectGraph(graph: ResolvedGraph, query?: GraphQuery): SelectedGraph {
   if (query === undefined) return graph;
-  return selectedGraph(graph, evaluate(graph, parseQuery(query)));
+  return selectedGraph(graph, evaluate(graph, parseGraphQuery(query)));
 }
