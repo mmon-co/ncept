@@ -207,57 +207,121 @@ function validateMaskTarget(
     staleMask(owner, mask, "the source operation does not contribute that metadata property");
 }
 
+function registerMask(
+  owner: ExactPatchRef,
+  mask: ExactContributionMask,
+  appliedRevisions: ReadonlyMap<string, PatchRevision>,
+  maskedContributions: Set<string>,
+  maskedProperties: Set<string>,
+): void {
+  validateMaskTarget(owner, mask, appliedRevisions);
+  if (mask.property === undefined) {
+    maskedContributions.add(contributionKey(mask.source, mask.operationIndex));
+    return;
+  }
+  maskedProperties.add(maskedPropertyKey(mask.source, mask.operationIndex, mask.property));
+}
+
 interface Contribution<Value> {
   readonly value: Value;
   readonly provenance: ContributionProvenance;
 }
 
+interface ContributionCollection {
+  readonly nodes: Map<NodeId, Contribution<StructureNode>[]>;
+  readonly edges: Map<EdgeId, Contribution<StructureEdge>[]>;
+  readonly metadataSets: Map<MetadataSetId, Contribution<MetadataSet>[]>;
+  readonly tags: TaggedSet[];
+  readonly masked: Set<string>;
+  readonly maskedProperties: Set<string>;
+  readonly appliedRevisions: Map<string, PatchRevision>;
+}
+
+function collectOperation(
+  owner: ExactPatchRef,
+  operation: PatchRevision["delta"]["operations"][number],
+  operationIndex: number,
+  collection: ContributionCollection,
+): void {
+  const provenance = { patch: owner, operationIndex };
+  if (operation.kind === "add-node") {
+    const contributions = collection.nodes.get(operation.node.id) ?? [];
+    contributions.push({ value: operation.node, provenance });
+    collection.nodes.set(operation.node.id, contributions);
+  } else if (operation.kind === "add-edge") {
+    const contributions = collection.edges.get(operation.edge.id) ?? [];
+    contributions.push({ value: operation.edge, provenance });
+    collection.edges.set(operation.edge.id, contributions);
+  } else if (operation.kind === "add-metadata-set") {
+    const contributions = collection.metadataSets.get(operation.metadataSet.id) ?? [];
+    contributions.push({ value: operation.metadataSet, provenance });
+    collection.metadataSets.set(operation.metadataSet.id, contributions);
+  } else if (operation.kind === "define-tag") {
+    collection.tags.push(operation.tag);
+  } else {
+    registerMask(
+      owner,
+      operation.mask,
+      collection.appliedRevisions,
+      collection.masked,
+      collection.maskedProperties,
+    );
+  }
+}
+
+function mergeMetadataProperties(
+  contributions: readonly Contribution<MetadataSet>[],
+  maskedProperties: ReadonlySet<string>,
+): {
+  readonly properties: Record<string, MetadataSet["properties"][string]>;
+  readonly provenance: Record<string, ContributionProvenance[]>;
+} {
+  const properties: Record<string, MetadataSet["properties"][string]> = {};
+  const provenance: Record<string, ContributionProvenance[]> = {};
+  for (const contribution of contributions)
+    for (const [key, value] of Object.entries(contribution.value.properties)) {
+      if (
+        maskedProperties.has(
+          maskedPropertyKey(
+            contribution.provenance.patch,
+            contribution.provenance.operationIndex,
+            key,
+          ),
+        )
+      )
+        continue;
+      properties[key] = value;
+      (provenance[key] ??= []).push(contribution.provenance);
+    }
+  return { properties, provenance };
+}
+
 export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const ordered = orderRevisions(bundle);
   const orderedRevisions = ordered.revisions;
-  const nodeContributions = new Map<NodeId, Contribution<StructureNode>[]>();
-  const edgeContributions = new Map<EdgeId, Contribution<StructureEdge>[]>();
-  const metadataContributions = new Map<MetadataSetId, Contribution<MetadataSet>[]>();
-  const tagContributions: TaggedSet[] = [];
-  const maskedContributions = new Set<string>();
-  const maskedProperties = new Set<string>();
-  const appliedRevisions = new Map<string, PatchRevision>();
+  const collection: ContributionCollection = {
+    nodes: new Map(),
+    edges: new Map(),
+    metadataSets: new Map(),
+    tags: [],
+    masked: new Set(),
+    maskedProperties: new Set(),
+    appliedRevisions: new Map(),
+  };
 
   for (const revision of orderedRevisions) {
-    revision.delta.operations.forEach((operation, operationIndex) => {
-      const provenance = { patch: revision.ref, operationIndex };
-      if (operation.kind === "add-node") {
-        const contributions = nodeContributions.get(operation.node.id) ?? [];
-        contributions.push({ value: operation.node, provenance });
-        nodeContributions.set(operation.node.id, contributions);
-      } else if (operation.kind === "add-edge") {
-        const contributions = edgeContributions.get(operation.edge.id) ?? [];
-        contributions.push({ value: operation.edge, provenance });
-        edgeContributions.set(operation.edge.id, contributions);
-      } else if (operation.kind === "add-metadata-set") {
-        const contributions = metadataContributions.get(operation.metadataSet.id) ?? [];
-        contributions.push({ value: operation.metadataSet, provenance });
-        metadataContributions.set(operation.metadataSet.id, contributions);
-      } else if (operation.kind === "define-tag") {
-        tagContributions.push(operation.tag);
-      } else {
-        validateMaskTarget(revision.ref, operation.mask, appliedRevisions);
-        if (operation.mask.property === undefined)
-          maskedContributions.add(
-            contributionKey(operation.mask.source, operation.mask.operationIndex),
-          );
-        else
-          maskedProperties.add(
-            maskedPropertyKey(
-              operation.mask.source,
-              operation.mask.operationIndex,
-              operation.mask.property,
-            ),
-          );
-      }
-    });
-    appliedRevisions.set(exactPatchRefKey(revision.ref), revision);
+    revision.delta.operations.forEach((operation, index) =>
+      collectOperation(revision.ref, operation, index, collection),
+    );
+    collection.appliedRevisions.set(exactPatchRefKey(revision.ref), revision);
   }
+
+  const nodeContributions = collection.nodes;
+  const edgeContributions = collection.edges;
+  const metadataContributions = collection.metadataSets;
+  const tagContributions = collection.tags;
+  const maskedContributions = collection.masked;
+  const maskedProperties = collection.maskedProperties;
 
   const enabled = (provenance: ContributionProvenance): boolean =>
     !maskedContributions.has(contributionKey(provenance.patch, provenance.operationIndex));
@@ -300,26 +364,10 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
         "incompatible-contribution",
         `metadata set '${id}' cannot change attachment subjects`,
       );
-    const properties: Record<string, MetadataSet["properties"][string]> = {};
-    const propertyProvenance: Record<string, ContributionProvenance[]> = {};
-    for (const contribution of active)
-      for (const [key, value] of Object.entries(contribution.value.properties)) {
-        if (
-          maskedProperties.has(
-            maskedPropertyKey(
-              contribution.provenance.patch,
-              contribution.provenance.operationIndex,
-              key,
-            ),
-          )
-        )
-          continue;
-        properties[key] = value;
-        (propertyProvenance[key] ??= []).push(contribution.provenance);
-      }
-    metadataSets.set(id, { ...active.at(-1)!.value, properties });
+    const merged = mergeMetadataProperties(active, maskedProperties);
+    metadataSets.set(id, { ...active.at(-1)!.value, properties: merged.properties });
     metadataProvenance[id] = active.map(({ provenance }) => provenance);
-    metadataPropertyProvenance[id] = propertyProvenance;
+    metadataPropertyProvenance[id] = merged.provenance;
   }
 
   const tags = new Map<string, TaggedSet>();
