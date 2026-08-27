@@ -4,6 +4,7 @@ import type {
   ClosedPatchBundle,
   ContributionProvenance,
   EdgeId,
+  ExactContributionMask,
   ExactPatchRef,
   LockedBase,
   MetadataSet,
@@ -150,13 +151,119 @@ function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
   );
 }
 
+function contributionKey(source: ExactPatchRef, operationIndex: number): string {
+  return `${exactPatchRefKey(source)}\0${operationIndex}`;
+}
+
+function maskedPropertyKey(
+  source: ExactPatchRef,
+  operationIndex: number,
+  property: string,
+): string {
+  return `${contributionKey(source, operationIndex)}\0${property}`;
+}
+
+function describeMask(mask: ExactContributionMask): string {
+  const property = mask.property === undefined ? "" : ` property '${mask.property}'`;
+  return `${mask.source.identity}@${exactRelease(mask.source)} operation ${mask.operationIndex} ${mask.entity.kind} '${mask.entity.id}'${property}`;
+}
+
+function staleMask(owner: ExactPatchRef, mask: ExactContributionMask, reason: string): never {
+  throw new PatchCompileError(
+    "stale-mask-target",
+    `Patch ${owner.identity}@${exactRelease(owner)} has stale mask target ${describeMask(mask)}: ${reason}`,
+  );
+}
+
+function validateMaskTarget(
+  owner: ExactPatchRef,
+  mask: ExactContributionMask,
+  appliedRevisions: ReadonlyMap<string, PatchRevision>,
+): void {
+  const source = appliedRevisions.get(exactPatchRefKey(mask.source));
+  if (source === undefined)
+    staleMask(owner, mask, "the exact source is not available earlier in scope");
+  if (!Number.isInteger(mask.operationIndex) || mask.operationIndex < 0)
+    staleMask(owner, mask, "the operation index is invalid");
+  const operation = source.delta.operations[mask.operationIndex];
+  if (operation === undefined) staleMask(owner, mask, "the source operation does not exist");
+
+  const matches =
+    (operation.kind === "add-node" &&
+      mask.entity.kind === "node" &&
+      operation.node.id === mask.entity.id) ||
+    (operation.kind === "add-edge" &&
+      mask.entity.kind === "edge" &&
+      operation.edge.id === mask.entity.id) ||
+    (operation.kind === "add-metadata-set" &&
+      mask.entity.kind === "metadata-set" &&
+      operation.metadataSet.id === mask.entity.id);
+  if (!matches) staleMask(owner, mask, "the source operation contributes to a different entity");
+  if (mask.property === undefined) return;
+  if (
+    operation.kind !== "add-metadata-set" ||
+    !Object.hasOwn(operation.metadataSet.properties, mask.property)
+  )
+    staleMask(owner, mask, "the source operation does not contribute that metadata property");
+}
+
+interface Contribution<Value> {
+  readonly value: Value;
+  readonly provenance: ContributionProvenance;
+}
+
 export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const ordered = orderRevisions(bundle);
   const orderedRevisions = ordered.revisions;
+  const nodeContributions = new Map<NodeId, Contribution<StructureNode>[]>();
+  const edgeContributions = new Map<EdgeId, Contribution<StructureEdge>[]>();
+  const metadataContributions = new Map<MetadataSetId, Contribution<MetadataSet>[]>();
+  const tagContributions: TaggedSet[] = [];
+  const maskedContributions = new Set<string>();
+  const maskedProperties = new Set<string>();
+  const appliedRevisions = new Map<string, PatchRevision>();
+
+  for (const revision of orderedRevisions) {
+    revision.delta.operations.forEach((operation, operationIndex) => {
+      const provenance = { patch: revision.ref, operationIndex };
+      if (operation.kind === "add-node") {
+        const contributions = nodeContributions.get(operation.node.id) ?? [];
+        contributions.push({ value: operation.node, provenance });
+        nodeContributions.set(operation.node.id, contributions);
+      } else if (operation.kind === "add-edge") {
+        const contributions = edgeContributions.get(operation.edge.id) ?? [];
+        contributions.push({ value: operation.edge, provenance });
+        edgeContributions.set(operation.edge.id, contributions);
+      } else if (operation.kind === "add-metadata-set") {
+        const contributions = metadataContributions.get(operation.metadataSet.id) ?? [];
+        contributions.push({ value: operation.metadataSet, provenance });
+        metadataContributions.set(operation.metadataSet.id, contributions);
+      } else if (operation.kind === "define-tag") {
+        tagContributions.push(operation.tag);
+      } else {
+        validateMaskTarget(revision.ref, operation.mask, appliedRevisions);
+        if (operation.mask.property === undefined)
+          maskedContributions.add(
+            contributionKey(operation.mask.source, operation.mask.operationIndex),
+          );
+        else
+          maskedProperties.add(
+            maskedPropertyKey(
+              operation.mask.source,
+              operation.mask.operationIndex,
+              operation.mask.property,
+            ),
+          );
+      }
+    });
+    appliedRevisions.set(exactPatchRefKey(revision.ref), revision);
+  }
+
+  const enabled = (provenance: ContributionProvenance): boolean =>
+    !maskedContributions.has(contributionKey(provenance.patch, provenance.operationIndex));
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
-  const tags = new Map<string, TaggedSet>();
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
   const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
@@ -165,50 +272,70 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     Record<string, ContributionProvenance[]>
   > = {};
 
-  for (const revision of orderedRevisions) {
-    revision.delta.operations.forEach((operation, operationIndex) => {
-      const provenance = { patch: revision.ref, operationIndex };
-      if (operation.kind === "add-node") {
-        nodes.set(operation.node.id, operation.node);
-        (nodeProvenance[operation.node.id] ??= []).push(provenance);
-      } else if (operation.kind === "add-edge") {
-        const existing = edges.get(operation.edge.id);
+  for (const [id, contributions] of nodeContributions) {
+    const active = contributions.filter(({ provenance }) => enabled(provenance));
+    const last = active.at(-1);
+    if (last === undefined) continue;
+    nodes.set(id, last.value);
+    nodeProvenance[id] = active.map(({ provenance }) => provenance);
+  }
+  for (const [id, contributions] of edgeContributions) {
+    const active = contributions.filter(({ provenance }) => enabled(provenance));
+    const first = active[0];
+    if (first === undefined) continue;
+    if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
+      throw new PatchCompileError(
+        "incompatible-contribution",
+        `edge '${id}' cannot change endpoints`,
+      );
+    edges.set(id, active.at(-1)!.value);
+    edgeProvenance[id] = active.map(({ provenance }) => provenance);
+  }
+  for (const [id, contributions] of metadataContributions) {
+    const active = contributions.filter(({ provenance }) => enabled(provenance));
+    const first = active[0];
+    if (first === undefined) continue;
+    if (active.some(({ value }) => !sameSubjects(first.value, value)))
+      throw new PatchCompileError(
+        "incompatible-contribution",
+        `metadata set '${id}' cannot change attachment subjects`,
+      );
+    const properties: Record<string, MetadataSet["properties"][string]> = {};
+    const propertyProvenance: Record<string, ContributionProvenance[]> = {};
+    for (const contribution of active)
+      for (const [key, value] of Object.entries(contribution.value.properties)) {
         if (
-          existing !== undefined &&
-          (existing.from !== operation.edge.from || existing.to !== operation.edge.to)
+          maskedProperties.has(
+            maskedPropertyKey(
+              contribution.provenance.patch,
+              contribution.provenance.operationIndex,
+              key,
+            ),
+          )
         )
-          throw new PatchCompileError(
-            "incompatible-contribution",
-            `edge '${operation.edge.id}' cannot change endpoints`,
-          );
-        edges.set(operation.edge.id, operation.edge);
-        (edgeProvenance[operation.edge.id] ??= []).push(provenance);
-      } else if (operation.kind === "add-metadata-set") {
-        const incoming = operation.metadataSet;
-        const existing = metadataSets.get(incoming.id);
-        if (existing !== undefined && !sameSubjects(existing, incoming))
-          throw new PatchCompileError(
-            "incompatible-contribution",
-            `metadata set '${incoming.id}' cannot change attachment subjects`,
-          );
-        metadataSets.set(incoming.id, {
-          ...incoming,
-          properties: { ...existing?.properties, ...incoming.properties },
-        });
-        (metadataProvenance[incoming.id] ??= []).push(provenance);
-        const properties = (metadataPropertyProvenance[incoming.id] ??= {});
-        for (const key of Object.keys(incoming.properties))
-          (properties[key] ??= []).push(provenance);
-      } else {
-        const existing = tags.get(operation.tag.name);
-        if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(operation.tag))
-          throw new PatchCompileError(
-            "duplicate-entity",
-            `conflicting tag '${operation.tag.name}'`,
-          );
-        tags.set(operation.tag.name, operation.tag);
+          continue;
+        properties[key] = value;
+        (propertyProvenance[key] ??= []).push(contribution.provenance);
       }
-    });
+    metadataSets.set(id, { ...active.at(-1)!.value, properties });
+    metadataProvenance[id] = active.map(({ provenance }) => provenance);
+    metadataPropertyProvenance[id] = propertyProvenance;
+  }
+
+  const tags = new Map<string, TaggedSet>();
+  for (const contribution of tagContributions) {
+    const tag = {
+      ...contribution,
+      nodes: contribution.nodes.filter((id) => nodes.has(id)),
+      edges: contribution.edges.filter((id) => edges.has(id)),
+      metadataSets: contribution.metadataSets.filter((id) => metadataSets.has(id)),
+    };
+    const existing = tags.get(tag.name);
+    if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(tag))
+      throw new PatchCompileError("duplicate-entity", `conflicting tag '${tag.name}'`);
+    tags.set(tag.name, tag);
+  }
+  for (const revision of orderedRevisions)
     for (const [key, value] of Object.entries(revision.metadata.properties)) {
       if (!key.startsWith("patch:") || value !== true) continue;
       const label = key.slice("patch:".length);
@@ -234,7 +361,6 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
           .map((set) => set.id),
       });
     }
-  }
 
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))

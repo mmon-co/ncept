@@ -456,9 +456,7 @@ test("exact masks suppress only their targeted entity and metadata contributions
   });
 
   expect(resolved.nodes).toEqual([{ id: "node-other" }, { id: "node-shared" }]);
-  expect(resolved.edges).toEqual([
-    { id: "edge-retained", from: "node-other", to: "node-shared" },
-  ]);
+  expect(resolved.edges).toEqual([{ id: "edge-retained", from: "node-other", to: "node-shared" }]);
   expect(resolved.metadataSets).toEqual([
     {
       id: "metadata-other",
