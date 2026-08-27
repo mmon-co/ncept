@@ -53,3 +53,53 @@ test("root resolution rejects dangling topology", () => {
     new PatchCompileError("dangling-edge", "edge 'edge-broken' has missing endpoints"),
   );
 });
+
+test("a Personal Patch applies its exact root bases in manifest order and itself last", () => {
+  const first = root([{ kind: "add-node", node: { id: "node-first" } }]);
+  const second = {
+    ...root([{ kind: "add-node", node: { id: "node-second" } }]),
+    ref: {
+      ...root([]).ref,
+      identity: "patch-second" as const,
+      digest: `sha256:${"c".repeat(64)}` as const,
+    },
+  };
+  const personal = {
+    ...root([{ kind: "add-node", node: { id: "node-notebook" } }]),
+    ref: {
+      ...root([]).ref,
+      identity: "patch-personal" as const,
+      digest: `sha256:${"d".repeat(64)}` as const,
+    },
+    bases: [
+      { identity: first.ref.identity, release: "1.0.0" },
+      { identity: second.ref.identity, release: "1.0.0" },
+    ],
+    lock: {
+      entries: [
+        {
+          requirement: { identity: first.ref.identity, release: "1.0.0" },
+          exact: first.ref,
+          acquisition: "hub:first",
+        },
+        {
+          requirement: { identity: second.ref.identity, release: "1.0.0" },
+          exact: second.ref,
+          acquisition: "hub:second",
+        },
+      ],
+    },
+  } satisfies PatchRevision;
+
+  const resolved = resolvePatchBundle({
+    terminal: personal.ref,
+    revisions: [personal, second, first],
+  });
+
+  expect(resolved.patchOrder).toEqual([first.ref, second.ref, personal.ref]);
+  expect(resolved.nodes).toEqual([
+    { id: "node-first" },
+    { id: "node-notebook" },
+    { id: "node-second" },
+  ]);
+});

@@ -5,6 +5,7 @@ export type PatchCompileErrorCode =
   | "dangling-edge"
   | "dangling-metadata"
   | "dangling-tag"
+  | "unknown-tag"
   | "unsupported-query"
   | "missing-display-metadata"
   | "dependency-cycle";
