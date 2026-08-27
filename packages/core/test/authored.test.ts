@@ -12,7 +12,10 @@ import {
 
 const id = "course-11111111-1111-1111-1111-111111111111" as CourseId;
 const bytes = (value: string) => new TextEncoder().encode(value);
-const node = (nodeId: string, requires?: string, tags: string[] = []) => bytes(`---\nid: ${nodeId}\ntags: [${tags.join(", ")}]\n---\n# ${nodeId}\nBody.${requires === undefined ? "" : `\n\n## Requires\n- [[${requires}]]`}\n`);
+const node = (nodeId: string, requires?: string, tags: string[] = []) =>
+  bytes(
+    `---\nid: ${nodeId}\ntags: [${tags.join(", ")}]\n---\n# ${nodeId}\nBody.${requires === undefined ? "" : `\n\n## Requires\n- [[${requires}]]`}\n`,
+  );
 
 function courseTree(): AuthoredTree {
   return {
@@ -75,10 +78,12 @@ describe("authored prospective validation", () => {
   });
 
   test("rejects an authored graph patch that would introduce a cycle", () => {
-    expect(() => authoredPatchChangeSet(courseTree(), "abc123", {
-      kind: "add-edge",
-      edge: { from: "a", to: "b", type: "dependency" },
-    })).toThrow(/cycle/);
+    expect(() =>
+      authoredPatchChangeSet(courseTree(), "abc123", {
+        kind: "add-edge",
+        edge: { from: "a", to: "b", type: "dependency" },
+      }),
+    ).toThrow(/cycle/);
   });
 
   test("requires curriculum identity and owned graph metadata to agree", () => {
@@ -87,7 +92,23 @@ describe("authored prospective validation", () => {
       target: { kind: "curriculum", id },
       files: new Map([
         ["course.yaml", bytes(YAML.stringify({ id, domain: "composition", kind: "curriculum" }))],
-        ["curriculum.yaml", bytes(YAML.stringify({ id: "composition", domain: "other", title: "Composition", bases: [], tags: [], modifications: [], correspondences: [], slots: [], created_at: now, updated_at: now }))],
+        [
+          "curriculum.yaml",
+          bytes(
+            YAML.stringify({
+              id: "composition",
+              domain: "other",
+              title: "Composition",
+              bases: [],
+              tags: [],
+              modifications: [],
+              correspondences: [],
+              slots: [],
+              created_at: now,
+              updated_at: now,
+            }),
+          ),
+        ],
       ]),
     };
     expect(() => validateAuthoredTree(tree)).toThrow(/same domain/);

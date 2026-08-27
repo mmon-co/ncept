@@ -1,5 +1,15 @@
 import { basename, dirname, join } from "node:path";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { readCardLog } from "./cards";
 import { readEvents } from "./events";
 import { listDomains, loadDomainGraph } from "./graph";
@@ -76,7 +86,9 @@ export function resolveDataDir(root?: string): DataDir {
   };
 }
 
-function marker(dd: DataDir): string { return join(dd.root, "format_version"); }
+function marker(dd: DataDir): string {
+  return join(dd.root, "format_version");
+}
 
 function validateStage(stage: DataDir): void {
   // Import locally to keep datadir's dependency direction acyclic at runtime.
@@ -113,8 +125,12 @@ export function migrateV1Store(dd: DataDir): void {
     if (!existsSync(dd.root) && existsSync(backup)) renameSync(backup, dd.root);
     rmSync(backup, { recursive: true, force: true });
     renameSync(dd.root, backup);
-    try { renameSync(stageRoot, dd.root); }
-    catch (error) { renameSync(backup, dd.root); throw error; }
+    try {
+      renameSync(stageRoot, dd.root);
+    } catch (error) {
+      renameSync(backup, dd.root);
+      throw error;
+    }
     rmSync(backup, { recursive: true, force: true });
     migrateV2Store(dd);
   } catch (error) {
@@ -134,31 +150,41 @@ export function migrateV2Store(dd: DataDir): void {
     const stage = resolveDataDir(stageRoot);
     validateStage(stage);
     for (const domain of listDomains(stage)) ensureLocalCourse(stage, domain);
-    if (existsSync(stage.sessionsDir)) for (const name of readdirSync(stage.sessionsDir)) {
-      if (!name.endsWith(".json")) continue;
-      const path = join(stage.sessionsDir, name);
-      const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-      // '(new)' and '(user)' are deliberately unassociated. A legacy course
-      // alias becomes a course seed, so no transcript is silently refiled.
-      if (raw.course_seeds === undefined && typeof raw.domain === "string" && raw.domain !== "(new)" && raw.domain !== "(user)") {
-        try {
-          const course = ensureLocalCourse(stage, raw.domain);
-          raw.course_seeds = [{ course_id: course.id }];
-          raw.working_set = { domain: raw.domain, course_id: course.id };
-          writeFileSync(path, JSON.stringify(raw, null, 2));
-        } catch {
-          // Historical records for no-longer-installed courses remain readable,
-          // but cannot claim an association that cannot be resolved.
+    if (existsSync(stage.sessionsDir))
+      for (const name of readdirSync(stage.sessionsDir)) {
+        if (!name.endsWith(".json")) continue;
+        const path = join(stage.sessionsDir, name);
+        const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        // '(new)' and '(user)' are deliberately unassociated. A legacy course
+        // alias becomes a course seed, so no transcript is silently refiled.
+        if (
+          raw.course_seeds === undefined &&
+          typeof raw.domain === "string" &&
+          raw.domain !== "(new)" &&
+          raw.domain !== "(user)"
+        ) {
+          try {
+            const course = ensureLocalCourse(stage, raw.domain);
+            raw.course_seeds = [{ course_id: course.id }];
+            raw.working_set = { domain: raw.domain, course_id: course.id };
+            writeFileSync(path, JSON.stringify(raw, null, 2));
+          } catch {
+            // Historical records for no-longer-installed courses remain readable,
+            // but cannot claim an association that cannot be resolved.
+          }
         }
       }
-    }
     writeFileSync(marker(stage), `${STORE_FORMAT_VERSION}\n`);
     const backup = `${dd.root}.v2-backup`;
     if (!existsSync(dd.root) && existsSync(backup)) renameSync(backup, dd.root);
     rmSync(backup, { recursive: true, force: true });
     renameSync(dd.root, backup);
-    try { renameSync(stageRoot, dd.root); }
-    catch (error) { renameSync(backup, dd.root); throw error; }
+    try {
+      renameSync(stageRoot, dd.root);
+    } catch (error) {
+      renameSync(backup, dd.root);
+      throw error;
+    }
     rmSync(backup, { recursive: true, force: true });
   } catch (error) {
     if (existsSync(stageRoot)) rmSync(stageRoot, { recursive: true, force: true });
@@ -172,7 +198,10 @@ export function ensureDataDir(dd: DataDir): void {
   // generation before ever creating a new empty root.
   if (!existsSync(dd.root)) {
     for (const backup of [`${dd.root}.v2-backup`, `${dd.root}.v1-backup`]) {
-      if (existsSync(backup)) { renameSync(backup, dd.root); break; }
+      if (existsSync(backup)) {
+        renameSync(backup, dd.root);
+        break;
+      }
     }
   }
   if (!existsSync(dd.root)) mkdirSync(dd.root, { recursive: true });
@@ -180,11 +209,19 @@ export function ensureDataDir(dd: DataDir): void {
   if (!existsSync(fmt)) writeFileSync(fmt, `${STORE_FORMAT_VERSION}\n`);
   else {
     const version = readFileSync(fmt, "utf8").trim();
-    if (version === "1") { migrateV1Store(dd); return; }
-    if (version === "2") { migrateV2Store(dd); return; }
-    if (version !== String(STORE_FORMAT_VERSION)) throw new Error(`unsupported store format version in ${fmt}`);
+    if (version === "1") {
+      migrateV1Store(dd);
+      return;
+    }
+    if (version === "2") {
+      migrateV2Store(dd);
+      return;
+    }
+    if (version !== String(STORE_FORMAT_VERSION))
+      throw new Error(`unsupported store format version in ${fmt}`);
   }
-  for (const d of [dd.domainsDir, dd.coursesDir, dd.overlayDir, dd.bindingTransactionsDir]) if (!existsSync(d)) mkdirSync(d, { recursive: true });
+  for (const d of [dd.domainsDir, dd.coursesDir, dd.overlayDir, dd.bindingTransactionsDir])
+    if (!existsSync(d)) mkdirSync(d, { recursive: true });
   // Finish or roll back an interrupted binding replacement before any reader
   // can enumerate the domain directory.
   recoverBindingTransaction(dd);
@@ -195,7 +232,15 @@ export function ensureDataDir(dd: DataDir): void {
   loadSpecStore(dd);
 }
 
-export function domainDir(dd: DataDir, domain: string): string { return join(dd.domainsDir, domain); }
-export function dossierDir(dd: DataDir, domain: string): string { return join(dd.overlayDir, domain, "dossiers"); }
-export function dossierFile(dd: DataDir, domain: string, nodeId: string): string { return join(dossierDir(dd, domain), `${nodeId}.md`); }
-export function graphEditsFile(dd: DataDir, domain: string): string { return join(dd.overlayDir, domain, "graph-edits.yaml"); }
+export function domainDir(dd: DataDir, domain: string): string {
+  return join(dd.domainsDir, domain);
+}
+export function dossierDir(dd: DataDir, domain: string): string {
+  return join(dd.overlayDir, domain, "dossiers");
+}
+export function dossierFile(dd: DataDir, domain: string, nodeId: string): string {
+  return join(dossierDir(dd, domain), `${nodeId}.md`);
+}
+export function graphEditsFile(dd: DataDir, domain: string): string {
+  return join(dd.overlayDir, domain, "graph-edits.yaml");
+}

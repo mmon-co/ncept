@@ -29,7 +29,13 @@ export interface ModelSpec {
   effort?: Effort;
 }
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue | undefined };
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue | undefined };
 type ProviderOptions = Record<string, { [key: string]: JsonValue | undefined }>;
 
 /**
@@ -115,9 +121,15 @@ export function registerConfiguredProviders(
   keys: ProviderKeys = {},
   custom: Record<string, OpenAICompatibleProviderConfig> = {},
 ): void {
-  registerProvider("anthropic", (id) => createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id));
-  registerProvider("openai", (id) => createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id));
-  registerProvider("google", (id) => createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id));
+  registerProvider("anthropic", (id) =>
+    createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id),
+  );
+  registerProvider("openai", (id) =>
+    createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id),
+  );
+  registerProvider("google", (id) =>
+    createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id),
+  );
   // OpenRouter accepts the OpenAI chat-completions dialect. Use the compatible
   // adapter so a missing OpenRouter key never falls through to OPENAI_API_KEY,
   // while retaining the OpenAI provider-options namespace for effort.
@@ -132,11 +144,13 @@ export function registerConfiguredProviders(
   for (const name of configuredCustomProviders) providers.delete(name);
   configuredCustomProviders = new Set(Object.keys(custom));
   for (const [name, config] of Object.entries(custom)) {
-    registerProvider(name, (id) => createOpenAICompatible({
-      name,
-      baseURL: config.url,
-      ...(config.key === undefined ? {} : { apiKey: config.key }),
-    })(id));
+    registerProvider(name, (id) =>
+      createOpenAICompatible({
+        name,
+        baseURL: config.url,
+        ...(config.key === undefined ? {} : { apiKey: config.key }),
+      })(id),
+    );
   }
 }
 
@@ -155,7 +169,10 @@ export function resolveModelSpec(name?: string): { model: LanguageModel; effort?
     throw new Error(
       `unknown model provider '${parsed.provider}' (registered: ${[...providers.keys()].join(", ")})`,
     );
-  return { model: factory(parsed.modelId), ...(parsed.effort !== undefined ? { effort: parsed.effort } : {}) };
+  return {
+    model: factory(parsed.modelId),
+    ...(parsed.effort !== undefined ? { effort: parsed.effort } : {}),
+  };
 }
 
 /** Resolve a spec to an AI SDK model (effort, if any, is dropped — callers that honor it use resolveModelSpec). */
@@ -240,7 +257,10 @@ export async function completeJson<T>(
 }
 
 function extractJson(text: string): unknown {
-  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  const t = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/, "");
   const start = t.search(/[[{]/);
   if (start === -1) throw new Error("no JSON found in response");
   return JSON.parse(t.slice(start));

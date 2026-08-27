@@ -90,9 +90,18 @@ function applyFailurePropagation(s: NodeState, factor: number, p: Params): void 
  * It therefore moves the estimate with its graded weight but deliberately
  * retains high uncertainty; direct target evidence can then dominate quickly.
  */
-function applyTransferredSuccess(s: NodeState, kind: SuccessKind, factor: number, support: number, p: Params): void {
+function applyTransferredSuccess(
+  s: NodeState,
+  kind: SuccessKind,
+  factor: number,
+  support: number,
+  p: Params,
+): void {
   const ep = p.evidence[kind];
-  const next = Math.min(ep.target, clamp01(s.estimate + ep.weight * factor * support * (ep.target - s.estimate)));
+  const next = Math.min(
+    ep.target,
+    clamp01(s.estimate + ep.weight * factor * support * (ep.target - s.estimate)),
+  );
   s.estimate = Math.max(s.estimate, next);
   s.uncertainty = Math.max(s.uncertainty, p.initial.uncertainty);
 }
@@ -113,7 +122,12 @@ export function foldMastery(
     const k = key(domain, node);
     let s = states.get(k);
     if (s === undefined) {
-      s = { estimate: p.initial.estimate, uncertainty: p.initial.uncertainty, last: null, directlyEvidenced: false };
+      s = {
+        estimate: p.initial.estimate,
+        uncertainty: p.initial.uncertainty,
+        last: null,
+        directlyEvidenced: false,
+      };
       states.set(k, s);
     }
     return s;
@@ -122,28 +136,69 @@ export function foldMastery(
   const sorted = [...events].sort((a, b) =>
     a.ts === b.ts ? 0 : Date.parse(a.ts) - Date.parse(b.ts),
   );
-  interface Path { domain: string; node: string; factor: number; hops: number; transferred: boolean; }
-  const adjacency = (success: boolean): Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]> => {
-    const result = new Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]>();
-    const add = (from: string, edge: { domain: string; node: string; factor: number; transferred: boolean }) =>
-      result.set(from, [...(result.get(from) ?? []), edge]);
-    for (const [domain, graph] of graphs) for (const edge of graph.edges) {
-      const factor = success ? p.propagation.success_up[edge.type] : p.propagation.failure_down[edge.type];
-      // Success travels from a demonstrated dependent to its prerequisites;
-      // failure travels in the reverse direction to cast downstream suspicion.
-      add(key(domain, success ? edge.from : edge.to), { domain, node: success ? edge.to : edge.from, factor, transferred: false });
-    }
+  interface Path {
+    domain: string;
+    node: string;
+    factor: number;
+    hops: number;
+    transferred: boolean;
+  }
+  const adjacency = (
+    success: boolean,
+  ): Map<string, { domain: string; node: string; factor: number; transferred: boolean }[]> => {
+    const result = new Map<
+      string,
+      { domain: string; node: string; factor: number; transferred: boolean }[]
+    >();
+    const add = (
+      from: string,
+      edge: { domain: string; node: string; factor: number; transferred: boolean },
+    ) => result.set(from, [...(result.get(from) ?? []), edge]);
+    for (const [domain, graph] of graphs)
+      for (const edge of graph.edges) {
+        const factor = success
+          ? p.propagation.success_up[edge.type]
+          : p.propagation.failure_down[edge.type];
+        // Success travels from a demonstrated dependent to its prerequisites;
+        // failure travels in the reverse direction to cast downstream suspicion.
+        add(key(domain, success ? edge.from : edge.to), {
+          domain,
+          node: success ? edge.to : edge.from,
+          factor,
+          transferred: false,
+        });
+      }
     for (const link of correspondences) {
-      if (!graphs.get(link.from.domain)?.nodes.has(link.from.node) || !graphs.get(link.to.domain)?.nodes.has(link.to.node)) continue;
-      if (link.relation === undefined) add(key(link.from.domain, link.from.node), { domain: link.to.domain, node: link.to.node, factor: link.weight, transferred: true });
+      if (
+        !graphs.get(link.from.domain)?.nodes.has(link.from.node) ||
+        !graphs.get(link.to.domain)?.nodes.has(link.to.node)
+      )
+        continue;
+      if (link.relation === undefined)
+        add(key(link.from.domain, link.from.node), {
+          domain: link.to.domain,
+          node: link.to.node,
+          factor: link.weight,
+          transferred: true,
+        });
       else {
-        const type = link.relation === "depends-on" ? "dependency" : "strong-relevance", factor = success ? p.propagation.success_up[type] : p.propagation.failure_down[type];
-        add(key(success ? link.from.domain : link.to.domain, success ? link.from.node : link.to.node), { domain: success ? link.to.domain : link.from.domain, node: success ? link.to.node : link.from.node, factor, transferred: false });
+        const type = link.relation === "depends-on" ? "dependency" : "strong-relevance",
+          factor = success ? p.propagation.success_up[type] : p.propagation.failure_down[type];
+        add(
+          key(success ? link.from.domain : link.to.domain, success ? link.from.node : link.to.node),
+          {
+            domain: success ? link.to.domain : link.from.domain,
+            node: success ? link.to.node : link.from.node,
+            factor,
+            transferred: false,
+          },
+        );
       }
     }
-    for (const edges of result.values()) edges.sort((a, b) =>
-      `${a.domain}\u0000${a.node}`.localeCompare(`${b.domain}\u0000${b.node}`),
-    );
+    for (const edges of result.values())
+      edges.sort((a, b) =>
+        `${a.domain}\u0000${a.node}`.localeCompare(`${b.domain}\u0000${b.node}`),
+      );
     return result;
   };
   const successAdjacency = adjacency(true);
@@ -158,10 +213,15 @@ export function foldMastery(
     for (let index = 0; index < queue.length; index++) {
       const current = queue[index]!;
       if (current.hops >= p.propagation.max_hops) continue;
-      for (const edge of (success ? successAdjacency : failureAdjacency).get(key(current.domain, current.node)) ?? []) {
+      for (const edge of (success ? successAdjacency : failureAdjacency).get(
+        key(current.domain, current.node),
+      ) ?? []) {
         const candidate: Path = {
-          domain: edge.domain, node: edge.node, factor: current.factor * edge.factor,
-          hops: current.hops + 1, transferred: current.transferred || edge.transferred,
+          domain: edge.domain,
+          node: edge.node,
+          factor: current.factor * edge.factor,
+          hops: current.hops + 1,
+          transferred: current.transferred || edge.transferred,
         };
         // A zero attenuation disables this path. It must not create a header or
         // become a bridge to a later correspondence edge.
@@ -170,9 +230,11 @@ export function foldMastery(
         const prior = best.get(candidateKey);
         if (prior !== undefined) {
           const tiedFactor = Math.abs(prior.factor - candidate.factor) <= FACTOR_EPSILON;
-          const priorIsBetter = prior.factor > candidate.factor + FACTOR_EPSILON ||
-            (tiedFactor && (prior.hops < candidate.hops ||
-              (prior.hops === candidate.hops && (!prior.transferred || candidate.transferred))));
+          const priorIsBetter =
+            prior.factor > candidate.factor + FACTOR_EPSILON ||
+            (tiedFactor &&
+              (prior.hops < candidate.hops ||
+                (prior.hops === candidate.hops && (!prior.transferred || candidate.transferred))));
           if (priorIsBetter) continue;
         }
         best.set(candidateKey, candidate);
@@ -180,7 +242,9 @@ export function foldMastery(
       }
     }
     best.delete(key(domain, node));
-    return [...best.values()].sort((a, b) => key(a.domain, a.node).localeCompare(key(b.domain, b.node)));
+    return [...best.values()].sort((a, b) =>
+      key(a.domain, a.node).localeCompare(key(b.domain, b.node)),
+    );
   };
 
   for (const ev of sorted) {
@@ -202,9 +266,22 @@ export function foldMastery(
         if (isSuccess) {
           if (path.transferred) {
             const priorUncertainty = target.uncertainty;
-            applyTransferredSuccess(target, ev.kind as SuccessKind, path.factor, supportWeight(ev, p), p);
+            applyTransferredSuccess(
+              target,
+              ev.kind as SuccessKind,
+              path.factor,
+              supportWeight(ev, p),
+              p,
+            );
             if (target.directlyEvidenced) target.uncertainty = priorUncertainty;
-          } else applySuccessPropagation(target, ev.kind as SuccessKind, path.factor, supportWeight(ev, p), p);
+          } else
+            applySuccessPropagation(
+              target,
+              ev.kind as SuccessKind,
+              path.factor,
+              supportWeight(ev, p),
+              p,
+            );
         } else applyFailurePropagation(target, path.factor, p);
         target.last = ts;
       }
@@ -260,7 +337,12 @@ export function unmetPrerequisites(
   node: string,
   p: Params,
 ): string[] {
-  const anc = walkAncestors(g, node, { dependency: 1, "strong-relevance": 0 }, Number.MAX_SAFE_INTEGER);
+  const anc = walkAncestors(
+    g,
+    node,
+    { dependency: 1, "strong-relevance": 0 },
+    Number.MAX_SAFE_INTEGER,
+  );
   const unmet: string[] = [];
   for (const [id] of [...anc.entries()].sort()) {
     const h = lookup.get(g.domain, id)!;

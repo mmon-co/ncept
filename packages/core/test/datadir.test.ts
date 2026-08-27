@@ -22,9 +22,16 @@ test("v2 sessions migrate their legacy course alias into a stable course seed", 
   writeFileSync(join(domain, "fractions.md"), "---\nid: fractions\n---\n# Fractions\n");
   const course = ensureLocalCourse(dd, "math");
   mkdirSync(dd.sessionsDir, { recursive: true });
-  writeFileSync(join(dd.sessionsDir, "s-legacy.json"), JSON.stringify({
-    id: "s-legacy", domain: "math", mode: "chat", created: "2026-08-01T00:00:00.000Z", messages: [],
-  }));
+  writeFileSync(
+    join(dd.sessionsDir, "s-legacy.json"),
+    JSON.stringify({
+      id: "s-legacy",
+      domain: "math",
+      mode: "chat",
+      created: "2026-08-01T00:00:00.000Z",
+      messages: [],
+    }),
+  );
   writeFileSync(join(dd.root, "format_version"), "2\n");
 
   ensureDataDir(dd);

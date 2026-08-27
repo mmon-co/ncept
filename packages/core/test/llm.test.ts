@@ -9,7 +9,10 @@ import {
 } from "../src/llm";
 
 const specs = [
-  ["openrouter/openai/gpt-5.1:high", { provider: "openrouter", modelId: "openai/gpt-5.1", effort: "high" }],
+  [
+    "openrouter/openai/gpt-5.1:high",
+    { provider: "openrouter", modelId: "openai/gpt-5.1", effort: "high" },
+  ],
   ["ollama/qwen3:32b", { provider: "ollama", modelId: "qwen3:32b" }],
   ["openai:gpt-5-mini:medium", { provider: "openai", modelId: "gpt-5-mini", effort: "medium" }],
   ["openai:medium", { provider: "openai", modelId: "medium" }],
@@ -50,7 +53,11 @@ test("OpenRouter serializes effort through chat completions and uses its own key
   const originalFetch = globalThis.fetch;
   const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
   const originalOpenAiKey = process.env.OPENAI_API_KEY;
-  const requests: Array<{ url: string; body: Record<string, unknown>; authorization: string | null }> = [];
+  const requests: Array<{
+    url: string;
+    body: Record<string, unknown>;
+    authorization: string | null;
+  }> = [];
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
     requests.push({
@@ -63,7 +70,9 @@ test("OpenRouter serializes effort through chat completions and uses its own key
       object: "chat.completion",
       created: 0,
       model: "openai/gpt-5.1",
-      choices: [{ index: 0, message: { role: "assistant", content: "done" }, finish_reason: "stop" }],
+      choices: [
+        { index: 0, message: { role: "assistant", content: "done" }, finish_reason: "stop" },
+      ],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     });
   };
@@ -71,14 +80,20 @@ test("OpenRouter serializes effort through chat completions and uses its own key
     process.env.OPENROUTER_API_KEY = "env-openrouter-key";
     process.env.OPENAI_API_KEY = "wrong-openai-key";
     registerConfiguredProviders();
-    await expect(complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).resolves.toBe("done");
+    await expect(
+      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
+    ).resolves.toBe("done");
 
     registerConfiguredProviders({ openrouter: "settings-openrouter-key" });
-    await expect(complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).resolves.toBe("done");
+    await expect(
+      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
+    ).resolves.toBe("done");
 
     delete process.env.OPENROUTER_API_KEY;
     registerConfiguredProviders();
-    await expect(complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" })).resolves.toBe("done");
+    await expect(
+      complete("system", "user", { model: "openrouter/openai/gpt-5.1:high" }),
+    ).resolves.toBe("done");
 
     expect(requests).toHaveLength(3);
     for (const request of requests) {

@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  GraphError,
-  loadDomainGraph,
-  validateGraphEdits,
-} from "../src/graph";
+import { GraphError, loadDomainGraph, validateGraphEdits } from "../src/graph";
 import { graphEditsFile } from "../src/datadir";
 import { tempDataDir, writeNode, writeTestDomain } from "./helpers";
 import { mkdirSync } from "node:fs";
@@ -32,7 +28,9 @@ describe("domain graph loader", () => {
     expect(g.nodes.get("b")!.knowledge_type).toBe("conceptual");
 
     writeNode(dd, "math", "a.md", `---\nid: a\ntype: dubious\n---\n# Alpha\n`);
-    expect(() => loadDomainGraph(dd, "math")).toThrow(/type must be factual, conceptual, or procedural/);
+    expect(() => loadDomainGraph(dd, "math")).toThrow(
+      /type must be factual, conceptual, or procedural/,
+    );
   });
 
   test("node rename (title change) preserves references via stable id", () => {

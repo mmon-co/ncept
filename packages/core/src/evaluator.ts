@@ -32,7 +32,17 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
   return raw.map((f, i) => {
     if (typeof f !== "object" || f === null) throw new Error(`finding ${i}: not an object`);
     const o = f as Record<string, unknown>;
-    const allowed = new Set(["node", "kind", "observation", "support", "native_outcome", "coarseness", "severity", "confused_with", "misconception_id"]);
+    const allowed = new Set([
+      "node",
+      "kind",
+      "observation",
+      "support",
+      "native_outcome",
+      "coarseness",
+      "severity",
+      "confused_with",
+      "misconception_id",
+    ]);
     for (const key of Object.keys(o)) {
       if (!allowed.has(key)) throw new Error(`finding ${i}: unknown field '${key}'`);
     }
@@ -40,7 +50,15 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
       throw new Error(`finding ${i}: 'node' must be one of the listed node ids`);
     if (!EVIDENCE_KINDS.includes(o.kind as never))
       throw new Error(`finding ${i}: 'kind' must be one of [${EVIDENCE_KINDS.join(", ")}]`);
-    for (const key of ["observation", "support", "native_outcome", "coarseness", "severity", "confused_with", "misconception_id"]) {
+    for (const key of [
+      "observation",
+      "support",
+      "native_outcome",
+      "coarseness",
+      "severity",
+      "confused_with",
+      "misconception_id",
+    ]) {
       if (o[key] !== undefined && typeof o[key] !== "string")
         throw new Error(`finding ${i}: '${key}' must be a string`);
     }
@@ -53,7 +71,9 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
       ...(o.coarseness !== undefined ? { coarseness: o.coarseness as string } : {}),
       ...(o.severity !== undefined ? { severity: o.severity as string } : {}),
       ...(o.confused_with !== undefined ? { confused_with: o.confused_with as string } : {}),
-      ...(o.misconception_id !== undefined ? { misconception_id: o.misconception_id as string } : {}),
+      ...(o.misconception_id !== undefined
+        ? { misconception_id: o.misconception_id as string }
+        : {}),
     };
   });
 }
@@ -222,9 +242,7 @@ export async function consolidateDossier(
 ): Promise<string | null> {
   const node = g.nodes.get(nodeId);
   if (node === undefined) throw new Error(`unknown node: ${nodeId}`);
-  const relevant = events.filter(
-    (e) => e.domain === g.domain && e.nodes.includes(nodeId),
-  );
+  const relevant = events.filter((e) => e.domain === g.domain && e.nodes.includes(nodeId));
   const current = fromScratch ? null : readDossier(dd, g.domain, nodeId);
   const evidenceLines = dossierEvidenceLines(relevant);
   if (relevant.length === 0 && current === null) return null;

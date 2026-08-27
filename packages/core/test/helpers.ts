@@ -10,12 +10,7 @@ export function tempDataDir(): DataDir {
   return dd;
 }
 
-export function writeNode(
-  dd: DataDir,
-  domain: string,
-  file: string,
-  content: string,
-): void {
+export function writeNode(dd: DataDir, domain: string, file: string, content: string): void {
   const dir = join(dd.domainsDir, domain);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, file), content);

@@ -82,15 +82,27 @@ function eventObject(raw: unknown): EventObject {
     throw new EventValidationError("source_ref must be a string");
   // Inferred observations are auditable record mining, never synthetic
   // transfer evidence. Keep the supporting learner record with the event.
-  if (o.source === "record-mining" && (typeof o.source_ref !== "string" || o.source_ref.trim() === ""))
+  if (
+    o.source === "record-mining" &&
+    (typeof o.source_ref !== "string" || o.source_ref.trim() === "")
+  )
     throw new EventValidationError("record-mining evidence requires a non-empty source_ref");
   if (o.observation !== undefined && typeof o.observation !== "string")
     throw new EventValidationError("observation must be a string");
   if (o.support !== undefined && o.support !== "unaided" && o.support !== "guided")
     throw new EventValidationError("support must be unaided or guided");
-  if (o.latency_ms !== undefined && (typeof o.latency_ms !== "number" || !Number.isFinite(o.latency_ms) || o.latency_ms < 0))
+  if (
+    o.latency_ms !== undefined &&
+    (typeof o.latency_ms !== "number" || !Number.isFinite(o.latency_ms) || o.latency_ms < 0)
+  )
     throw new EventValidationError("latency_ms must be a non-negative number");
-  if (o.confidence !== undefined && (typeof o.confidence !== "number" || !Number.isFinite(o.confidence) || o.confidence < 0 || o.confidence > 1))
+  if (
+    o.confidence !== undefined &&
+    (typeof o.confidence !== "number" ||
+      !Number.isFinite(o.confidence) ||
+      o.confidence < 0 ||
+      o.confidence > 1)
+  )
     throw new EventValidationError("confidence must be a number between 0 and 1");
   if (o.native_outcome !== undefined && typeof o.native_outcome !== "string")
     throw new EventValidationError("native_outcome must be a string");
@@ -105,7 +117,9 @@ function mistakePayload(
 ): Pick<EvidenceEvent, "coarseness" | "severity" | "confused_with" | "misconception_id"> {
   const coarseness = o.coarseness ?? defaults.coarseness;
   const severity = o.severity ?? defaults.severity;
-  const hasModernOverrides = ["coarseness", "severity", "confused_with", "misconception_id"].some((key) => hasOwn(o, key));
+  const hasModernOverrides = ["coarseness", "severity", "confused_with", "misconception_id"].some(
+    (key) => hasOwn(o, key),
+  );
   if (kind !== "mistake") {
     if (hasModernOverrides)
       throw new EventValidationError("mistake payload fields are only valid for kind 'mistake'");
@@ -116,9 +130,15 @@ function mistakePayload(
   if (severity !== "slip" && severity !== "misconception" && severity !== "unknown")
     throw new EventValidationError("mistake severity must be slip, misconception, or unknown");
   const payloadlessLegacy = allowUntouchedLegacy && !hasModernOverrides;
-  if (o.confused_with !== undefined && (typeof o.confused_with !== "string" || o.confused_with.length === 0))
+  if (
+    o.confused_with !== undefined &&
+    (typeof o.confused_with !== "string" || o.confused_with.length === 0)
+  )
     throw new EventValidationError("confused_with must be a non-empty string");
-  if (o.misconception_id !== undefined && (typeof o.misconception_id !== "string" || o.misconception_id.length === 0))
+  if (
+    o.misconception_id !== undefined &&
+    (typeof o.misconception_id !== "string" || o.misconception_id.length === 0)
+  )
     throw new EventValidationError("misconception_id must be a non-empty string");
   if (coarseness === "node" && o.confused_with === undefined && !payloadlessLegacy)
     throw new EventValidationError("node-coarse mistakes need a confused_with payload");
@@ -150,7 +170,11 @@ function buildEvent(
     source: o.source as EvidenceSource,
     ...(o.source_ref !== undefined ? { source_ref: o.source_ref as string } : {}),
     ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
-    ...(o.support !== undefined ? { support: o.support as Support } : defaults.support !== undefined ? { support: defaults.support } : {}),
+    ...(o.support !== undefined
+      ? { support: o.support as Support }
+      : defaults.support !== undefined
+        ? { support: defaults.support }
+        : {}),
     ...(o.latency_ms !== undefined ? { latency_ms: o.latency_ms as number } : {}),
     ...(o.confidence !== undefined ? { confidence: o.confidence as number } : {}),
     ...(o.native_outcome !== undefined ? { native_outcome: o.native_outcome as string } : {}),

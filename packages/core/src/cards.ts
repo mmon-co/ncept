@@ -26,10 +26,22 @@ export function validateCardEntry(raw: unknown): CardLogEntry {
       if (!isIso(o.ts)) throw new CardValidationError("card.ts must be ISO-8601");
       if (typeof o.front !== "string" || typeof o.back !== "string")
         throw new CardValidationError("card.front/back must be strings");
-      if (o.nodes !== undefined && (!Array.isArray(o.nodes) || !o.nodes.every((n) => typeof n === "string")))
+      if (
+        o.nodes !== undefined &&
+        (!Array.isArray(o.nodes) || !o.nodes.every((n) => typeof n === "string"))
+      )
         throw new CardValidationError("card.nodes must be an array of node ids");
-      if (o.node_refs !== undefined && (!Array.isArray(o.node_refs) || !o.node_refs.every((ref) =>
-        typeof ref === "object" && ref !== null && typeof (ref as { course_id?: unknown }).course_id === "string" && typeof (ref as { node_id?: unknown }).node_id === "string")))
+      if (
+        o.node_refs !== undefined &&
+        (!Array.isArray(o.node_refs) ||
+          !o.node_refs.every(
+            (ref) =>
+              typeof ref === "object" &&
+              ref !== null &&
+              typeof (ref as { course_id?: unknown }).course_id === "string" &&
+              typeof (ref as { node_id?: unknown }).node_id === "string",
+          ))
+      )
         throw new CardValidationError("card.node_refs must be scoped node refs");
       if (o.domain !== undefined && typeof o.domain !== "string")
         throw new CardValidationError("card.domain must be a string");
@@ -43,8 +55,7 @@ export function validateCardEntry(raw: unknown): CardLogEntry {
       return o as unknown as CardUpdate;
     }
     case "review": {
-      if (typeof o.card_id !== "string")
-        throw new CardValidationError("review.card_id required");
+      if (typeof o.card_id !== "string") throw new CardValidationError("review.card_id required");
       if (!isIso(o.ts)) throw new CardValidationError("review.ts must be ISO-8601");
       if (!GRADES.includes(o.grade as never))
         throw new CardValidationError(
@@ -52,7 +63,10 @@ export function validateCardEntry(raw: unknown): CardLogEntry {
         );
       if (o.answer !== undefined && typeof o.answer !== "string")
         throw new CardValidationError("review.answer must be a string");
-      if (o.response_ms !== undefined && (typeof o.response_ms !== "number" || !Number.isFinite(o.response_ms) || o.response_ms < 0))
+      if (
+        o.response_ms !== undefined &&
+        (typeof o.response_ms !== "number" || !Number.isFinite(o.response_ms) || o.response_ms < 0)
+      )
         throw new CardValidationError("review.response_ms must be a non-negative finite number");
       if (o.observation !== undefined && typeof o.observation !== "string")
         throw new CardValidationError("review.observation must be a string");

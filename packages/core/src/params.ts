@@ -61,8 +61,7 @@ function deepMerge<T>(base: T, patch: unknown): T {
   if (patch === undefined || patch === null) return base;
   if (!isRecord(base) || !isRecord(patch)) return patch as T;
   const merged: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(patch))
-    merged[key] = deepMerge(merged[key], value);
+  for (const [key, value] of Object.entries(patch)) merged[key] = deepMerge(merged[key], value);
   return merged as T;
 }
 
@@ -71,39 +70,48 @@ function migrateLegacyParams(raw: unknown): unknown {
   if (!isRecord(raw)) return raw;
   const legacy = isRecord(raw.evidence) ? raw.evidence : {};
   const legacyKeys = ["demonstrated-unaided", "demonstrated-guided", "failed"];
-  const isLegacy = raw.version === 1 ||
-    (raw.version === undefined && legacyKeys.some((key) => key in legacy));
+  const isLegacy =
+    raw.version === 1 || (raw.version === undefined && legacyKeys.some((key) => key in legacy));
   if (!isLegacy) return raw;
-  const unaided = isRecord(legacy["demonstrated-unaided"]) ? legacy["demonstrated-unaided"] : undefined;
-  const guided = isRecord(legacy["demonstrated-guided"]) ? legacy["demonstrated-guided"] : undefined;
+  const unaided = isRecord(legacy["demonstrated-unaided"])
+    ? legacy["demonstrated-unaided"]
+    : undefined;
+  const guided = isRecord(legacy["demonstrated-guided"])
+    ? legacy["demonstrated-guided"]
+    : undefined;
   const failed = isRecord(legacy.failed) ? legacy.failed : undefined;
   const recognized = isRecord(legacy.recognized) ? legacy.recognized : undefined;
   const unaidedWeight = unaided?.weight;
   const guidedWeight = guided?.weight;
-  const effectiveUnaidedWeight = typeof unaidedWeight === "number"
-    ? unaidedWeight
-    : DEFAULT_PARAMS.evidence.used.weight;
+  const effectiveUnaidedWeight =
+    typeof unaidedWeight === "number" ? unaidedWeight : DEFAULT_PARAMS.evidence.used.weight;
   return {
     ...raw,
     version: 2,
-    ...(effectiveUnaidedWeight !== 0 && typeof guidedWeight === "number" ? {
-      support_weight: { unaided: 1, guided: guidedWeight / effectiveUnaidedWeight },
-    } : {}),
+    ...(effectiveUnaidedWeight !== 0 && typeof guidedWeight === "number"
+      ? {
+          support_weight: { unaided: 1, guided: guidedWeight / effectiveUnaidedWeight },
+        }
+      : {}),
     evidence: {
       // Preserve tuning where a legacy kind has one unambiguous v2 analogue.
       // Targets are structural in D1 and therefore always use the v2 ceiling.
       recognized: { ...recognized, target: DEFAULT_PARAMS.evidence.recognized.target },
-      ...(unaided === undefined ? {} : {
-        used: { ...unaided, target: DEFAULT_PARAMS.evidence.used.target },
-      }),
-      ...(failed === undefined ? {} : {
-        mistake: {
-          base_effect: {
-            ...(failed.weight === undefined ? {} : { weight: failed.weight }),
-            ...(failed.shrink === undefined ? {} : { shrink: failed.shrink }),
-          },
-        },
-      }),
+      ...(unaided === undefined
+        ? {}
+        : {
+            used: { ...unaided, target: DEFAULT_PARAMS.evidence.used.target },
+          }),
+      ...(failed === undefined
+        ? {}
+        : {
+            mistake: {
+              base_effect: {
+                ...(failed.weight === undefined ? {} : { weight: failed.weight }),
+                ...(failed.shrink === undefined ? {} : { shrink: failed.shrink }),
+              },
+            },
+          }),
     },
   };
 }
@@ -171,6 +179,5 @@ export function loadParams(dd: DataDir): Params {
 }
 
 export function writeDefaultParams(dd: DataDir): void {
-  if (!existsSync(dd.paramsFile))
-    writeFileSync(dd.paramsFile, YAML.stringify(DEFAULT_PARAMS));
+  if (!existsSync(dd.paramsFile)) writeFileSync(dd.paramsFile, YAML.stringify(DEFAULT_PARAMS));
 }

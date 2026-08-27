@@ -36,19 +36,24 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   const body = raw.slice(fmMatch[0].length);
   const titleMatch = body.match(/^#\s+(.+)$/m);
   const title = titleMatch?.[1]?.trim() ?? basename(path, ".md");
-  const aliases: string[] = Array.isArray(fm.aliases)
-    ? fm.aliases.map(String)
-    : [];
+  const aliases: string[] = Array.isArray(fm.aliases) ? fm.aliases.map(String) : [];
   const tags: string[] = Array.isArray(fm.tags) ? fm.tags.map(String) : [];
   // v1 node files predate knowledge types. Conceptual is the conservative
   // default: it neither invents a named misconception nor limits later rungs.
   const knowledgeType = fm.type ?? "conceptual";
-  if (knowledgeType !== "factual" && knowledgeType !== "conceptual" && knowledgeType !== "procedural")
+  if (
+    knowledgeType !== "factual" &&
+    knowledgeType !== "conceptual" &&
+    knowledgeType !== "procedural"
+  )
     throw new GraphError(`${path}: frontmatter type must be factual, conceptual, or procedural`);
   if (fm.threshold !== undefined && typeof fm.threshold !== "boolean")
     throw new GraphError(`${path}: frontmatter threshold must be a boolean`);
   const threshold = fm.threshold ?? false;
-  if (fm.criterion !== undefined && (typeof fm.criterion !== "string" || fm.criterion.trim() === ""))
+  if (
+    fm.criterion !== undefined &&
+    (typeof fm.criterion !== "string" || fm.criterion.trim() === "")
+  )
     throw new GraphError(`${path}: frontmatter criterion must be a non-empty string`);
   if (fm.deprecated !== undefined && typeof fm.deprecated !== "boolean")
     throw new GraphError(`${path}: frontmatter deprecated must be a boolean`);
@@ -78,7 +83,18 @@ export function parseNodeFile(path: string, raw: string): ParsedNodeFile {
   }
 
   return {
-    node: { id: fm.id, criterion, deprecated, title, aliases, tags, knowledge_type: knowledgeType as KnowledgeType, threshold, file: path, body },
+    node: {
+      id: fm.id,
+      criterion,
+      deprecated,
+      title,
+      aliases,
+      tags,
+      knowledge_type: knowledgeType as KnowledgeType,
+      threshold,
+      file: path,
+      body,
+    },
     requires,
     seeAlso,
   };
@@ -103,14 +119,9 @@ export function buildLinkIndex(nodes: Iterable<GraphNode>): Map<string, string> 
   return index;
 }
 
-function resolveLink(
-  index: Map<string, string>,
-  target: string,
-  from: string,
-): string {
+function resolveLink(index: Map<string, string>, target: string, from: string): string {
   const id = index.get(target.toLowerCase());
-  if (id === undefined)
-    throw new GraphError(`node '${from}': unresolved wikilink [[${target}]]`);
+  if (id === undefined) throw new GraphError(`node '${from}': unresolved wikilink [[${target}]]`);
   return id;
 }
 
@@ -130,9 +141,7 @@ export function assertAcyclic(edges: GraphEdge[]): void {
     if (s === 2) return;
     if (s === 1) {
       const start = stack.indexOf(n);
-      throw new GraphError(
-        `dependency cycle: ${[...stack.slice(start), n].join(" -> ")}`,
-      );
+      throw new GraphError(`dependency cycle: ${[...stack.slice(start), n].join(" -> ")}`);
     }
     state.set(n, 1);
     stack.push(n);
@@ -154,8 +163,7 @@ export function loadDomainGraph(dd: DataDir, domain: string): DomainGraph {
   }
   const nodes = new Map<string, GraphNode>();
   for (const p of parsed) {
-    if (nodes.has(p.node.id))
-      throw new GraphError(`duplicate node id '${p.node.id}' in ${domain}`);
+    if (nodes.has(p.node.id)) throw new GraphError(`duplicate node id '${p.node.id}' in ${domain}`);
     nodes.set(p.node.id, p.node);
   }
   const index = buildLinkIndex(nodes.values());
@@ -190,7 +198,12 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
   const nodes = new Map(g.nodes);
   let edges = [...g.edges];
   for (const n of edits.add_nodes ?? []) {
-    if (n.knowledge_type !== undefined && n.knowledge_type !== "factual" && n.knowledge_type !== "conceptual" && n.knowledge_type !== "procedural")
+    if (
+      n.knowledge_type !== undefined &&
+      n.knowledge_type !== "factual" &&
+      n.knowledge_type !== "conceptual" &&
+      n.knowledge_type !== "procedural"
+    )
       throw new GraphError(`graph-edits: node '${n.id}' has invalid knowledge_type`);
     if (n.threshold !== undefined && typeof n.threshold !== "boolean")
       throw new GraphError(`graph-edits: node '${n.id}' has invalid threshold`);
@@ -218,9 +231,7 @@ export function applyGraphEdits(g: DomainGraph, edits: GraphEdits): DomainGraph 
       edges.push({ from: e.from, to: e.to, type: e.type });
   }
   for (const e of edits.remove_edges ?? []) {
-    edges = edges.filter(
-      (x) => !(x.from === e.from && x.to === e.to && x.type === e.type),
-    );
+    edges = edges.filter((x) => !(x.from === e.from && x.to === e.to && x.type === e.type));
   }
   return { domain: g.domain, nodes, edges };
 }
@@ -257,8 +268,7 @@ export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
   }
   const nodes = new Map<string, GraphNode>();
   for (const p of parsed) {
-    if (nodes.has(p.node.id))
-      throw new GraphError(`duplicate node id '${p.node.id}' in ${domain}`);
+    if (nodes.has(p.node.id)) throw new GraphError(`duplicate node id '${p.node.id}' in ${domain}`);
     nodes.set(p.node.id, p.node);
   }
   const index = buildLinkIndex(nodes.values());
@@ -267,7 +277,11 @@ export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
     for (const t of p.requires)
       edges.push({ from: p.node.id, to: resolveLink(index, t, p.node.id), type: "dependency" });
     for (const t of p.seeAlso)
-      edges.push({ from: p.node.id, to: resolveLink(index, t, p.node.id), type: "strong-relevance" });
+      edges.push({
+        from: p.node.id,
+        to: resolveLink(index, t, p.node.id),
+        type: "strong-relevance",
+      });
   }
   assertAcyclic(edges);
   return { domain, nodes, edges };
@@ -275,12 +289,14 @@ export function loadDomainGraphRaw(dd: DataDir, domain: string): DomainGraph {
 
 export function listDomains(dd: DataDir): string[] {
   if (!existsSync(dd.domainsDir)) return [];
-  return readdirSync(dd.domainsDir, { withFileTypes: true })
-    // Binding transaction state lives under overlay, so every pre-existing
-    // directory name remains a visible legacy course key.
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  return (
+    readdirSync(dd.domainsDir, { withFileTypes: true })
+      // Binding transaction state lives under overlay, so every pre-existing
+      // directory name remains a visible legacy course key.
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort()
+  );
 }
 
 export function readDossier(dd: DataDir, domain: string, nodeId: string): string | null {
@@ -317,9 +333,7 @@ function walk(
 ): Map<string, { hops: number; factor: number }> {
   const out = new Map<string, { hops: number; factor: number }>();
   // Deterministic BFS keeping the strongest factor per node.
-  const queue: { id: string; hops: number; factor: number }[] = [
-    { id: start, hops: 0, factor: 1 },
-  ];
+  const queue: { id: string; hops: number; factor: number }[] = [{ id: start, hops: 0, factor: 1 }];
   while (queue.length > 0) {
     const cur = queue.shift()!;
     if (cur.hops >= maxHops) continue;

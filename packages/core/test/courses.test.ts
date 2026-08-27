@@ -36,39 +36,86 @@ import { tempDataDir, writeNode } from "./helpers";
 describe("course-local artifacts", () => {
   test("derivation writer rejects duplicate lineage and links", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
-    authorDomain(dd, "derived", { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] }, "create");
+    authorDomain(
+      dd,
+      "base",
+      { nodes: [{ id: "base", type: "conceptual", body: "Base." }] },
+      "create",
+    );
+    authorDomain(
+      dd,
+      "derived",
+      { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] },
+      "create",
+    );
     const base = ensureLocalCourse(dd, "base");
     const derived = ensureLocalCourse(dd, "derived");
-    const link = { from: { course_id: base.id, node: "base" }, to: { course_id: derived.id, node: "derived" }, weight: 0.5 };
-    expect(() => writeCourseDerivation(dd, "derived", { based_on: [base.id, base.id], correspondences: [link] })).toThrow(/duplicate based_on/);
-    expect(() => writeCourseDerivation(dd, "derived", { based_on: [base.id], correspondences: [link, link] })).toThrow(/duplicate correspondences/);
+    const link = {
+      from: { course_id: base.id, node: "base" },
+      to: { course_id: derived.id, node: "derived" },
+      weight: 0.5,
+    };
+    expect(() =>
+      writeCourseDerivation(dd, "derived", {
+        based_on: [base.id, base.id],
+        correspondences: [link],
+      }),
+    ).toThrow(/duplicate based_on/);
+    expect(() =>
+      writeCourseDerivation(dd, "derived", { based_on: [base.id], correspondences: [link, link] }),
+    ).toThrow(/duplicate correspondences/);
   });
 
   test("derivation edits preserve the curriculum package kind", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "curriculum", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
+    authorDomain(
+      dd,
+      "curriculum",
+      { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+      "create",
+    );
     const local = ensureLocalCourse(dd, "curriculum");
-    writeFileSync(join(dd.domainsDir, "curriculum", "course.yaml"), YAML.stringify({ ...local, kind: "curriculum" }));
+    writeFileSync(
+      join(dd.domainsDir, "curriculum", "course.yaml"),
+      YAML.stringify({ ...local, kind: "curriculum" }),
+    );
     writeCourseDerivation(dd, "curriculum", { based_on: [], correspondences: [] });
     expect(publishCourse(dd, "curriculum", "1.0.0").kind).toBe("curriculum");
   });
 
   test("malformed derivations fail closed and a failed second adoption rolls back", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
+    authorDomain(
+      dd,
+      "base",
+      { nodes: [{ id: "base", type: "conceptual", body: "Base." }] },
+      "create",
+    );
     const base = ensureLocalCourse(dd, "base");
     publishCourse(dd, "base", "1.0.0");
     bindCourse(dd, base.id, "1.0.0", "base-copy");
-    authorDomain(dd, "derived", { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] }, "create");
+    authorDomain(
+      dd,
+      "derived",
+      { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] },
+      "create",
+    );
     const derived = ensureLocalCourse(dd, "derived");
     writeCourseDerivation(dd, "derived", {
       based_on: [base.id],
-      correspondences: [{ from: { course_id: base.id, node: "base" }, to: { course_id: derived.id, node: "derived" }, weight: 0.5 }],
+      correspondences: [
+        {
+          from: { course_id: base.id, node: "base" },
+          to: { course_id: derived.id, node: "derived" },
+          weight: 0.5,
+        },
+      ],
     });
     publishCourse(dd, "derived", "1.0.0");
     const revisionPath = join(dd.coursesDir, derived.id, "versions", "1.0.0", "revision.yaml");
-    const revision = YAML.parse(readFileSync(revisionPath, "utf8")) as { derivation: { correspondences: { from: { node: string }; to: { node: string } }[] } };
+    const revision = YAML.parse(readFileSync(revisionPath, "utf8")) as {
+      derivation: { correspondences: { from: { node: string }; to: { node: string } }[] };
+    };
     revision.derivation.correspondences[0]!.to.node = "missing";
     writeFileSync(revisionPath, YAML.stringify(revision));
     expect(() => loadPublishedCourse(dd, derived.id, "1.0.0")).toThrow(/unknown local node/);
@@ -77,69 +124,144 @@ describe("course-local artifacts", () => {
     revision.derivation.correspondences[0]!.to.node = "derived";
     revision.derivation.correspondences[0]!.from.node = "missing-foreign";
     writeFileSync(revisionPath, YAML.stringify(revision));
-    expect(() => bindCourse(dd, derived.id, "1.0.0", "derived-copy")).toThrow(/unknown pinned node/);
+    expect(() => bindCourse(dd, derived.id, "1.0.0", "derived-copy")).toThrow(
+      /unknown pinned node/,
+    );
     expect(loadBindings(dd).bindings.map((binding) => binding.domain)).toEqual(["base-copy"]);
     expect(existsSync(join(dd.domainsDir, "derived-copy"))).toBe(false);
   });
 
   test("conflicting authored weights reject the second adoption regardless of order", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "first", { nodes: [{ id: "first", type: "conceptual", body: "First." }] }, "create");
-    authorDomain(dd, "second", { nodes: [{ id: "second", type: "conceptual", body: "Second." }] }, "create");
+    authorDomain(
+      dd,
+      "first",
+      { nodes: [{ id: "first", type: "conceptual", body: "First." }] },
+      "create",
+    );
+    authorDomain(
+      dd,
+      "second",
+      { nodes: [{ id: "second", type: "conceptual", body: "Second." }] },
+      "create",
+    );
     const first = ensureLocalCourse(dd, "first");
     const second = ensureLocalCourse(dd, "second");
     writeCourseDerivation(dd, "first", {
       based_on: [second.id],
-      correspondences: [{ from: { course_id: first.id, node: "first" }, to: { course_id: second.id, node: "second" }, weight: 0.4 }],
+      correspondences: [
+        {
+          from: { course_id: first.id, node: "first" },
+          to: { course_id: second.id, node: "second" },
+          weight: 0.4,
+        },
+      ],
     });
     writeCourseDerivation(dd, "second", {
       based_on: [first.id],
-      correspondences: [{ from: { course_id: first.id, node: "first" }, to: { course_id: second.id, node: "second" }, weight: 0.6 }],
+      correspondences: [
+        {
+          from: { course_id: first.id, node: "first" },
+          to: { course_id: second.id, node: "second" },
+          weight: 0.6,
+        },
+      ],
     });
     publishCourse(dd, "first", "1.0.0");
     publishCourse(dd, "second", "1.0.0");
     bindCourse(dd, first.id, "1.0.0", "first-copy");
-    expect(() => bindCourse(dd, second.id, "1.0.0", "second-copy")).toThrow(/conflicting authored correspondence weights/);
+    expect(() => bindCourse(dd, second.id, "1.0.0", "second-copy")).toThrow(
+      /conflicting authored correspondence weights/,
+    );
     expect(loadBindings(dd).bindings.map((binding) => binding.domain)).toEqual(["first-copy"]);
     expect(existsSync(join(dd.domainsDir, "second-copy"))).toBe(false);
   });
 
   test("published derivation metadata ships author-declared correspondences", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "base", { nodes: [{ id: "rule", type: "conceptual", body: "Base rule." }] }, "create");
+    authorDomain(
+      dd,
+      "base",
+      { nodes: [{ id: "rule", type: "conceptual", body: "Base rule." }] },
+      "create",
+    );
     const base = ensureLocalCourse(dd, "base");
     publishCourse(dd, "base", "1.0.0");
-    authorDomain(dd, "derived", { nodes: [{ id: "rule", type: "conceptual", body: "Derived rule." }] }, "create");
+    authorDomain(
+      dd,
+      "derived",
+      { nodes: [{ id: "rule", type: "conceptual", body: "Derived rule." }] },
+      "create",
+    );
     const derived = ensureLocalCourse(dd, "derived");
     writeCourseDerivation(dd, "derived", {
       based_on: [base.id],
-      correspondences: [{ from: { course_id: base.id, node: "rule" }, to: { course_id: derived.id, node: "rule" }, weight: 0.6 }],
+      correspondences: [
+        {
+          from: { course_id: base.id, node: "rule" },
+          to: { course_id: derived.id, node: "rule" },
+          weight: 0.6,
+        },
+      ],
     });
     publishCourse(dd, "derived", "1.0.0");
     bindCourse(dd, base.id, "1.0.0", "base-copy");
     bindCourse(dd, derived.id, "1.0.0", "derived-copy");
-    expect(resolveCorrespondences(dd)).toEqual([{ from: { domain: "base-copy", node: "rule" }, to: { domain: "derived-copy", node: "rule" }, weight: 0.6 }]);
+    expect(resolveCorrespondences(dd)).toEqual([
+      {
+        from: { domain: "base-copy", node: "rule" },
+        to: { domain: "derived-copy", node: "rule" },
+        weight: 0.6,
+      },
+    ]);
   });
 
   test("confirmed correspondences resolve course-local endpoints and replay derived mastery", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "source", { nodes: [{ id: "same", type: "conceptual", body: "Source concept." }] }, "create");
-    authorDomain(dd, "target", { nodes: [{ id: "same", type: "conceptual", body: "Target concept." }] }, "create");
+    authorDomain(
+      dd,
+      "source",
+      { nodes: [{ id: "same", type: "conceptual", body: "Source concept." }] },
+      "create",
+    );
+    authorDomain(
+      dd,
+      "target",
+      { nodes: [{ id: "same", type: "conceptual", body: "Target concept." }] },
+      "create",
+    );
     const source = ensureLocalCourse(dd, "source");
     const target = ensureLocalCourse(dd, "target");
     publishCourse(dd, "source", "1.0.0");
     publishCourse(dd, "target", "1.0.0");
     bindCourse(dd, source.id, "1.0.0", "source-copy");
     bindCourse(dd, target.id, "1.0.0", "target-copy");
-    const link = { from: { course_id: source.id, node: "same" }, to: { course_id: target.id, node: "same" }, weight: 0.4 };
+    const link = {
+      from: { course_id: source.id, node: "same" },
+      to: { course_id: target.id, node: "same" },
+      weight: 0.4,
+    };
     confirmCorrespondence(dd, link);
-    expect(resolveCorrespondences(dd)).toEqual([{ from: { domain: "source-copy", node: "same" }, to: { domain: "target-copy", node: "same" }, weight: 0.4 }]);
+    expect(resolveCorrespondences(dd)).toEqual([
+      {
+        from: { domain: "source-copy", node: "same" },
+        to: { domain: "target-copy", node: "same" },
+        weight: 0.4,
+      },
+    ]);
     const bindingsBeforeInvalidConfirmation = readFileSync(dd.bindingsFile, "utf8");
-    expect(() => confirmCorrespondence(dd, {
-      from: { course_id: source.id, node: "missing" }, to: { course_id: target.id, node: "same" }, weight: 0.4,
-    })).toThrow(/unknown pinned node/);
+    expect(() =>
+      confirmCorrespondence(dd, {
+        from: { course_id: source.id, node: "missing" },
+        to: { course_id: target.id, node: "same" },
+        weight: 0.4,
+      }),
+    ).toThrow(/unknown pinned node/);
     expect(readFileSync(dd.bindingsFile, "utf8")).toBe(bindingsBeforeInvalidConfirmation);
-    writeFileSync(dd.eventsFile, `${JSON.stringify({ v: 1, vocab_version: 2, ts: "2026-08-01T12:00:00.000Z", domain: "source-copy", nodes: ["same"], kind: "used", source: "manual" })}\n`);
+    writeFileSync(
+      dd.eventsFile,
+      `${JSON.stringify({ v: 1, vocab_version: 2, ts: "2026-08-01T12:00:00.000Z", domain: "source-copy", nodes: ["same"], kind: "used", source: "manual" })}\n`,
+    );
     rebuildCache(dd);
     expect(readHeaders(dd, "target-copy")[0]?.estimate).toBeGreaterThan(0.1);
     expect(() => confirmCorrespondence(dd, { ...link, weight: 2 })).toThrow(/weight/);
@@ -147,23 +269,52 @@ describe("course-local artifacts", () => {
 
   test("publishes immutable versions and enforces local criterion/revision rules", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "linear-algebra", {
-      nodes: [{ id: "vector", criterion: "identify a vector", body: "A vector is an element of a vector space." }],
-    }, "create");
+    authorDomain(
+      dd,
+      "linear-algebra",
+      {
+        nodes: [
+          {
+            id: "vector",
+            criterion: "identify a vector",
+            body: "A vector is an element of a vector space.",
+          },
+        ],
+      },
+      "create",
+    );
     const local = ensureLocalCourse(dd, "linear-algebra");
     expect(local.id).toMatch(/^course-/);
     const first = publishCourse(dd, "linear-algebra", "1.0.0");
     expect(loadPublishedCourse(dd, local.id, "1.0.0")).toEqual(first);
     expect(() => publishCourse(dd, "linear-algebra", "1.0.0")).toThrow(/immutable/);
 
-    authorDomain(dd, "linear-algebra", {
-      nodes: [{ id: "matrix", criterion: "multiply matrices", body: "Matrices compose linear maps.", requires: ["vector"] }],
-    }, "add");
+    authorDomain(
+      dd,
+      "linear-algebra",
+      {
+        nodes: [
+          {
+            id: "matrix",
+            criterion: "multiply matrices",
+            body: "Matrices compose linear maps.",
+            requires: ["vector"],
+          },
+        ],
+      },
+      "add",
+    );
     expect(() => publishCourse(dd, "linear-algebra", "1.0.1")).toThrow(/minor version bump/);
-    expect(publishCourse(dd, "linear-algebra", "1.1.0").nodes.map((node) => node.id)).toEqual(["matrix", "vector"]);
+    expect(publishCourse(dd, "linear-algebra", "1.1.0").nodes.map((node) => node.id)).toEqual([
+      "matrix",
+      "vector",
+    ]);
 
     const vector = join(dd.domainsDir, "linear-algebra", "vector.md");
-    writeFileSync(vector, readFileSync(vector, "utf8").replace("identify a vector", "identify a nonzero vector"));
+    writeFileSync(
+      vector,
+      readFileSync(vector, "utf8").replace("identify a vector", "identify a nonzero vector"),
+    );
     expect(() => publishCourse(dd, "linear-algebra", "1.1.1")).toThrow(/changed criterion/);
   });
 
@@ -177,22 +328,47 @@ describe("course-local artifacts", () => {
 
   test("installs a pinned snapshot and rejects unsafe binding targets", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "logic", { nodes: [{ id: "proof", body: "A proof establishes a proposition." }] }, "create");
+    authorDomain(
+      dd,
+      "logic",
+      { nodes: [{ id: "proof", body: "A proof establishes a proposition." }] },
+      "create",
+    );
     const local = ensureLocalCourse(dd, "logic");
     publishCourse(dd, "logic", "1.0.0");
     // A working copy may now have unpublished edits, but adoption copies the
     // immutable package, including its original prose, into a new namespace.
-    writeFileSync(join(dd.domainsDir, "logic", "proof.md"), "---\nid: proof\n---\n# Proof\nUnpublished rewrite.\n");
+    writeFileSync(
+      join(dd.domainsDir, "logic", "proof.md"),
+      "---\nid: proof\n---\n# Proof\nUnpublished rewrite.\n",
+    );
     const binding = bindCourse(dd, local.id, "1.0.0", "adopted-logic");
     expect(binding.abandoned_nodes).toEqual([]);
-    expect(loadDomainGraphRaw(dd, "adopted-logic").nodes.get("proof")?.body).toContain("establishes a proposition");
+    expect(loadDomainGraphRaw(dd, "adopted-logic").nodes.get("proof")?.body).toContain(
+      "establishes a proposition",
+    );
     // Later changes to the publishing working copy cannot change this pin.
-    writeFileSync(join(dd.domainsDir, "logic", "proof.md"), "---\nid: proof\n---\n# Proof\nAnother rewrite.\n");
-    expect(loadDomainGraphRaw(dd, "adopted-logic").nodes.get("proof")?.body).toContain("establishes a proposition");
+    writeFileSync(
+      join(dd.domainsDir, "logic", "proof.md"),
+      "---\nid: proof\n---\n# Proof\nAnother rewrite.\n",
+    );
+    expect(loadDomainGraphRaw(dd, "adopted-logic").nodes.get("proof")?.body).toContain(
+      "establishes a proposition",
+    );
     expect(loadBindings(dd).bindings).toEqual([binding]);
 
-    authorDomain(dd, "other", { nodes: [{ id: "different", body: "A different course." }] }, "create");
-    authorDomain(dd, "second", { nodes: [{ id: "second-node", body: "A second course." }] }, "create");
+    authorDomain(
+      dd,
+      "other",
+      { nodes: [{ id: "different", body: "A different course." }] },
+      "create",
+    );
+    authorDomain(
+      dd,
+      "second",
+      { nodes: [{ id: "second-node", body: "A second course." }] },
+      "create",
+    );
     const second = ensureLocalCourse(dd, "second");
     publishCourse(dd, "second", "1.0.0");
     expect(() => bindCourse(dd, second.id, "1.0.0", "other")).toThrow(/belongs to/);
@@ -206,10 +382,16 @@ describe("course-local artifacts", () => {
     const source = join(dd.domainsDir, "source");
     const sourceWork = join(dd.bindingTransactionsDir, Buffer.from("source").toString("base64url"));
     mkdirSync(join(sourceWork, "next"), { recursive: true });
-    writeFileSync(dd.bindingTransactionFile, JSON.stringify({
-      v: 1, domain: "source", had_previous: true,
-      previous_bindings: Buffer.from(priorBindings).toString("base64"), phase: "prepared",
-    }));
+    writeFileSync(
+      dd.bindingTransactionFile,
+      JSON.stringify({
+        v: 1,
+        domain: "source",
+        had_previous: true,
+        previous_bindings: Buffer.from(priorBindings).toString("base64"),
+        phase: "prepared",
+      }),
+    );
     ensureDataDir(dd);
     expect(loadDomainGraphRaw(dd, "source").nodes.get("n")?.id).toBe("n");
     expect(existsSync(sourceWork)).toBe(false);
@@ -217,23 +399,38 @@ describe("course-local artifacts", () => {
     mkdirSync(sourceWork, { recursive: true });
     renameSync(source, join(sourceWork, "previous"));
     mkdirSync(source);
-    writeFileSync(dd.bindingTransactionFile, JSON.stringify({
-      v: 1, domain: "source", had_previous: true,
-      previous_bindings: Buffer.from(priorBindings).toString("base64"), phase: "installed",
-    }));
+    writeFileSync(
+      dd.bindingTransactionFile,
+      JSON.stringify({
+        v: 1,
+        domain: "source",
+        had_previous: true,
+        previous_bindings: Buffer.from(priorBindings).toString("base64"),
+        phase: "installed",
+      }),
+    );
     ensureDataDir(dd);
     expect(existsSync(source)).toBe(true);
     expect(existsSync(join(sourceWork, "previous"))).toBe(false);
     expect(readFileSync(dd.bindingsFile, "utf8")).toBe(priorBindings);
 
     const newDomain = join(dd.domainsDir, "new-adoption");
-    const newWork = join(dd.bindingTransactionsDir, Buffer.from("new-adoption").toString("base64url"));
+    const newWork = join(
+      dd.bindingTransactionsDir,
+      Buffer.from("new-adoption").toString("base64url"),
+    );
     mkdirSync(newDomain);
     mkdirSync(newWork, { recursive: true });
-    writeFileSync(dd.bindingTransactionFile, JSON.stringify({
-      v: 1, domain: "new-adoption", had_previous: false,
-      previous_bindings: Buffer.from(priorBindings).toString("base64"), phase: "installed",
-    }));
+    writeFileSync(
+      dd.bindingTransactionFile,
+      JSON.stringify({
+        v: 1,
+        domain: "new-adoption",
+        had_previous: false,
+        previous_bindings: Buffer.from(priorBindings).toString("base64"),
+        phase: "installed",
+      }),
+    );
     ensureDataDir(dd);
     expect(existsSync(newDomain)).toBe(false);
     expect(loadDomainGraphRaw(dd, "source").nodes.get("n")?.id).toBe("n");
@@ -253,12 +450,30 @@ describe("course-local artifacts", () => {
   test("migrates legacy non-kebab course directories without hiding their evidence", () => {
     const dd = tempDataDir();
     writeNode(dd, "Linear Algebra", "basis.md", "---\nid: basis\n---\n# Basis\nA basis.\n");
-    writeFileSync(dd.eventsFile, JSON.stringify({
-      v: 1, vocab_version: 2, ts: "2026-08-22T00:00:00.000Z", domain: "Linear Algebra", nodes: ["basis"], kind: "used", source: "lesson",
-    }) + "\n");
-    writeFileSync(dd.cardsFile, JSON.stringify({
-      type: "card", id: "legacy-card", ts: "2026-08-22T00:00:00.000Z", front: "f", back: "b", domain: "Linear Algebra", nodes: ["basis"],
-    }) + "\n");
+    writeFileSync(
+      dd.eventsFile,
+      JSON.stringify({
+        v: 1,
+        vocab_version: 2,
+        ts: "2026-08-22T00:00:00.000Z",
+        domain: "Linear Algebra",
+        nodes: ["basis"],
+        kind: "used",
+        source: "lesson",
+      }) + "\n",
+    );
+    writeFileSync(
+      dd.cardsFile,
+      JSON.stringify({
+        type: "card",
+        id: "legacy-card",
+        ts: "2026-08-22T00:00:00.000Z",
+        front: "f",
+        back: "b",
+        domain: "Linear Algebra",
+        nodes: ["basis"],
+      }) + "\n",
+    );
     writeFileSync(join(dd.root, "format_version"), "1\n");
     ensureDataDir(resolveDataDir(dd.root));
     const migrated = resolveDataDir(dd.root);
@@ -272,17 +487,37 @@ describe("course-local artifacts", () => {
     const dd = tempDataDir();
     for (const domain of ["history.binding-next", "history.binding-previous"]) {
       writeNode(dd, domain, "n.md", "---\nid: n\n---\n# N\nLegacy node.\n");
-      writeFileSync(dd.eventsFile, `${existsSync(dd.eventsFile) ? readFileSync(dd.eventsFile, "utf8") : ""}${JSON.stringify({
-        v: 1, vocab_version: 2, ts: "2026-08-22T00:00:00.000Z", domain, nodes: ["n"], kind: "used", source: "lesson",
-      })}\n`);
-      writeFileSync(dd.cardsFile, `${existsSync(dd.cardsFile) ? readFileSync(dd.cardsFile, "utf8") : ""}${JSON.stringify({
-        type: "card", id: `card-${domain}`, ts: "2026-08-22T00:00:00.000Z", front: "f", back: "b", domain, nodes: ["n"],
-      })}\n`);
+      writeFileSync(
+        dd.eventsFile,
+        `${existsSync(dd.eventsFile) ? readFileSync(dd.eventsFile, "utf8") : ""}${JSON.stringify({
+          v: 1,
+          vocab_version: 2,
+          ts: "2026-08-22T00:00:00.000Z",
+          domain,
+          nodes: ["n"],
+          kind: "used",
+          source: "lesson",
+        })}\n`,
+      );
+      writeFileSync(
+        dd.cardsFile,
+        `${existsSync(dd.cardsFile) ? readFileSync(dd.cardsFile, "utf8") : ""}${JSON.stringify({
+          type: "card",
+          id: `card-${domain}`,
+          ts: "2026-08-22T00:00:00.000Z",
+          front: "f",
+          back: "b",
+          domain,
+          nodes: ["n"],
+        })}\n`,
+      );
     }
     writeFileSync(join(dd.root, "format_version"), "1\n");
     ensureDataDir(resolveDataDir(dd.root));
     const migrated = resolveDataDir(dd.root);
-    expect(listDomains(migrated)).toEqual(expect.arrayContaining(["history.binding-next", "history.binding-previous"]));
+    expect(listDomains(migrated)).toEqual(
+      expect.arrayContaining(["history.binding-next", "history.binding-previous"]),
+    );
     for (const domain of ["history.binding-next", "history.binding-previous"])
       expect(existsSync(join(migrated.domainsDir, domain, "course.yaml"))).toBe(true);
     expect(readFileSync(migrated.eventsFile, "utf8")).toContain("history.binding-next");
@@ -291,10 +526,24 @@ describe("course-local artifacts", () => {
 
   test("stages v1 migration without rewriting local node identities or evidence", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "legacy", { nodes: [{ id: "same-local-name", body: "Legacy node." }] }, "create");
-    writeFileSync(dd.eventsFile, JSON.stringify({
-      v: 1, vocab_version: 2, ts: "2026-08-22T00:00:00.000Z", domain: "legacy", nodes: ["same-local-name"], kind: "used", source: "lesson",
-    }) + "\n");
+    authorDomain(
+      dd,
+      "legacy",
+      { nodes: [{ id: "same-local-name", body: "Legacy node." }] },
+      "create",
+    );
+    writeFileSync(
+      dd.eventsFile,
+      JSON.stringify({
+        v: 1,
+        vocab_version: 2,
+        ts: "2026-08-22T00:00:00.000Z",
+        domain: "legacy",
+        nodes: ["same-local-name"],
+        kind: "used",
+        source: "lesson",
+      }) + "\n",
+    );
     writeFileSync(join(dd.root, "format_version"), "1\n");
     ensureDataDir(resolveDataDir(dd.root));
     const migrated = resolveDataDir(dd.root);
@@ -308,41 +557,86 @@ describe("course-local artifacts", () => {
 describe("local publication hub reads", () => {
   test("preview chooses a constrained bump and rebind keeps overlay metadata", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "published", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
+    authorDomain(
+      dd,
+      "published",
+      { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+      "create",
+    );
     const course = ensureLocalCourse(dd, "published");
-    expect(previewCoursePublish(dd, "published")).toMatchObject({ bump: "initial", version: "1.0.0" });
+    expect(previewCoursePublish(dd, "published")).toMatchObject({
+      bump: "initial",
+      version: "1.0.0",
+    });
     publishCourse(dd, "published", "1.0.0");
     bindCourse(dd, course.id, "1.0.0", "installed");
     const bindings = loadBindings(dd);
     bindings.bindings[0]!.abandoned_nodes = ["one"];
     writeFileSync(dd.bindingsFile, YAML.stringify(bindings));
-    authorDomain(dd, "published", { nodes: [{ id: "two", type: "conceptual", body: "Two." }] }, "add");
-    expect(previewCoursePublish(dd, "published")).toMatchObject({ bump: "minor", version: "1.1.0" });
+    authorDomain(
+      dd,
+      "published",
+      { nodes: [{ id: "two", type: "conceptual", body: "Two." }] },
+      "add",
+    );
+    expect(previewCoursePublish(dd, "published")).toMatchObject({
+      bump: "minor",
+      version: "1.1.0",
+    });
     publishCourse(dd, "published", "1.1.0");
-    expect(listPublishedCourses(dd)[0]!.versions.map((revision) => revision.version)).toEqual(["1.0.0", "1.1.0"]);
-    expect(rebindCourse(dd, course.id, "1.1.0")).toMatchObject({ version: "1.1.0", abandoned_nodes: ["one"] });
+    expect(listPublishedCourses(dd)[0]!.versions.map((revision) => revision.version)).toEqual([
+      "1.0.0",
+      "1.1.0",
+    ]);
+    expect(rebindCourse(dd, course.id, "1.1.0")).toMatchObject({
+      version: "1.1.0",
+      abandoned_nodes: ["one"],
+    });
   });
 });
 
 describe("partial package imports", () => {
   test("imports a dependency-closed, source-attributed fragment", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "source", { nodes: [
-      { id: "base", type: "conceptual", body: "Base." },
-      { id: "target", type: "conceptual", body: "Target.", requires: ["base"] },
-      { id: "other", type: "conceptual", body: "Other." },
-    ] }, "create");
-    const source = ensureLocalCourse(dd, "source"); publishCourse(dd, "source", "1.0.0");
+    authorDomain(
+      dd,
+      "source",
+      {
+        nodes: [
+          { id: "base", type: "conceptual", body: "Base." },
+          { id: "target", type: "conceptual", body: "Target.", requires: ["base"] },
+          { id: "other", type: "conceptual", body: "Other." },
+        ],
+      },
+      "create",
+    );
+    const source = ensureLocalCourse(dd, "source");
+    publishCourse(dd, "source", "1.0.0");
     const binding = importCourseFragment(dd, source.id, "1.0.0", "source-fragment", ["target"]);
-    expect(binding).toMatchObject({ course_id: source.id, domain: "source-fragment", fragment_nodes: ["base", "target"] });
-    expect([...loadDomainGraphRaw(dd, "source-fragment").nodes.keys()].sort()).toEqual(["base", "target"]);
-    expect(() => importCourseFragment(dd, source.id, "1.0.0", "again", ["base"])).toThrow(/already adopted/);
+    expect(binding).toMatchObject({
+      course_id: source.id,
+      domain: "source-fragment",
+      fragment_nodes: ["base", "target"],
+    });
+    expect([...loadDomainGraphRaw(dd, "source-fragment").nodes.keys()].sort()).toEqual([
+      "base",
+      "target",
+    ]);
+    expect(() => importCourseFragment(dd, source.id, "1.0.0", "again", ["base"])).toThrow(
+      /already adopted/,
+    );
   });
 
   test("new artifact publication has a fresh source identity", () => {
     const dd = tempDataDir();
-    authorDomain(dd, "source", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
-    const source = ensureLocalCourse(dd, "source"); publishCourse(dd, "source", "1.0.0");
+    authorDomain(
+      dd,
+      "source",
+      { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+      "create",
+    );
+    const source = ensureLocalCourse(dd, "source");
+    publishCourse(dd, "source", "1.0.0");
     const fork = publishNewCourseArtifact(dd, "source", "source-next");
     expect(fork).toMatchObject({ domain: "source-next", version: "1.0.0" });
     expect(fork.course_id).not.toBe(source.id);
@@ -351,79 +645,201 @@ describe("partial package imports", () => {
   test("an incompatible draft leaves the fresh-artifact path available", () => {
     const dd = tempDataDir();
     writeNode(dd, "major", "one.md", "---\nid: one\ncriterion: Old criterion\n---\n# One\nBody.\n");
-    ensureLocalCourse(dd, "major"); publishCourse(dd, "major", "1.0.0");
+    ensureLocalCourse(dd, "major");
+    publishCourse(dd, "major", "1.0.0");
     writeNode(dd, "major", "one.md", "---\nid: one\ncriterion: New criterion\n---\n# One\nBody.\n");
     expect(listPublishPreviews(dd, "major")).toEqual([]);
-    expect(publishNewCourseArtifact(dd, "major", "major-next")).toMatchObject({ domain: "major-next", version: "1.0.0" });
+    expect(publishNewCourseArtifact(dd, "major", "major-next")).toMatchObject({
+      domain: "major-next",
+      version: "1.0.0",
+    });
   });
 });
 
 test("fresh artifact forks retain source lineage and transform authored correspondence endpoints", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
-  authorDomain(dd, "derived", { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] }, "create");
-  const base = ensureLocalCourse(dd, "base"), derived = ensureLocalCourse(dd, "derived");
-  writeCourseDerivation(dd, "derived", { based_on: [base.id], correspondences: [{ from: { course_id: derived.id, node: "derived" }, to: { course_id: base.id, node: "base" }, weight: .6 }] });
+  authorDomain(
+    dd,
+    "base",
+    { nodes: [{ id: "base", type: "conceptual", body: "Base." }] },
+    "create",
+  );
+  authorDomain(
+    dd,
+    "derived",
+    { nodes: [{ id: "derived", type: "conceptual", body: "Derived." }] },
+    "create",
+  );
+  const base = ensureLocalCourse(dd, "base"),
+    derived = ensureLocalCourse(dd, "derived");
+  writeCourseDerivation(dd, "derived", {
+    based_on: [base.id],
+    correspondences: [
+      {
+        from: { course_id: derived.id, node: "derived" },
+        to: { course_id: base.id, node: "base" },
+        weight: 0.6,
+      },
+    ],
+  });
   publishCourse(dd, "derived", "1.0.0");
   const fork = publishNewCourseArtifact(dd, "derived", "derived-next");
   expect(fork.derivation.based_on).toEqual([base.id, derived.id].sort());
-  expect(fork.derivation.correspondences).toEqual([{ from: { course_id: fork.course_id, node: "derived" }, to: { course_id: base.id, node: "base" }, weight: .6 }]);
+  expect(fork.derivation.correspondences).toEqual([
+    {
+      from: { course_id: fork.course_id, node: "derived" },
+      to: { course_id: base.id, node: "base" },
+      weight: 0.6,
+    },
+  ]);
 });
 
 test("authored working copies report their latest publication separately from bindings", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "authored", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
+  authorDomain(
+    dd,
+    "authored",
+    { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+    "create",
+  );
   publishCourse(dd, "authored", "1.0.0");
-  expect(courseReadState(dd, "authored")).toMatchObject({ binding_version: null, published_version: "1.0.0", draft: true });
+  expect(courseReadState(dd, "authored")).toMatchObject({
+    binding_version: null,
+    published_version: "1.0.0",
+    draft: true,
+  });
 });
 
 test("adoption and fragment aliases never replace an existing working copy", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "source", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
-  const source = ensureLocalCourse(dd, "source"); publishCourse(dd, "source", "1.0.0");
+  authorDomain(
+    dd,
+    "source",
+    { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+    "create",
+  );
+  const source = ensureLocalCourse(dd, "source");
+  publishCourse(dd, "source", "1.0.0");
   const before = readFileSync(join(dd.domainsDir, "source", "one.md"), "utf8");
   const bindings = readFileSync(dd.bindingsFile, "utf8");
-  expect(() => bindCourse(dd, source.id, "1.0.0", "source")).toThrow(/belongs to an existing working copy/);
-  expect(() => importCourseFragment(dd, source.id, "1.0.0", "source", ["one"])).toThrow(/belongs to an existing working copy/);
+  expect(() => bindCourse(dd, source.id, "1.0.0", "source")).toThrow(
+    /belongs to an existing working copy/,
+  );
+  expect(() => importCourseFragment(dd, source.id, "1.0.0", "source", ["one"])).toThrow(
+    /belongs to an existing working copy/,
+  );
   expect(readFileSync(join(dd.domainsDir, "source", "one.md"), "utf8")).toBe(before);
   expect(readFileSync(dd.bindingsFile, "utf8")).toBe(bindings);
 });
 
 test("fragment overlays and authored links are limited to imported nodes", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "source", { nodes: [{ id: "kept", type: "conceptual", body: "Kept." }, { id: "omitted", type: "conceptual", body: "Omitted." }] }, "create");
-  authorDomain(dd, "target", { nodes: [{ id: "target", type: "conceptual", body: "Target." }] }, "create");
-  const source = ensureLocalCourse(dd, "source"), target = ensureLocalCourse(dd, "target");
-  writeCourseDerivation(dd, "source", { based_on: [target.id], correspondences: [{ from: { course_id: source.id, node: "omitted" }, to: { course_id: target.id, node: "target" }, weight: .5 }] });
-  publishCourse(dd, "source", "1.0.0"); publishCourse(dd, "target", "1.0.0");
+  authorDomain(
+    dd,
+    "source",
+    {
+      nodes: [
+        { id: "kept", type: "conceptual", body: "Kept." },
+        { id: "omitted", type: "conceptual", body: "Omitted." },
+      ],
+    },
+    "create",
+  );
+  authorDomain(
+    dd,
+    "target",
+    { nodes: [{ id: "target", type: "conceptual", body: "Target." }] },
+    "create",
+  );
+  const source = ensureLocalCourse(dd, "source"),
+    target = ensureLocalCourse(dd, "target");
+  writeCourseDerivation(dd, "source", {
+    based_on: [target.id],
+    correspondences: [
+      {
+        from: { course_id: source.id, node: "omitted" },
+        to: { course_id: target.id, node: "target" },
+        weight: 0.5,
+      },
+    ],
+  });
+  publishCourse(dd, "source", "1.0.0");
+  publishCourse(dd, "target", "1.0.0");
   importCourseFragment(dd, source.id, "1.0.0", "source-fragment", ["kept"]);
   bindCourse(dd, target.id, "1.0.0", "target-copy");
   expect(() => setNodeAbandoned(dd, "source-fragment", "omitted")).toThrow(/unimported/);
-  expect(() => confirmCorrespondence(dd, { from: { course_id: source.id, node: "omitted" }, to: { course_id: target.id, node: "target" }, weight: .5 })).toThrow(/unimported/);
+  expect(() =>
+    confirmCorrespondence(dd, {
+      from: { course_id: source.id, node: "omitted" },
+      to: { course_id: target.id, node: "target" },
+      weight: 0.5,
+    }),
+  ).toThrow(/unimported/);
   expect(resolveCorrespondences(dd)).toEqual([]);
   expect(() => validateCourseStore(dd)).not.toThrow();
 });
 
 test("forking an adopted cited curriculum preserves pinned kind and lineage", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
-  authorDomain(dd, "curriculum", { nodes: [{ id: "lesson", type: "conceptual", body: "Lesson." }] }, "create");
-  const base = ensureLocalCourse(dd, "base"), curriculum = ensureLocalCourse(dd, "curriculum");
-  writeFileSync(localCourseFile(dd, "curriculum"), YAML.stringify({ id: curriculum.id, domain: "curriculum", kind: "curriculum" }));
-  writeCourseDerivation(dd, "curriculum", { based_on: [base.id], correspondences: [{ from: { course_id: curriculum.id, node: "lesson" }, to: { course_id: base.id, node: "base" }, weight: .7 }] });
+  authorDomain(
+    dd,
+    "base",
+    { nodes: [{ id: "base", type: "conceptual", body: "Base." }] },
+    "create",
+  );
+  authorDomain(
+    dd,
+    "curriculum",
+    { nodes: [{ id: "lesson", type: "conceptual", body: "Lesson." }] },
+    "create",
+  );
+  const base = ensureLocalCourse(dd, "base"),
+    curriculum = ensureLocalCourse(dd, "curriculum");
+  writeFileSync(
+    localCourseFile(dd, "curriculum"),
+    YAML.stringify({ id: curriculum.id, domain: "curriculum", kind: "curriculum" }),
+  );
+  writeCourseDerivation(dd, "curriculum", {
+    based_on: [base.id],
+    correspondences: [
+      {
+        from: { course_id: curriculum.id, node: "lesson" },
+        to: { course_id: base.id, node: "base" },
+        weight: 0.7,
+      },
+    ],
+  });
   publishCourse(dd, "curriculum", "1.0.0");
   bindCourse(dd, curriculum.id, "1.0.0", "adopted-curriculum");
   const fork = publishNewCourseArtifact(dd, "adopted-curriculum", "forked-curriculum");
   expect(fork.kind).toBe("curriculum");
   expect(fork.derivation.based_on).toEqual([base.id, curriculum.id].sort());
-  expect(fork.derivation.correspondences).toEqual([{ from: { course_id: fork.course_id, node: "lesson" }, to: { course_id: base.id, node: "base" }, weight: .7 }]);
+  expect(fork.derivation.correspondences).toEqual([
+    {
+      from: { course_id: fork.course_id, node: "lesson" },
+      to: { course_id: base.id, node: "base" },
+      weight: 0.7,
+    },
+  ]);
 });
 
 test("failed first publication removes empty artifact parents and keeps the working copy adopted", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "broken", { nodes: [{ id: "one", type: "conceptual", body: "One." }] }, "create");
+  authorDomain(
+    dd,
+    "broken",
+    { nodes: [{ id: "one", type: "conceptual", body: "One." }] },
+    "create",
+  );
   const local = ensureLocalCourse(dd, "broken");
-  writeFileSync(join(dd.domainsDir, "broken", "course-context.json"), JSON.stringify({ version: 1, domain: "broken", teaching_notes: [{ node: "missing", sticking_points: "bad" }] }));
+  writeFileSync(
+    join(dd.domainsDir, "broken", "course-context.json"),
+    JSON.stringify({
+      version: 1,
+      domain: "broken",
+      teaching_notes: [{ node: "missing", sticking_points: "bad" }],
+    }),
+  );
   expect(() => publishCourse(dd, "broken", "1.0.0")).toThrow(/unknown node/);
   expect(existsSync(join(dd.coursesDir, local.id))).toBe(false);
   expect(adoptedDomains(dd)).toContain("broken");
@@ -431,10 +847,35 @@ test("failed first publication removes empty artifact parents and keeps the work
 
 test("forking a fragment filters cited links for omitted source nodes", () => {
   const dd = tempDataDir();
-  authorDomain(dd, "base", { nodes: [{ id: "base", type: "conceptual", body: "Base." }] }, "create");
-  authorDomain(dd, "source", { nodes: [{ id: "kept", type: "conceptual", body: "Kept." }, { id: "omitted", type: "conceptual", body: "Omitted." }] }, "create");
-  const base = ensureLocalCourse(dd, "base"), source = ensureLocalCourse(dd, "source");
-  writeCourseDerivation(dd, "source", { based_on: [base.id], correspondences: [{ from: { course_id: source.id, node: "omitted" }, to: { course_id: base.id, node: "base" }, weight: .5 }] });
+  authorDomain(
+    dd,
+    "base",
+    { nodes: [{ id: "base", type: "conceptual", body: "Base." }] },
+    "create",
+  );
+  authorDomain(
+    dd,
+    "source",
+    {
+      nodes: [
+        { id: "kept", type: "conceptual", body: "Kept." },
+        { id: "omitted", type: "conceptual", body: "Omitted." },
+      ],
+    },
+    "create",
+  );
+  const base = ensureLocalCourse(dd, "base"),
+    source = ensureLocalCourse(dd, "source");
+  writeCourseDerivation(dd, "source", {
+    based_on: [base.id],
+    correspondences: [
+      {
+        from: { course_id: source.id, node: "omitted" },
+        to: { course_id: base.id, node: "base" },
+        weight: 0.5,
+      },
+    ],
+  });
   publishCourse(dd, "source", "1.0.0");
   importCourseFragment(dd, source.id, "1.0.0", "source-fragment", ["kept"]);
   expect(previewNewCourseDerivation(dd, "source-fragment").correspondences).toEqual([]);
