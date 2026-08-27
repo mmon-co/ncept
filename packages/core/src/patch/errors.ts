@@ -9,7 +9,7 @@ export type PatchCompileErrorCode =
   | "dangling-metadata"
   | "dangling-tag"
   | "unknown-tag"
-  | "unsupported-query"
+  | "malformed-query"
   | "missing-display-metadata"
   | "dependency-cycle";
 
