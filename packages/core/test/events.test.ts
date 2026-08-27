@@ -9,7 +9,7 @@ describe("evidence log", () => {
     appendEvents(dd, [ev(), ev({ kind: "not-recalled", nodes: ["a"] })]);
     const events = readEvents(dd);
     expect(events.length).toBe(2);
-    expect(events[1]!.kind).toBe("not-recalled");
+    expect(events.at(1)?.kind).toBe("not-recalled");
   });
 
   test("rejects numeric judgments via unknown keys", () => {
