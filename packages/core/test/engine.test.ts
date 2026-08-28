@@ -8,15 +8,41 @@ import {
   programmeTo,
 } from "../src/engine";
 import { DEFAULT_PARAMS } from "../src/params";
-import { loadDomainGraph } from "../src/graph";
 import { validateEvent } from "../src/events";
-import { tempDataDir, writeTestDomain, ev } from "./helpers";
+import { ev } from "./helpers";
 import type { DomainGraph, MasteryHeader } from "../src/types";
 
 function graphs(): Map<string, DomainGraph> {
-  const dd = tempDataDir();
-  writeTestDomain(dd);
-  return new Map([["math", loadDomainGraph(dd, "math")]]);
+  const nodes = new Map(
+    ["a", "b", "c", "d"].map((id) => [
+      id,
+      {
+        id,
+        criterion: id,
+        deprecated: false,
+        title: id.toUpperCase(),
+        knowledge_type: "conceptual" as const,
+        threshold: false,
+        aliases: [],
+        tags: [],
+        body: `${id} content`,
+      },
+    ]),
+  );
+  return new Map([
+    [
+      "math",
+      {
+        domain: "math",
+        nodes,
+        edges: [
+          { from: "b", to: "a", type: "dependency" },
+          { from: "c", to: "b", type: "dependency" },
+          { from: "d", to: "b", type: "strong-relevance" },
+        ],
+      },
+    ],
+  ]);
 }
 
 function graph(domain = "math"): DomainGraph {
@@ -311,9 +337,9 @@ describe("mastery propagation", () => {
     third.domain = "chemistry";
     const links = [
       // c reaches a through its local prerequisite chain, then crosses into
-      // physics c and continues through that course's prerequisites.
+      // physics c and continues through that graph's prerequisites.
       { from: { domain: "math", node: "a" }, to: { domain: "physics", node: "c" }, weight: 0.5 },
-      // A second directed correspondence demonstrates a multi-course path.
+      // A second directed correspondence demonstrates a multi-graph path.
       {
         from: { domain: "physics", node: "a" },
         to: { domain: "chemistry", node: "d" },
