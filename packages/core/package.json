@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./observation-associations": "./src/observation-associations.ts",
+    "./observations": "./src/observations.ts",
+    "./patch": "./src/patch/index.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",

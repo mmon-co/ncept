@@ -1,8 +1,15 @@
 # Core context
 
-The core context owns the portable learning model. Local application behavior may coordinate it, but the model remains usable without the server or web packages.
+The core context owns the portable learning model. Application behavior may
+coordinate it, but the model remains usable without the web Application or its
+framework.
 
 ## Language
+
+**Core**:
+The portable learning model and the repository-defined algorithms over it. Core
+does not depend on SolidStart, browser state, or Application runtime resources.
+_Avoid_: Application workflow, server function, browser transport
 
 **Course**:
 A Patch whose Patch metadata includes the course label. The application queries and presents that label specially without giving Course a distinct content representation.

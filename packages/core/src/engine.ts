@@ -4,10 +4,10 @@ import {
   type EvidenceEvent,
   type MasteryHeader,
   type Params,
-  type ResolvedCorrespondenceLink,
+  type ResolvedGraphLink,
   type SuccessKind,
 } from "./types";
-import { walkAncestors } from "./graph";
+import type { LearnerNodeProjection } from "./patch";
 
 const MS_PER_DAY = 86_400_000;
 // Path products of user-configured decimal factors can differ by one ULP solely
@@ -86,6 +86,25 @@ function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
   s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - ep.shrink));
 }
 
+/** Apply one classified observation to an exact learner projection. */
+export function applyEvidenceEffect(
+  current: LearnerNodeProjection | undefined,
+  event: EvidenceEvent,
+  params: Params,
+): { estimate: number; uncertainty: number } {
+  const observed = current?.kind === "observed" ? current : undefined;
+  const state: NodeState = {
+    estimate: observed?.estimate ?? params.initial.estimate,
+    uncertainty: observed?.uncertainty ?? params.initial.uncertainty,
+    last: observed?.lastObserved === undefined ? null : Date.parse(observed.lastObserved),
+    directlyEvidenced: observed !== undefined,
+  };
+  const time = Date.parse(event.ts);
+  grow(state, time, params);
+  applyDirect(state, event, params);
+  return { estimate: fix(state.estimate), uncertainty: fix(state.uncertainty) };
+}
+
 function applyPropagation(
   target: NodeState,
   event: EvidenceEvent,
@@ -154,7 +173,7 @@ export function foldMastery(
   events: EvidenceEvent[],
   graphs: Map<string, DomainGraph>,
   p: Params,
-  correspondences: ResolvedCorrespondenceLink[] = [],
+  correspondences: ResolvedGraphLink[] = [],
 ): MasteryHeader[] {
   const states = new Map<string, NodeState>(); // key = domain + NUL + node
   const get = (domain: string, node: string): NodeState => {
@@ -288,7 +307,7 @@ export function foldMastery(
     const graph = graphs.get(ev.domain);
     const isSuccess = isSuccessKind(ev.kind);
     for (const node of ev.nodes) {
-      // Historical logs remain readable after a course/node disappears, but
+      // Historical observations remain readable after a graph or Node disappears, but
       // stale evidence must never manufacture a derived header.
       if (graph === undefined || !graph.nodes.has(node)) continue;
       const s = get(ev.domain, node);
@@ -357,14 +376,17 @@ export function unmetPrerequisites(
   node: string,
   p: Params,
 ): string[] {
-  const anc = walkAncestors(
-    g,
-    node,
-    { dependency: 1, "strong-relevance": 0 },
-    Number.MAX_SAFE_INTEGER,
-  );
+  const ancestors = new Set<string>();
+  const visit = (current: string): void => {
+    for (const edge of g.edges) {
+      if (edge.type !== "dependency" || edge.from !== current || ancestors.has(edge.to)) continue;
+      ancestors.add(edge.to);
+      visit(edge.to);
+    }
+  };
+  visit(node);
   const unmet: string[] = [];
-  for (const [id] of [...anc.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const id of [...ancestors].sort()) {
     const h = lookup.get(g.domain, id);
     if (h.estimate < p.mastery_threshold) unmet.push(id);
   }
