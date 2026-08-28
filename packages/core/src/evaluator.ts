@@ -1,12 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { EVIDENCE_KINDS, GRADES, VOCAB_VERSION } from "./types";
 import type { Card, DomainGraph, EvidenceEvent, EvidenceSource, Grade } from "./types";
 import { validateEvent } from "./events";
 import { complete, completeJson, type LlmOptions } from "./llm";
 import { nudgeByTime } from "./grading";
-import { readDossier } from "./graph";
-import { dossierFile, type DataDir } from "./datadir";
-import { dirname } from "node:path";
 
 function nodeCatalog(g: DomainGraph): string {
   return [...g.nodes.values()]
@@ -206,60 +202,4 @@ Grade on semantic correctness, not exact wording. Never output anything but the 
     opts,
   );
   return { ...res, grade: nudgeByTime(res.grade, responseMs) };
-}
-
-/** Render all recorded evidence and structured diagnostics for dossier input. */
-export function dossierEvidenceLines(events: EvidenceEvent[]): string {
-  return events
-    .map((e) => {
-      const conditions = [
-        e.support !== undefined ? `support=${e.support}` : undefined,
-        e.latency_ms !== undefined ? `latency_ms=${e.latency_ms}` : undefined,
-        e.confidence !== undefined ? `confidence=${e.confidence}` : undefined,
-        e.native_outcome !== undefined ? `native_outcome=${e.native_outcome}` : undefined,
-        e.coarseness !== undefined ? `coarseness=${e.coarseness}` : undefined,
-        e.severity !== undefined ? `severity=${e.severity}` : undefined,
-        e.confused_with !== undefined ? `confused_with=${e.confused_with}` : undefined,
-        e.misconception_id !== undefined ? `misconception_id=${e.misconception_id}` : undefined,
-      ].filter((value): value is string => value !== undefined);
-      return `- [${e.ts} ${e.kind} via ${e.source}${conditions.length > 0 ? `; ${conditions.join(", ")}` : ""}] ${e.observation ?? "(no notes)"}`;
-    })
-    .join("\n");
-}
-
-/**
- * Dossier consolidation (spec): merge observations into the curated dossier,
- * preserving misconception specifics. Non-destructive: events stay in the log,
- * so `rebuild-dossier` can always regenerate from scratch.
- */
-export async function consolidateDossier(
-  dd: DataDir,
-  g: DomainGraph,
-  nodeId: string,
-  events: EvidenceEvent[],
-  fromScratch = false,
-  opts: LlmOptions = {},
-): Promise<string | null> {
-  const node = g.nodes.get(nodeId);
-  if (node === undefined) throw new Error(`unknown node: ${nodeId}`);
-  const relevant = events.filter((e) => e.domain === g.domain && e.nodes.includes(nodeId));
-  const current = fromScratch ? null : readDossier(dd, g.domain, nodeId);
-  const evidenceLines = dossierEvidenceLines(relevant);
-  if (relevant.length === 0 && current === null) return null;
-
-  const text = await complete(
-    `You maintain a learner dossier for one concept: a freeform description of
-what this learner grasps, what they don't, their misconceptions, and quirks of
-their understanding. Rewrite it integrating the evidence below. Rules:
-- PRESERVE specific misconception details; only mark one resolved when later
-  evidence contradicts it (say so explicitly).
-- Write dense, specific prose a tutor can act on. No scores or numbers.
-- Markdown, no frontmatter, no title heading.`,
-    `Concept: ${node.title} (${nodeId})\n\nCurrent dossier:\n${current ?? "(none yet)"}\n\nEvidence history:\n${evidenceLines || "(none)"}`,
-    opts,
-  );
-  const path = dossierFile(dd, g.domain, nodeId);
-  if (!existsSync(dirname(path))) mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text.trimEnd() + "\n");
-  return text;
 }

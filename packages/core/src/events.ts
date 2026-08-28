@@ -1,4 +1,3 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import {
   EVIDENCE_KINDS,
   EVIDENCE_SOURCES,
@@ -10,17 +9,8 @@ import {
   type MistakeSeverity,
   type Support,
 } from "./types";
-import type { DataDir } from "./datadir";
 
 export class EventValidationError extends Error {}
-
-const LEGACY_KINDS = [
-  "demonstrated-unaided",
-  "demonstrated-guided",
-  "recognized",
-  "failed",
-  "misconception-observed",
-] as const;
 
 const ALLOWED_KEYS = new Set([
   "v",
@@ -163,30 +153,27 @@ function parseEvent(raw: unknown): ParsedEvent {
 function mistakePayload(
   event: ParsedEvent,
   kind: EvidenceKind,
-  defaults: { coarseness?: MistakeCoarseness; severity?: MistakeSeverity } = {},
-  allowUntouchedLegacy = false,
 ): Pick<EvidenceEvent, "coarseness" | "severity" | "confused_with" | "misconception_id"> {
   if (kind !== "mistake") {
     if (event.hasMistakePayload)
       throw new EventValidationError("mistake payload fields are only valid for kind 'mistake'");
     return {};
   }
-  const coarseness = event.coarseness ?? defaults.coarseness;
-  const severity = event.severity ?? defaults.severity;
+  const coarseness = event.coarseness;
+  const severity = event.severity;
   if (coarseness !== "node" && coarseness !== "topic")
     throw new EventValidationError("mistake coarseness must be node or topic");
   if (severity !== "slip" && severity !== "misconception" && severity !== "unknown")
     throw new EventValidationError("mistake severity must be slip, misconception, or unknown");
-  const payloadlessLegacy = allowUntouchedLegacy && !event.hasMistakePayload;
   const confusedWith = optionalString(event.confused_with, "confused_with");
   const misconceptionId = optionalString(event.misconception_id, "misconception_id");
   if (confusedWith === "")
     throw new EventValidationError("confused_with must be a non-empty string");
   if (misconceptionId === "")
     throw new EventValidationError("misconception_id must be a non-empty string");
-  if (coarseness === "node" && confusedWith === undefined && !payloadlessLegacy)
+  if (coarseness === "node" && confusedWith === undefined)
     throw new EventValidationError("node-coarse mistakes need a confused_with payload");
-  if (severity === "misconception" && misconceptionId === undefined && !payloadlessLegacy)
+  if (severity === "misconception" && misconceptionId === undefined)
     throw new EventValidationError("misconception mistakes need a misconception_id payload");
   return {
     coarseness,
@@ -196,14 +183,7 @@ function mistakePayload(
   };
 }
 
-function buildEvent(
-  event: ParsedEvent,
-  kind: EvidenceKind,
-  vocabVersion: number,
-  defaults: { support?: Support; coarseness?: MistakeCoarseness; severity?: MistakeSeverity } = {},
-  allowUntouchedLegacy = false,
-): EvidenceEvent {
-  const support = event.support ?? defaults.support;
+function buildEvent(event: ParsedEvent, kind: EvidenceKind, vocabVersion: number): EvidenceEvent {
   return {
     v: 1,
     vocab_version: vocabVersion,
@@ -214,11 +194,11 @@ function buildEvent(
     source: event.source,
     ...(event.source_ref === undefined ? {} : { source_ref: event.source_ref }),
     ...(event.observation === undefined ? {} : { observation: event.observation }),
-    ...(support === undefined ? {} : { support }),
+    ...(event.support === undefined ? {} : { support: event.support }),
     ...(event.latency_ms === undefined ? {} : { latency_ms: event.latency_ms }),
     ...(event.confidence === undefined ? {} : { confidence: event.confidence }),
     ...(event.native_outcome === undefined ? {} : { native_outcome: event.native_outcome }),
-    ...mistakePayload(event, kind, defaults, allowUntouchedLegacy),
+    ...mistakePayload(event, kind),
   };
 }
 
@@ -237,84 +217,4 @@ function validateCurrentEvent(event: ParsedEvent): EvidenceEvent {
 /** Validate a current canonical v2 event before it can be appended. */
 export function validateEvent(raw: unknown): EvidenceEvent {
   return validateCurrentEvent(parseEvent(raw));
-}
-
-/** Read-only conversion of one persisted v1 row into the universal vocabulary. */
-function normalizeLegacyEvent(event: ParsedEvent): EvidenceEvent {
-  if (event.vocabVersion !== undefined && event.vocabVersion !== 1)
-    throw new EventValidationError(
-      `unsupported vocab_version ${display(event.vocabVersion)} (current: ${VOCAB_VERSION})`,
-    );
-  if (!isOneOf(LEGACY_KINDS, event.kind))
-    throw new EventValidationError(
-      `kind '${display(event.kind)}' not in legacy vocabulary [${LEGACY_KINDS.join(", ")}]`,
-    );
-  switch (event.kind) {
-    case "demonstrated-unaided":
-      return buildEvent(event, "used", 1, { support: "unaided" });
-    case "demonstrated-guided":
-      return buildEvent(event, "used", 1, { support: "guided" });
-    case "failed":
-      return buildEvent(event, "mistake", 1, { coarseness: "node", severity: "unknown" }, true);
-    case "misconception-observed":
-      return buildEvent(
-        event,
-        "mistake",
-        1,
-        { coarseness: "node", severity: "misconception" },
-        true,
-      );
-    case "recognized":
-      return buildEvent(event, "recognized", 1);
-  }
-}
-
-/** Validates all events first, then appends — a batch is all-or-nothing. */
-export function appendEvents(dd: DataDir, raws: unknown[]): EvidenceEvent[] {
-  const events = raws.map(validateEvent);
-  const lines = events.map((event) => JSON.stringify(event) + "\n").join("");
-  appendFileSync(dd.eventsFile, lines);
-  return events;
-}
-
-/**
- * Normalize a persisted event without making it appendable. Used by every
- * store record that embeds historical observations, not only events.jsonl.
- */
-export function normalizeStoredEvent(raw: unknown): EvidenceEvent {
-  const event = parseEvent(raw);
-  return event.vocabVersion === 1 || event.vocabVersion === undefined
-    ? normalizeLegacyEvent(event)
-    : validateCurrentEvent(event);
-}
-
-export interface EventRecord {
-  /** Normalized in-memory event for folds and readers. */
-  event: EvidenceEvent;
-  /** Original JSONL line, retained for non-append-only maintenance operations. */
-  rawLine: string;
-}
-
-export function readEventRecords(dd: DataDir): EventRecord[] {
-  if (!existsSync(dd.eventsFile)) return [];
-  const out: EventRecord[] = [];
-  const raw = readFileSync(dd.eventsFile, "utf8");
-  let lineNo = 0;
-  for (const line of raw.split("\n")) {
-    lineNo++;
-    if (line.trim() === "") continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      throw new EventValidationError(`events.jsonl:${lineNo}: invalid JSON`);
-    }
-    out.push({ event: normalizeStoredEvent(parsed), rawLine: line });
-  }
-  return out;
-}
-
-/** Read events in the universal vocabulary without ever rewriting legacy rows. */
-export function readEvents(dd: DataDir): EvidenceEvent[] {
-  return readEventRecords(dd).map((record) => record.event);
 }
