@@ -1,6 +1,8 @@
 # Core context
 
-The core context owns the portable learning model. Local application behavior may coordinate it, but the model remains usable without the server or web packages.
+The core context owns the portable learning model. Application behavior may
+coordinate it, but the model remains usable without the web Application or its
+framework.
 
 ## Language
 
