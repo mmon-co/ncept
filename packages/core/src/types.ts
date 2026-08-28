@@ -1,5 +1,3 @@
-import type { ScopedNodeRef } from "./views";
-
 export const VOCAB_VERSION = 2;
 
 /** Universal learner-state observations. Conditions live on the event, not here. */
@@ -67,29 +65,12 @@ export interface EvidenceEvent {
 export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
 export type EdgeType = (typeof EDGE_TYPES)[number];
 
-/** A node reference is meaningful only beside its opaque course artifact id. */
-export interface CourseNodeRef {
-  course_id: string;
-  node: string;
-}
-
-/**
- * Learner-confirmed, directed cross-course relation. It intentionally is not a
- * GraphEdge: authored graph edges remain local to one course.
- */
-export interface CorrespondenceLink {
-  from: CourseNodeRef;
-  to: CourseNodeRef;
-  /** Confidence/strength in (0, 1]; scales transferred fold effects. */
-  weight: number;
-}
-
-/** A correspondence after course ids have been resolved to installed aliases. */
-export interface ResolvedCorrespondenceLink {
+/** A directed relation available to the learner-state fold. */
+export interface ResolvedGraphLink {
   from: { domain: string; node: string };
   to: { domain: string; node: string };
   weight: number;
-  /** Package assertions retain graph semantics; learner/authored correspondences omit this. */
+  /** A relation maps onto ordinary graph propagation when present. */
   relation?: "depends-on" | "reinforces";
 }
 
@@ -127,7 +108,7 @@ export function knowledgeTypePolicy(type: KnowledgeType): KnowledgeTypePolicy {
 }
 
 export interface GraphNode {
-  /** Stable only inside its owning course; events address it with their course/domain. */
+  /** Stable within the exact graph used to interpret an observation. */
   id: string;
   /** Immutable assessment criterion. A changed criterion requires a new local id on publication. */
   criterion: string;
@@ -157,42 +138,8 @@ export interface DomainGraph {
   edges: GraphEdge[];
 }
 
-export interface GraphEdits {
-  add_nodes?: {
-    id: string;
-    title?: string;
-    body?: string;
-    knowledge_type?: KnowledgeType;
-    threshold?: boolean;
-  }[];
-  remove_nodes?: string[];
-  add_edges?: { from: string; to: string; type: EdgeType }[];
-  remove_edges?: { from: string; to: string; type: EdgeType }[];
-}
-
 export const GRADES = ["again", "hard", "good", "easy"] as const;
 export type Grade = (typeof GRADES)[number];
-
-export interface CardDef {
-  type: "card";
-  id: string;
-  ts: string;
-  front: string;
-  back: string;
-  domain?: string;
-  nodes?: string[]; // legacy local ids; graph nodes this card evidences
-  /** Stable node associations; new writes include these beside legacy nodes. */
-  node_refs?: ScopedNodeRef[];
-}
-
-export interface CardUpdate {
-  type: "card-update";
-  id: string;
-  ts: string;
-  patch: Partial<Pick<CardDef, "front" | "back" | "nodes" | "node_refs" | "domain">> & {
-    suspended?: boolean;
-  };
-}
 
 export interface ReviewRecord {
   type: "review";
@@ -204,16 +151,13 @@ export interface ReviewRecord {
   observation?: string;
 }
 
-export type CardLogEntry = CardDef | CardUpdate | ReviewRecord;
-
-/** Materialized card state after folding card + card-update entries. */
+/** Current review-card state used by grading and scheduling. */
 export interface Card {
   id: string;
   front: string;
   back: string;
   domain?: string;
   nodes: string[];
-  node_refs?: ScopedNodeRef[];
   suspended: boolean;
   created: string;
 }
