@@ -184,6 +184,30 @@ export type GraphQuery =
   | { readonly intersection: readonly [GraphQuery, ...GraphQuery[]] }
   | { readonly difference: readonly [GraphQuery, GraphQuery] };
 
+export interface RootPatchDefinition {
+  readonly title: string;
+  readonly author: string;
+  readonly labels: readonly string[];
+  readonly nodes: readonly {
+    readonly id: NodeId;
+    readonly label: string;
+    readonly lesson: string;
+  }[];
+  readonly edges: readonly {
+    readonly id: EdgeId;
+    readonly from: NodeId;
+    readonly to: NodeId;
+    readonly role: string;
+    readonly strength?: number;
+  }[];
+}
+
+export interface PatchViewDefinition {
+  readonly name: string;
+  readonly kind: "live" | "frozen";
+  readonly query: GraphQuery;
+}
+
 export interface SelectedGraph extends ResolvedGraph {}
 
 export type LearnerNodeProjection =
