@@ -14,6 +14,12 @@ interface Fragment {
   readonly metadataSets: Set<MetadataSetId>;
 }
 
+export const GRAPH_QUERY_OPERAND_BOUNDS = {
+  union: { min: 2 },
+  intersection: { min: 2 },
+  difference: { min: 2, max: 2 },
+} as const;
+
 function malformed(message: string): never {
   throw new PatchCompileError("malformed-query", message);
 }
@@ -31,13 +37,15 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
   if (keys[0] === "union" || keys[0] === "intersection") {
     const operation = keys[0];
     const children = raw[operation];
-    if (!isArray(children) || children.length === 0)
-      return malformed(`${label}.${operation} must be a non-empty array`);
-    const [first, ...rest] = children;
-    if (first === undefined) return malformed(`${label}.${operation} must be a non-empty array`);
-    const parsed: [GraphQuery, ...GraphQuery[]] = [
+    if (!isArray(children) || children.length < GRAPH_QUERY_OPERAND_BOUNDS[operation].min)
+      return malformed(`${label}.${operation} must contain at least two terms`);
+    const [first, second, ...rest] = children;
+    if (first === undefined || second === undefined)
+      return malformed(`${label}.${operation} must contain at least two terms`);
+    const parsed: [GraphQuery, GraphQuery, ...GraphQuery[]] = [
       parseGraphQuery(first, `${label}.${operation}[0]`),
-      ...rest.map((child, index) => parseGraphQuery(child, `${label}.${operation}[${index + 1}]`)),
+      parseGraphQuery(second, `${label}.${operation}[1]`),
+      ...rest.map((child, index) => parseGraphQuery(child, `${label}.${operation}[${index + 2}]`)),
     ];
     return operation === "union" ? { union: parsed } : { intersection: parsed };
   }

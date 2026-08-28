@@ -121,7 +121,10 @@ test("unknown tags and malformed restricted queries fail with typed errors", () 
   for (const [query, code] of [
     [{ tag: "missing" }, "unknown-tag"],
     [{ union: [] }, "malformed-query"],
+    [{ union: [{ tag: "left" }] }, "malformed-query"],
+    [{ intersection: [{ tag: "left" }] }, "malformed-query"],
     [{ difference: [{ tag: "left" }] }, "malformed-query"],
+    [{ difference: [{ tag: "left" }, { tag: "right" }, { tag: "left" }] }, "malformed-query"],
     [{ tag: "left", union: [{ tag: "right" }] }, "malformed-query"],
   ] as const) {
     try {
