@@ -7,6 +7,7 @@ import {
   type ResolvedCorrespondenceLink,
   type SuccessKind,
 } from "./types";
+import type { LearnerNodeProjection } from "./patch";
 import { walkAncestors } from "./graph";
 
 const MS_PER_DAY = 86_400_000;
@@ -84,6 +85,25 @@ function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
   // Floors remain able to lower the estimate.
   s.estimate = success ? Math.max(s.estimate, next) : next;
   s.uncertainty = Math.max(p.min_uncertainty, s.uncertainty * (1 - ep.shrink));
+}
+
+/** Apply one classified observation to an exact learner projection. */
+export function applyEvidenceEffect(
+  current: LearnerNodeProjection | undefined,
+  event: EvidenceEvent,
+  params: Params,
+): { estimate: number; uncertainty: number } {
+  const observed = current?.kind === "observed" ? current : undefined;
+  const state: NodeState = {
+    estimate: observed?.estimate ?? params.initial.estimate,
+    uncertainty: observed?.uncertainty ?? params.initial.uncertainty,
+    last: observed?.lastObserved === undefined ? null : Date.parse(observed.lastObserved),
+    directlyEvidenced: observed !== undefined,
+  };
+  const time = Date.parse(event.ts);
+  grow(state, time, params);
+  applyDirect(state, event, params);
+  return { estimate: fix(state.estimate), uncertainty: fix(state.uncertainty) };
 }
 
 function applyPropagation(
