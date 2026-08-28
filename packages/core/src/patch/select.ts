@@ -19,8 +19,7 @@ function malformed(message: string): never {
 }
 
 export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
-  if (!isRecord(value))
-    return malformed(`${label} must be an object`);
+  if (!isRecord(value)) return malformed(`${label} must be an object`);
   const raw = value;
   const keys = Object.keys(raw);
   if (keys.length !== 1) return malformed(`${label} must contain exactly one query term`);
@@ -38,9 +37,7 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     if (first === undefined) return malformed(`${label}.${operation} must be a non-empty array`);
     const parsed: [GraphQuery, ...GraphQuery[]] = [
       parseGraphQuery(first, `${label}.${operation}[0]`),
-      ...rest.map((child, index) =>
-        parseGraphQuery(child, `${label}.${operation}[${index + 1}]`),
-      ),
+      ...rest.map((child, index) => parseGraphQuery(child, `${label}.${operation}[${index + 1}]`)),
     ];
     return operation === "union" ? { union: parsed } : { intersection: parsed };
   }
@@ -152,6 +149,32 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
     return subjects.length === 0 ? [] : [{ ...metadata, subjects }];
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
+  const nodeProvenance: Record<NodeId, ResolvedGraph["provenance"]["nodes"][NodeId]> = {};
+  const edgeProvenance: Record<EdgeId, ResolvedGraph["provenance"]["edges"][EdgeId]> = {};
+  const metadataSetProvenance: Record<
+    MetadataSetId,
+    ResolvedGraph["provenance"]["metadataSets"][MetadataSetId]
+  > = {};
+  const metadataPropertyProvenance: Record<
+    MetadataSetId,
+    ResolvedGraph["provenance"]["metadataProperties"][MetadataSetId]
+  > = {};
+  for (const node of graph.nodes) {
+    const provenance = graph.provenance.nodes[node.id];
+    if (nodes.has(node.id) && provenance !== undefined) nodeProvenance[node.id] = provenance;
+  }
+  for (const edge of graph.edges) {
+    const provenance = graph.provenance.edges[edge.id];
+    if (edges.has(edge.id) && provenance !== undefined) edgeProvenance[edge.id] = provenance;
+  }
+  for (const metadata of graph.metadataSets)
+    if (metadataSets.has(metadata.id)) {
+      const provenance = graph.provenance.metadataSets[metadata.id];
+      const propertyProvenance = graph.provenance.metadataProperties[metadata.id];
+      if (provenance !== undefined) metadataSetProvenance[metadata.id] = provenance;
+      if (propertyProvenance !== undefined)
+        metadataPropertyProvenance[metadata.id] = propertyProvenance;
+    }
 
   return {
     ...graph,
@@ -165,22 +188,10 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       metadataSets: tag.metadataSets.filter((id) => metadataSets.has(id)),
     })),
     provenance: {
-      nodes: Object.fromEntries(
-        Object.entries(graph.provenance.nodes).filter(([id]) => nodes.has(id as NodeId)),
-      ) as ResolvedGraph["provenance"]["nodes"],
-      edges: Object.fromEntries(
-        Object.entries(graph.provenance.edges).filter(([id]) => edges.has(id as EdgeId)),
-      ) as ResolvedGraph["provenance"]["edges"],
-      metadataSets: Object.fromEntries(
-        Object.entries(graph.provenance.metadataSets).filter(([id]) =>
-          metadataSets.has(id as MetadataSetId),
-        ),
-      ) as ResolvedGraph["provenance"]["metadataSets"],
-      metadataProperties: Object.fromEntries(
-        Object.entries(graph.provenance.metadataProperties).filter(([id]) =>
-          metadataSets.has(id as MetadataSetId),
-        ),
-      ) as ResolvedGraph["provenance"]["metadataProperties"],
+      nodes: nodeProvenance,
+      edges: edgeProvenance,
+      metadataSets: metadataSetProvenance,
+      metadataProperties: metadataPropertyProvenance,
     },
   };
 }
