@@ -180,8 +180,8 @@ export interface ResolvedGraph {
 
 export type GraphQuery =
   | { readonly tag: string }
-  | { readonly union: readonly [GraphQuery, ...GraphQuery[]] }
-  | { readonly intersection: readonly [GraphQuery, ...GraphQuery[]] }
+  | { readonly union: readonly [GraphQuery, GraphQuery, ...GraphQuery[]] }
+  | { readonly intersection: readonly [GraphQuery, GraphQuery, ...GraphQuery[]] }
   | { readonly difference: readonly [GraphQuery, GraphQuery] };
 
 export interface RootPatchDefinition {
