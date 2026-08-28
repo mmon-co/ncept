@@ -2,6 +2,12 @@ import { expect, test } from "bun:test";
 import { compileGraph } from "../../src/patch/compile";
 import type { ClosedPatchBundle, PatchRevision } from "../../src/patch/model";
 
+function versionOf(revision: PatchRevision): string {
+  const version = revision.ref.version;
+  if (version === undefined) throw new Error("test Patch needs a version");
+  return version;
+}
+
 const revision: PatchRevision = {
   ref: {
     identity: "patch-linear-algebra",
@@ -236,7 +242,7 @@ test("metadata precedence uses the whole exact Patch ref when commits happen to 
           acquisition: {
             kind: "hub",
             identity: first.ref.identity,
-            version: first.ref.version!,
+            version: versionOf(first),
           },
         },
         {
@@ -245,7 +251,7 @@ test("metadata precedence uses the whole exact Patch ref when commits happen to 
           acquisition: {
             kind: "hub",
             identity: second.ref.identity,
-            version: second.ref.version!,
+            version: versionOf(second),
           },
         },
       ],

@@ -148,8 +148,7 @@ Additional rules for self-produced artifacts:
   misunderstanding rather than a typo or shortcut; use severity unknown unless
   a slip or named misconception is actually evidenced.`,
     `Domain nodes:\n${nodeCatalog(g)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
-    (raw) =>
-      parseFindings(raw, g, { domain: g.domain, source: "artifact", sourceRef, ts }),
+    (raw) => parseFindings(raw, g, { domain: g.domain, source: "artifact", sourceRef, ts }),
     opts,
   );
 }
