@@ -12,7 +12,7 @@ export const EVIDENCE_KINDS = [
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 export type SuccessKind = "recognized" | "recalled" | "used" | "generalized";
 export type MistakeCoarseness = "node" | "topic";
-export type MistakeSeverity = "slip" | "misconception" | "unknown";
+type MistakeSeverity = "slip" | "misconception" | "unknown";
 export type Support = "unaided" | "guided";
 
 /** Kinds whose direct evidence points toward their configured mastery ceiling. */

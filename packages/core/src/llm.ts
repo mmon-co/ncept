@@ -1,4 +1,4 @@
-import { generateText, type EmbeddingModel, type LanguageModel } from "ai";
+import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -104,16 +104,6 @@ export interface ProviderKeys {
 export interface OpenAICompatibleProviderConfig {
   url: string;
   key?: string;
-}
-
-/** Create an OpenRouter embedding model without falling back to OPENAI_API_KEY. */
-export function openRouterEmbeddingModel(modelId: string, apiKey?: string): EmbeddingModel {
-  const key = apiKey ?? process.env.OPENROUTER_API_KEY;
-  return createOpenAICompatible({
-    name: "openai",
-    baseURL: "https://openrouter.ai/api/v1",
-    ...(key === undefined ? {} : { apiKey: key }),
-  }).embeddingModel(modelId);
 }
 
 /**

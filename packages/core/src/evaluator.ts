@@ -113,26 +113,6 @@ learner into CATEGORICAL evidence only. Rules:
 - Emit NOTHING for concepts that simply were not touched. Return [] when nothing
   was demonstrated.`;
 
-/** Post-session transcript evaluation (spec: evaluator / post-lesson evaluation). */
-export async function evaluateTranscript(
-  nodes: readonly EvaluationCatalogNode[],
-  domain: string,
-  transcript: string,
-  sourceRef: string,
-  source: EvidenceSource,
-  ts: string,
-  opts: LlmOptions = {},
-): Promise<EvidenceEvent[]> {
-  return completeJson(
-    CLASSIFY_RULES,
-    `Domain nodes:\n${nodeCatalog(nodes)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
-    // Event validation is inside completeJson so an invalid structured mistake
-    // triggers the normal repair retry instead of escaping after generation.
-    (raw) => parseFindings(raw, nodes, { domain, source, sourceRef, ts }),
-    opts,
-  );
-}
-
 /**
  * Artifact evaluation with positive/negative asymmetry (spec): unprompted
  * correct use is strong evidence; absence emits nothing; errors are
