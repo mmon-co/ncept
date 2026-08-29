@@ -1,11 +1,12 @@
 import { EVIDENCE_KINDS, GRADES, VOCAB_VERSION } from "./types";
-import type { VisualGraph } from "./patch/model";
 import type { Card, EvidenceEvent, EvidenceSource, Grade } from "./types";
 import { validateEvent } from "./events";
 import { completeJson, type LlmOptions } from "./llm";
 import { nudgeByTime } from "./grading";
 
-function nodeCatalog(nodes: VisualGraph["nodes"]): string {
+export type EvaluationCatalogNode = Readonly<{ id: string; label: string }>;
+
+function nodeCatalog(nodes: readonly EvaluationCatalogNode[]): string {
   return [...nodes]
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((node) => `- ${node.id}: ${node.label}`)
@@ -39,7 +40,7 @@ interface FindingContext {
 
 function parseFindings(
   raw: unknown,
-  nodes: VisualGraph["nodes"],
+  nodes: readonly EvaluationCatalogNode[],
   context: FindingContext,
 ): EvidenceEvent[] {
   if (!Array.isArray(raw)) throw new Error("expected a JSON array of findings");
@@ -114,7 +115,7 @@ learner into CATEGORICAL evidence only. Rules:
 
 /** Post-session transcript evaluation (spec: evaluator / post-lesson evaluation). */
 export async function evaluateTranscript(
-  nodes: VisualGraph["nodes"],
+  nodes: readonly EvaluationCatalogNode[],
   domain: string,
   transcript: string,
   sourceRef: string,
@@ -138,7 +139,7 @@ export async function evaluateTranscript(
  * classified conservatively.
  */
 export async function evaluateArtifact(
-  nodes: VisualGraph["nodes"],
+  nodes: readonly EvaluationCatalogNode[],
   domain: string,
   artifact: string,
   sourceRef: string,
