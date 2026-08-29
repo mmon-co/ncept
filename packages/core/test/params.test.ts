@@ -128,7 +128,7 @@ describe("params migration", () => {
     expect(loadParams(dd).evidence.recognized.target).toBe(0.55);
   });
 
-  test("rejects unsupported, non-finite, and out-of-range params before folding", () => {
+  test("rejects unsupported, non-finite, and out-of-range params before use", () => {
     const dd = tempDataDir();
     writeFileSync(dd.paramsFile, YAML.stringify({ version: 3 }));
     expect(() => loadParams(dd)).toThrow(/unsupported params version/);

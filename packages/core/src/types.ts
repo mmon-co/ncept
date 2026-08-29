@@ -47,7 +47,7 @@ export interface EvidenceEvent {
   source: EvidenceSource;
   source_ref?: string; // transcript / card id / artifact path
   observation?: string; // freeform text destined for dossiers; never numeric input
-  /** Conditions captured for later retuning; only support is initially folded. */
+  /** Conditions captured for later retuning; only support affects the current projection. */
   support?: Support;
   latency_ms?: number;
   confidence?: number;

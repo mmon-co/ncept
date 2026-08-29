@@ -3,10 +3,7 @@ import YAML from "yaml";
 import type { EvidenceParams, MistakeMultiplier, Params } from "./types";
 import type { DataDir } from "./datadir";
 
-/**
- * Hand-tuned defaults (design D4). Any values are recoverable later: state is
- * a replayable fold, so retuning means editing params.yaml and rebuilding.
- */
+/** Hand-tuned defaults for current evidence application and review session size. */
 export const DEFAULT_PARAMS: Params = {
   version: 2,
   initial: { estimate: 0.1, uncertainty: 1.0 },

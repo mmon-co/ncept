@@ -17,7 +17,7 @@ function clamp01(x: number): number {
   return Math.min(1, Math.max(0, x));
 }
 
-/** Round to fixed precision so folds are byte-stable across float noise. */
+/** Round to fixed precision so repeated applications are byte-stable across float noise. */
 function fix(x: number): number {
   return Math.round(x * 1e9) / 1e9;
 }
@@ -39,7 +39,7 @@ function applyDirect(s: NodeState, ev: EvidenceEvent, p: Params): void {
     const coarseness = ev.coarseness;
     const severityName = ev.severity;
     if (coarseness === undefined || severityName === undefined)
-      throw new Error("mistake evidence must be validated before folding");
+      throw new Error("mistake evidence must be validated before application");
     const coarse = m.coarseness[coarseness];
     const severity = m.severity[severityName];
     const weight = m.base_effect.weight * coarse.effect * severity.effect * supportWeight(ev, p);
