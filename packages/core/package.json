@@ -16,8 +16,5 @@
     "ai": "latest",
     "ts-fsrs": "^4.0.0",
     "yaml": "^2.5.0"
-  },
-  "devDependencies": {
-    "bun-types": "latest"
   }
 }
