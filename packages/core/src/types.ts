@@ -62,43 +62,6 @@ export interface EvidenceEvent {
   misconception_id?: string;
 }
 
-export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
-export type EdgeType = (typeof EDGE_TYPES)[number];
-
-export const KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
-export type KnowledgeType = (typeof KNOWLEDGE_TYPES)[number];
-
-export interface GraphNode {
-  /** Stable within the exact graph used to interpret an observation. */
-  id: string;
-  /** Immutable assessment criterion. A changed criterion requires a new local id on publication. */
-  criterion: string;
-  /** Published history is retained; a deprecated node may still have evidence and edges. */
-  deprecated: boolean;
-  title: string;
-  /** Authored pedagogy metadata for course creation and calibration. */
-  knowledge_type: KnowledgeType;
-  /** A transformative, troublesome portal worth extra authoring attention. */
-  threshold: boolean;
-  aliases: string[];
-  /** Organization metadata only. */
-  tags: string[];
-  file?: string; // absolute path of the markdown source, if file-backed
-  body: string; // markdown body (definition prose)
-}
-
-export interface GraphEdge {
-  from: string; // the node that requires / references
-  to: string; // the prerequisite / related node
-  type: EdgeType;
-}
-
-export interface DomainGraph {
-  domain: string;
-  nodes: Map<string, GraphNode>;
-  edges: GraphEdge[];
-}
-
 export const GRADES = ["again", "hard", "good", "easy"] as const;
 export type Grade = (typeof GRADES)[number];
 

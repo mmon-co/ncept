@@ -1,13 +1,14 @@
 import { EVIDENCE_KINDS, GRADES, VOCAB_VERSION } from "./types";
-import type { Card, DomainGraph, EvidenceEvent, EvidenceSource, Grade } from "./types";
+import type { VisualGraph } from "./patch/model";
+import type { Card, EvidenceEvent, EvidenceSource, Grade } from "./types";
 import { validateEvent } from "./events";
 import { completeJson, type LlmOptions } from "./llm";
 import { nudgeByTime } from "./grading";
 
-function nodeCatalog(g: DomainGraph): string {
-  return [...g.nodes.values()]
+function nodeCatalog(nodes: VisualGraph["nodes"]): string {
+  return [...nodes]
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map((n) => `- ${n.id}: ${n.title}`)
+    .map((node) => `- ${node.id}: ${node.label}`)
     .join("\n");
 }
 
@@ -36,8 +37,13 @@ interface FindingContext {
   ts: string;
 }
 
-function parseFindings(raw: unknown, g: DomainGraph, context: FindingContext): EvidenceEvent[] {
+function parseFindings(
+  raw: unknown,
+  nodes: VisualGraph["nodes"],
+  context: FindingContext,
+): EvidenceEvent[] {
   if (!Array.isArray(raw)) throw new Error("expected a JSON array of findings");
+  const nodeIds = new Set<string>(nodes.map((node) => node.id));
   return raw.map((f, i) => {
     if (!isRecord(f)) throw new Error(`finding ${i}: not an object`);
     const allowed = new Set([
@@ -54,7 +60,7 @@ function parseFindings(raw: unknown, g: DomainGraph, context: FindingContext): E
     for (const key of Object.keys(f)) {
       if (!allowed.has(key)) throw new Error(`finding ${i}: unknown field '${key}'`);
     }
-    if (typeof f.node !== "string" || !g.nodes.has(f.node))
+    if (typeof f.node !== "string" || !nodeIds.has(f.node))
       throw new Error(`finding ${i}: 'node' must be one of the listed node ids`);
     if (!isOneOf(EVIDENCE_KINDS, f.kind))
       throw new Error(`finding ${i}: 'kind' must be one of [${EVIDENCE_KINDS.join(", ")}]`);
@@ -108,7 +114,8 @@ learner into CATEGORICAL evidence only. Rules:
 
 /** Post-session transcript evaluation (spec: evaluator / post-lesson evaluation). */
 export async function evaluateTranscript(
-  g: DomainGraph,
+  nodes: VisualGraph["nodes"],
+  domain: string,
   transcript: string,
   sourceRef: string,
   source: EvidenceSource,
@@ -117,10 +124,10 @@ export async function evaluateTranscript(
 ): Promise<EvidenceEvent[]> {
   return completeJson(
     CLASSIFY_RULES,
-    `Domain nodes:\n${nodeCatalog(g)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
+    `Domain nodes:\n${nodeCatalog(nodes)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
     // Event validation is inside completeJson so an invalid structured mistake
     // triggers the normal repair retry instead of escaping after generation.
-    (raw) => parseFindings(raw, g, { domain: g.domain, source, sourceRef, ts }),
+    (raw) => parseFindings(raw, nodes, { domain, source, sourceRef, ts }),
     opts,
   );
 }
@@ -131,7 +138,8 @@ export async function evaluateTranscript(
  * classified conservatively.
  */
 export async function evaluateArtifact(
-  g: DomainGraph,
+  nodes: VisualGraph["nodes"],
+  domain: string,
   artifact: string,
   sourceRef: string,
   ts: string,
@@ -147,8 +155,8 @@ Additional rules for self-produced artifacts:
 - Errors may be sloppiness: emit mistake only when the artifact clearly shows
   misunderstanding rather than a typo or shortcut; use severity unknown unless
   a slip or named misconception is actually evidenced.`,
-    `Domain nodes:\n${nodeCatalog(g)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
-    (raw) => parseFindings(raw, g, { domain: g.domain, source: "artifact", sourceRef, ts }),
+    `Domain nodes:\n${nodeCatalog(nodes)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
+    (raw) => parseFindings(raw, nodes, { domain, source: "artifact", sourceRef, ts }),
     opts,
   );
 }
