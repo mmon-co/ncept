@@ -1,7 +1,7 @@
 import { EVIDENCE_KINDS, GRADES, VOCAB_VERSION } from "./types";
 import type { Card, DomainGraph, EvidenceEvent, EvidenceSource, Grade } from "./types";
 import { validateEvent } from "./events";
-import { complete, completeJson, type LlmOptions } from "./llm";
+import { completeJson, type LlmOptions } from "./llm";
 import { nudgeByTime } from "./grading";
 
 function nodeCatalog(g: DomainGraph): string {
@@ -11,23 +11,35 @@ function nodeCatalog(g: DomainGraph): string {
     .join("\n");
 }
 
-interface RawFinding {
-  node: string;
-  kind: string;
-  observation?: string;
-  support?: string;
-  native_outcome?: string;
-  coarseness?: string;
-  severity?: string;
-  confused_with?: string;
-  misconception_id?: string;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
+function isOneOf<const Choices extends readonly string[]>(
+  choices: Choices,
+  value: unknown,
+): value is Choices[number] {
+  return typeof value === "string" && choices.some((choice) => choice === value);
+}
+
+function optionalString(record: Record<string, unknown>, key: string, label: string) {
+  const value = record[key];
+  if (value !== undefined && typeof value !== "string")
+    throw new Error(`${label}: '${key}' must be a string`);
+  return value;
+}
+
+interface FindingContext {
+  domain: string;
+  source: EvidenceSource;
+  sourceRef: string;
+  ts: string;
+}
+
+function parseFindings(raw: unknown, g: DomainGraph, context: FindingContext): EvidenceEvent[] {
   if (!Array.isArray(raw)) throw new Error("expected a JSON array of findings");
   return raw.map((f, i) => {
-    if (typeof f !== "object" || f === null) throw new Error(`finding ${i}: not an object`);
-    const o = f as Record<string, unknown>;
+    if (!isRecord(f)) throw new Error(`finding ${i}: not an object`);
     const allowed = new Set([
       "node",
       "kind",
@@ -39,14 +51,14 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
       "confused_with",
       "misconception_id",
     ]);
-    for (const key of Object.keys(o)) {
+    for (const key of Object.keys(f)) {
       if (!allowed.has(key)) throw new Error(`finding ${i}: unknown field '${key}'`);
     }
-    if (typeof o.node !== "string" || !g.nodes.has(o.node))
+    if (typeof f.node !== "string" || !g.nodes.has(f.node))
       throw new Error(`finding ${i}: 'node' must be one of the listed node ids`);
-    if (!EVIDENCE_KINDS.includes(o.kind as never))
+    if (!isOneOf(EVIDENCE_KINDS, f.kind))
       throw new Error(`finding ${i}: 'kind' must be one of [${EVIDENCE_KINDS.join(", ")}]`);
-    for (const key of [
+    const optionalFields = [
       "observation",
       "support",
       "native_outcome",
@@ -54,52 +66,20 @@ function parseFindings(raw: unknown, g: DomainGraph): RawFinding[] {
       "severity",
       "confused_with",
       "misconception_id",
-    ]) {
-      if (o[key] !== undefined && typeof o[key] !== "string")
-        throw new Error(`finding ${i}: '${key}' must be a string`);
-    }
-    return {
-      node: o.node,
-      kind: o.kind as string,
-      ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
-      ...(o.support !== undefined ? { support: o.support as string } : {}),
-      ...(o.native_outcome !== undefined ? { native_outcome: o.native_outcome as string } : {}),
-      ...(o.coarseness !== undefined ? { coarseness: o.coarseness as string } : {}),
-      ...(o.severity !== undefined ? { severity: o.severity as string } : {}),
-      ...(o.confused_with !== undefined ? { confused_with: o.confused_with as string } : {}),
-      ...(o.misconception_id !== undefined
-        ? { misconception_id: o.misconception_id as string }
-        : {}),
-    };
-  });
-}
-
-function toEvents(
-  findings: RawFinding[],
-  domain: string,
-  source: EvidenceSource,
-  sourceRef: string,
-  ts: string,
-): EvidenceEvent[] {
-  return findings.map((f) =>
-    validateEvent({
+    ].map((key) => [key, optionalString(f, key, `finding ${i}`)] as const);
+    const present = Object.fromEntries(optionalFields.filter(([, value]) => value !== undefined));
+    return validateEvent({
       v: 1,
       vocab_version: VOCAB_VERSION,
-      ts,
-      domain,
+      ts: context.ts,
+      domain: context.domain,
       nodes: [f.node],
       kind: f.kind,
-      source,
-      source_ref: sourceRef,
-      ...(f.observation !== undefined ? { observation: f.observation } : {}),
-      ...(f.support !== undefined ? { support: f.support } : {}),
-      ...(f.native_outcome !== undefined ? { native_outcome: f.native_outcome } : {}),
-      ...(f.coarseness !== undefined ? { coarseness: f.coarseness } : {}),
-      ...(f.severity !== undefined ? { severity: f.severity } : {}),
-      ...(f.confused_with !== undefined ? { confused_with: f.confused_with } : {}),
-      ...(f.misconception_id !== undefined ? { misconception_id: f.misconception_id } : {}),
-    }),
-  );
+      source: context.source,
+      source_ref: context.sourceRef,
+      ...present,
+    });
+  });
 }
 
 const CLASSIFY_RULES = `
@@ -140,7 +120,7 @@ export async function evaluateTranscript(
     `Domain nodes:\n${nodeCatalog(g)}\n\nSession transcript:\n<transcript>\n${transcript}\n</transcript>\n\nClassify what the LEARNER (not the tutor) demonstrated, failed, or revealed.`,
     // Event validation is inside completeJson so an invalid structured mistake
     // triggers the normal repair retry instead of escaping after generation.
-    (raw) => toEvents(parseFindings(raw, g), g.domain, source, sourceRef, ts),
+    (raw) => parseFindings(raw, g, { domain: g.domain, source, sourceRef, ts }),
     opts,
   );
 }
@@ -168,7 +148,7 @@ Additional rules for self-produced artifacts:
   misunderstanding rather than a typo or shortcut; use severity unknown unless
   a slip or named misconception is actually evidenced.`,
     `Domain nodes:\n${nodeCatalog(g)}\n\nUser-produced artifact:\n<artifact>\n${artifact}\n</artifact>`,
-    (raw) => toEvents(parseFindings(raw, g), g.domain, "artifact", sourceRef, ts),
+    (raw) => parseFindings(raw, g, { domain: g.domain, source: "artifact", sourceRef, ts }),
     opts,
   );
 }
@@ -189,14 +169,13 @@ export async function autoGrade(
 Grade on semantic correctness, not exact wording. Never output anything but the JSON.`,
     `Prompt: ${card.front}\nExpected answer: ${card.back}\nLearner's answer: ${answer}`,
     (raw) => {
-      const o = raw as Record<string, unknown>;
-      if (!GRADES.includes(o?.grade as never))
+      if (!isRecord(raw)) throw new Error("grade response must be an object");
+      if (!isOneOf(GRADES, raw.grade))
         throw new Error(`grade must be one of [${GRADES.join(", ")}]`);
-      if (o.observation !== undefined && typeof o.observation !== "string")
-        throw new Error("observation must be a string");
+      const observation = optionalString(raw, "observation", "grade response");
       return {
-        grade: o.grade as Grade,
-        ...(o.observation !== undefined ? { observation: o.observation as string } : {}),
+        grade: raw.grade,
+        ...(observation === undefined ? {} : { observation }),
       };
     },
     opts,

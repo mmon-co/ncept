@@ -17,10 +17,12 @@ function ref(identity: `patch-${string}`, version: string, fill: string): ExactP
 }
 
 function hubBase(exact: ExactPatchRef): LockedBase {
+  const version = exact.version;
+  if (version === undefined) throw new Error("test Hub base needs a version");
   return {
-    requirement: { identity: exact.identity, release: exact.version! },
+    requirement: { identity: exact.identity, release: version },
     exact,
-    acquisition: { kind: "hub", identity: exact.identity, version: exact.version! },
+    acquisition: { kind: "hub", identity: exact.identity, version },
   };
 }
 

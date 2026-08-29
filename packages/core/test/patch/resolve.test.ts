@@ -170,7 +170,7 @@ test("a Personal Patch rejects an exact lock that does not satisfy its manifest 
           acquisition: {
             kind: "hub" as const,
             identity: course.ref.identity,
-            version: course.ref.version!,
+            version: hubBase(course.ref).requirement.release,
           },
         },
       ],
@@ -231,8 +231,8 @@ test("resolution rejects incompatible exact revisions and dependency cycles with
     });
     throw new Error("expected incompatible exact revisions to fail");
   } catch (error) {
-    expect(error).toBeInstanceOf(PatchCompileError);
-    expect((error as PatchCompileError).code).toBe("incompatible-revision");
+    if (!(error instanceof PatchCompileError)) throw error;
+    expect(error.code).toBe("incompatible-revision");
   }
 
   const cycleARef = ref("patch-cycle-a", "1.0.0", "a");
@@ -243,8 +243,8 @@ test("resolution rejects incompatible exact revisions and dependency cycles with
     resolvePatchBundle({ terminal: cycleA.ref, revisions: [cycleB, cycleA] });
     throw new Error("expected a dependency cycle to fail");
   } catch (error) {
-    expect(error).toBeInstanceOf(PatchCompileError);
-    expect((error as PatchCompileError).code).toBe("dependency-cycle");
+    if (!(error instanceof PatchCompileError)) throw error;
+    expect(error.code).toBe("dependency-cycle");
   }
 });
 
@@ -340,8 +340,8 @@ test("metadata contributions cannot change an identified set's attachment subjec
     resolvePatchBundle({ terminal: incompatible.ref, revisions: [foundation, incompatible] });
     throw new Error("expected incompatible subjects to fail");
   } catch (error) {
-    expect(error).toBeInstanceOf(PatchCompileError);
-    expect((error as PatchCompileError).code).toBe("incompatible-contribution");
+    if (!(error instanceof PatchCompileError)) throw error;
+    expect(error.code).toBe("incompatible-contribution");
   }
 });
 
@@ -526,9 +526,9 @@ test("a stale exact mask reports the Reconciliation Patch that must change", () 
     });
     throw new Error("expected the stale exact mask to fail");
   } catch (error) {
-    expect(error).toBeInstanceOf(PatchCompileError);
-    expect((error as PatchCompileError).code).toBe("stale-mask-target");
-    expect((error as Error).message).toContain(reconciliation.ref.identity);
-    expect((error as Error).message).toContain("patch-source@1.0.0 operation 0 node 'node-shared'");
+    if (!(error instanceof PatchCompileError)) throw error;
+    expect(error.code).toBe("stale-mask-target");
+    expect(error.message).toContain(reconciliation.ref.identity);
+    expect(error.message).toContain("patch-source@1.0.0 operation 0 node 'node-shared'");
   }
 });

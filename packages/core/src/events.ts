@@ -5,8 +5,6 @@ import {
   type EvidenceEvent,
   type EvidenceKind,
   type EvidenceSource,
-  type MistakeCoarseness,
-  type MistakeSeverity,
   type Support,
 } from "./types";
 

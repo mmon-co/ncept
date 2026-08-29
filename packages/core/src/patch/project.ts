@@ -4,7 +4,6 @@ import type {
   ExactPatchRef,
   MetadataSet,
   NodeId,
-  PatchId,
   SelectedGraph,
   VisualGraph,
   VisualNodeAppearance,
@@ -149,7 +148,7 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
     return {
       id: node.id,
       label,
-      groupId: source.identity as PatchId,
+      groupId: source.identity,
       rank: ranks.get(node.id) ?? 0,
       appearance: appearance(input, node.id),
       annotations: input.annotations[node.id] ?? [],

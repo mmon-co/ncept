@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   PatchCompileError,
+  parseGraphQuery,
   resolvePatchBundle,
   selectGraph,
   type GraphQuery,
@@ -120,15 +121,18 @@ test("unknown tags and malformed restricted queries fail with typed errors", () 
   for (const [query, code] of [
     [{ tag: "missing" }, "unknown-tag"],
     [{ union: [] }, "malformed-query"],
+    [{ union: [{ tag: "left" }] }, "malformed-query"],
+    [{ intersection: [{ tag: "left" }] }, "malformed-query"],
     [{ difference: [{ tag: "left" }] }, "malformed-query"],
+    [{ difference: [{ tag: "left" }, { tag: "right" }, { tag: "left" }] }, "malformed-query"],
     [{ tag: "left", union: [{ tag: "right" }] }, "malformed-query"],
   ] as const) {
     try {
-      selectGraph(graph, query as GraphQuery);
+      selectGraph(graph, parseGraphQuery(query));
       throw new Error("expected query to fail");
     } catch (error) {
-      expect(error).toBeInstanceOf(PatchCompileError);
-      expect((error as PatchCompileError).code).toBe(code);
+      if (!(error instanceof PatchCompileError)) throw error;
+      expect(error.code).toBe(code);
     }
   }
 });

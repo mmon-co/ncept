@@ -44,12 +44,13 @@ function lockedBases(revision: PatchRevision): LockedBase[] {
     const matches = revision.lock.entries.flatMap((entry, index) =>
       sameRequirement(entry.requirement, requirement) ? [{ entry, index }] : [],
     );
-    if (matches.length !== 1 || used.has(matches[0]!.index))
+    const match = matches[0];
+    if (matches.length !== 1 || match === undefined || used.has(match.index))
       throw new PatchCompileError(
         "invalid-bundle",
         `Patch ${revision.ref.identity} base ${requirement.identity}@${requirement.release} does not have one exact lock entry`,
       );
-    const { entry, index } = matches[0]!;
+    const { entry, index } = match;
     used.add(index);
     if (
       entry.exact.identity !== requirement.identity ||
@@ -348,26 +349,28 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   for (const [id, contributions] of edgeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const first = active[0];
-    if (first === undefined) continue;
+    const last = active.at(-1);
+    if (first === undefined || last === undefined) continue;
     if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
       throw new PatchCompileError(
         "incompatible-contribution",
         `edge '${id}' cannot change endpoints`,
       );
-    edges.set(id, active.at(-1)!.value);
+    edges.set(id, last.value);
     edgeProvenance[id] = active.map(({ provenance }) => provenance);
   }
   for (const [id, contributions] of metadataContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const first = active[0];
-    if (first === undefined) continue;
+    const last = active.at(-1);
+    if (first === undefined || last === undefined) continue;
     if (active.some(({ value }) => !sameSubjects(first.value, value)))
       throw new PatchCompileError(
         "incompatible-contribution",
         `metadata set '${id}' cannot change attachment subjects`,
       );
     const merged = mergeMetadataProperties(active, maskedProperties);
-    metadataSets.set(id, { ...active.at(-1)!.value, properties: merged.properties });
+    metadataSets.set(id, { ...last.value, properties: merged.properties });
     metadataProvenance[id] = active.map(({ provenance }) => provenance);
     metadataPropertyProvenance[id] = merged.provenance;
   }
@@ -438,9 +441,8 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       );
   }
 
-  const patchMetadata = Object.fromEntries(
-    orderedRevisions.map((revision) => [revision.ref.identity, revision.metadata]),
-  ) as Record<PatchId, PatchMetadata>;
+  const patchMetadata: Record<PatchId, PatchMetadata> = {};
+  for (const revision of orderedRevisions) patchMetadata[revision.ref.identity] = revision.metadata;
   return {
     terminal: bundle.terminal,
     patchOrder: orderedRevisions.map((revision) => revision.ref),

@@ -14,14 +14,19 @@ interface Fragment {
   readonly metadataSets: Set<MetadataSetId>;
 }
 
+export const GRAPH_QUERY_OPERAND_BOUNDS = {
+  union: { min: 2 },
+  intersection: { min: 2 },
+  difference: { min: 2, max: 2 },
+} as const;
+
 function malformed(message: string): never {
   throw new PatchCompileError("malformed-query", message);
 }
 
 export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return malformed(`${label} must be an object`);
-  const raw = value as Record<string, unknown>;
+  if (!isRecord(value)) return malformed(`${label} must be an object`);
+  const raw = value;
   const keys = Object.keys(raw);
   if (keys.length !== 1) return malformed(`${label} must contain exactly one query term`);
   if (keys[0] === "tag") {
@@ -32,15 +37,20 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
   if (keys[0] === "union" || keys[0] === "intersection") {
     const operation = keys[0];
     const children = raw[operation];
-    if (!Array.isArray(children) || children.length === 0)
-      return malformed(`${label}.${operation} must be a non-empty array`);
-    const parsed = children.map((child, index) =>
-      parseGraphQuery(child, `${label}.${operation}[${index}]`),
-    ) as [GraphQuery, ...GraphQuery[]];
+    if (!isArray(children) || children.length < GRAPH_QUERY_OPERAND_BOUNDS[operation].min)
+      return malformed(`${label}.${operation} must contain at least two terms`);
+    const [first, second, ...rest] = children;
+    if (first === undefined || second === undefined)
+      return malformed(`${label}.${operation} must contain at least two terms`);
+    const parsed: [GraphQuery, GraphQuery, ...GraphQuery[]] = [
+      parseGraphQuery(first, `${label}.${operation}[0]`),
+      parseGraphQuery(second, `${label}.${operation}[1]`),
+      ...rest.map((child, index) => parseGraphQuery(child, `${label}.${operation}[${index + 2}]`)),
+    ];
     return operation === "union" ? { union: parsed } : { intersection: parsed };
   }
   if (keys[0] === "difference") {
-    if (!Array.isArray(raw.difference) || raw.difference.length !== 2)
+    if (!isArray(raw.difference) || raw.difference.length !== 2)
       return malformed(`${label}.difference must contain exactly two terms`);
     return {
       difference: [
@@ -50,6 +60,14 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     };
   }
   return malformed(`${label} has an unknown query term '${keys[0]}'`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
 }
 
 function combine(
@@ -139,6 +157,32 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
     return subjects.length === 0 ? [] : [{ ...metadata, subjects }];
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
+  const nodeProvenance: Record<NodeId, ResolvedGraph["provenance"]["nodes"][NodeId]> = {};
+  const edgeProvenance: Record<EdgeId, ResolvedGraph["provenance"]["edges"][EdgeId]> = {};
+  const metadataSetProvenance: Record<
+    MetadataSetId,
+    ResolvedGraph["provenance"]["metadataSets"][MetadataSetId]
+  > = {};
+  const metadataPropertyProvenance: Record<
+    MetadataSetId,
+    ResolvedGraph["provenance"]["metadataProperties"][MetadataSetId]
+  > = {};
+  for (const node of graph.nodes) {
+    const provenance = graph.provenance.nodes[node.id];
+    if (nodes.has(node.id) && provenance !== undefined) nodeProvenance[node.id] = provenance;
+  }
+  for (const edge of graph.edges) {
+    const provenance = graph.provenance.edges[edge.id];
+    if (edges.has(edge.id) && provenance !== undefined) edgeProvenance[edge.id] = provenance;
+  }
+  for (const metadata of graph.metadataSets)
+    if (metadataSets.has(metadata.id)) {
+      const provenance = graph.provenance.metadataSets[metadata.id];
+      const propertyProvenance = graph.provenance.metadataProperties[metadata.id];
+      if (provenance !== undefined) metadataSetProvenance[metadata.id] = provenance;
+      if (propertyProvenance !== undefined)
+        metadataPropertyProvenance[metadata.id] = propertyProvenance;
+    }
 
   return {
     ...graph,
@@ -152,22 +196,10 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       metadataSets: tag.metadataSets.filter((id) => metadataSets.has(id)),
     })),
     provenance: {
-      nodes: Object.fromEntries(
-        Object.entries(graph.provenance.nodes).filter(([id]) => nodes.has(id as NodeId)),
-      ) as ResolvedGraph["provenance"]["nodes"],
-      edges: Object.fromEntries(
-        Object.entries(graph.provenance.edges).filter(([id]) => edges.has(id as EdgeId)),
-      ) as ResolvedGraph["provenance"]["edges"],
-      metadataSets: Object.fromEntries(
-        Object.entries(graph.provenance.metadataSets).filter(([id]) =>
-          metadataSets.has(id as MetadataSetId),
-        ),
-      ) as ResolvedGraph["provenance"]["metadataSets"],
-      metadataProperties: Object.fromEntries(
-        Object.entries(graph.provenance.metadataProperties).filter(([id]) =>
-          metadataSets.has(id as MetadataSetId),
-        ),
-      ) as ResolvedGraph["provenance"]["metadataProperties"],
+      nodes: nodeProvenance,
+      edges: edgeProvenance,
+      metadataSets: metadataSetProvenance,
+      metadataProperties: metadataPropertyProvenance,
     },
   };
 }
