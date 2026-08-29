@@ -12,12 +12,12 @@ does not depend on SolidStart, browser state, or Application runtime resources.
 _Avoid_: Application workflow, server function, browser transport
 
 **Course**:
-A Patch whose Patch metadata includes the course label. The application queries and presents that label specially without giving Course a distinct content representation.
-_Avoid_: Domain, learner scope, graph-owning model kind
+A Patch whose Patch metadata includes the course label. The label serves Hub distribution and discovery only; the learner-facing organization is Missions and Views, and Course has no distinct content representation.
+_Avoid_: Domain, learner scope, graph-owning model kind, dashboard unit
 
 **Curriculum**:
-A Patch whose Patch metadata includes the curriculum label. The application queries and presents that label specially without giving Curriculum a distinct content representation.
-_Avoid_: Course, specification, synthetic course
+A Patch whose Patch metadata includes the curriculum label. The label serves Hub distribution and discovery only; the learner-facing analog is a Mission's computed route, and Curriculum has no distinct content representation.
+_Avoid_: Course, specification, synthetic course, dashboard unit
 
 **Patch**:
 The sole identified and versioned portable content unit. A Patch declares an ordered list of base Patch requirements and a delta of nodes, edges, Pedagogical metadata, and Patch metadata; a root Patch has no bases and expresses its complete graph as the delta from the empty graph.
@@ -87,5 +87,5 @@ Non-user-associated content attached to Patch nodes and edges and released with 
 _Avoid_: Learner state, user tag
 
 **Notebook**:
-User-authored Pedagogical content for bridge nodes, one-off Lessons, and similar local additions. It is the owned delta of the Personal scope rather than a distinct content representation.
-_Avoid_: Learner state, Artifact library
+The owned delta of the Personal scope: user-authored graph content, from one-off bridge nodes to whole self-charted domains. Content lives here until publication reifies a View of it into a discrete Patch; minting a separate Patch is a distribution decision, not an authoring one.
+_Avoid_: Learner state, Artifact library, mandatory per-course Patch
