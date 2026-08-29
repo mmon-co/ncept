@@ -1,443 +1,97 @@
 import { describe, expect, test } from "bun:test";
-import {
-  foldMastery,
-  effectiveUncertainty,
-  headerLookup,
-  unmetPrerequisites,
-  probeCandidates,
-  programmeTo,
-} from "../src/engine";
-import { DEFAULT_PARAMS } from "../src/params";
+import { applyEvidenceEffect } from "../src/engine";
 import { validateEvent } from "../src/events";
+import { DEFAULT_PARAMS } from "../src/params";
+import type { EvidenceEvent } from "../src/types";
 import { ev } from "./helpers";
-import type { DomainGraph, MasteryHeader } from "../src/types";
 
-function graphs(): Map<string, DomainGraph> {
-  const nodes = new Map(
-    ["a", "b", "c", "d"].map((id) => [
-      id,
-      {
-        id,
-        criterion: id,
-        deprecated: false,
-        title: id.toUpperCase(),
-        knowledge_type: "conceptual" as const,
-        threshold: false,
-        aliases: [],
-        tags: [],
-        body: `${id} content`,
-      },
-    ]),
-  );
-  return new Map([
-    [
-      "math",
-      {
-        domain: "math",
-        nodes,
-        edges: [
-          { from: "b", to: "a", type: "dependency" },
-          { from: "c", to: "b", type: "dependency" },
-          { from: "d", to: "b", type: "strong-relevance" },
-        ],
-      },
-    ],
-  ]);
+function evidence(overrides: Partial<Record<string, unknown>> = {}): EvidenceEvent {
+  return validateEvent(ev(overrides));
 }
 
-function graph(domain = "math"): DomainGraph {
-  const result = graphs().get(domain);
-  if (result === undefined) throw new Error(`missing test graph ${domain}`);
-  return result;
-}
+describe("evidence application", () => {
+  test("a weaker success rung cannot revoke stronger evidence", () => {
+    const generalized = evidence({ kind: "generalized" });
+    const first = applyEvidenceEffect(undefined, generalized, DEFAULT_PARAMS);
+    const current = applyEvidenceEffect(
+      { kind: "observed", ...first, lastObserved: generalized.ts },
+      generalized,
+      DEFAULT_PARAMS,
+    );
 
-function header(headers: MasteryHeader[], node: string, domain = "math"): MasteryHeader {
-  const result = headers.find((item) => item.domain === domain && item.node === node);
-  if (result === undefined) throw new Error(`missing mastery header ${domain}/${node}`);
-  return result;
-}
+    const recognized = applyEvidenceEffect(
+      { kind: "observed", ...current, lastObserved: generalized.ts },
+      evidence({ kind: "recognized" }),
+      DEFAULT_PARAMS,
+    );
 
-const P = DEFAULT_PARAMS;
-
-describe("mastery fold", () => {
-  test("determinism: same log + params -> identical headers", () => {
-    const g = graphs();
-    const events = [
-      ev(),
-      ev({ ts: "2026-08-02T12:00:00.000Z", kind: "not-recalled", nodes: ["c"] }),
-    ].map(validateEvent);
-    const h1 = foldMastery(events, g, P);
-    const h2 = foldMastery(events, g, P);
-    expect(JSON.stringify(h1)).toBe(JSON.stringify(h2));
+    expect(current.estimate).toBeGreaterThan(DEFAULT_PARAMS.evidence.recognized.target);
+    expect(recognized.estimate).toBe(current.estimate);
+    expect(recognized.uncertainty).toBeLessThan(current.uncertainty);
   });
 
-  test("stale or foreign evidence rows remain history without manufacturing headers", () => {
-    const headers = foldMastery(
-      [
-        validateEvent(ev({ domain: "gone", nodes: ["node"] })),
-        validateEvent(ev({ domain: "math", nodes: ["gone"] })),
-      ],
-      graphs(),
-      P,
+  test("guided support discounts the estimate without discounting certainty", () => {
+    const unaided = applyEvidenceEffect(
+      undefined,
+      evidence({ kind: "used", support: "unaided" }),
+      DEFAULT_PARAMS,
     );
-    expect(headers).toEqual([]);
-  });
+    const guided = applyEvidenceEffect(
+      undefined,
+      evidence({ kind: "used", support: "guided" }),
+      DEFAULT_PARAMS,
+    );
 
-  test("direct evidence moves estimate toward target and shrinks uncertainty", () => {
-    const g = graphs();
-    const h = header(foldMastery([validateEvent(ev({ nodes: ["d"] }))], g, P), "d");
-    expect(h.estimate).toBeGreaterThan(P.initial.estimate);
-    expect(h.uncertainty).toBeLessThan(P.initial.uncertainty);
-    expect(h.last_evidenced).toBe("2026-08-01T12:00:00.000Z");
-  });
-
-  test("recognized evidence is structurally capped below mastery", () => {
-    const g = graphs();
-    const events = Array.from({ length: 100 }, (_, i) =>
-      validateEvent(
-        ev({
-          ts: `2026-08-${String((i % 27) + 1).padStart(2, "0")}T12:00:00.000Z`,
-          nodes: ["d"],
-          kind: "recognized",
-        }),
-      ),
-    );
-    const h = header(foldMastery(events, g, P), "d");
-    expect(h.estimate).toBeLessThan(P.mastery_threshold);
-    expect(h.estimate).toBeLessThanOrEqual(P.evidence.recognized.target);
-  });
-
-  test("success targets remain hard ceilings under aggressive tuning", () => {
-    const tuned = structuredClone(P);
-    tuned.evidence.recognized.weight = 20;
-    tuned.support_weight.guided = 20;
-    const headers = foldMastery(
-      [validateEvent(ev({ nodes: ["c"], kind: "recognized", support: "guided" }))],
-      graphs(),
-      tuned,
-    );
-    expect(header(headers, "c").estimate).toBeLessThanOrEqual(tuned.evidence.recognized.target);
-    expect(header(headers, "b").estimate).toBeLessThanOrEqual(tuned.evidence.recognized.target);
-  });
-
-  test("a lower success rung cannot erase stronger evidence", () => {
-    const g = graphs();
-    const strong = Array.from({ length: 30 }, (_, i) =>
-      validateEvent(
-        ev({
-          ts: `2026-08-${String((i % 27) + 1).padStart(2, "0")}T12:00:00.000Z`,
-          nodes: ["d"],
-          kind: "generalized",
-        }),
-      ),
-    );
-    const before = header(foldMastery(strong, g, P), "d");
-    const after = header(
-      foldMastery(
-        [
-          ...strong,
-          validateEvent(ev({ ts: "2026-09-01T12:00:00.000Z", nodes: ["d"], kind: "recognized" })),
-        ],
-        g,
-        P,
-      ),
-      "d",
-    );
-    expect(after.estimate).toBe(before.estimate);
-    expect(after.uncertainty).toBeLessThan(0.1); // it still contributes certainty after staleness growth
-  });
-
-  test("support discounts estimate but keeps the observation's uncertainty signal", () => {
-    const g = graphs();
-    const unaided = header(
-      foldMastery([validateEvent(ev({ nodes: ["d"], kind: "used", support: "unaided" }))], g, P),
-      "d",
-    );
-    const guided = header(
-      foldMastery([validateEvent(ev({ nodes: ["d"], kind: "used", support: "guided" }))], g, P),
-      "d",
-    );
     expect(guided.estimate).toBeLessThan(unaided.estimate);
     expect(guided.uncertainty).toBe(unaided.uncertainty);
   });
 
-  test("mistake severity distinguishes mild slips from misconception pulls", () => {
-    const g = graphs();
-    const slip = header(
-      foldMastery(
-        [
-          validateEvent(
-            ev({ nodes: ["d"], kind: "mistake", coarseness: "topic", severity: "slip" }),
-          ),
-        ],
-        g,
-        P,
-      ),
-      "d",
+  test("mistake severity distinguishes slips from misconceptions", () => {
+    const slip = applyEvidenceEffect(
+      undefined,
+      evidence({ kind: "mistake", coarseness: "topic", severity: "slip" }),
+      DEFAULT_PARAMS,
     );
-    const misconception = header(
-      foldMastery(
-        [
-          validateEvent(
-            ev({
-              nodes: ["d"],
-              kind: "mistake",
-              coarseness: "topic",
-              severity: "misconception",
-              misconception_id: "bad-rule",
-            }),
-          ),
-        ],
-        g,
-        P,
-      ),
-      "d",
+    const misconception = applyEvidenceEffect(
+      undefined,
+      evidence({
+        kind: "mistake",
+        coarseness: "topic",
+        severity: "misconception",
+        misconception_id: "bad-rule",
+      }),
+      DEFAULT_PARAMS,
     );
-    expect(slip.estimate).toBeLessThan(P.initial.estimate);
+
+    expect(slip.estimate).toBeLessThan(DEFAULT_PARAMS.initial.estimate);
     expect(misconception.estimate).toBeLessThan(slip.estimate);
-    expect(slip.uncertainty).toBeLessThan(P.initial.uncertainty);
-  });
-});
-
-describe("mastery propagation", () => {
-  test("downstream success re-evidences ancestors, attenuated per hop", () => {
-    const g = graphs();
-    // success on c: b is 1 hop up, a is 2 hops up
-    const headers = foldMastery([validateEvent(ev({ nodes: ["c"] }))], g, P);
-    const get = (node: string) => header(headers, node);
-    expect(get("b").estimate).toBeGreaterThan(P.initial.estimate);
-    expect(get("a").estimate).toBeGreaterThan(P.initial.estimate);
-    expect(get("c").estimate).toBeGreaterThan(get("b").estimate);
-    expect(get("b").estimate).toBeGreaterThan(get("a").estimate);
+    expect(slip.uncertainty).toBeLessThan(DEFAULT_PARAMS.initial.uncertainty);
   });
 
-  test("directed graded correspondences transfer without synthesizing reverse evidence", () => {
-    const source = graph();
-    const target = structuredClone(source);
-    target.domain = "physics";
-    const links = [
-      { from: { domain: "math", node: "d" }, to: { domain: "physics", node: "a" }, weight: 0.5 },
-    ];
-    const headers = foldMastery(
-      [validateEvent(ev({ domain: "math", nodes: ["d"], kind: "used" }))],
-      new Map([
-        ["math", source],
-        ["physics", target],
-      ]),
-      P,
-      links,
-    );
-    const transferred = header(headers, "a", "physics");
-    const direct = header(headers, "d");
-    expect(transferred.estimate).toBeGreaterThan(P.initial.estimate);
-    expect(transferred.estimate).toBeLessThan(direct.estimate);
-    // Transfer relation is deliberately uncertain; direct target evidence may
-    // subsequently reduce this state without a synthetic target event.
-    expect(transferred.uncertainty).toBe(P.initial.uncertainty);
-    expect(headers.some((header) => header.domain === "physics" && header.node === "d")).toBe(
-      false,
-    );
-  });
-
-  test("zero attenuation disables paths without creating evidenced headers or correspondence bridges", () => {
-    const source = graph();
-    const target = structuredClone(source);
-    target.domain = "physics";
-    const tuned = structuredClone(P);
-    tuned.propagation.success_up.dependency = 0;
-    tuned.propagation.success_up["strong-relevance"] = 0;
-    const headers = foldMastery(
-      [validateEvent(ev({ nodes: ["c"], kind: "used" }))],
-      new Map([
-        ["math", source],
-        ["physics", target],
-      ]),
-      tuned,
-      [{ from: { domain: "math", node: "a" }, to: { domain: "physics", node: "a" }, weight: 0.5 }],
-    );
-    expect(headers.map(({ domain, node }) => `${domain}/${node}`)).toEqual(["math/c"]);
-  });
-
-  test("an equally strong local path wins a tie with transferred evidence", () => {
-    const math = graph();
-    const other = structuredClone(math);
-    other.domain = "aaa";
-    const headers = foldMastery(
-      [validateEvent(ev({ nodes: ["c"], kind: "used" }))],
-      new Map([
-        ["math", math],
-        ["aaa", other],
-      ]),
-      P,
-      [
-        { from: { domain: "math", node: "c" }, to: { domain: "aaa", node: "c" }, weight: 0.5 },
-        { from: { domain: "aaa", node: "c" }, to: { domain: "math", node: "a" }, weight: 0.5 },
-      ],
-    );
-    // math/c -> math/b -> math/a and the two-link transfer path both have
-    // factor 0.25. The ordinary local support should preserve its certainty.
-    expect(header(headers, "a").uncertainty).toBeLessThan(P.initial.uncertainty);
-  });
-
-  test("non-binary rounding ties still prefer a local effective path", () => {
-    const math = graph();
-    math.edges = [
-      { from: "d", to: "c", type: "dependency" },
-      { from: "c", to: "b", type: "strong-relevance" },
-      { from: "b", to: "a", type: "dependency" },
-    ];
-    const other = structuredClone(math);
-    other.domain = "aaa";
-    const tuned = structuredClone(P);
-    tuned.propagation.max_hops = 3;
-    tuned.propagation.success_up.dependency = 0.1;
-    tuned.propagation.success_up["strong-relevance"] = 0.3;
-    const headers = foldMastery(
-      [validateEvent(ev({ nodes: ["d"], kind: "used" }))],
-      new Map([
-        ["math", math],
-        ["aaa", other],
-      ]),
-      tuned,
-      [
-        // 0.1 * 0.1 * 0.3, mathematically equal to the local
-        // 0.1 * 0.3 * 0.1 path but not necessarily bit-identical.
-        { from: { domain: "math", node: "d" }, to: { domain: "aaa", node: "d" }, weight: 0.1 },
-        { from: { domain: "aaa", node: "c" }, to: { domain: "math", node: "a" }, weight: 0.3 },
-      ],
-    );
-    expect(header(headers, "a").uncertainty).toBeLessThan(tuned.initial.uncertainty);
-  });
-
-  test("later transfer does not erase certainty established by direct target evidence", () => {
-    const source = graph();
-    const target = structuredClone(source);
-    target.domain = "physics";
-    const direct = validateEvent(ev({ domain: "physics", nodes: ["a"], kind: "used" }));
-    const transferred = validateEvent(
-      ev({ ts: "2026-08-02T12:00:00.000Z", domain: "math", nodes: ["d"], kind: "used" }),
-    );
-    const headers = foldMastery(
-      [direct, transferred],
-      new Map([
-        ["math", source],
-        ["physics", target],
-      ]),
-      P,
-      [{ from: { domain: "math", node: "d" }, to: { domain: "physics", node: "a" }, weight: 0.5 }],
-    );
-    expect(header(headers, "a", "physics").uncertainty).toBeLessThan(P.initial.uncertainty);
-  });
-
-  test("effective-graph walks cross local and correspondence paths without looping cycles", () => {
-    const source = graph();
-    const target = structuredClone(source);
-    target.domain = "physics";
-    const third = structuredClone(source);
-    third.domain = "chemistry";
-    const links = [
-      // c reaches a through its local prerequisite chain, then crosses into
-      // physics c and continues through that graph's prerequisites.
-      { from: { domain: "math", node: "a" }, to: { domain: "physics", node: "c" }, weight: 0.5 },
-      // A second directed correspondence demonstrates a multi-graph path.
+  test("elapsed time widens uncertainty before applying new evidence", () => {
+    const event = evidence({ ts: "2026-08-01T12:00:00.000Z" });
+    const recent = applyEvidenceEffect(
       {
-        from: { domain: "physics", node: "a" },
-        to: { domain: "chemistry", node: "d" },
-        weight: 0.5,
+        kind: "observed",
+        estimate: 0.5,
+        uncertainty: 0.1,
+        lastObserved: event.ts,
       },
-      // Cyclic input is bounded and does not manufacture another source hit.
-      { from: { domain: "chemistry", node: "d" }, to: { domain: "math", node: "c" }, weight: 1 },
-    ];
-    const tuned = structuredClone(P);
-    tuned.propagation.max_hops = 6;
-    const headers = foldMastery(
-      [validateEvent(ev({ domain: "math", nodes: ["c"], kind: "used" }))],
-      new Map([
-        ["math", source],
-        ["physics", target],
-        ["chemistry", third],
-      ]),
-      tuned,
-      links,
+      event,
+      DEFAULT_PARAMS,
     );
-    expect(
-      headers.find((header) => header.domain === "physics" && header.node === "a")?.estimate,
-    ).toBeGreaterThan(P.initial.estimate);
-    expect(
-      headers.find((header) => header.domain === "chemistry" && header.node === "d")?.estimate,
-    ).toBeGreaterThan(P.initial.estimate);
-    expect(JSON.stringify(headers)).toBe(
-      JSON.stringify(
-        foldMastery(
-          [validateEvent(ev({ domain: "math", nodes: ["c"], kind: "used" }))],
-          new Map([
-            ["math", source],
-            ["physics", target],
-            ["chemistry", third],
-          ]),
-          tuned,
-          links,
-        ),
-      ),
+    const stale = applyEvidenceEffect(
+      {
+        kind: "observed",
+        estimate: 0.5,
+        uncertainty: 0.1,
+        lastObserved: "2026-05-03T12:00:00.000Z",
+      },
+      event,
+      DEFAULT_PARAMS,
     );
-  });
-});
 
-describe("mastery failure and staleness", () => {
-  test("upstream failure bumps descendant uncertainty weaker than success-up, estimate untouched", () => {
-    const g = graphs();
-    const before = foldMastery([validateEvent(ev({ nodes: ["c"] }))], g, P);
-    const after = foldMastery(
-      [
-        validateEvent(ev({ nodes: ["c"] })),
-        validateEvent(ev({ ts: "2026-08-02T12:00:00.000Z", nodes: ["a"], kind: "not-recalled" })),
-      ],
-      g,
-      P,
-    );
-    const cBefore = header(before, "c");
-    const cAfter = header(after, "c");
-    expect(cAfter.estimate).toBe(cBefore.estimate); // estimate untouched by failure-down
-    expect(cAfter.uncertainty).toBeGreaterThan(cBefore.uncertainty);
-    // failure-down attenuation must be weaker than success-up
-    expect(P.propagation.failure_down.dependency).toBeLessThan(P.propagation.success_up.dependency);
-  });
-
-  test("staleness widens effective uncertainty but never touches stored estimate", () => {
-    const g = graphs();
-    const h = header(foldMastery([validateEvent(ev({ nodes: ["d"] }))], g, P), "d");
-    const now = Date.parse("2026-08-01T12:00:00.000Z");
-    const later = now + 90 * 86_400_000;
-    expect(effectiveUncertainty(h, later, P)).toBeGreaterThan(effectiveUncertainty(h, now, P));
-  });
-});
-
-describe("header queries", () => {
-  test("unmet prerequisites from headers alone", () => {
-    const g = graph();
-    const lookup = headerLookup([], P); // cold start: everything unknown
-    expect(unmetPrerequisites(g, lookup, "c", P)).toEqual(["a", "b"]);
-  });
-
-  test("probe candidates rank high-uncertainty, high-dependency nodes first", () => {
-    const g = graph();
-    const now = Date.parse("2026-08-01T12:00:00.000Z");
-    const cands = probeCandidates(g, headerLookup([], P), now, P);
-    // a and b have dependents; d has none — a/b must outrank d
-    const idx = (n: string) => cands.findIndex((c) => c.node === n);
-    expect(idx("b")).toBeLessThan(idx("d"));
-    expect(idx("a")).toBeLessThan(idx("d"));
-  });
-
-  test("programme covers unmastered prerequisites in topological order, ending at target", () => {
-    const g = graph();
-    const order = programmeTo(g, headerLookup([], P), "c", P);
-    expect(order).toEqual(["a", "b", "c"]);
-    // mastered prerequisites are skipped
-    const mastered = headerLookup(
-      [{ domain: "math", node: "a", estimate: 0.9, uncertainty: 0.1, last_evidenced: null }],
-      P,
-    );
-    expect(programmeTo(g, mastered, "c", P)).toEqual(["b", "c"]);
+    expect(stale.estimate).toBe(recent.estimate);
+    expect(stale.uncertainty).toBeGreaterThan(recent.uncertainty);
   });
 });

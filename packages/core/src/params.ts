@@ -3,10 +3,7 @@ import YAML from "yaml";
 import type { EvidenceParams, MistakeMultiplier, Params } from "./types";
 import type { DataDir } from "./datadir";
 
-/**
- * Hand-tuned defaults (design D4). Any values are recoverable later: state is
- * a replayable fold, so retuning means editing params.yaml and rebuilding.
- */
+/** Hand-tuned defaults for current evidence application and review session size. */
 export const DEFAULT_PARAMS: Params = {
   version: 2,
   initial: { estimate: 0.1, uncertainty: 1.0 },
@@ -35,19 +32,7 @@ export const DEFAULT_PARAMS: Params = {
   support_weight: { unaided: 1, guided: 0.6 },
   uncertainty_growth_per_day: 0.01,
   min_uncertainty: 0.05,
-  mastery_threshold: 0.7,
-  propagation: {
-    success_up: { dependency: 0.5, "strong-relevance": 0.2 },
-    failure_down: { dependency: 0.25, "strong-relevance": 0.1 },
-    failure_bump: 0.15,
-    max_hops: 3,
-  },
   review: { max_cards_per_session: 20 },
-  calibration: {
-    max_questions: 8,
-    stop_uncertainty: 0.25,
-    round_size: 5,
-  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -162,19 +147,9 @@ function parseParams(raw: unknown): Params {
   const coarseness = record("evidence.mistake.coarseness", mistake.coarseness);
   const severity = record("evidence.mistake.severity", mistake.severity);
   const supportWeight = record("support_weight", params.support_weight);
-  const propagation = record("propagation", params.propagation);
-  const successUp = record("propagation.success_up", propagation.success_up);
-  const failureDown = record("propagation.failure_down", propagation.failure_down);
   const review = record("review", params.review);
-  const calibration = record("calibration", params.calibration);
 
   const recognized = evidenceParams("evidence.recognized", evidence.recognized);
-  const masteryThreshold = finite("mastery_threshold", params.mastery_threshold, 0, 1);
-  if (recognized.target >= masteryThreshold)
-    throw new Error("params evidence.recognized.target must be below mastery_threshold");
-
-  const roundSize = nonNegativeInteger("calibration.round_size", calibration.round_size);
-  if (roundSize < 1) throw new Error("params calibration.round_size must be at least 1");
 
   return {
     version: 2,
@@ -216,39 +191,11 @@ function parseParams(raw: unknown): Params {
       params.uncertainty_growth_per_day,
     ),
     min_uncertainty: finite("min_uncertainty", params.min_uncertainty, 0, 1),
-    mastery_threshold: masteryThreshold,
-    propagation: {
-      success_up: {
-        dependency: finite("propagation.success_up.dependency", successUp.dependency, 0, 1),
-        "strong-relevance": finite(
-          "propagation.success_up.strong-relevance",
-          successUp["strong-relevance"],
-          0,
-          1,
-        ),
-      },
-      failure_down: {
-        dependency: finite("propagation.failure_down.dependency", failureDown.dependency, 0, 1),
-        "strong-relevance": finite(
-          "propagation.failure_down.strong-relevance",
-          failureDown["strong-relevance"],
-          0,
-          1,
-        ),
-      },
-      failure_bump: finite("propagation.failure_bump", propagation.failure_bump, 0, 1),
-      max_hops: nonNegativeInteger("propagation.max_hops", propagation.max_hops),
-    },
     review: {
       max_cards_per_session: nonNegativeInteger(
         "review.max_cards_per_session",
         review.max_cards_per_session,
       ),
-    },
-    calibration: {
-      max_questions: nonNegativeInteger("calibration.max_questions", calibration.max_questions),
-      stop_uncertainty: finite("calibration.stop_uncertainty", calibration.stop_uncertainty, 0, 1),
-      round_size: roundSize,
     },
   };
 }

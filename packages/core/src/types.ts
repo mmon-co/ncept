@@ -47,7 +47,7 @@ export interface EvidenceEvent {
   source: EvidenceSource;
   source_ref?: string; // transcript / card id / artifact path
   observation?: string; // freeform text destined for dossiers; never numeric input
-  /** Conditions captured for later retuning; only support is initially folded. */
+  /** Conditions captured for later retuning; only support affects the current projection. */
   support?: Support;
   latency_ms?: number;
   confidence?: number;
@@ -60,82 +60,6 @@ export interface EvidenceEvent {
   confused_with?: string;
   /** Required for misconception-severity mistakes. */
   misconception_id?: string;
-}
-
-export const EDGE_TYPES = ["dependency", "strong-relevance"] as const;
-export type EdgeType = (typeof EDGE_TYPES)[number];
-
-/** A directed relation available to the learner-state fold. */
-export interface ResolvedGraphLink {
-  from: { domain: string; node: string };
-  to: { domain: string; node: string };
-  weight: number;
-  /** A relation maps onto ordinary graph propagation when present. */
-  relation?: "depends-on" | "reinforces";
-}
-
-export const KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
-export type KnowledgeType = (typeof KNOWLEDGE_TYPES)[number];
-
-/**
- * Type-specific assessment policy. This is metadata for emitters/selectors,
- * not a change to graph edges or mastery propagation.
- */
-export interface KnowledgeTypePolicy {
-  /** Success rungs that are meaningful evidence for this kind of node. */
-  allowed_rungs: readonly SuccessKind[];
-  /** The preauthored MC-item pattern required for nodes of this kind. */
-  item_template: "recall" | "slip-distractors" | "misconception-distractors";
-}
-
-export const KNOWLEDGE_TYPE_POLICIES: Readonly<Record<KnowledgeType, KnowledgeTypePolicy>> = {
-  factual: {
-    allowed_rungs: ["recognized", "recalled"],
-    item_template: "recall",
-  },
-  conceptual: {
-    allowed_rungs: ["recognized", "recalled", "used", "generalized"],
-    item_template: "misconception-distractors",
-  },
-  procedural: {
-    allowed_rungs: ["recognized", "recalled", "used", "generalized"],
-    item_template: "slip-distractors",
-  },
-};
-
-export function knowledgeTypePolicy(type: KnowledgeType): KnowledgeTypePolicy {
-  return KNOWLEDGE_TYPE_POLICIES[type];
-}
-
-export interface GraphNode {
-  /** Stable within the exact graph used to interpret an observation. */
-  id: string;
-  /** Immutable assessment criterion. A changed criterion requires a new local id on publication. */
-  criterion: string;
-  /** Published history is retained; a deprecated node may still have evidence and edges. */
-  deprecated: boolean;
-  title: string;
-  /** What is being learned; controls assessment-rung and item-template policy. */
-  knowledge_type: KnowledgeType;
-  /** A transformative, troublesome portal worth extra authoring attention. */
-  threshold: boolean;
-  aliases: string[];
-  /** Organization metadata only — never affects edges, propagation, or programmes. */
-  tags: string[];
-  file?: string; // absolute path of the markdown source, if file-backed
-  body: string; // markdown body (definition prose)
-}
-
-export interface GraphEdge {
-  from: string; // the node that requires / references
-  to: string; // the prerequisite / related node
-  type: EdgeType;
-}
-
-export interface DomainGraph {
-  domain: string;
-  nodes: Map<string, GraphNode>;
-  edges: GraphEdge[];
 }
 
 export const GRADES = ["again", "hard", "good", "easy"] as const;
@@ -160,14 +84,6 @@ export interface Card {
   nodes: string[];
   suspended: boolean;
   created: string;
-}
-
-export interface MasteryHeader {
-  domain: string;
-  node: string;
-  estimate: number; // [0,1], as of last event
-  uncertainty: number; // [0,1], as of last event (grow with elapsed time on read)
-  last_evidenced: string | null; // ISO, null = never
 }
 
 export interface EvidenceParams {
@@ -196,22 +112,6 @@ export interface Params {
   support_weight: Record<Support, number>;
   uncertainty_growth_per_day: number;
   min_uncertainty: number;
-  mastery_threshold: number;
-  propagation: {
-    /** per-hop attenuation multipliers by edge type */
-    success_up: Record<EdgeType, number>;
-    failure_down: Record<EdgeType, number>;
-    /** uncertainty bump base for failure-down propagation */
-    failure_bump: number;
-    max_hops: number;
-  };
   /** User-level volume bounds (attention span), never per-domain. */
   review: { max_cards_per_session: number };
-  calibration: {
-    max_questions: number;
-    /** Stop a calibration once every node is below this effective uncertainty. */
-    stop_uncertainty: number;
-    /** Questions selected and then answered as one adaptive batch. */
-    round_size: number;
-  };
 }

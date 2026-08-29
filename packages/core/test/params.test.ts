@@ -119,22 +119,16 @@ describe("params migration", () => {
     expect(loadParams(blankSection).evidence).toEqual(DEFAULT_PARAMS.evidence);
   });
 
-  test("preserves valid v2 recognition tuning but rejects targets that can establish mastery", () => {
+  test("preserves valid v2 recognition tuning", () => {
     const dd = tempDataDir();
     writeFileSync(
       dd.paramsFile,
       YAML.stringify({ version: 2, evidence: { recognized: { target: 0.55 } } }),
     );
     expect(loadParams(dd).evidence.recognized.target).toBe(0.55);
-
-    writeFileSync(
-      dd.paramsFile,
-      YAML.stringify({ version: 2, evidence: { recognized: { target: 0.7 } } }),
-    );
-    expect(() => loadParams(dd)).toThrow(/below mastery_threshold/);
   });
 
-  test("rejects unsupported, non-finite, and out-of-range params before folding", () => {
+  test("rejects unsupported, non-finite, and out-of-range params before use", () => {
     const dd = tempDataDir();
     writeFileSync(dd.paramsFile, YAML.stringify({ version: 3 }));
     expect(() => loadParams(dd)).toThrow(/unsupported params version/);

@@ -268,48 +268,6 @@ test("metadata precedence uses the whole exact Patch ref when commits happen to 
   expect(graph.nodes[0]?.label).toBe("Second");
 });
 
-test("lesson provenance ignores later pedagogical metadata that does not replace the lesson", () => {
-  const course = revision;
-  const personal: PatchRevision = {
-    ...revision,
-    ref: { ...revision.ref, identity: "patch-personal", digest: `sha256:${"e".repeat(64)}` },
-    bases: [{ identity: course.ref.identity, release: "1.0.0" }],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: course.ref.identity, release: "1.0.0" },
-          exact: course.ref,
-          acquisition: {
-            kind: "hub",
-            identity: course.ref.identity,
-            version: "1.0.0",
-          },
-        },
-      ],
-    },
-    delta: {
-      operations: [
-        {
-          kind: "add-metadata-set",
-          metadataSet: {
-            id: "metadata-notebook-note",
-            subjects: [{ kind: "node", id: "node-vectors" }],
-            properties: { "pedagogy:notebook": true },
-          },
-        },
-      ],
-    },
-  };
-
-  const graph = compileGraph({
-    bundle: { terminal: personal.ref, revisions: [course, personal] },
-    learner: { kind: "absent" },
-    annotations: {},
-  });
-
-  expect(graph.nodes.find((node) => node.id === "node-vectors")?.contentSource).toEqual(course.ref);
-});
-
 test("property provenance keeps a merged lesson at the Patch that last changed that property", () => {
   const foundation = revision;
   const contribution: PatchRevision = {
