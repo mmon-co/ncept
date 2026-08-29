@@ -88,7 +88,7 @@ learner into CATEGORICAL evidence only. Rules:
 - Output a JSON array of findings. Each finding has {"node": "<id>", "kind":
   "<kind>", "observation": "<specifics>", ...conditions}.
 - "node" MUST be an id from the provided node list. Only tag nodes DIRECTLY
-  observed — never infer prerequisites; propagation is computed mechanically.
+  observed. Never infer prerequisite evidence.
 - Compile response structure into the universal observations: recognized (picked
   out from options), recalled (produced a fact/statement), used (correctly
   applied it), generalized (transferred or abstracted it), or not-recalled (no
