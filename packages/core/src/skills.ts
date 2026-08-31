@@ -70,6 +70,11 @@ export function skillBody(name: string): string {
   return inlineIncludes(skill.body, skill.dir).trim();
 }
 
+/** An invocation message: the Skill's body followed by the request-time facts. */
+export function skillInvocation(name: string, facts: readonly string[]): string {
+  return [skillBody(name), ...facts].join("\n\n");
+}
+
 /**
  * The always-loaded tier: the base layer, the registry index (every Skill's
  * description), and the technique trigger index.

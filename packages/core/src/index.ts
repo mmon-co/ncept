@@ -53,4 +53,10 @@ export {
   type ProviderKeys,
 } from "./llm";
 export { autoGrade, evaluateArtifact, type EvaluationCatalogNode } from "./evaluator";
-export { listSkills, skillBody, tutorSystemPrompt, type SkillMeta } from "./skills";
+export {
+  listSkills,
+  skillBody,
+  skillInvocation,
+  tutorSystemPrompt,
+  type SkillMeta,
+} from "./skills";
