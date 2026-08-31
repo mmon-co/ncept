@@ -1,10 +1,12 @@
 # Pedagogy Skill library
 
-The Agent Skills-compatible library translated by hand from `docs/pedagogy` under
-ADR 0008: one Skill per model-judged registry problem. Each Skill's
-`description` states the problem and its signal — the descriptions together
-are the registry index — and its body is the decision procedure, or an index
-into the shared technique files where resolution is situational.
+The Agent Skills-compatible pedagogy library, and the canonical
+problem/antidote registry (ADR 0008): one Skill per model-judged problem.
+Each Skill's `description` states the problem and its signal — the
+descriptions together are the registry index — and its body is the decision
+procedure, or an index into the shared technique files where resolution is
+situational. Designs that are not model instruction (instruments,
+background jobs, the Playground contract) live in `docs/pedagogy`.
 
 ## Layout
 
