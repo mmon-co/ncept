@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./observation-associations": "./src/observation-associations.ts",
     "./observations": "./src/observations.ts",
-    "./patch": "./src/patch/index.ts"
+    "./patch": "./src/patch/index.ts",
+    "./patch-storage": "./src/patch-storage.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
