@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { DataDir } from "./datadir";
@@ -28,7 +29,7 @@ const PATCH_FILE = "patch.json";
 export class PatchStoreError extends Error {}
 
 export interface BasedPatchDefinition {
-  readonly bases: readonly ExactPatchRef[];
+  readonly bases: readonly [ExactPatchRef, ...ExactPatchRef[]];
   readonly delta: SemanticDelta;
   readonly metadata: PatchMetadata;
 }
@@ -76,8 +77,8 @@ function isNodeId(value: unknown): value is NodeId {
   return typeof value === "string" && /^node-[0-9a-z-]+$/.test(value);
 }
 
-function runGit(repository: string, args: readonly string[]): string {
-  const result = spawnSync("git", args, { cwd: repository, encoding: "utf8" });
+function runGit(repository: string, args: readonly string[], input?: string): string {
+  const result = spawnSync("git", args, { cwd: repository, encoding: "utf8", input });
   if (result.status === 0) return result.stdout.trim();
   const diagnostic = [result.stdout, result.stderr, result.error?.message]
     .filter((part): part is string => typeof part === "string" && part.trim() !== "")
@@ -96,13 +97,51 @@ function initializeRepository(repository: string): void {
   runGit(repository, ["config", "user.email", "patch-store@common-concept.local"]);
 }
 
-function commitContent(repository: string, content: PatchContent, message: string): PatchRevision {
+function candidateCommit(
+  repository: string,
+  content: PatchContent,
+  message: string,
+  parent?: string,
+): PatchRevision {
   if (!existsSync(join(repository, ".git"))) initializeRepository(repository);
-  writeFileSync(join(repository, PATCH_FILE), json(content));
-  runGit(repository, ["add", "--", PATCH_FILE]);
-  runGit(repository, ["commit", "--quiet", "--message", message]);
-  const commit = runGit(repository, ["rev-parse", "HEAD"]);
+  const blob = runGit(repository, ["hash-object", "-w", "--stdin"], json(content));
+  const tree = runGit(repository, ["mktree"], `100644 blob ${blob}\t${PATCH_FILE}\n`);
+  const commit = runGit(repository, [
+    "commit-tree",
+    tree,
+    ...(parent === undefined ? [] : ["-p", parent]),
+    "-m",
+    message,
+  ]);
   return { ref: { identity: content.identity, commit, digest: digest(content) }, ...content };
+}
+
+function publishCandidate(
+  repository: string,
+  candidate: PatchRevision,
+  previous?: string,
+): PatchRevision {
+  runGit(repository, [
+    "update-ref",
+    "HEAD",
+    candidate.ref.commit,
+    ...(previous === undefined ? [] : [previous]),
+  ]);
+  runGit(repository, ["reset", "--hard", "--quiet", "HEAD"]);
+  return candidate;
+}
+
+function commitContent(
+  repository: string,
+  content: PatchContent,
+  message: string,
+  parent?: string,
+): PatchRevision {
+  return publishCandidate(
+    repository,
+    candidateCommit(repository, content, message, parent),
+    parent,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -176,18 +215,6 @@ function authoredBase(exact: ExactPatchRef) {
   };
 }
 
-function revisionFromContent(content: PatchContent): PatchRevision {
-  const contentDigest = digest(content);
-  return {
-    ref: {
-      identity: content.identity,
-      commit: contentDigest.slice("sha256:".length),
-      digest: contentDigest,
-    },
-    ...content,
-  };
-}
-
 function collectRevisionClosure(
   dd: DataDir,
   revision: PatchRevision,
@@ -231,13 +258,15 @@ function currentPersonalRevision(dd: DataDir): PatchRevision | undefined {
 }
 
 function commitPersonal(dd: DataDir, content: PatchContent, message: string): PatchRevision {
-  const candidate = revisionFromContent(content);
+  const repository = personalRepository(dd);
+  const current = currentPersonalRevision(dd);
+  const candidate = candidateCommit(repository, content, message, current?.ref.commit);
   compileGraph({
     bundle: bundleForRevision(dd, candidate),
     learner: { kind: "absent" },
     annotations: {},
   });
-  return commitContent(personalRepository(dd), content, message);
+  return publishCandidate(repository, candidate, current?.ref.commit);
 }
 
 function addAuthoredToPersonal(dd: DataDir, exact: ExactPatchRef): void {
@@ -261,6 +290,24 @@ function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
   return `metadata-${id.replace(/^(node|edge)-/, "")}`;
 }
 
+function lessonOperations(input: {
+  readonly id: NodeId;
+  readonly label: string;
+  readonly lesson: string;
+}): SemanticDelta["operations"] {
+  return [
+    { kind: "add-node", node: { id: input.id } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: metadataId(input.id),
+        subjects: [{ kind: "node", id: input.id }],
+        properties: { "display:label": input.label, "pedagogy:lesson": input.lesson },
+      },
+    },
+  ];
+}
+
 function rootContent(identity: PatchId, definition: RootPatchDefinition): PatchContent {
   return {
     identity,
@@ -268,17 +315,7 @@ function rootContent(identity: PatchId, definition: RootPatchDefinition): PatchC
     lock: { entries: [] },
     delta: {
       operations: [
-        ...definition.nodes.flatMap((node) => [
-          { kind: "add-node" as const, node: { id: node.id } },
-          {
-            kind: "add-metadata-set" as const,
-            metadataSet: {
-              id: metadataId(node.id),
-              subjects: [{ kind: "node" as const, id: node.id }],
-              properties: { "display:label": node.label, "pedagogy:lesson": node.lesson },
-            },
-          },
-        ]),
+        ...definition.nodes.flatMap(lessonOperations),
         ...definition.edges.flatMap((edge) => [
           { kind: "add-edge" as const, edge: { id: edge.id, from: edge.from, to: edge.to } },
           {
@@ -349,8 +386,13 @@ export function validateRootPatchDefinition(
   ];
   if (new Set(metadataIds).size !== metadataIds.length)
     invalidRoot("Node and Edge identities must produce distinct metadata identities");
+  const repository = mkdtempSync(join(tmpdir(), "concept-root-validation-"));
   try {
-    const revision = revisionFromContent(rootContent(identity, definition));
+    const revision = candidateCommit(
+      repository,
+      rootContent(identity, definition),
+      `Validate ${identity}`,
+    );
     compileGraph({
       bundle: { terminal: revision.ref, revisions: [revision] },
       learner: { kind: "absent" },
@@ -358,6 +400,8 @@ export function validateRootPatchDefinition(
     });
   } catch (error) {
     invalidRoot(error instanceof Error ? error.message : String(error));
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
   }
 }
 
@@ -438,15 +482,21 @@ export function reviseAuthoredRootPatch(
   const current = revisionAt(repository, identity);
   if (current.bases.length !== 0) throw new PatchStoreError(`${identity} is not a root Patch`);
   validateRootPatchDefinition(identity, definition);
-  commitContent(repository, rootContent(identity, definition), `Revise ${identity}`);
+  commitContent(
+    repository,
+    rootContent(identity, definition),
+    `Revise ${identity}`,
+    current.ref.commit,
+  );
   return { identity };
 }
 
 function createAuthoredContent(dd: DataDir, content: PatchContent): AuthoredPatch {
   const repository = authoredRepository(dd, content.identity);
   if (existsSync(repository)) throw new PatchStoreError(`Patch ${content.identity} already exists`);
-  resolvePatchBundle(bundleForRevision(dd, revisionFromContent(content)));
-  const revision = commitContent(repository, content, `Create ${content.identity}`);
+  const candidate = candidateCommit(repository, content, `Create ${content.identity}`);
+  resolvePatchBundle(bundleForRevision(dd, candidate));
+  const revision = publishCandidate(repository, candidate);
   addAuthoredToPersonal(dd, revision.ref);
   return { identity: content.identity };
 }
@@ -458,6 +508,7 @@ export function createAuthoredRootPatch(dd: DataDir, input: RootPatchDefinition)
 }
 
 export function createAuthoredBasedPatch(dd: DataDir, input: BasedPatchDefinition): AuthoredPatch {
+  if (input.bases.length === 0) throw new PatchStoreError("a based Patch needs at least one base");
   const identity = `patch-${randomUUID()}` as const;
   const locked = input.bases.map(authoredBase);
   return createAuthoredContent(dd, {
@@ -514,18 +565,7 @@ export function addNotebookLesson(
   const next = {
     ...content,
     delta: {
-      operations: [
-        ...content.delta.operations,
-        { kind: "add-node" as const, node: { id: input.id } },
-        {
-          kind: "add-metadata-set" as const,
-          metadataSet: {
-            id: metadataId(input.id),
-            subjects: [{ kind: "node" as const, id: input.id }],
-            properties: { "display:label": input.label, "pedagogy:lesson": input.lesson },
-          },
-        },
-      ],
+      operations: [...content.delta.operations, ...lessonOperations(input)],
     },
   } satisfies PatchContent;
   const revision = commitPersonal(dd, next, `Add Notebook lesson ${input.id}`);
