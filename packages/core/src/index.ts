@@ -45,12 +45,14 @@ export {
   registeredProviders,
   registerProvider,
   resolveModel,
+  resolveConfiguredModelSpec,
   resolveModelSpec,
   type Effort,
   type LlmOptions,
   type ModelSpec,
   type OpenAICompatibleProviderConfig,
   type ProviderKeys,
+  type ResolvedLanguageModel,
 } from "./llm";
 export { autoGrade, evaluateArtifact, type EvaluationCatalogNode } from "./evaluator";
 export {

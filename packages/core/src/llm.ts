@@ -14,14 +14,11 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
  * Env overrides: CONCEPT_MODEL (default model), CONCEPT_FAST_MODEL (model for
  * cheap grading/summary calls; unset = default model).
  */
-export interface LlmOptions {
-  model?: string;
-}
-
 export const DEFAULT_MODEL = "anthropic/claude-opus-5";
 
 export const EFFORTS = ["none", "minimal", "low", "medium", "high", "max"] as const;
 export type Effort = (typeof EFFORTS)[number];
+export type ResolvedLanguageModel = Exclude<LanguageModel, string>;
 
 export interface ModelSpec {
   provider: string;
@@ -41,6 +38,11 @@ type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue | undefined };
 type ProviderOptions = Record<string, { [key: string]: JsonValue | undefined }>;
+
+export interface LlmOptions {
+  model?: string | ResolvedLanguageModel;
+  providerOptions?: ProviderOptions;
+}
 
 /**
  * Parse "provider/model-id[:effort]". The effort suffix is only recognized
@@ -83,7 +85,7 @@ export function formatModelSpec(s: ModelSpec): string {
   return `${s.provider}/${s.modelId}${s.effort !== undefined ? `:${s.effort}` : ""}`;
 }
 
-type ProviderFactory = (modelId: string) => LanguageModel;
+type ProviderFactory = (modelId: string) => ResolvedLanguageModel;
 
 const providers = new Map<string, ProviderFactory>();
 let configuredCustomProviders = new Set<string>();
@@ -106,6 +108,39 @@ export interface OpenAICompatibleProviderConfig {
   key?: string;
 }
 
+function configuredProviderFactories(
+  keys: ProviderKeys = {},
+  custom: Record<string, OpenAICompatibleProviderConfig> = {},
+): Map<string, ProviderFactory> {
+  const configured = new Map<string, ProviderFactory>();
+  configured.set("anthropic", (id) =>
+    createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id),
+  );
+  configured.set("openai", (id) =>
+    createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id),
+  );
+  configured.set("google", (id) =>
+    createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id),
+  );
+  const openrouterKey = keys.openrouter ?? process.env.OPENROUTER_API_KEY;
+  const openrouter = createOpenAICompatible({
+    name: "openai",
+    baseURL: "https://openrouter.ai/api/v1",
+    ...(openrouterKey === undefined ? {} : { apiKey: openrouterKey }),
+  });
+  configured.set("openrouter", (id) => openrouter(id));
+  for (const [name, config] of Object.entries(custom)) {
+    configured.set(name, (id) =>
+      createOpenAICompatible({
+        name,
+        baseURL: config.url,
+        ...(config.key === undefined ? {} : { apiKey: config.key }),
+      })(id),
+    );
+  }
+  return configured;
+}
+
 /**
  * Register built-ins plus configured OpenAI-compatible endpoints. Omitted
  * built-in keys let their SDK read its environment; supplied keys win. This
@@ -116,37 +151,10 @@ export function registerConfiguredProviders(
   keys: ProviderKeys = {},
   custom: Record<string, OpenAICompatibleProviderConfig> = {},
 ): void {
-  registerProvider("anthropic", (id) =>
-    createAnthropic(keys.anthropic === undefined ? {} : { apiKey: keys.anthropic })(id),
-  );
-  registerProvider("openai", (id) =>
-    createOpenAI(keys.openai === undefined ? {} : { apiKey: keys.openai })(id),
-  );
-  registerProvider("google", (id) =>
-    createGoogleGenerativeAI(keys.google === undefined ? {} : { apiKey: keys.google })(id),
-  );
-  // OpenRouter accepts the OpenAI chat-completions dialect. Use the compatible
-  // adapter so a missing OpenRouter key never falls through to OPENAI_API_KEY,
-  // while retaining the OpenAI provider-options namespace for effort.
-  const openrouterKey = keys.openrouter ?? process.env.OPENROUTER_API_KEY;
-  const openrouter = createOpenAICompatible({
-    name: "openai",
-    baseURL: "https://openrouter.ai/api/v1",
-    ...(openrouterKey === undefined ? {} : { apiKey: openrouterKey }),
-  });
-  registerProvider("openrouter", (id) => openrouter(id));
-
   for (const name of configuredCustomProviders) providers.delete(name);
   configuredCustomProviders = new Set(Object.keys(custom));
-  for (const [name, config] of Object.entries(custom)) {
-    registerProvider(name, (id) =>
-      createOpenAICompatible({
-        name,
-        baseURL: config.url,
-        ...(config.key === undefined ? {} : { apiKey: config.key }),
-      })(id),
-    );
-  }
+  for (const [name, factory] of configuredProviderFactories(keys, custom))
+    registerProvider(name, factory);
 }
 
 registerConfiguredProviders();
@@ -167,6 +175,25 @@ export function resolveModelSpec(name?: string): { model: LanguageModel; effort?
   return {
     model: factory(parsed.modelId),
     ...(parsed.effort !== undefined ? { effort: parsed.effort } : {}),
+  };
+}
+
+/** Resolve one request's configured providers without mutating the process registry. */
+export function resolveConfiguredModelSpec(
+  name: string,
+  keys: ProviderKeys = {},
+  custom: Record<string, OpenAICompatibleProviderConfig> = {},
+): { model: ResolvedLanguageModel; effort?: Effort } {
+  const parsed = parseModelSpec(name);
+  const configured = configuredProviderFactories(keys, custom);
+  const factory = configured.get(parsed.provider) ?? providers.get(parsed.provider);
+  if (factory === undefined)
+    throw new Error(
+      `unknown configured model provider '${parsed.provider}' (available: ${[...new Set([...configured.keys(), ...providers.keys()])].join(", ")})`,
+    );
+  return {
+    model: factory(parsed.modelId),
+    ...(parsed.effort === undefined ? {} : { effort: parsed.effort }),
   };
 }
 
@@ -211,10 +238,12 @@ export async function complete(
   user: string,
   opts: LlmOptions = {},
 ): Promise<string> {
-  const spec = opts.model ?? defaultModel();
-  const providerOptions = effortProviderOptions(spec);
+  const selected = opts.model ?? defaultModel();
+  const providerOptions =
+    opts.providerOptions ??
+    (typeof selected === "string" ? effortProviderOptions(selected) : undefined);
   const { text } = await generateText({
-    model: resolveModelSpec(spec).model,
+    model: typeof selected === "string" ? resolveModelSpec(selected).model : selected,
     instructions: system,
     prompt: user,
     ...(providerOptions !== undefined ? { providerOptions } : {}),
