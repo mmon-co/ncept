@@ -1,10 +1,18 @@
 /** Loader for the pedagogy Skill library in `skills/` (see skills/README.md). */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-const SKILLS_DIR = fileURLToPath(new URL("../skills", import.meta.url));
+const PACKAGE_SKILLS_DIR = fileURLToPath(new URL("../skills", import.meta.url));
+
+function skillsDir(): string {
+  if (existsSync(PACKAGE_SKILLS_DIR)) return PACKAGE_SKILLS_DIR;
+  const projectRoot = process.env.CONCEPT_PROJECT_ROOT;
+  return projectRoot === undefined
+    ? PACKAGE_SKILLS_DIR
+    : join(projectRoot, "packages", "core", "skills");
+}
 
 export interface SkillMeta {
   readonly name: string;
@@ -20,7 +28,8 @@ interface SkillFile {
 }
 
 function parseSkillFile(dir: string): SkillFile {
-  const path = join(SKILLS_DIR, dir, "SKILL.md");
+  const root = skillsDir();
+  const path = join(root, dir, "SKILL.md");
   const raw = readFileSync(path, "utf8");
   const match = /^---\n([\s\S]*?)\n---\n/.exec(raw);
   if (match === null) throw new Error(`${path} has no frontmatter`);
@@ -39,12 +48,12 @@ function parseSkillFile(dir: string): SkillFile {
   return {
     meta: { name, description, disableModelInvocation: disable === true },
     body: raw.slice(match[0].length),
-    dir: join(SKILLS_DIR, dir),
+    dir: join(root, dir),
   };
 }
 
 function skillFiles(): SkillFile[] {
-  return readdirSync(SKILLS_DIR, { withFileTypes: true })
+  return readdirSync(skillsDir(), { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !["techniques", "snippets"].includes(entry.name))
     .map((entry) => parseSkillFile(entry.name))
     .sort((left, right) => left.meta.name.localeCompare(right.meta.name));
@@ -80,7 +89,8 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
  * description), and the technique trigger index.
  */
 export function tutorSystemPrompt(): string {
-  const base = readFileSync(join(SKILLS_DIR, "base.md"), "utf8").trim();
+  const root = skillsDir();
+  const base = readFileSync(join(root, "base.md"), "utf8").trim();
   const index = skillFiles()
     .map(
       ({ meta }) =>
@@ -91,6 +101,6 @@ export function tutorSystemPrompt(): string {
         }`,
     )
     .join("\n");
-  const triggers = readFileSync(join(SKILLS_DIR, "techniques", "index.md"), "utf8").trim();
+  const triggers = readFileSync(join(root, "techniques", "index.md"), "utf8").trim();
   return `${base}\n\n## Skills\n\nEach Skill is the antidote to one problem; its description says when that problem is present. Invoke one when its problem fires.\n\n${index}\n\n${triggers}`;
 }
