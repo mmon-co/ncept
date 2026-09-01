@@ -489,7 +489,7 @@ test("exact masks suppress only their targeted entity and metadata contributions
   ]);
 });
 
-test("a stale exact mask reports the Reconciliation Patch that must change", () => {
+test("a stale exact mask reports the Patch whose delta must change", () => {
   const oldSource = based(
     ref("patch-source", "1.0.0", "8"),
     [],
