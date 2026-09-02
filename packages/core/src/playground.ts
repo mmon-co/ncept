@@ -251,26 +251,26 @@ export function spacedReviewPlayground(input: {
 }): SpacedReviewPlayground {
   return {
     proposeCard(card) {
-      parseSpacedReviewCard(card);
-      if (card.status !== "pending") throw new Error("a proposed card must be pending");
-      if (input.store.readSpacedReviewCard(input.scope, card.id) !== undefined)
-        throw new Error(`spaced-review card ${card.id} already exists`);
-      input.store.saveSpacedReviewCard(input.scope, card);
+      const parsed = parseSpacedReviewCard(card);
+      if (parsed.status !== "pending") throw new Error("a proposed card must be pending");
+      if (input.store.readSpacedReviewCard(input.scope, parsed.id) !== undefined)
+        throw new Error(`spaced-review card ${parsed.id} already exists`);
+      input.store.saveSpacedReviewCard(input.scope, parsed);
     },
     approveCard(id) {
       const card = input.store.readSpacedReviewCard(input.scope, id);
       if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
-      const approved = { ...card, status: "approved" as const };
+      const approved = parseSpacedReviewCard({ ...card, status: "approved" });
       input.store.saveSpacedReviewCard(input.scope, approved);
       return approved;
     },
     card: (id) => input.store.readSpacedReviewCard(input.scope, id),
     cards: () => input.store.listSpacedReviewCards(input.scope),
     appendGrade(grade) {
-      parseSpacedReviewGrade(grade);
-      if (input.store.readSpacedReviewCard(input.scope, grade.cardId)?.status !== "approved")
-        throw new Error(`grade targets an unapproved spaced-review card ${grade.cardId}`);
-      input.store.appendSpacedReviewGrade(input.scope, grade);
+      const parsed = parseSpacedReviewGrade(grade);
+      if (input.store.readSpacedReviewCard(input.scope, parsed.cardId)?.status !== "approved")
+        throw new Error(`grade targets an unapproved spaced-review card ${parsed.cardId}`);
+      input.store.appendSpacedReviewGrade(input.scope, parsed);
     },
     grades: () => input.store.readSpacedReviewGrades(input.scope),
     appendObservation: (observation) => input.trail.appendObservation(input.scope, observation),
