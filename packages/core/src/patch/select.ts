@@ -1,6 +1,8 @@
 import { PatchCompileError } from "./errors";
+import { sameExactPatchRef } from "./model";
 import type {
   EdgeId,
+  ExactPatchRef,
   GraphQuery,
   MetadataSetId,
   NodeId,
@@ -33,6 +35,36 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     if (typeof raw.tag !== "string" || raw.tag.length === 0)
       return malformed(`${label}.tag must be a non-empty string`);
     return { tag: raw.tag };
+  }
+  if (keys[0] === "cone") {
+    if (!isRecord(raw.cone) || Object.keys(raw.cone).some((key) => key !== "targets"))
+      return malformed(`${label}.cone must contain only targets`);
+    if (!isArray(raw.cone.targets) || !raw.cone.targets.every(isNodeId))
+      return malformed(`${label}.cone.targets must contain Node ids`);
+    const [first, ...rest] = raw.cone.targets;
+    if (first === undefined)
+      return malformed(`${label}.cone.targets must contain at least one Node id`);
+    return { cone: { targets: [first, ...rest] } };
+  }
+  if (keys[0] === "provenance") {
+    if (!isRecord(raw.provenance))
+      return malformed(`${label}.provenance must be an exact Patch reference`);
+    const ref = raw.provenance;
+    if (
+      !isPatchId(ref.identity) ||
+      (ref.version !== undefined && typeof ref.version !== "string") ||
+      typeof ref.commit !== "string" ||
+      !isDigest(ref.digest)
+    )
+      return malformed(`${label}.provenance must be an exact Patch reference`);
+    return {
+      provenance: {
+        identity: ref.identity,
+        ...(ref.version === undefined ? {} : { version: ref.version }),
+        commit: ref.commit,
+        digest: ref.digest,
+      },
+    };
   }
   if (keys[0] === "union" || keys[0] === "intersection") {
     const operation = keys[0];
@@ -68,6 +100,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
+}
+
+function isNodeId(value: unknown): value is NodeId {
+  return typeof value === "string" && /^node-[0-9a-z-]+$/.test(value);
+}
+
+function isPatchId(value: unknown): value is `patch-${string}` {
+  return typeof value === "string" && /^patch-[0-9a-z-]+$/.test(value);
+}
+
+function isDigest(value: unknown): value is `sha256:${string}` {
+  return typeof value === "string" && value.startsWith("sha256:");
 }
 
 function combine(
@@ -124,8 +168,84 @@ function tagFragment(graph: ResolvedGraph, name: string): Fragment {
   return { nodes, edges, metadataSets };
 }
 
+function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[]): Fragment {
+  const nodes = new Set<NodeId>();
+  const edges = new Set<EdgeId>();
+  const pending = [...targets];
+  while (pending.length > 0) {
+    const node = pending.shift();
+    if (node === undefined || nodes.has(node)) continue;
+    if (!graph.nodes.some(({ id }) => id === node))
+      throw new PatchCompileError("dangling-query", `cone targets missing node '${node}'`);
+    nodes.add(node);
+    for (const edge of graph.edges)
+      if (edge.to === node) {
+        edges.add(edge.id);
+        pending.push(edge.from);
+      }
+  }
+  const metadataSets = new Set(
+    graph.metadataSets
+      .filter((metadata) =>
+        metadata.subjects.some((subject) =>
+          subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
+        ),
+      )
+      .map(({ id }) => id),
+  );
+  return { nodes, edges, metadataSets };
+}
+
+function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment {
+  if (!graph.patchOrder.some((candidate) => sameExactPatchRef(candidate, ref)))
+    throw new PatchCompileError(
+      "unknown-provenance",
+      "provenance selector names a Patch outside the graph",
+    );
+  const contributed = (items: readonly { readonly patch: typeof ref }[] | undefined): boolean =>
+    items?.some((item) => sameExactPatchRef(item.patch, ref)) === true;
+  const nodes = new Set(
+    graph.nodes.filter(({ id }) => contributed(graph.provenance.nodes[id])).map(({ id }) => id),
+  );
+  const edges = new Set(
+    graph.edges.filter(({ id }) => contributed(graph.provenance.edges[id])).map(({ id }) => id),
+  );
+  const metadataSets = new Set(
+    graph.metadataSets
+      .filter(({ id }) => contributed(graph.provenance.metadataSets[id]))
+      .map(({ id }) => id),
+  );
+  for (const edge of graph.edges)
+    if (edges.has(edge.id)) {
+      nodes.add(edge.from);
+      nodes.add(edge.to);
+    }
+  for (const metadata of graph.metadataSets)
+    if (metadataSets.has(metadata.id))
+      for (const subject of metadata.subjects)
+        if (subject.kind === "node") nodes.add(subject.id);
+        else {
+          const edge = graph.edges.find(({ id }) => id === subject.id);
+          if (edge !== undefined) {
+            edges.add(edge.id);
+            nodes.add(edge.from);
+            nodes.add(edge.to);
+          }
+        }
+  for (const metadata of graph.metadataSets)
+    if (
+      metadata.subjects.some((subject) =>
+        subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
+      )
+    )
+      metadataSets.add(metadata.id);
+  return { nodes, edges, metadataSets };
+}
+
 function evaluate(graph: ResolvedGraph, query: GraphQuery): Fragment {
   if ("tag" in query) return tagFragment(graph, query.tag);
+  if ("cone" in query) return coneFragment(graph, query.cone.targets);
+  if ("provenance" in query) return provenanceFragment(graph, query.provenance);
   if ("difference" in query)
     return combine(
       evaluate(graph, query.difference[0]),

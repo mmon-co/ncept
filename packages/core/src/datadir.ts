@@ -1,17 +1,16 @@
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-/** V4 is the incompatible Patch-native store introduced by the direct Course cutover. */
-export const STORE_FORMAT_VERSION = 4;
+/** V5 is the direct, principal/Profile-keyed Core store. Earlier prototype data is not migrated. */
+export const STORE_FORMAT_VERSION = 5;
 
 export interface DataDir {
   root: string;
-  /** Append-only user Observations with exact content provenance. */
-  observationsFile: string;
-  paramsFile: string;
-  /** Web-only persisted conversation history; harmless to core consumers. */
+  /** Principal/Profile-keyed trails, association commits, Views, selections, and Playgrounds. */
+  profilesDir: string;
+  /** Application-owned persisted conversation history. */
   sessionsDir: string;
-  /** Web-only submitted work records; harmless to core consumers. */
+  /** Application-owned submitted work records. */
   artifactsDir: string;
   /** Local configuration and secrets. */
   settingsFile: string;
@@ -21,8 +20,7 @@ export function resolveDataDir(root?: string): DataDir {
   const r = root ?? process.env.CONCEPT_DATA_DIR ?? join(process.env.HOME ?? ".", ".concept");
   return {
     root: r,
-    observationsFile: join(r, "observations.jsonl"),
-    paramsFile: join(r, "params.yaml"),
+    profilesDir: join(r, "profiles"),
     sessionsDir: join(r, "sessions"),
     artifactsDir: join(r, "artifacts"),
     settingsFile: join(r, "settings.json"),

@@ -75,11 +75,10 @@ function numberProperty(
   )?.value;
 }
 
-function rankNodes(graph: SelectedGraph, roles: ReadonlyMap<EdgeId, string>): Map<NodeId, number> {
+function rankNodes(graph: SelectedGraph): Map<NodeId, number> {
   const dependencies = new Map<NodeId, NodeId[]>();
   for (const node of graph.nodes) dependencies.set(node.id, []);
-  for (const edge of graph.edges)
-    if (roles.get(edge.id) === "dependency") dependencies.get(edge.from)?.push(edge.to);
+  for (const edge of graph.edges) dependencies.get(edge.from)?.push(edge.to);
   const ranks = new Map<NodeId, number>();
   const active = new Set<NodeId>();
   const visit = (node: NodeId): number => {
@@ -124,14 +123,7 @@ function appearance(input: VisualProjectionInput, node: NodeId): VisualNodeAppea
 }
 
 export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
-  const edgeRoles = new Map(
-    input.graph.edges.map((edge) => [
-      edge.id,
-      stringProperty(input.graph, metadataForEdge(input.graph, edge.id), "graph:role") ??
-        "relation",
-    ]),
-  );
-  const ranks = rankNodes(input.graph, edgeRoles);
+  const ranks = rankNodes(input.graph);
   const groups = input.graph.patchOrder.map((ref) => {
     const title = input.graph.patchMetadata[ref.identity]?.properties["patch:title"];
     return { id: ref.identity, label: typeof title === "string" ? title : ref.identity };
@@ -164,7 +156,7 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
       id: edge.id,
       from: edge.from,
       to: edge.to,
-      role: edgeRoles.get(edge.id) ?? "relation",
+      role: "dependency" as const,
       ...(strength === undefined ? {} : { strength }),
     };
   });

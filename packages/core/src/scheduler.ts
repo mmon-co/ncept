@@ -7,7 +7,12 @@ import {
   type Card as FsrsCard,
   type Grade as FsrsGrade,
 } from "ts-fsrs";
-import type { Grade, ReviewRecord } from "./types";
+import type { Grade } from "./observation";
+
+export interface ReviewRecord {
+  readonly ts: string;
+  readonly grade: Grade;
+}
 
 const RATING: Record<Grade, FsrsGrade> = {
   again: Rating.Again,

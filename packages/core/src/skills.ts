@@ -1,11 +1,42 @@
 /** Loader for the pedagogy Skill catalog in `skills/` (see skills/README.md, ADR 0012). */
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import basePromptSource from "../skills/base.md?raw";
+import chartingSource from "../skills/charting/SKILL.md?raw";
+import evaluatorSweepSource from "../skills/evaluator-sweep/SKILL.md?raw";
+import lessonSource from "../skills/lesson/SKILL.md?raw";
+import missionSource from "../skills/mission/SKILL.md?raw";
+import planningSource from "../skills/planning/SKILL.md?raw";
+import probingSource from "../skills/probing/SKILL.md?raw";
+import evaluateSource from "../skills/procedures/evaluate.md?raw";
+import graphAuthoringSource from "../skills/procedures/graph-authoring.md?raw";
+import materialWorkSource from "../skills/procedures/material-work.md?raw";
+import missionConversationSource from "../skills/procedures/mission-conversation.md?raw";
+import probeLoopSource from "../skills/procedures/probe-loop.md?raw";
+import quizAuthoringSource from "../skills/procedures/quiz-authoring.md?raw";
+import realignmentSource from "../skills/realignment/SKILL.md?raw";
+import recordingReviewSource from "../skills/recording-review/SKILL.md?raw";
 
-const SKILLS_DIR = fileURLToPath(new URL("../skills", import.meta.url));
-const PROCEDURES_DIR = "procedures";
+const SKILL_SOURCES: Readonly<Record<string, string>> = {
+  charting: chartingSource,
+  "evaluator-sweep": evaluatorSweepSource,
+  lesson: lessonSource,
+  mission: missionSource,
+  planning: planningSource,
+  probing: probingSource,
+  realignment: realignmentSource,
+  "recording-review": recordingReviewSource,
+};
+
+const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
+  "procedures/evaluate.md": evaluateSource,
+  "procedures/graph-authoring.md": graphAuthoringSource,
+  "procedures/material-work.md": materialWorkSource,
+  "procedures/mission-conversation.md": missionConversationSource,
+  "procedures/probe-loop.md": probeLoopSource,
+  "procedures/quiz-authoring.md": quizAuthoringSource,
+};
 
 const FACETS = ["position", "chart", "advance"] as const;
 type Facet = (typeof FACETS)[number];
@@ -21,6 +52,12 @@ export interface SkillMeta {
   readonly entry: readonly Entry[];
 }
 
+/** The complete Agent Skills-compatible file shipped for one catalog entry. */
+export interface BuiltSkillBundle {
+  readonly name: string;
+  readonly content: string;
+}
+
 interface SkillFile {
   readonly meta: SkillMeta;
   readonly body: string;
@@ -33,46 +70,57 @@ function isOneOf<const Choices extends readonly string[]>(
   return typeof value === "string" && choices.some((choice) => choice === value);
 }
 
-function parseSkillFile(dir: string): SkillFile {
-  const path = join(SKILLS_DIR, dir, "SKILL.md");
-  const raw = readFileSync(path, "utf8");
+function parseSkillFile(dir: string, raw: string): SkillFile {
+  const description = `skills/${dir}/SKILL.md`;
   const match = /^---\n([\s\S]*?)\n---\n/.exec(raw);
-  if (match === null) throw new Error(`${path} has no frontmatter`);
+  if (match === null) throw new Error(`${description} has no frontmatter`);
   const front: unknown = YAML.parse(match[1] ?? "");
   if (typeof front !== "object" || front === null)
-    throw new Error(`${path} frontmatter must be a mapping`);
+    throw new Error(`${description} frontmatter must be a mapping`);
   const name: unknown = Reflect.get(front, "name");
-  const description: unknown = Reflect.get(front, "description");
+  const skillDescription: unknown = Reflect.get(front, "description");
   const facet: unknown = Reflect.get(front, "facet");
   const entry: unknown = Reflect.get(front, "entry");
-  if (typeof name !== "string" || name !== dir)
-    throw new Error(`${path} name must equal its directory name`);
-  if (typeof description !== "string" || description.trim() === "")
-    throw new Error(`${path} needs a description`);
-  if (!isOneOf(FACETS, facet)) throw new Error(`${path} facet must be one of ${FACETS.join(", ")}`);
+  if (
+    typeof name !== "string" ||
+    name !== dir ||
+    name.length > 64 ||
+    !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)
+  )
+    throw new Error(
+      `${description} name must equal its directory name and follow Agent Skills naming`,
+    );
+  if (
+    typeof skillDescription !== "string" ||
+    skillDescription.trim() === "" ||
+    skillDescription.length > 1024
+  )
+    throw new Error(`${description} needs an Agent Skills description of at most 1024 characters`);
+  if (!isOneOf(FACETS, facet))
+    throw new Error(`${description} facet must be one of ${FACETS.join(", ")}`);
   const who: Entry[] = [];
   if (Array.isArray(entry)) for (const item of entry) if (isOneOf(ENTRIES, item)) who.push(item);
   if (!Array.isArray(entry) || who.length === 0 || who.length !== entry.length)
-    throw new Error(`${path} entry must be a non-empty list from ${ENTRIES.join(", ")}`);
+    throw new Error(`${description} entry must be a non-empty list from ${ENTRIES.join(", ")}`);
   return {
-    meta: { name, description, facet, entry: who },
+    meta: { name, description: skillDescription, facet, entry: who },
     body: raw.slice(match[0].length),
   };
 }
 
 function skillFiles(): SkillFile[] {
-  return readdirSync(SKILLS_DIR, { withFileTypes: true })
-    .filter((dirent) => dirent.isDirectory() && dirent.name !== PROCEDURES_DIR)
-    .map((dirent) => parseSkillFile(dirent.name))
+  return Object.entries(SKILL_SOURCES)
+    .map(([name, source]) => parseSkillFile(name, source))
     .sort((left, right) => left.meta.name.localeCompare(right.meta.name));
 }
 
-/** Inline `@procedures/<name>.md` lines, resolved from the catalog root. */
+/** Inline `@procedures/<name>.md` lines from the catalog payload. */
 function inlineIncludes(text: string, seen: readonly string[] = []): string {
   return text.replace(/^@(\S+)$/gm, (_line, relative: string) => {
-    const path = join(SKILLS_DIR, relative);
-    if (seen.includes(path)) throw new Error(`include cycle through ${path}`);
-    return inlineIncludes(readFileSync(path, "utf8").trim(), [...seen, path]);
+    const source = PROCEDURE_SOURCES[relative];
+    if (source === undefined) throw new Error(`unknown Skill include ${relative}`);
+    if (seen.includes(relative)) throw new Error(`include cycle through ${relative}`);
+    return inlineIncludes(source.trim(), [...seen, relative]);
   });
 }
 
@@ -87,6 +135,40 @@ export function skillBody(name: string): string {
   return inlineIncludes(skill.body).trim();
 }
 
+function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {
+  const metadata = {
+    "concept-facet": skill.meta.facet,
+    "concept-entry": skill.meta.entry.join(","),
+  };
+  const frontmatter = {
+    name: skill.meta.name,
+    description: skill.meta.description,
+    metadata,
+    ...(skill.meta.entry.includes("model") ? {} : { "disable-model-invocation": true }),
+  };
+  return {
+    name: skill.meta.name,
+    content: `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n\n${skillBody(skill.meta.name)}\n`,
+  };
+}
+
+/** The immutable catalog payload embedded directly in a Pedagogy release. */
+export function builtSkillBundles(): readonly BuiltSkillBundle[] {
+  return skillFiles().map(builtSkillBundle);
+}
+
+/** Write the release catalog payload as deterministic, self-contained bundle directories. */
+export function buildSkillBundles(outputDir: string): void {
+  rmSync(outputDir, { force: true, recursive: true });
+  mkdirSync(outputDir, { recursive: true });
+
+  for (const bundle of builtSkillBundles()) {
+    const directory = join(outputDir, bundle.name);
+    mkdirSync(directory);
+    writeFileSync(join(directory, "SKILL.md"), bundle.content);
+  }
+}
+
 /** An invocation message: the Skill's body followed by the request-time facts. */
 export function skillInvocation(name: string, facts: readonly string[]): string {
   return [skillBody(name), ...facts].join("\n\n");
@@ -98,7 +180,7 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
  * the host's to read and stay out of the index.
  */
 export function tutorSystemPrompt(): string {
-  const base = readFileSync(join(SKILLS_DIR, "base.md"), "utf8").trim();
+  const base = basePromptSource.trim();
   const visible = skillFiles().filter(({ meta }) => meta.entry.some((who) => who !== "system"));
   const index = FACETS.map((facet) => {
     const rows = visible
