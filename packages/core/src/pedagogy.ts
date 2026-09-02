@@ -145,6 +145,19 @@ export interface PedagogyReleaseSource {
 }
 
 export const V1_FOLD_IMPLEMENTATION = "common-concept-fold-v1";
+export const V1_PAYLOAD_VOCABULARY = 1;
+
+/** Guard the only theory implementation and payload mapping executable in this build. */
+export function assertSupportedPedagogicalTheory(theory: PedagogicalTheory): void {
+  if (theory.implementationVersion !== V1_FOLD_IMPLEMENTATION)
+    throw new Error(
+      `unsupported Pedagogical-theory implementation ${theory.implementationVersion}`,
+    );
+  if (theory.payloadMapping.vocabularyVersion !== V1_PAYLOAD_VOCABULARY)
+    throw new Error(
+      `unsupported Pedagogical-theory payload mapping ${theory.payloadMapping.vocabularyVersion}`,
+    );
+}
 
 export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
   initialEstimate: 0.5,
@@ -183,7 +196,7 @@ export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
 
 export const V1_PEDAGOGICAL_THEORY: PedagogicalTheory = {
   implementationVersion: V1_FOLD_IMPLEMENTATION,
-  payloadMapping: { vocabularyVersion: 1 },
+  payloadMapping: { vocabularyVersion: V1_PAYLOAD_VOCABULARY },
   parameters: V1_PEDAGOGICAL_PARAMETERS,
 };
 

@@ -421,6 +421,88 @@ test("Pedagogy overlays resolve typed Skill operations over content-derived root
   expect(resolved.skillCatalog.bundles.at(-1)).toEqual(addition);
 });
 
+test("built-in interpretation and folding reject unsupported Pedagogical-theory versions", () => {
+  const unsupportedImplementation: PedagogicalTheory = {
+    ...V1_PEDAGOGICAL_THEORY,
+    implementationVersion: "foreign-fold-v2",
+  };
+  const implementationTheory: ResolvedTheory = {
+    origin: PLATFORM_PEDAGOGY_RELEASE.ref,
+    digest: pedagogicalTheoryDigest(unsupportedImplementation),
+    theory: unsupportedImplementation,
+  };
+  expect(() =>
+    observation(
+      "observation-foreign-implementation",
+      "2026-09-01T12:00:00.000Z",
+      {
+        kind: "lesson",
+        vocabularyVersion: 1,
+        criterion: "differentiate a polynomial",
+        response: "3x²",
+        result: "demonstrated",
+        assistance: "none",
+      },
+      implementationTheory,
+    ),
+  ).toThrow("unsupported Pedagogical-theory implementation foreign-fold-v2");
+
+  const unsupportedMapping: PedagogicalTheory = {
+    ...V1_PEDAGOGICAL_THEORY,
+    payloadMapping: { vocabularyVersion: 2 },
+  };
+  expect(() =>
+    observation(
+      "observation-foreign-mapping",
+      "2026-09-01T12:00:00.000Z",
+      {
+        kind: "lesson",
+        vocabularyVersion: 2,
+        criterion: "differentiate a polynomial",
+        response: "3x²",
+        result: "demonstrated",
+        assistance: "none",
+      },
+      {
+        origin: PLATFORM_PEDAGOGY_RELEASE.ref,
+        digest: pedagogicalTheoryDigest(unsupportedMapping),
+        theory: unsupportedMapping,
+      },
+    ),
+  ).toThrow("unsupported Pedagogical-theory payload mapping 2");
+
+  const supportedTheory: ResolvedTheory = {
+    origin: PLATFORM_PEDAGOGY_RELEASE.ref,
+    digest: pedagogicalTheoryDigest(V1_PEDAGOGICAL_THEORY),
+    theory: V1_PEDAGOGICAL_THEORY,
+  };
+  const supportedObservation = observation(
+    "observation-supported",
+    "2026-09-01T12:00:00.000Z",
+    {
+      kind: "lesson",
+      vocabularyVersion: 1,
+      criterion: "differentiate a polynomial",
+      response: "3x²",
+      result: "demonstrated",
+      assistance: "none",
+    },
+    supportedTheory,
+  );
+  expect(() =>
+    foldLearnerState({
+      graph,
+      trail: {
+        observations: [supportedObservation],
+        revision: contentDigest([supportedObservation]),
+      },
+      association: association("association-foreign", implementationTheory, [supportedObservation]),
+      theory: implementationTheory,
+      evaluatedAt: "2026-09-02T12:00:00.000Z",
+    }),
+  ).toThrow("unsupported Pedagogical-theory implementation foreign-fold-v2");
+});
+
 test("an accepted Profile parameter override creates a distinguishable refold without rewriting history", () => {
   const store = new LocalDirectoryCoreStore(tempDataDir());
   const resolved = resolvePedagogy(

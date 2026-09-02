@@ -2,6 +2,7 @@ import type { AssociationCommit, ParameterOverride } from "./association";
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
 import { interpretPayload, type Observation, type ObservationId } from "./observation";
 import {
+  assertSupportedPedagogicalTheory,
   contentDigest,
   type ContentDigest,
   type PedagogicalTheory,
@@ -150,6 +151,7 @@ export function foldLearnerState(input: {
   /** Explicit because a portable deterministic fold has no ambient clock. */
   readonly evaluatedAt: string;
 }): LearnerState {
+  assertSupportedPedagogicalTheory(input.theory.theory);
   assertFoldInputs(input.association, input.graph, input.theory);
   const evaluatedAt = Date.parse(input.evaluatedAt);
   if (Number.isNaN(evaluatedAt)) throw new Error("Fold evaluation time must be an ISO timestamp");

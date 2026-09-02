@@ -1,9 +1,10 @@
 import type { ExactPatchRef, NodeId } from "./patch";
-import type {
-  ContentDigest,
-  ExactPedagogyRelease,
-  ObservationInterpretationValue,
-  PedagogicalTheory,
+import {
+  assertSupportedPedagogicalTheory,
+  type ContentDigest,
+  type ExactPedagogyRelease,
+  type ObservationInterpretationValue,
+  type PedagogicalTheory,
 } from "./pedagogy";
 
 export type ObservationId = `observation-${string}`;
@@ -151,6 +152,7 @@ export function interpretPayload(
   theory: PedagogicalTheory,
   payload: ObservationPayload,
 ): ObservationInterpretationValue {
+  assertSupportedPedagogicalTheory(theory);
   if (payload.vocabularyVersion !== theory.payloadMapping.vocabularyVersion)
     throw new Error(
       `payload vocabulary ${payload.vocabularyVersion} is not supported by theory vocabulary ${theory.payloadMapping.vocabularyVersion}`,
