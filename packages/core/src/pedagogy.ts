@@ -36,7 +36,6 @@ export interface EvidenceEffect {
 }
 
 export interface PedagogicalTheoryParameters {
-  readonly vocabularyVersion: number;
   readonly initialEstimate: number;
   readonly masteryGate: number;
   /** The highest estimate recall evidence alone can establish. */
@@ -75,8 +74,13 @@ export interface PedagogicalTheoryParameters {
   };
 }
 
+export interface PayloadVocabularyMapping {
+  readonly vocabularyVersion: number;
+}
+
 export interface PedagogicalTheory {
   readonly implementationVersion: string;
+  readonly payloadMapping: PayloadVocabularyMapping;
   readonly parameters: PedagogicalTheoryParameters;
 }
 
@@ -135,7 +139,6 @@ export interface PedagogyReleaseSource {
 export const V1_FOLD_IMPLEMENTATION = "common-concept-fold-v1";
 
 export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
-  vocabularyVersion: 1,
   initialEstimate: 0.5,
   masteryGate: 0.8,
   recallRungCeiling: 0.8,
@@ -172,6 +175,7 @@ export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
 
 export const V1_PEDAGOGICAL_THEORY: PedagogicalTheory = {
   implementationVersion: V1_FOLD_IMPLEMENTATION,
+  payloadMapping: { vocabularyVersion: 1 },
   parameters: V1_PEDAGOGICAL_PARAMETERS,
 };
 
@@ -205,6 +209,7 @@ export function contentDigest(value: unknown): ContentDigest {
 export function pedagogicalTheoryDigest(theory: PedagogicalTheory): ContentDigest {
   return contentDigest({
     implementationVersion: theory.implementationVersion,
+    payloadMapping: theory.payloadMapping,
     parameters: theory.parameters,
   });
 }

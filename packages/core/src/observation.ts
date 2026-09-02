@@ -145,9 +145,9 @@ export function interpretPayload(
   theory: PedagogicalTheory,
   payload: ObservationPayload,
 ): ObservationInterpretationValue {
-  if (payload.vocabularyVersion !== theory.parameters.vocabularyVersion)
+  if (payload.vocabularyVersion !== theory.payloadMapping.vocabularyVersion)
     throw new Error(
-      `payload vocabulary ${payload.vocabularyVersion} is not supported by theory vocabulary ${theory.parameters.vocabularyVersion}`,
+      `payload vocabulary ${payload.vocabularyVersion} is not supported by theory vocabulary ${theory.payloadMapping.vocabularyVersion}`,
     );
   switch (payload.kind) {
     case "lesson":
@@ -185,7 +185,7 @@ export function interpretObservation(
     interpretation: {
       theoryOrigin: theory.origin,
       theoryDigest: theory.digest,
-      vocabularyVersion: theory.theory.parameters.vocabularyVersion,
+      vocabularyVersion: theory.theory.payloadMapping.vocabularyVersion,
       value: interpretPayload(theory.theory, payload),
     },
     ...(supersedes === undefined ? {} : { supersedes }),

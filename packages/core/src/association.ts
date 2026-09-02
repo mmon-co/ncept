@@ -15,7 +15,6 @@ export type AssociationCommitId = `association-${string}`;
 export type ParameterOverrideId = `parameter-override-${string}`;
 
 export interface PedagogicalTheoryParameterOverride {
-  readonly vocabularyVersion?: number;
   readonly initialEstimate?: number;
   readonly masteryGate?: number;
   readonly recallRungCeiling?: number;

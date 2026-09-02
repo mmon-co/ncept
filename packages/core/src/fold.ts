@@ -107,7 +107,6 @@ export function resolveFoldParameters(
     throw new Error("Parameter override content does not match its digest");
   const changed = override.parameters;
   return {
-    vocabularyVersion: changed.vocabularyVersion ?? base.vocabularyVersion,
     initialEstimate: changed.initialEstimate ?? base.initialEstimate,
     masteryGate: changed.masteryGate ?? base.masteryGate,
     recallRungCeiling: changed.recallRungCeiling ?? base.recallRungCeiling,
