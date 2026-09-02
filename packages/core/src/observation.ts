@@ -43,6 +43,8 @@ export interface LessonPayload extends NativePayloadBase {
   readonly assistance: "none" | "hint" | "worked";
   readonly transfer?: boolean;
   readonly mistake?: "slip" | "bug" | "misconception";
+  readonly misconception?: string;
+  readonly confusedWith?: NodeId;
 }
 
 export interface QuizPayload extends NativePayloadBase {
@@ -53,6 +55,8 @@ export interface QuizPayload extends NativePayloadBase {
   readonly assistance: "none" | "hint";
   readonly transfer?: boolean;
   readonly mistake?: "slip" | "bug" | "misconception";
+  readonly misconception?: string;
+  readonly confusedWith?: NodeId;
 }
 
 export type Grade = "again" | "hard" | "good" | "easy";
@@ -74,6 +78,8 @@ export interface ArtifactPayload extends NativePayloadBase {
   readonly assistance: "none" | "hint";
   readonly transfer?: boolean;
   readonly mistake?: "slip" | "bug" | "misconception";
+  readonly misconception?: string;
+  readonly confusedWith?: NodeId;
 }
 
 export interface MissionPayload extends NativePayloadBase {
@@ -124,6 +130,8 @@ function evidence(
       evidence: "not-recalled",
       support: payload.assistance === "none" ? "independent" : "assisted",
       ...(payload.mistake === undefined ? {} : { mistake: payload.mistake }),
+      ...(payload.misconception === undefined ? {} : { misconception: payload.misconception }),
+      ...(payload.confusedWith === undefined ? {} : { confusedWith: payload.confusedWith }),
     };
   return {
     kind: "evidence",

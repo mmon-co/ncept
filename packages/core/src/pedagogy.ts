@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { NodeId } from "./patch";
 
 export type ContentDigest = `sha256:${string}`;
 export type PedagogyPackageId = `pedagogy-${string}`;
@@ -18,6 +19,8 @@ export interface EvidenceInterpretation {
   readonly evidence: EvidenceKind;
   readonly support: EvidenceSupport;
   readonly mistake?: MistakeKind;
+  readonly misconception?: string;
+  readonly confusedWith?: NodeId;
 }
 
 export interface ExperienceInterpretation {
@@ -54,6 +57,21 @@ export interface PedagogicalTheoryParameters {
     readonly rungCeilingWeight: number;
     /** Age at which an observed estimate contributes maximum staleness to ranking. */
     readonly stalenessHorizonDays: number;
+  };
+  readonly probeRanking: {
+    readonly uncertaintyWeight: number;
+    readonly topologicalValueWeight: number;
+    readonly stalenessWeight: number;
+    /** Age at which an observed estimate contributes maximum staleness to ranking. */
+    readonly stalenessHorizonDays: number;
+  };
+  readonly revisionSignals: {
+    readonly minimumMistakeClusterSize: number;
+    readonly minimumPrerequisiteContradictions: number;
+    /** Number of recent outcomes considered when looking for non-converging alternation. */
+    readonly outcomeWindow: number;
+    readonly minimumOutcomeAlternations: number;
+    readonly minimumItemAttempts: number;
   };
 }
 
@@ -136,6 +154,19 @@ export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
     stalenessWeight: 0.3,
     rungCeilingWeight: 0.5,
     stalenessHorizonDays: 30,
+  },
+  probeRanking: {
+    uncertaintyWeight: 1,
+    topologicalValueWeight: 0.5,
+    stalenessWeight: 0.4,
+    stalenessHorizonDays: 30,
+  },
+  revisionSignals: {
+    minimumMistakeClusterSize: 2,
+    minimumPrerequisiteContradictions: 2,
+    outcomeWindow: 4,
+    minimumOutcomeAlternations: 3,
+    minimumItemAttempts: 3,
   },
 };
 

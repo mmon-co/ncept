@@ -24,6 +24,7 @@ export interface PedagogicalTheoryParameterOverride {
   readonly propagation?: Readonly<Partial<PedagogicalTheoryParameters["propagation"]>>;
   readonly uncertaintyAgingRate?: number;
   readonly frontierRanking?: Readonly<Partial<PedagogicalTheoryParameters["frontierRanking"]>>;
+  readonly probeRanking?: Readonly<Partial<PedagogicalTheoryParameters["probeRanking"]>>;
 }
 
 /** Immutable user-associated parameters embedded in the Association commit that applies them. */

@@ -121,6 +121,8 @@ export function resolveFoldParameters(
     propagation: { ...base.propagation, ...changed.propagation },
     uncertaintyAgingRate: changed.uncertaintyAgingRate ?? base.uncertaintyAgingRate,
     frontierRanking: { ...base.frontierRanking, ...changed.frontierRanking },
+    probeRanking: { ...base.probeRanking, ...changed.probeRanking },
+    revisionSignals: base.revisionSignals,
   };
 }
 
