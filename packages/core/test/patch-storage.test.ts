@@ -11,7 +11,11 @@ import {
   readAuthoredPatchRevision,
   reviseAuthoredRootPatch,
 } from "../src/patch-storage";
+import type { ProfileScope } from "../src/scope";
 import { tempDataDir } from "./helpers";
+
+const main: ProfileScope = { principal: "principal-alice", profile: "profile-main" };
+const scratch: ProfileScope = { principal: "principal-alice", profile: "profile-scratch" };
 
 function head(repository: string): string {
   const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" });
@@ -22,7 +26,7 @@ function head(repository: string): string {
 test("Patch authoring and Notebook changes are exact Git commits without recovery state", () => {
   const dd = tempDataDir();
   const patches = join(dd.root, "patches");
-  const personal = join(patches, "personal");
+  const personal = join(dd.profilesDir, main.principal, main.profile, "patches", "personal");
   const definition = {
     title: "Geometry",
     author: "Euclid",
@@ -31,13 +35,14 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
     edges: [],
   };
 
-  const root = createAuthoredRootPatch(dd, definition);
+  const root = createAuthoredRootPatch(dd, main, definition);
   const rootRevision = readAuthoredPatchRevision(dd, root.identity);
   expect(rootRevision.ref.commit).toBe(head(join(patches, "authored", root.identity)));
-  const afterRoot = loadPersonalPatchBundle(dd).terminal;
+  const afterRoot = loadPersonalPatchBundle(dd, main).terminal;
+  expect(() => loadPersonalPatchBundle(dd, scratch)).toThrow("Personal Patch does not exist");
   expect(afterRoot.commit).toBe(head(personal));
 
-  const based = createAuthoredBasedPatch(dd, {
+  const based = createAuthoredBasedPatch(dd, main, {
     bases: [rootRevision.ref],
     delta: { operations: [] },
     metadata: { properties: { "patch:title": "Geometry notes" }, citations: [] },
@@ -45,18 +50,18 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, based.identity).ref.commit).toBe(
     head(join(patches, "authored", based.identity)),
   );
-  const afterBased = loadPersonalPatchBundle(dd).terminal;
+  const afterBased = loadPersonalPatchBundle(dd, main).terminal;
   expect(afterBased.commit).toBe(head(personal));
   expect(afterBased.commit).not.toBe(afterRoot.commit);
 
-  const reified = createAuthoredReifiedPatch(dd, {
+  const reified = createAuthoredReifiedPatch(dd, main, {
     source: { terminal: rootRevision.ref, revisions: [rootRevision] },
     metadata: { properties: { "patch:title": "Geometry copy" }, citations: [] },
   });
   expect(readAuthoredPatchRevision(dd, reified.identity).ref.commit).toBe(
     head(join(patches, "authored", reified.identity)),
   );
-  const afterReified = loadPersonalPatchBundle(dd).terminal;
+  const afterReified = loadPersonalPatchBundle(dd, main).terminal;
   expect(afterReified.commit).toBe(head(personal));
   expect(afterReified.commit).not.toBe(afterBased.commit);
 
@@ -65,7 +70,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(revised.commit).toBe(head(join(patches, "authored", root.identity)));
   expect(revised.commit).not.toBe(rootRevision.ref.commit);
 
-  const notebook = addNotebookLesson(dd, {
+  const notebook = addNotebookLesson(dd, main, {
     id: "node-my-proof",
     label: "My proof",
     lesson: "Construct a proof",
@@ -73,7 +78,23 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(notebook.ref.commit).toBe(head(personal));
   expect(notebook.ref.commit).not.toBe(afterReified.commit);
 
-  expect(readdirSync(patches).sort()).toEqual(["authored", "personal"]);
+  const scratchPatch = createAuthoredRootPatch(dd, scratch, {
+    ...definition,
+    title: "Scratch geometry",
+  });
+  expect(readAuthoredPatchRevision(dd, scratchPatch.identity).ref.commit).toBe(
+    head(join(patches, "authored", scratchPatch.identity)),
+  );
+  expect(loadPersonalPatchBundle(dd, scratch).terminal).not.toEqual(
+    loadPersonalPatchBundle(dd, main).terminal,
+  );
+  expect(
+    loadPersonalPatchBundle(dd, main).revisions.some(
+      ({ ref }) => ref.identity === scratchPatch.identity,
+    ),
+  ).toBeFalse();
+  expect(readdirSync(patches).sort()).toEqual(["authored"]);
+  expect(existsSync(join(dd.root, "patches", "personal"))).toBeFalse();
   expect(existsSync(join(patches, "personal-transaction.json"))).toBeFalse();
   expect(existsSync(join(patches, "deferred-patch-updates"))).toBeFalse();
   expect(existsSync(join(patches, "reconciliation"))).toBeFalse();
