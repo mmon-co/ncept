@@ -1,35 +1,40 @@
-/** Loader for the pedagogy Skill library in `skills/` (see skills/README.md). */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+/** Loader for the pedagogy Skill catalog in `skills/` (see skills/README.md, ADR 0012). */
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-const PACKAGE_SKILLS_DIR = fileURLToPath(new URL("../skills", import.meta.url));
+const SKILLS_DIR = fileURLToPath(new URL("../skills", import.meta.url));
+const PROCEDURES_DIR = "procedures";
 
-function skillsDir(): string {
-  if (existsSync(PACKAGE_SKILLS_DIR)) return PACKAGE_SKILLS_DIR;
-  const projectRoot = process.env.CONCEPT_PROJECT_ROOT;
-  return projectRoot === undefined
-    ? PACKAGE_SKILLS_DIR
-    : join(projectRoot, "packages", "core", "skills");
-}
+const FACETS = ["position", "chart", "advance"] as const;
+type Facet = (typeof FACETS)[number];
+
+const ENTRIES = ["learner", "model", "system"] as const;
+/** Who may start a Skill's body. */
+type Entry = (typeof ENTRIES)[number];
 
 export interface SkillMeta {
   readonly name: string;
   readonly description: string;
-  /** Learner-invoked: the model suggests the Skill but never invokes it. */
-  readonly disableModelInvocation: boolean;
+  readonly facet: Facet;
+  readonly entry: readonly Entry[];
 }
 
 interface SkillFile {
   readonly meta: SkillMeta;
   readonly body: string;
-  readonly dir: string;
+}
+
+function isOneOf<const Choices extends readonly string[]>(
+  choices: Choices,
+  value: unknown,
+): value is Choices[number] {
+  return typeof value === "string" && choices.some((choice) => choice === value);
 }
 
 function parseSkillFile(dir: string): SkillFile {
-  const root = skillsDir();
-  const path = join(root, dir, "SKILL.md");
+  const path = join(SKILLS_DIR, dir, "SKILL.md");
   const raw = readFileSync(path, "utf8");
   const match = /^---\n([\s\S]*?)\n---\n/.exec(raw);
   if (match === null) throw new Error(`${path} has no frontmatter`);
@@ -38,33 +43,36 @@ function parseSkillFile(dir: string): SkillFile {
     throw new Error(`${path} frontmatter must be a mapping`);
   const name: unknown = Reflect.get(front, "name");
   const description: unknown = Reflect.get(front, "description");
+  const facet: unknown = Reflect.get(front, "facet");
+  const entry: unknown = Reflect.get(front, "entry");
   if (typeof name !== "string" || name !== dir)
     throw new Error(`${path} name must equal its directory name`);
   if (typeof description !== "string" || description.trim() === "")
     throw new Error(`${path} needs a description`);
-  const disable: unknown = Reflect.get(front, "disable-model-invocation");
-  if (disable !== undefined && disable !== true)
-    throw new Error(`${path} disable-model-invocation must be true or absent`);
+  if (!isOneOf(FACETS, facet)) throw new Error(`${path} facet must be one of ${FACETS.join(", ")}`);
+  const who: Entry[] = [];
+  if (Array.isArray(entry)) for (const item of entry) if (isOneOf(ENTRIES, item)) who.push(item);
+  if (!Array.isArray(entry) || who.length === 0 || who.length !== entry.length)
+    throw new Error(`${path} entry must be a non-empty list from ${ENTRIES.join(", ")}`);
   return {
-    meta: { name, description, disableModelInvocation: disable === true },
+    meta: { name, description, facet, entry: who },
     body: raw.slice(match[0].length),
-    dir: join(root, dir),
   };
 }
 
 function skillFiles(): SkillFile[] {
-  return readdirSync(skillsDir(), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !["techniques", "snippets"].includes(entry.name))
-    .map((entry) => parseSkillFile(entry.name))
+  return readdirSync(SKILLS_DIR, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory() && dirent.name !== PROCEDURES_DIR)
+    .map((dirent) => parseSkillFile(dirent.name))
     .sort((left, right) => left.meta.name.localeCompare(right.meta.name));
 }
 
-/** Inline `@relative/path` include lines, relative to the containing file. */
-function inlineIncludes(text: string, dir: string, seen: readonly string[] = []): string {
+/** Inline `@procedures/<name>.md` lines, resolved from the catalog root. */
+function inlineIncludes(text: string, seen: readonly string[] = []): string {
   return text.replace(/^@(\S+)$/gm, (_line, relative: string) => {
-    const path = join(dir, relative);
+    const path = join(SKILLS_DIR, relative);
     if (seen.includes(path)) throw new Error(`include cycle through ${path}`);
-    return inlineIncludes(readFileSync(path, "utf8").trim(), dirname(path), [...seen, path]);
+    return inlineIncludes(readFileSync(path, "utf8").trim(), [...seen, path]);
   });
 }
 
@@ -72,11 +80,11 @@ export function listSkills(): SkillMeta[] {
   return skillFiles().map(({ meta }) => meta);
 }
 
-/** The Skill's body with its includes mechanically inlined, for harnesses without a file surface. */
+/** The Skill's body with its procedures inlined: a self-contained bundle. */
 export function skillBody(name: string): string {
   const skill = skillFiles().find(({ meta }) => meta.name === name);
   if (skill === undefined) throw new Error(`unknown Skill: ${name}`);
-  return inlineIncludes(skill.body, skill.dir).trim();
+  return inlineIncludes(skill.body).trim();
 }
 
 /** An invocation message: the Skill's body followed by the request-time facts. */
@@ -85,22 +93,25 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
 }
 
 /**
- * The always-loaded tier: the base layer, the registry index (every Skill's
- * description), and the technique trigger index.
+ * The always-loaded tier: the base unit and the index of every Skill the
+ * learner or the model may start, grouped by facet. System-only Skills are
+ * the host's to read and stay out of the index.
  */
 export function tutorSystemPrompt(): string {
-  const root = skillsDir();
-  const base = readFileSync(join(root, "base.md"), "utf8").trim();
-  const index = skillFiles()
-    .map(
-      ({ meta }) =>
-        `- **${meta.name}**: ${meta.description}${
-          meta.disableModelInvocation
-            ? " (Learner-invoked: suggest it and say why; never start it yourself.)"
-            : ""
-        }`,
-    )
-    .join("\n");
-  const triggers = readFileSync(join(root, "techniques", "index.md"), "utf8").trim();
-  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one problem; its description says when that problem is present. Invoke one when its problem fires.\n\n${index}\n\n${triggers}`;
+  const base = readFileSync(join(SKILLS_DIR, "base.md"), "utf8").trim();
+  const visible = skillFiles().filter(({ meta }) => meta.entry.some((who) => who !== "system"));
+  const index = FACETS.map((facet) => {
+    const rows = visible
+      .filter(({ meta }) => meta.facet === facet)
+      .map(
+        ({ meta }) =>
+          `- **${meta.name}**: ${meta.description}${
+            meta.entry.includes("model")
+              ? ""
+              : " (Learner-started: propose it and say why; never start it yourself.)"
+          }`,
+      );
+    return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;
+  });
+  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Invoke one when its poison fires.\n\n${index.join("\n\n")}`;
 }
