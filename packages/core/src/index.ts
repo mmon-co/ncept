@@ -62,6 +62,7 @@ export {
 } from "./observation";
 export {
   acceptParameterOverride,
+  assertAssociationCompatibility,
   parameterOverride,
   type AssociationCommit,
   type AssociationCommitId,
@@ -91,6 +92,8 @@ export {
 } from "./storage";
 export { LocalDirectoryCoreStore } from "./local-directory";
 export {
+  parseSpacedReviewCard,
+  parseSpacedReviewGrade,
   spacedReviewDueQueue,
   spacedReviewPlayground,
   type ContextInjection,

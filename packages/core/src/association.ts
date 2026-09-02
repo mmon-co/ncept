@@ -1,4 +1,4 @@
-import type { ExactPatchRef, NodeId } from "./patch";
+import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
 import {
   contentDigest,
   type ContentDigest,
@@ -6,6 +6,7 @@ import {
   type EvidenceKind,
   type ExactPedagogyRelease,
   type PedagogicalTheoryParameters,
+  type ResolvedTheory,
 } from "./pedagogy";
 import type { ObservationId } from "./observation";
 import type { ProfileScope } from "./scope";
@@ -54,6 +55,24 @@ export interface AssociationCommit {
   };
   readonly parameterOverride?: ParameterOverride;
   readonly associations: readonly ObservationAssociation[];
+}
+
+/** Validate the exact Patch and, when supplied, theory inputs named by a commit. */
+export function assertAssociationCompatibility(
+  association: AssociationCommit,
+  graph: ResolvedGraph,
+  theory?: ResolvedTheory,
+): void {
+  if (!sameExactPatchRef(association.patchRevision, graph.terminal))
+    throw new Error("Association commit targets a different Patch revision");
+  if (
+    theory !== undefined &&
+    (association.theory.digest !== theory.digest ||
+      association.theory.origin.identity !== theory.origin.identity ||
+      association.theory.origin.version !== theory.origin.version ||
+      association.theory.origin.digest !== theory.origin.digest)
+  )
+    throw new Error("Association commit targets a different Pedagogical theory");
 }
 
 export function parameterOverride(input: {

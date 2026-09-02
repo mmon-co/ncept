@@ -1,14 +1,13 @@
 import { trail as nodeTrail } from "./instrument-learning";
 import { interpretPayload, type Observation, type ObservationId } from "./observation";
 import {
-  sameExactPatchRef,
   type ContributionProvenance,
   type NodeId,
   type ResolvedGraph,
   type StructureEdge,
   type StructureNode,
 } from "./patch";
-import type { AssociationCommit } from "./association";
+import { assertAssociationCompatibility, type AssociationCommit } from "./association";
 import type { TrailSnapshot } from "./fold";
 import type { EvidenceInterpretation, ResolvedTheory } from "./pedagogy";
 
@@ -102,15 +101,7 @@ function chronological(left: AssociatedRecord, right: AssociatedRecord): number 
 }
 
 function learnerRecords(input: SignalsInstrumentInput, aggregate: AggregatedTrail): LearnerRecords {
-  if (!sameExactPatchRef(aggregate.association.patchRevision, input.graph.terminal))
-    throw new Error("Association commit targets a different Patch revision");
-  if (
-    aggregate.association.theory.digest !== input.theory.digest ||
-    aggregate.association.theory.origin.identity !== input.theory.origin.identity ||
-    aggregate.association.theory.origin.version !== input.theory.origin.version ||
-    aggregate.association.theory.origin.digest !== input.theory.origin.digest
-  )
-    throw new Error("Association commit targets a different Pedagogical theory");
+  assertAssociationCompatibility(aggregate.association, input.graph, input.theory);
 
   const byNode = new Map<NodeId, readonly AssociatedRecord[]>();
   for (const node of input.graph.nodes) {

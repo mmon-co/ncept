@@ -1,4 +1,8 @@
-import type { AssociationCommit, ParameterOverride } from "./association";
+import {
+  assertAssociationCompatibility,
+  type AssociationCommit,
+  type ParameterOverride,
+} from "./association";
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
 import { interpretPayload, type Observation, type ObservationId } from "./observation";
 import {
@@ -126,22 +130,6 @@ export function resolveFoldParameters(
   };
 }
 
-function assertFoldInputs(
-  association: AssociationCommit,
-  graph: ResolvedGraph,
-  theory: ResolvedTheory,
-): void {
-  if (!sameExactPatchRef(association.patchRevision, graph.terminal))
-    throw new Error("Association commit targets a different Patch revision");
-  if (
-    association.theory.digest !== theory.digest ||
-    association.theory.origin.identity !== theory.origin.identity ||
-    association.theory.origin.version !== theory.origin.version ||
-    association.theory.origin.digest !== theory.origin.digest
-  )
-    throw new Error("Association commit targets a different Pedagogical theory");
-}
-
 /** Fold the complete immutable trail in timestamp order under one exact Association commit. */
 export function foldLearnerState(input: {
   readonly graph: ResolvedGraph;
@@ -152,7 +140,7 @@ export function foldLearnerState(input: {
   readonly evaluatedAt: string;
 }): LearnerState {
   assertSupportedPedagogicalTheory(input.theory.theory);
-  assertFoldInputs(input.association, input.graph, input.theory);
+  assertAssociationCompatibility(input.association, input.graph, input.theory);
   const evaluatedAt = Date.parse(input.evaluatedAt);
   if (Number.isNaN(evaluatedAt)) throw new Error("Fold evaluation time must be an ISO timestamp");
   const observations = new Map(

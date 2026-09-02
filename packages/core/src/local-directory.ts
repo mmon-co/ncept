@@ -14,7 +14,13 @@ import type { TrailSnapshot } from "./fold";
 import type { Observation } from "./observation";
 import { contentDigest, type ExactPedagogyRelease } from "./pedagogy";
 import { parseGraphQuery } from "./patch";
-import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
+import {
+  parseSpacedReviewCard,
+  parseSpacedReviewGrade,
+  type SpacedReviewCard,
+  type SpacedReviewCardId,
+  type SpacedReviewGrade,
+} from "./playground";
 import type { ProfileScope } from "./scope";
 import type { CoreStores } from "./storage";
 import type { View, ViewId } from "./view";
@@ -100,35 +106,6 @@ function isExactPedagogyRelease(value: unknown): value is ExactPedagogyRelease {
     typeof value.version === "string" &&
     typeof value.digest === "string" &&
     value.digest.startsWith("sha256:")
-  );
-}
-
-function isSpacedReviewCard(value: unknown): value is SpacedReviewCard {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    /^srs-card-[0-9a-z-]+$/.test(value.id) &&
-    typeof value.createdAt === "string" &&
-    (value.status === "pending" || value.status === "approved") &&
-    (value.format === "recall" || value.format === "application") &&
-    typeof value.category === "string" &&
-    typeof value.front === "string" &&
-    typeof value.back === "string" &&
-    Array.isArray(value.associations)
-  );
-}
-
-function isSpacedReviewGrade(value: unknown): value is SpacedReviewGrade {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    /^srs-grade-[0-9a-z-]+$/.test(value.id) &&
-    typeof value.cardId === "string" &&
-    /^srs-card-[0-9a-z-]+$/.test(value.cardId) &&
-    typeof value.gradedAt === "string" &&
-    typeof value.answer === "string" &&
-    typeof value.latencyMs === "number" &&
-    ["again", "hard", "good", "easy"].includes(String(value.grade))
   );
 }
 
@@ -278,13 +255,14 @@ export class LocalDirectoryCoreStore implements CoreStores {
   }
 
   saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): void {
-    if (!isSpacedReviewCard(card)) throw new Error("invalid spaced-review card");
-    atomicJson(spacedReviewCardPath(this.dataDir, scope, card.id), card);
+    const parsed = parseSpacedReviewCard(card);
+    atomicJson(spacedReviewCardPath(this.dataDir, scope, parsed.id), parsed);
   }
 
   readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): SpacedReviewCard | undefined {
     const path = spacedReviewCardPath(this.dataDir, scope, id);
-    return existsSync(path) ? readJson(path, isSpacedReviewCard, "spaced-review card") : undefined;
+    if (!existsSync(path)) return undefined;
+    return parseSpacedReviewCard(JSON.parse(readFileSync(path, "utf8")));
   }
 
   listSpacedReviewCards(scope: ProfileScope): readonly SpacedReviewCard[] {
@@ -292,7 +270,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     if (!existsSync(root)) return [];
     return readdirSync(root)
       .filter((name) => name.endsWith(".json"))
-      .map((name) => readJson(join(root, name), isSpacedReviewCard, "spaced-review card"))
+      .map((name) => parseSpacedReviewCard(JSON.parse(readFileSync(join(root, name), "utf8"))))
       .sort(
         (left, right) =>
           left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
@@ -300,12 +278,12 @@ export class LocalDirectoryCoreStore implements CoreStores {
   }
 
   appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): void {
-    if (!isSpacedReviewGrade(grade)) throw new Error("invalid spaced-review grade");
-    if (this.readSpacedReviewGrades(scope).some(({ id }) => id === grade.id))
-      throw new Error(`spaced-review grade ${grade.id} already exists`);
+    const parsed = parseSpacedReviewGrade(grade);
+    if (this.readSpacedReviewGrades(scope).some(({ id }) => id === parsed.id))
+      throw new Error(`spaced-review grade ${parsed.id} already exists`);
     const path = spacedReviewGradeLog(this.dataDir, scope);
     mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify(grade)}\n`);
+    appendFileSync(path, `${JSON.stringify(parsed)}\n`);
   }
 
   readSpacedReviewGrades(scope: ProfileScope): readonly SpacedReviewGrade[] {
@@ -314,11 +292,6 @@ export class LocalDirectoryCoreStore implements CoreStores {
     return readFileSync(path, "utf8")
       .split("\n")
       .filter((line) => line !== "")
-      .map((line, index) => {
-        const value: unknown = JSON.parse(line);
-        if (!isSpacedReviewGrade(value))
-          throw new Error(`${path}:${index + 1}: invalid spaced-review grade`);
-        return value;
-      });
+      .map((line) => parseSpacedReviewGrade(JSON.parse(line)));
   }
 }

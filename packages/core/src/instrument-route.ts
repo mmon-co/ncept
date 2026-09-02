@@ -1,5 +1,6 @@
 import { PatchCompileError } from "./patch/errors";
 import type { NodeId, ResolvedGraph, StructureNode } from "./patch/model";
+import { selectGraph } from "./patch/select";
 
 export type RouteResult =
   | { readonly kind: "found"; readonly nodes: readonly StructureNode[] }
@@ -7,12 +8,12 @@ export type RouteResult =
 
 /** Returns the target's complete prerequisite cone in stable dependency order. */
 export function route(graph: ResolvedGraph, target: NodeId): RouteResult {
-  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
-  if (!nodes.has(target)) return { kind: "missing-target", target };
-
+  if (!graph.nodes.some(({ id }) => id === target)) return { kind: "missing-target", target };
+  const cone = selectGraph(graph, { cone: { targets: [target] } });
+  const nodes = new Map(cone.nodes.map((node) => [node.id, node]));
   const prerequisites = new Map<NodeId, NodeId[]>();
-  for (const node of graph.nodes) prerequisites.set(node.id, []);
-  for (const edge of graph.edges) prerequisites.get(edge.to)?.push(edge.from);
+  for (const node of cone.nodes) prerequisites.set(node.id, []);
+  for (const edge of cone.edges) prerequisites.get(edge.to)?.push(edge.from);
 
   const ordered: StructureNode[] = [];
   const visited = new Set<NodeId>();

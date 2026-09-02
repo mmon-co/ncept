@@ -1,13 +1,7 @@
-import type { AssociationCommit } from "./association";
+import { assertAssociationCompatibility, type AssociationCommit } from "./association";
 import { foldLearnerState, type LearnerState, type TrailSnapshot } from "./fold";
 import type { Observation, ObservationId } from "./observation";
-import {
-  exactPatchRefKey,
-  sameExactPatchRef,
-  type NodeId,
-  type ResolvedGraph,
-  type StructureNode,
-} from "./patch";
+import { exactPatchRefKey, type NodeId, type ResolvedGraph, type StructureNode } from "./patch";
 import type { ResolvedTheory } from "./pedagogy";
 
 export interface TrailRecord {
@@ -63,8 +57,7 @@ export interface CompetencyInstrumentInput {
 }
 
 function recordsByNode(input: CoverageInstrumentInput): ReadonlyMap<NodeId, TrailRecord[]> {
-  if (!sameExactPatchRef(input.association.patchRevision, input.graph.terminal))
-    throw new Error("Association commit targets a different Patch revision");
+  assertAssociationCompatibility(input.association, input.graph);
 
   const graphNodes = new Set(input.graph.nodes.map(({ id }) => id));
   const graphPatches = new Set(input.graph.patchOrder.map(exactPatchRefKey));
