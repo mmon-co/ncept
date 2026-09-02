@@ -18,6 +18,7 @@ import {
   type Observation,
   type LearnerState,
   type PedagogicalTheory,
+  type PedagogicalTheoryParameterOverride,
   type PedagogyRelease,
   type ProfileScope,
   type ResolvedTheory,
@@ -451,6 +452,18 @@ test("an accepted Profile parameter override creates a distinguishable refold wi
     theory: resolved.theory,
     evaluatedAt: "2026-09-02T12:00:00.000Z",
   });
+
+  const invalidVocabularyOverride: PedagogicalTheoryParameterOverride = {};
+  Reflect.set(invalidVocabularyOverride, "vocabularyVersion", 2);
+  expect(() =>
+    acceptParameterOverride(store, scope, {
+      associationId: "association-invalid-vocabulary-override",
+      overrideId: "parameter-override-invalid-vocabulary",
+      createdAt: "2026-09-02T12:30:00.000Z",
+      parameters: invalidVocabularyOverride,
+    }),
+  ).toThrow("cannot change payload vocabulary semantics");
+  expect(store.currentAssociation(scope)?.id).toBe(original.id);
 
   const accepted = acceptParameterOverride(store, scope, {
     associationId: "association-after-override",

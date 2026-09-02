@@ -63,6 +63,8 @@ export function parameterOverride(input: {
 }): ParameterOverride {
   if (Number.isNaN(Date.parse(input.createdAt)))
     throw new Error("Parameter override createdAt must be an ISO timestamp");
+  if ("vocabularyVersion" in input.parameters)
+    throw new Error("Parameter overrides cannot change payload vocabulary semantics");
   return { ...input, digest: contentDigest(input.parameters) };
 }
 
