@@ -8,7 +8,11 @@ import {
   type Grade as FsrsGrade,
 } from "ts-fsrs";
 import type { Grade } from "./observation";
-import type { ReviewRecord } from "./playground";
+
+export interface ReviewRecord {
+  readonly ts: string;
+  readonly grade: Grade;
+}
 
 const RATING: Record<Grade, FsrsGrade> = {
   again: Rating.Again,

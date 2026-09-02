@@ -2,16 +2,9 @@ import type { AssociationCommit, AssociationCommitId } from "./association";
 import type { TrailSnapshot } from "./fold";
 import type { Observation } from "./observation";
 import type { ExactPedagogyRelease } from "./pedagogy";
+import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
 import type { View, ViewId } from "./view";
-
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
 
 export interface TrailStore {
   appendObservation(scope: ProfileScope, observation: Observation): void;
@@ -36,15 +29,13 @@ export interface PedagogySelectionStore {
   selectedPedagogy(scope: ProfileScope): ExactPedagogyRelease | undefined;
 }
 
-export interface PlaygroundStore {
-  putPlaygroundRecord(scope: ProfileScope, namespace: string, key: string, value: JsonValue): void;
-  getPlaygroundRecord(scope: ProfileScope, namespace: string, key: string): JsonValue | undefined;
-  listPlaygroundRecords(
-    scope: ProfileScope,
-    namespace: string,
-  ): Readonly<Record<string, JsonValue>>;
-  deletePlaygroundRecord(scope: ProfileScope, namespace: string, key: string): void;
+export interface SpacedReviewStore {
+  saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): void;
+  readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): SpacedReviewCard | undefined;
+  listSpacedReviewCards(scope: ProfileScope): readonly SpacedReviewCard[];
+  appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): void;
+  readSpacedReviewGrades(scope: ProfileScope): readonly SpacedReviewGrade[];
 }
 
 export interface CoreStores
-  extends TrailStore, AssociationStore, ViewStore, PedagogySelectionStore, PlaygroundStore {}
+  extends TrailStore, AssociationStore, ViewStore, PedagogySelectionStore, SpacedReviewStore {}

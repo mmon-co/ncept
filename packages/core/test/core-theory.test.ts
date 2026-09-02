@@ -10,12 +10,13 @@ import {
   foldLearnerState,
   interpretObservation,
   pedagogicalTheoryDigest,
-  playgroundContract,
   resolvePedagogy,
+  spacedReviewPlayground,
   sessionPedagogyMetadata,
   type AssociationCommit,
   type ExactPedagogyRelease,
   type Observation,
+  type LearnerState,
   type PedagogicalTheory,
   type PedagogyRelease,
   type ProfileScope,
@@ -216,31 +217,96 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     store.appendObservation(scope, record);
 
   const injected: string[] = [];
-  const playground = playgroundContract({
+  let liveState: LearnerState | undefined;
+  const playground = spacedReviewPlayground({
     scope,
-    namespace: "spaced-review",
     trail: store,
-    playground: store,
-    instruments: { competency: () => "live" },
+    store,
+    instruments: {
+      competency: () => required(liveState, "live competency"),
+      trail: (node) => ({ kind: "missing-node", node }),
+      content: (node) => ({
+        node,
+        label: "Target",
+        content: "Differentiate a polynomial",
+        contentSource: patchRef,
+        inspectorRef: "core-story",
+      }),
+    },
     injectContext: ({ content }) => injected.push(content),
   });
-  playground.store.put("card-one", { front: "d/dx x³", back: "3x²" });
+  for (const card of [
+    {
+      id: "srs-card-derivative" as const,
+      category: "calculus",
+      front: "d/dx x³",
+      back: "3x²",
+    },
+    {
+      id: "srs-card-integral" as const,
+      category: "calculus",
+      front: "integral of 3x²",
+      back: "x³ + C",
+    },
+    {
+      id: "srs-card-linearity" as const,
+      category: "algebra",
+      front: "expand 3(x + 1)",
+      back: "3x + 3",
+    },
+  ]) {
+    playground.proposeCard({
+      ...card,
+      createdAt: "2026-09-01T12:00:00.000Z",
+      status: "pending",
+      format: "recall",
+      associations: [{ patch: patchRef, node: "node-target" }],
+    });
+    playground.approveCard(card.id);
+  }
+  playground.proposeCard({
+    id: "srs-card-pending",
+    createdAt: "2026-09-01T12:00:00.000Z",
+    status: "pending",
+    format: "application",
+    category: "calculus",
+    front: "Apply the power rule",
+    back: "A worked transfer",
+    associations: [{ patch: patchRef, node: "node-target" }],
+  });
+  expect(playground.dueQueue("2026-09-01T12:30:00.000Z", 3).map(({ card }) => card.id)).toEqual([
+    "srs-card-linearity",
+    "srs-card-derivative",
+    "srs-card-integral",
+  ]);
+
   const review = observation(
     "observation-review",
     "2026-09-01T12:30:00.000Z",
     {
       kind: "srs",
       vocabularyVersion: 1,
-      cardId: "card-one",
+      cardId: "srs-card-derivative",
       answer: "3x²",
       latencyMs: 1200,
       grade: "good",
     },
     resolved.theory,
   );
+  const grade = {
+    id: "srs-grade-derivative-one" as const,
+    cardId: "srs-card-derivative" as const,
+    gradedAt: review.envelope.observedAt,
+    answer: "3x²",
+    latencyMs: 1200,
+    grade: "good" as const,
+  };
+  playground.appendGrade(grade);
   playground.appendObservation(review);
+  expect(() => playground.appendGrade(grade)).toThrow("already exists");
   playground.injectContext({ mode: "append", content: "review complete" });
-  expect(playground.store.get("card-one")).toEqual({ front: "d/dx x³", back: "3x²" });
+  expect(playground.grades()).toEqual([grade]);
+  expect(store.listSpacedReviewCards({ ...scope, profile: "profile-scratch" })).toEqual([]);
   expect(injected).toEqual(["review complete"]);
 
   expect(
@@ -262,6 +328,9 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     evaluatedAt: "2026-09-02T12:30:00.000Z",
   });
   expect(firstState.nodes["node-target"]?.estimate).toBeGreaterThan(0.5);
+  liveState = firstState;
+  expect(playground.instruments.competency()).toBe(firstState);
+  expect(playground.instruments.content("node-target").contentSource).toEqual(patchRef);
 
   const changedTheory: PedagogicalTheory = {
     ...V1_PEDAGOGICAL_THEORY,

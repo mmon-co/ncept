@@ -5,7 +5,6 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,8 +14,9 @@ import type { TrailSnapshot } from "./fold";
 import type { Observation } from "./observation";
 import { contentDigest, type ExactPedagogyRelease } from "./pedagogy";
 import { parseGraphQuery } from "./patch";
+import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
-import type { CoreStores, JsonValue } from "./storage";
+import type { CoreStores } from "./storage";
 import type { View, ViewId } from "./view";
 
 function component(value: string, label: string): string {
@@ -103,14 +103,32 @@ function isExactPedagogyRelease(value: unknown): value is ExactPedagogyRelease {
   );
 }
 
-function isJsonValue(value: unknown): value is JsonValue {
+function isSpacedReviewCard(value: unknown): value is SpacedReviewCard {
   return (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string" ||
-    (typeof value === "number" && Number.isFinite(value)) ||
-    (Array.isArray(value) && value.every(isJsonValue)) ||
-    (isRecord(value) && Object.values(value).every(isJsonValue))
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    /^srs-card-[0-9a-z-]+$/.test(value.id) &&
+    typeof value.createdAt === "string" &&
+    (value.status === "pending" || value.status === "approved") &&
+    (value.format === "recall" || value.format === "application") &&
+    typeof value.category === "string" &&
+    typeof value.front === "string" &&
+    typeof value.back === "string" &&
+    Array.isArray(value.associations)
+  );
+}
+
+function isSpacedReviewGrade(value: unknown): value is SpacedReviewGrade {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    /^srs-grade-[0-9a-z-]+$/.test(value.id) &&
+    typeof value.cardId === "string" &&
+    /^srs-card-[0-9a-z-]+$/.test(value.cardId) &&
+    typeof value.gradedAt === "string" &&
+    typeof value.answer === "string" &&
+    typeof value.latencyMs === "number" &&
+    ["again", "hard", "good", "easy"].includes(String(value.grade))
   );
 }
 
@@ -153,12 +171,16 @@ function viewPath(dd: DataDir, scope: ProfileScope, id: ViewId): string {
   return join(profileRoot(dd, scope), "views", `${component(id, "View id")}.json`);
 }
 
-function playgroundRoot(dd: DataDir, scope: ProfileScope, namespace: string): string {
-  return join(profileRoot(dd, scope), "playgrounds", component(namespace, "Playground namespace"));
+function spacedReviewRoot(dd: DataDir, scope: ProfileScope): string {
+  return join(profileRoot(dd, scope), "playgrounds", "spaced-review");
 }
 
-function playgroundPath(dd: DataDir, scope: ProfileScope, namespace: string, key: string): string {
-  return join(playgroundRoot(dd, scope, namespace), `${component(key, "Playground key")}.json`);
+function spacedReviewCardPath(dd: DataDir, scope: ProfileScope, id: SpacedReviewCardId): string {
+  return join(spacedReviewRoot(dd, scope), "cards", `${component(id, "card id")}.json`);
+}
+
+function spacedReviewGradeLog(dd: DataDir, scope: ProfileScope): string {
+  return join(spacedReviewRoot(dd, scope), "grades.jsonl");
 }
 
 /** Synchronous filesystem implementation for local harnesses and development. */
@@ -255,33 +277,48 @@ export class LocalDirectoryCoreStore implements CoreStores {
       : undefined;
   }
 
-  putPlaygroundRecord(scope: ProfileScope, namespace: string, key: string, value: JsonValue): void {
-    atomicJson(playgroundPath(this.dataDir, scope, namespace, key), value);
+  saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): void {
+    if (!isSpacedReviewCard(card)) throw new Error("invalid spaced-review card");
+    atomicJson(spacedReviewCardPath(this.dataDir, scope, card.id), card);
   }
 
-  getPlaygroundRecord(scope: ProfileScope, namespace: string, key: string): JsonValue | undefined {
-    const path = playgroundPath(this.dataDir, scope, namespace, key);
-    return existsSync(path) ? readJson(path, isJsonValue, "Playground record") : undefined;
+  readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): SpacedReviewCard | undefined {
+    const path = spacedReviewCardPath(this.dataDir, scope, id);
+    return existsSync(path) ? readJson(path, isSpacedReviewCard, "spaced-review card") : undefined;
   }
 
-  listPlaygroundRecords(
-    scope: ProfileScope,
-    namespace: string,
-  ): Readonly<Record<string, JsonValue>> {
-    const root = playgroundRoot(this.dataDir, scope, namespace);
-    if (!existsSync(root)) return {};
-    return Object.fromEntries(
-      readdirSync(root)
-        .filter((name) => name.endsWith(".json"))
-        .map((name) => [
-          decodeURIComponent(name.slice(0, -".json".length)),
-          readJson(join(root, name), isJsonValue, "Playground record"),
-        ]),
-    );
+  listSpacedReviewCards(scope: ProfileScope): readonly SpacedReviewCard[] {
+    const root = join(spacedReviewRoot(this.dataDir, scope), "cards");
+    if (!existsSync(root)) return [];
+    return readdirSync(root)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => readJson(join(root, name), isSpacedReviewCard, "spaced-review card"))
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      );
   }
 
-  deletePlaygroundRecord(scope: ProfileScope, namespace: string, key: string): void {
-    const path = playgroundPath(this.dataDir, scope, namespace, key);
-    if (existsSync(path)) unlinkSync(path);
+  appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): void {
+    if (!isSpacedReviewGrade(grade)) throw new Error("invalid spaced-review grade");
+    if (this.readSpacedReviewGrades(scope).some(({ id }) => id === grade.id))
+      throw new Error(`spaced-review grade ${grade.id} already exists`);
+    const path = spacedReviewGradeLog(this.dataDir, scope);
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, `${JSON.stringify(grade)}\n`);
+  }
+
+  readSpacedReviewGrades(scope: ProfileScope): readonly SpacedReviewGrade[] {
+    const path = spacedReviewGradeLog(this.dataDir, scope);
+    if (!existsSync(path)) return [];
+    return readFileSync(path, "utf8")
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line, index) => {
+        const value: unknown = JSON.parse(line);
+        if (!isSpacedReviewGrade(value))
+          throw new Error(`${path}:${index + 1}: invalid spaced-review grade`);
+        return value;
+      });
   }
 }
