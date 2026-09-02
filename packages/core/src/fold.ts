@@ -19,6 +19,7 @@ export interface LearnerNodeState {
   readonly uncertainty: number;
   readonly observedAt: string;
   readonly ageDays: number;
+  readonly atRungCeiling: boolean;
   readonly evidence: readonly ObservationId[];
 }
 
@@ -50,6 +51,7 @@ interface Accumulator {
   estimate: number;
   information: number;
   observedAt?: string;
+  atRungCeiling: boolean;
   evidence: ObservationId[];
 }
 
@@ -202,9 +204,21 @@ export function foldLearnerState(input: {
         const state = accumulator.get(propagated.node) ?? {
           estimate: parameters.initialEstimate,
           information: 0,
+          atRungCeiling: false,
           evidence: [],
         };
-        state.estimate = clamp(state.estimate + effect.delta * weight);
+        const nextEstimate = state.estimate + effect.delta * weight;
+        if (interpretation.evidence === "recalled" && effect.delta >= 0) {
+          state.estimate = clamp(
+            Math.max(state.estimate, Math.min(nextEstimate, parameters.recallRungCeiling)),
+          );
+          state.atRungCeiling =
+            state.estimate === parameters.recallRungCeiling &&
+            nextEstimate >= parameters.recallRungCeiling;
+        } else {
+          state.estimate = clamp(nextEstimate);
+          state.atRungCeiling = false;
+        }
         state.information += effect.information * weight;
         if (state.observedAt === undefined || observation.envelope.observedAt > state.observedAt)
           state.observedAt = observation.envelope.observedAt;
@@ -227,6 +241,7 @@ export function foldLearnerState(input: {
       ),
       observedAt: state.observedAt,
       ageDays,
+      atRungCeiling: state.atRungCeiling,
       evidence: state.evidence,
     };
   }

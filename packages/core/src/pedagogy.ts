@@ -36,6 +36,8 @@ export interface PedagogicalTheoryParameters {
   readonly vocabularyVersion: number;
   readonly initialEstimate: number;
   readonly masteryGate: number;
+  /** The highest estimate recall evidence alone can establish. */
+  readonly recallRungCeiling: number;
   readonly evidence: Readonly<Record<EvidenceKind, EvidenceEffect>>;
   readonly assistedWeight: number;
   readonly propagation: {
@@ -110,6 +112,7 @@ export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
   vocabularyVersion: 1,
   initialEstimate: 0.5,
   masteryGate: 0.8,
+  recallRungCeiling: 0.8,
   evidence: {
     used: { delta: 0.18, information: 1 },
     generalized: { delta: 0.28, information: 1.5 },
