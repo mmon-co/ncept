@@ -160,7 +160,7 @@ function spacedReviewGradeLog(dd: DataDir, scope: ProfileScope): string {
   return join(spacedReviewRoot(dd, scope), "grades.jsonl");
 }
 
-/** Synchronous filesystem implementation for local harnesses and development. */
+/** Filesystem implementation of the asynchronous ports for local harnesses and development. */
 export class LocalDirectoryCoreStore implements CoreStores {
   constructor(readonly dataDir: DataDir) {
     ensureDataDir(dataDir);
