@@ -47,6 +47,14 @@ export interface PedagogicalTheoryParameters {
   };
   /** Exponential rate per day at which old certainty decays back toward total uncertainty. */
   readonly uncertaintyAgingRate: number;
+  readonly frontierRanking: {
+    readonly missionImportanceWeight: number;
+    readonly uncertaintyWeight: number;
+    readonly stalenessWeight: number;
+    readonly rungCeilingWeight: number;
+    /** Age at which an observed estimate contributes maximum staleness to ranking. */
+    readonly stalenessHorizonDays: number;
+  };
 }
 
 export interface PedagogicalTheory {
@@ -122,6 +130,13 @@ export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
   assistedWeight: 0.5,
   propagation: { success: 0.35, failure: 0.1, defaultEdgeStrength: 0.5 },
   uncertaintyAgingRate: 0.015,
+  frontierRanking: {
+    missionImportanceWeight: 1,
+    uncertaintyWeight: 0.6,
+    stalenessWeight: 0.3,
+    rungCeilingWeight: 0.5,
+    stalenessHorizonDays: 30,
+  },
 };
 
 export const V1_PEDAGOGICAL_THEORY: PedagogicalTheory = {

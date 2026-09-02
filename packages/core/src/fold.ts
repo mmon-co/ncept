@@ -120,6 +120,7 @@ export function resolveFoldParameters(
     assistedWeight: changed.assistedWeight ?? base.assistedWeight,
     propagation: { ...base.propagation, ...changed.propagation },
     uncertaintyAgingRate: changed.uncertaintyAgingRate ?? base.uncertaintyAgingRate,
+    frontierRanking: { ...base.frontierRanking, ...changed.frontierRanking },
   };
 }
 
