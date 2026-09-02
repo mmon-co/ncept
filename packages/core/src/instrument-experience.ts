@@ -19,6 +19,7 @@ export interface PreferencesInstrumentRecord {
   /** Citation for the current Learning preferences fact. */
   readonly observationId: ObservationId;
   readonly observedAt: string;
+  readonly experienceScope: string;
   readonly values: Readonly<Record<string, string | number | boolean | readonly string[]>>;
   readonly historyAvailable: boolean;
 }
@@ -67,11 +68,16 @@ export function mission(trail: TrailSnapshot, experienceScope?: string): Mission
 /** Reads the current Learning preferences facts without making a choice from them. */
 export function preferences(trail: TrailSnapshot): PreferencesInstrumentResult {
   const records = currentExperienceRecords(trail.observations).flatMap((observation) => {
-    if (observation.payload.kind !== "preferences") return [];
+    if (
+      observation.payload.kind !== "preferences" ||
+      observation.envelope.subject.kind !== "experience"
+    )
+      return [];
     return [
       {
         observationId: observation.envelope.id,
         observedAt: observation.envelope.observedAt,
+        experienceScope: observation.envelope.subject.scope,
         values: observation.payload.values,
         historyAvailable: observation.supersedes !== undefined,
       },

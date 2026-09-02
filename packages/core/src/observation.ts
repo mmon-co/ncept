@@ -14,21 +14,24 @@ export type ObservationSource =
   | { readonly kind: "import"; readonly importId: string }
   | { readonly kind: "system"; readonly event: string };
 
+export type NodeObservationSubject = {
+  readonly kind: "node";
+  readonly node: NodeId;
+  /** The release applied last to the Node's pedagogical metadata during the activity. */
+  readonly effectiveProvenance: ExactPatchRef;
+};
+export type ExperienceObservationSubject = { readonly kind: "experience"; readonly scope: string };
+export type ArtifactObservationSubject = { readonly kind: "artifact"; readonly artifactId: string };
 export type ObservationSubject =
-  | {
-      readonly kind: "node";
-      readonly node: NodeId;
-      /** The release applied last to the Node's pedagogical metadata during the activity. */
-      readonly effectiveProvenance: ExactPatchRef;
-    }
-  | { readonly kind: "experience"; readonly scope: string }
-  | { readonly kind: "artifact"; readonly artifactId: string };
+  | NodeObservationSubject
+  | ExperienceObservationSubject
+  | ArtifactObservationSubject;
 
-export interface ObservationEnvelope {
+export interface ObservationEnvelope<Subject extends ObservationSubject = ObservationSubject> {
   readonly id: ObservationId;
   readonly observedAt: string;
   readonly source: ObservationSource;
-  readonly subject: ObservationSubject;
+  readonly subject: Subject;
 }
 
 interface NativePayloadBase {
@@ -96,13 +99,16 @@ export interface PreferencesPayload extends NativePayloadBase {
   readonly values: Readonly<Record<string, string | number | boolean | readonly string[]>>;
 }
 
+export type ExperiencePayload = MissionPayload | PreferencesPayload;
 export type ObservationPayload =
   | LessonPayload
   | QuizPayload
   | SrsPayload
   | ArtifactPayload
-  | MissionPayload
-  | PreferencesPayload;
+  | ExperiencePayload;
+
+export type ObservationSubjectFor<Payload extends ObservationPayload> =
+  Payload extends ExperiencePayload ? ExperienceObservationSubject : ObservationSubject;
 
 export interface ObservationInterpretation {
   readonly theoryOrigin: ExactPedagogyRelease;
@@ -167,9 +173,9 @@ export function interpretPayload(
   }
 }
 
-export function interpretObservation(
-  envelope: ObservationEnvelope,
-  payload: ObservationPayload,
+export function interpretObservation<Payload extends ObservationPayload>(
+  envelope: ObservationEnvelope<ObservationSubjectFor<Payload>>,
+  payload: Payload,
   theory: {
     readonly origin: ExactPedagogyRelease;
     readonly digest: ContentDigest;
@@ -179,6 +185,11 @@ export function interpretObservation(
 ): Observation {
   if (Number.isNaN(Date.parse(envelope.observedAt)))
     throw new Error("Observation observedAt must be an ISO timestamp");
+  if (
+    (payload.kind === "mission" || payload.kind === "preferences") &&
+    envelope.subject.kind !== "experience"
+  )
+    throw new Error(`${payload.kind} Observations require an experience subject`);
   return {
     envelope,
     payload,
@@ -193,8 +204,11 @@ export function interpretObservation(
 }
 
 function experienceKey(observation: Observation): string | undefined {
-  if (observation.payload.kind === "mission") return `mission:${observation.payload.missionId}`;
-  if (observation.payload.kind === "preferences") return "preferences";
+  if (observation.envelope.subject.kind !== "experience") return undefined;
+  const scope = observation.envelope.subject.scope;
+  if (observation.payload.kind === "mission")
+    return `mission:${scope}:${observation.payload.missionId}`;
+  if (observation.payload.kind === "preferences") return `preferences:${scope}`;
   return undefined;
 }
 
