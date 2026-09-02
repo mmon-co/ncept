@@ -110,6 +110,7 @@ export function resolveFoldParameters(
     vocabularyVersion: changed.vocabularyVersion ?? base.vocabularyVersion,
     initialEstimate: changed.initialEstimate ?? base.initialEstimate,
     masteryGate: changed.masteryGate ?? base.masteryGate,
+    recallRungCeiling: changed.recallRungCeiling ?? base.recallRungCeiling,
     evidence: {
       used: { ...base.evidence.used, ...changed.evidence?.used },
       generalized: { ...base.evidence.generalized, ...changed.evidence?.generalized },

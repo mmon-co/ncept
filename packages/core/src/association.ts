@@ -18,6 +18,7 @@ export interface PedagogicalTheoryParameterOverride {
   readonly vocabularyVersion?: number;
   readonly initialEstimate?: number;
   readonly masteryGate?: number;
+  readonly recallRungCeiling?: number;
   readonly evidence?: Readonly<Partial<Record<EvidenceKind, Readonly<Partial<EvidenceEffect>>>>>;
   readonly assistedWeight?: number;
   readonly propagation?: Readonly<Partial<PedagogicalTheoryParameters["propagation"]>>;
