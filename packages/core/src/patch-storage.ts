@@ -41,6 +41,12 @@ export interface ReifiedPatchDefinition {
   readonly metadata: PatchMetadata;
 }
 
+export interface PersonalPatchChange {
+  readonly operations: SemanticDelta["operations"];
+  readonly citations?: PatchMetadata["citations"];
+  readonly summary: string;
+}
+
 export interface AuthoredPatch {
   readonly identity: PatchId;
 }
@@ -600,6 +606,24 @@ export function readPersonalPatch(
   };
 }
 
+/** Commit one accepted graph change to the Profile's Notebook. */
+export function revisePersonalPatch(dd: DataDir, scope: ProfileScope, change: PersonalPatchChange) {
+  if (change.summary.trim() === "")
+    throw new PatchStoreError("a Personal Patch change needs a summary");
+  const current = currentPersonalRevision(dd, scope);
+  const content = personalContent(current);
+  const next = {
+    ...content,
+    delta: { operations: [...content.delta.operations, ...change.operations] },
+    metadata: {
+      ...content.metadata,
+      citations: [...content.metadata.citations, ...(change.citations ?? [])],
+    },
+  } satisfies PatchContent;
+  const revision = commitPersonal(dd, scope, next, change.summary.trim());
+  return readPersonalPatch(dd, scope, { kind: "absent" }, undefined, revision.ref);
+}
+
 export function addNotebookLesson(
   dd: DataDir,
   scope: ProfileScope,
@@ -607,16 +631,10 @@ export function addNotebookLesson(
 ) {
   if (!isNodeId(input.id) || input.label.trim() === "" || input.lesson.trim() === "")
     throw new PatchStoreError("invalid Notebook lesson");
-  const current = currentPersonalRevision(dd, scope);
-  const content = personalContent(current);
-  const next = {
-    ...content,
-    delta: {
-      operations: [...content.delta.operations, ...lessonOperations(input)],
-    },
-  } satisfies PatchContent;
-  const revision = commitPersonal(dd, scope, next, `Add Notebook lesson ${input.id}`);
-  return readPersonalPatch(dd, scope, { kind: "absent" }, undefined, revision.ref);
+  return revisePersonalPatch(dd, scope, {
+    operations: lessonOperations(input),
+    summary: `Add Notebook lesson ${input.id}`,
+  });
 }
 
 export function openPersonalLesson(
