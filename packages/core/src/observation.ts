@@ -54,9 +54,12 @@ export interface LessonPayload extends NativePayloadBase {
 export interface QuizPayload extends NativePayloadBase {
   readonly kind: "quiz";
   readonly itemId: string;
+  /** The selected option label, or the literal skip label. */
   readonly response: string;
   readonly correct: boolean;
   readonly assistance: "none" | "hint";
+  readonly skipped?: boolean;
+  readonly comment?: string;
   readonly transfer?: boolean;
   readonly mistake?: "slip" | "bug" | "misconception";
   readonly misconception?: string;
@@ -122,7 +125,8 @@ export interface ObservationInterpretation {
 export interface Observation {
   readonly envelope: ObservationEnvelope;
   readonly payload: ObservationPayload;
-  readonly interpretation: ObservationInterpretation;
+  /** Absent while a native payload is waiting for the evaluator sweep. */
+  readonly interpretation?: ObservationInterpretation;
   readonly supersedes?: ObservationId;
 }
 

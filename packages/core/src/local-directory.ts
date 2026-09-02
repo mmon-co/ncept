@@ -49,7 +49,7 @@ function isObservation(value: unknown): value is Observation {
     typeof value.envelope.id === "string" &&
     value.envelope.id.startsWith("observation-") &&
     isRecord(value.payload) &&
-    isRecord(value.interpretation)
+    (value.interpretation === undefined || isRecord(value.interpretation))
   );
 }
 
