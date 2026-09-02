@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolvePatchBundle } from "../src/patch";
+import { resolvePatchBundle, type RootPatchDefinition } from "../src/patch";
 import {
   addNotebookLesson,
   createAuthoredBasedPatch,
@@ -11,6 +11,7 @@ import {
   loadPersonalPatchBundle,
   readAuthoredPatchRevision,
   reviseAuthoredRootPatch,
+  validateRootPatchDefinition,
 } from "../src/patch-storage";
 import type { ProfileScope } from "../src/scope";
 import { evaluateView } from "../src/view";
@@ -18,6 +19,31 @@ import { tempDataDir } from "./helpers";
 
 const main: ProfileScope = { principal: "principal-alice", profile: "profile-main" };
 const scratch: ProfileScope = { principal: "principal-alice", profile: "profile-scratch" };
+
+test("authored Edges accept only the dependency role", () => {
+  const definition: RootPatchDefinition = {
+    title: "Geometry",
+    author: "Euclid",
+    labels: ["course"],
+    nodes: [
+      { id: "node-lines", label: "Lines", lesson: "Understand lines" },
+      { id: "node-triangles", label: "Triangles", lesson: "Understand triangles" },
+    ],
+    edges: [
+      {
+        id: "edge-lines-triangles",
+        from: "node-lines",
+        to: "node-triangles",
+        role: "dependency",
+      },
+    ],
+  };
+  expect(() => validateRootPatchDefinition("patch-geometry", definition)).not.toThrow();
+  Reflect.set(definition.edges[0] ?? {}, "role", "relation");
+  expect(() => validateRootPatchDefinition("patch-geometry", definition)).toThrow(
+    "the dependency role",
+  );
+});
 
 function head(repository: string): string {
   const result = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" });
@@ -40,9 +66,8 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   const root = createAuthoredRootPatch(dd, main, definition);
   const rootRevision = readAuthoredPatchRevision(dd, root.identity);
   expect(rootRevision.ref.commit).toBe(head(join(patches, "authored", root.identity)));
-  const afterRoot = loadPersonalPatchBundle(dd, main).terminal;
+  expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
   expect(() => loadPersonalPatchBundle(dd, scratch)).toThrow("Personal Patch does not exist");
-  expect(afterRoot.commit).toBe(head(personal));
 
   const based = createAuthoredBasedPatch(dd, main, {
     bases: [rootRevision.ref],
@@ -52,9 +77,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, based.identity).ref.commit).toBe(
     head(join(patches, "authored", based.identity)),
   );
-  const afterBased = loadPersonalPatchBundle(dd, main).terminal;
-  expect(afterBased.commit).toBe(head(personal));
-  expect(afterBased.commit).not.toBe(afterRoot.commit);
+  expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
 
   const source = resolvePatchBundle({ terminal: rootRevision.ref, revisions: [rootRevision] });
   const reified = createAuthoredReifiedPatch(dd, main, {
@@ -70,9 +93,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, reified.identity).ref.commit).toBe(
     head(join(patches, "authored", reified.identity)),
   );
-  const afterReified = loadPersonalPatchBundle(dd, main).terminal;
-  expect(afterReified.commit).toBe(head(personal));
-  expect(afterReified.commit).not.toBe(afterBased.commit);
+  expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
 
   reviseAuthoredRootPatch(dd, root.identity, { ...definition, title: "Revised geometry" });
   const revised = readAuthoredPatchRevision(dd, root.identity).ref;
@@ -85,7 +106,9 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
     lesson: "Construct a proof",
   });
   expect(notebook.ref.commit).toBe(head(personal));
-  expect(notebook.ref.commit).not.toBe(afterReified.commit);
+  const personalBundle = loadPersonalPatchBundle(dd, main);
+  expect(personalBundle.revisions.map(({ ref }) => ref.identity)).toEqual(["patch-personal"]);
+  expect(resolvePatchBundle(personalBundle).nodes).toContainEqual({ id: "node-my-proof" });
 
   const scratchPatch = createAuthoredRootPatch(dd, scratch, {
     ...definition,
@@ -94,9 +117,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, scratchPatch.identity).ref.commit).toBe(
     head(join(patches, "authored", scratchPatch.identity)),
   );
-  expect(loadPersonalPatchBundle(dd, scratch).terminal).not.toEqual(
-    loadPersonalPatchBundle(dd, main).terminal,
-  );
+  expect(() => loadPersonalPatchBundle(dd, scratch)).toThrow("Personal Patch does not exist");
   expect(
     loadPersonalPatchBundle(dd, main).revisions.some(
       ({ ref }) => ref.identity === scratchPatch.identity,

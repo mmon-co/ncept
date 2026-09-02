@@ -1,6 +1,7 @@
 export type PatchId = `patch-${string}`;
 export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
+export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
 
 export type MetadataValue = string | number | boolean | null | readonly string[];
@@ -199,7 +200,7 @@ export interface RootPatchDefinition {
     readonly id: EdgeId;
     readonly from: NodeId;
     readonly to: NodeId;
-    readonly role: string;
+    readonly role: EdgeRole;
     readonly strength?: number;
   }[];
 }
@@ -256,7 +257,7 @@ export interface VisualEdge {
   readonly id: EdgeId;
   readonly from: NodeId;
   readonly to: NodeId;
-  readonly role: string;
+  readonly role: EdgeRole;
   readonly strength?: number;
 }
 

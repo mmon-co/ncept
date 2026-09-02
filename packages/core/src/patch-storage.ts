@@ -296,24 +296,6 @@ function commitPersonal(
   return publishCandidate(repository, candidate, current?.ref.commit);
 }
 
-function addAuthoredToPersonal(dd: DataDir, scope: ProfileScope, exact: ExactPatchRef): void {
-  const current = currentPersonalRevision(dd, scope);
-  const content = personalContent(current);
-  if (content.lock.entries.some((entry) => entry.exact.identity === exact.identity))
-    throw new PatchStoreError(`Personal Patch already contains ${exact.identity}`);
-  const locked = authoredBase(exact);
-  commitPersonal(
-    dd,
-    scope,
-    {
-      ...content,
-      bases: [...content.bases, locked.requirement],
-      lock: { entries: [...content.lock.entries, locked] },
-    },
-    `Add ${exact.identity} to Personal scope`,
-  );
-}
-
 function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
   return `metadata-${id.replace(/^(node|edge)-/, "")}`;
 }
@@ -375,6 +357,10 @@ function invalidRoot(reason: string): never {
   throw new PatchStoreError(`invalid root Patch definition: ${reason}`);
 }
 
+function hasDependencyRole(value: unknown): boolean {
+  return typeof value === "object" && value !== null && Reflect.get(value, "role") === "dependency";
+}
+
 export function validateRootPatchDefinition(
   identity: PatchId,
   definition: RootPatchDefinition,
@@ -403,11 +389,13 @@ export function validateRootPatchDefinition(
         !nodeIds.has(edge.from) ||
         !nodeIds.has(edge.to) ||
         edge.from === edge.to ||
-        edge.role.trim() === "" ||
+        !hasDependencyRole(edge) ||
         (edge.strength !== undefined && !Number.isFinite(edge.strength)),
     )
   )
-    invalidRoot("every Edge needs distinct existing endpoints, a role, and a finite strength");
+    invalidRoot(
+      "every Edge needs distinct existing endpoints, the dependency role, and a finite strength",
+    );
   const metadataIds = [
     ...definition.nodes.map(({ id }) => metadataId(id)),
     ...definition.edges.map(({ id }) => metadataId(id)),
@@ -494,7 +482,7 @@ export function readAuthoredRootPatchDefinition(
       const properties = metadataBySubject.get(`edge:${operation.edge.id}`);
       const role = properties?.["graph:role"];
       const strength = properties?.["graph:strength"];
-      if (typeof role !== "string" || (strength !== undefined && typeof strength !== "number"))
+      if (role !== "dependency" || (strength !== undefined && typeof strength !== "number"))
         throw new PatchStoreError(`Edge ${operation.edge.id} is missing authored content`);
       return [
         {
@@ -536,8 +524,7 @@ function createAuthoredContent(
   if (existsSync(repository)) throw new PatchStoreError(`Patch ${content.identity} already exists`);
   const candidate = candidateCommit(repository, content, `Create ${content.identity}`);
   resolvePatchBundle(bundleForRevision(dd, scope, candidate));
-  const revision = publishCandidate(repository, candidate);
-  addAuthoredToPersonal(dd, scope, revision.ref);
+  publishCandidate(repository, candidate);
   return { identity: content.identity };
 }
 
