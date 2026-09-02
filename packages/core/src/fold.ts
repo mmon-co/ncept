@@ -1,7 +1,13 @@
-import type { AssociationCommit } from "./association";
+import type { AssociationCommit, ParameterOverride } from "./association";
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
 import { interpretPayload, type Observation, type ObservationId } from "./observation";
-import type { ContentDigest, PedagogicalTheory, ResolvedTheory } from "./pedagogy";
+import {
+  contentDigest,
+  type ContentDigest,
+  type PedagogicalTheory,
+  type PedagogicalTheoryParameters,
+  type ResolvedTheory,
+} from "./pedagogy";
 
 export interface TrailSnapshot {
   readonly revision: ContentDigest;
@@ -89,6 +95,31 @@ function ageUncertainty(base: number, ageDays: number, rate: number): number {
   return clamp(1 - (1 - base) * Math.exp(-rate * ageDays));
 }
 
+export function resolveFoldParameters(
+  theory: PedagogicalTheory,
+  override?: ParameterOverride,
+): PedagogicalTheoryParameters {
+  const base = theory.parameters;
+  if (override === undefined) return base;
+  if (contentDigest(override.parameters) !== override.digest)
+    throw new Error("Parameter override content does not match its digest");
+  const changed = override.parameters;
+  return {
+    vocabularyVersion: changed.vocabularyVersion ?? base.vocabularyVersion,
+    initialEstimate: changed.initialEstimate ?? base.initialEstimate,
+    masteryGate: changed.masteryGate ?? base.masteryGate,
+    evidence: {
+      used: { ...base.evidence.used, ...changed.evidence?.used },
+      generalized: { ...base.evidence.generalized, ...changed.evidence?.generalized },
+      recalled: { ...base.evidence.recalled, ...changed.evidence?.recalled },
+      "not-recalled": { ...base.evidence["not-recalled"], ...changed.evidence?.["not-recalled"] },
+    },
+    assistedWeight: changed.assistedWeight ?? base.assistedWeight,
+    propagation: { ...base.propagation, ...changed.propagation },
+    uncertaintyAgingRate: changed.uncertaintyAgingRate ?? base.uncertaintyAgingRate,
+  };
+}
+
 function assertFoldInputs(
   association: AssociationCommit,
   graph: ResolvedGraph,
@@ -103,8 +134,6 @@ function assertFoldInputs(
     association.theory.origin.digest !== theory.origin.digest
   )
     throw new Error("Association commit targets a different Pedagogical theory");
-  if (association.parameterOverride !== undefined)
-    throw new Error("Parameter override application belongs to #247 and is not available yet");
 }
 
 /** Fold the complete immutable trail in timestamp order under one exact Association commit. */
@@ -129,7 +158,11 @@ export function foldLearnerState(input: {
       .map((observation) => [observation.envelope.id, observation]),
   );
   const accumulator = new Map<NodeId, Accumulator>();
-  const parameters = input.theory.theory.parameters;
+  const parameters = resolveFoldParameters(
+    input.theory.theory,
+    input.association.parameterOverride,
+  );
+  const effectiveTheory: PedagogicalTheory = { ...input.theory.theory, parameters };
   const patchKeys = new Set(
     input.graph.patchOrder.map(
       (patch) => `${patch.identity}\0${patch.version ?? ""}\0${patch.commit}\0${patch.digest}`,
@@ -146,7 +179,7 @@ export function foldLearnerState(input: {
   for (const observation of observations.values()) {
     const mapping = mappings.get(observation.envelope.id);
     if (mapping === undefined) continue;
-    const interpretation = interpretPayload(input.theory.theory, observation.payload);
+    const interpretation = interpretPayload(effectiveTheory, observation.payload);
     if (interpretation.kind !== "evidence") continue;
     const effect = parameters.evidence[interpretation.evidence];
     const supportWeight = interpretation.support === "assisted" ? parameters.assistedWeight : 1;

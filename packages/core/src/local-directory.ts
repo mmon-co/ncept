@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AssociationCommit, AssociationCommitId } from "./association";
+import type { AssociationCommit, AssociationCommitId, ParameterOverride } from "./association";
 import { ensureDataDir, type DataDir } from "./datadir";
 import type { TrailSnapshot } from "./fold";
 import type { Observation } from "./observation";
@@ -47,6 +47,18 @@ function isObservation(value: unknown): value is Observation {
   );
 }
 
+function isParameterOverride(value: unknown): value is ParameterOverride {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id.startsWith("parameter-override-") &&
+    typeof value.createdAt === "string" &&
+    typeof value.digest === "string" &&
+    value.digest.startsWith("sha256:") &&
+    isRecord(value.parameters)
+  );
+}
+
 function isAssociationCommit(value: unknown): value is AssociationCommit {
   return (
     isRecord(value) &&
@@ -57,6 +69,7 @@ function isAssociationCommit(value: unknown): value is AssociationCommit {
     typeof value.createdAt === "string" &&
     isRecord(value.patchRevision) &&
     isRecord(value.theory) &&
+    (value.parameterOverride === undefined || isParameterOverride(value.parameterOverride)) &&
     Array.isArray(value.associations)
   );
 }

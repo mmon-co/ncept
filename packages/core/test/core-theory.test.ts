@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   PLATFORM_PEDAGOGY_RELEASE,
   V1_PEDAGOGICAL_THEORY,
+  acceptParameterOverride,
   assessLearnerStateStaleness,
   contentDigest,
   currentExperiences,
@@ -311,6 +312,74 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
       trailRevision: store.readTrail(scope).revision,
     }).staleness,
   ).toEqual({ stale: true, reasons: ["association", "theory"] });
+});
+
+test("an accepted Profile parameter override creates a distinguishable refold without rewriting history", () => {
+  const store = new LocalDirectoryCoreStore(tempDataDir());
+  const resolved = resolvePedagogy(
+    pedagogySource([PLATFORM_PEDAGOGY_RELEASE]),
+    PLATFORM_PEDAGOGY_RELEASE.ref,
+  );
+  const lesson = observation(
+    "observation-override-lesson",
+    "2026-09-01T12:00:00.000Z",
+    {
+      kind: "lesson",
+      vocabularyVersion: 1,
+      criterion: "differentiate a polynomial",
+      response: "3x²",
+      result: "demonstrated",
+      assistance: "none",
+    },
+    resolved.theory,
+  );
+  store.appendObservation(scope, lesson);
+  const original = association("association-before-override", resolved.theory, [lesson]);
+  store.commitAssociation(scope, original);
+  store.setCurrentAssociation(scope, original.id);
+  const trailBefore = store.readTrail(scope);
+  const before = foldLearnerState({
+    graph,
+    trail: trailBefore,
+    association: original,
+    theory: resolved.theory,
+    evaluatedAt: "2026-09-02T12:00:00.000Z",
+  });
+
+  const accepted = acceptParameterOverride(store, scope, {
+    associationId: "association-after-override",
+    overrideId: "parameter-override-slower-evidence",
+    createdAt: "2026-09-02T13:00:00.000Z",
+    parameters: { evidence: { used: { delta: 0.05 } } },
+  });
+  const after = foldLearnerState({
+    graph,
+    trail: store.readTrail(scope),
+    association: accepted,
+    theory: resolved.theory,
+    evaluatedAt: "2026-09-02T12:00:00.000Z",
+  });
+
+  expect(accepted).toMatchObject({
+    parent: original.id,
+    theory: original.theory,
+    associations: original.associations,
+    parameterOverride: {
+      id: "parameter-override-slower-evidence",
+      parameters: { evidence: { used: { delta: 0.05 } } },
+      digest: contentDigest({ evidence: { used: { delta: 0.05 } } }),
+    },
+  });
+  expect(store.currentAssociation(scope)?.id).toBe(accepted.id);
+  expect(
+    store.currentAssociation({ principal: scope.principal, profile: "profile-other" }),
+  ).toBeUndefined();
+  expect(store.readAssociation(scope, original.id)).toEqual(original);
+  expect(store.readTrail(scope)).toEqual(trailBefore);
+  expect(after.inputs.theoryDigest).toBe(before.inputs.theoryDigest);
+  expect(after.inputs.associationCommit).not.toBe(before.inputs.associationCommit);
+  expect(after.nodes["node-target"]?.estimate).not.toBe(before.nodes["node-target"]?.estimate);
+  expect(after.nodes["node-target"]?.uncertainty).toBe(before.nodes["node-target"]?.uncertainty);
 });
 
 test("the fold replays chronological evidence, propagates through dependencies, and ages uncertainty", () => {
