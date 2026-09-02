@@ -1,15 +1,102 @@
 export { STORE_FORMAT_VERSION, ensureDataDir, resolveDataDir, type DataDir } from "./datadir";
-export * from "./scope";
-export * from "./pedagogy";
-export * from "./observation";
-export * from "./association";
-export * from "./fold";
-export * from "./view";
-export * from "./storage";
-export * from "./local-directory";
-export * from "./playground";
-export * from "./session";
-export { deriveSchedulerState, isDue, type SchedulerState } from "./scheduler";
+export { type PrincipalId, type ProfileId, type ProfileScope } from "./scope";
+export {
+  PLATFORM_PEDAGOGY_RELEASE,
+  V1_FOLD_IMPLEMENTATION,
+  V1_PEDAGOGICAL_PARAMETERS,
+  V1_PEDAGOGICAL_THEORY,
+  canonicalJson,
+  contentDigest,
+  pedagogicalTheoryDigest,
+  resolvePedagogy,
+  type ContainedTheory,
+  type ContentDigest,
+  type EvidenceEffect,
+  type EvidenceInterpretation,
+  type EvidenceKind,
+  type EvidenceSupport,
+  type ExactPedagogyRelease,
+  type ExperienceInterpretation,
+  type MistakeKind,
+  type ObservationInterpretationValue,
+  type PayloadVocabularyMapping,
+  type PedagogicalTheory,
+  type PedagogicalTheoryParameters,
+  type PedagogyOverlayRelease,
+  type PedagogyPackageId,
+  type PedagogyRelease,
+  type PedagogyReleaseSource,
+  type PlatformPedagogyRelease,
+  type ReferencedTheory,
+  type ResolvedPedagogy,
+  type ResolvedTheory,
+  type SkillCatalogRelease,
+  type SkillOverlayOperation,
+  type TheorySelection,
+} from "./pedagogy";
+export {
+  currentExperiences,
+  interpretObservation,
+  interpretPayload,
+  type ArtifactPayload,
+  type Grade,
+  type LessonPayload,
+  type MissionPayload,
+  type Observation,
+  type ObservationEnvelope,
+  type ObservationId,
+  type ObservationInterpretation,
+  type ObservationPayload,
+  type ObservationSource,
+  type ObservationSubject,
+  type PreferencesPayload,
+  type QuizPayload,
+  type SrsPayload,
+} from "./observation";
+export {
+  acceptParameterOverride,
+  parameterOverride,
+  type AssociationCommit,
+  type AssociationCommitId,
+  type ObservationAssociation,
+  type ParameterOverride,
+  type ParameterOverrideId,
+  type PedagogicalTheoryParameterOverride,
+} from "./association";
+export {
+  assessLearnerStateStaleness,
+  foldLearnerState,
+  resolveFoldParameters,
+  type CurrentFoldInputs,
+  type LearnerNodeState,
+  type LearnerState,
+  type StalenessReason,
+  type TrailSnapshot,
+} from "./fold";
+export { evaluateView, type View, type ViewId } from "./view";
+export {
+  type AssociationStore,
+  type CoreStores,
+  type PedagogySelectionStore,
+  type SpacedReviewStore,
+  type TrailStore,
+  type ViewStore,
+} from "./storage";
+export { LocalDirectoryCoreStore } from "./local-directory";
+export {
+  spacedReviewDueQueue,
+  spacedReviewPlayground,
+  type ContextInjection,
+  type DueCard,
+  type SpacedReviewCard,
+  type SpacedReviewCardId,
+  type SpacedReviewGrade,
+  type SpacedReviewGradeId,
+  type SpacedReviewInstruments,
+  type SpacedReviewPlayground,
+} from "./playground";
+export { sessionPedagogyMetadata, type SessionPedagogyMetadata } from "./session";
+export { deriveSchedulerState, isDue, type ReviewRecord, type SchedulerState } from "./scheduler";
 export {
   DEFAULT_MODEL,
   EFFORTS,
@@ -34,9 +121,12 @@ export {
   type ResolvedLanguageModel,
 } from "./llm";
 export {
+  buildSkillBundles,
+  builtSkillBundles,
   listSkills,
   skillBody,
   skillInvocation,
   tutorSystemPrompt,
+  type BuiltSkillBundle,
   type SkillMeta,
 } from "./skills";
