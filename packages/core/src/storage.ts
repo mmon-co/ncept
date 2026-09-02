@@ -7,34 +7,40 @@ import type { ProfileScope } from "./scope";
 import type { View, ViewId } from "./view";
 
 export interface TrailStore {
-  appendObservation(scope: ProfileScope, observation: Observation): void;
-  readTrail(scope: ProfileScope): TrailSnapshot;
+  appendObservation(scope: ProfileScope, observation: Observation): Promise<void>;
+  readTrail(scope: ProfileScope): Promise<TrailSnapshot>;
 }
 
 export interface AssociationStore {
-  commitAssociation(scope: ProfileScope, commit: AssociationCommit): void;
-  readAssociation(scope: ProfileScope, id: AssociationCommitId): AssociationCommit | undefined;
-  currentAssociation(scope: ProfileScope): AssociationCommit | undefined;
-  setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): void;
+  commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void>;
+  readAssociation(
+    scope: ProfileScope,
+    id: AssociationCommitId,
+  ): Promise<AssociationCommit | undefined>;
+  currentAssociation(scope: ProfileScope): Promise<AssociationCommit | undefined>;
+  setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): Promise<void>;
 }
 
 export interface ViewStore {
-  saveView(scope: ProfileScope, view: View): void;
-  readView(scope: ProfileScope, id: ViewId): View | undefined;
-  listViews(scope: ProfileScope): readonly View[];
+  saveView(scope: ProfileScope, view: View): Promise<void>;
+  readView(scope: ProfileScope, id: ViewId): Promise<View | undefined>;
+  listViews(scope: ProfileScope): Promise<readonly View[]>;
 }
 
 export interface PedagogySelectionStore {
-  selectPedagogy(scope: ProfileScope, release: ExactPedagogyRelease): void;
-  selectedPedagogy(scope: ProfileScope): ExactPedagogyRelease | undefined;
+  selectPedagogy(scope: ProfileScope, release: ExactPedagogyRelease): Promise<void>;
+  selectedPedagogy(scope: ProfileScope): Promise<ExactPedagogyRelease | undefined>;
 }
 
 export interface SpacedReviewStore {
-  saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): void;
-  readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): SpacedReviewCard | undefined;
-  listSpacedReviewCards(scope: ProfileScope): readonly SpacedReviewCard[];
-  appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): void;
-  readSpacedReviewGrades(scope: ProfileScope): readonly SpacedReviewGrade[];
+  saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): Promise<void>;
+  readSpacedReviewCard(
+    scope: ProfileScope,
+    id: SpacedReviewCardId,
+  ): Promise<SpacedReviewCard | undefined>;
+  listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]>;
+  appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): Promise<void>;
+  readSpacedReviewGrades(scope: ProfileScope): Promise<readonly SpacedReviewGrade[]>;
 }
 
 export interface CoreStores

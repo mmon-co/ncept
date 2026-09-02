@@ -425,6 +425,14 @@ export function readAuthoredPatchRevision(dd: DataDir, identity: PatchId): Patch
   return revisionAt(authoredRepository(dd, identity), identity);
 }
 
+/** Create the Profile's empty Personal scope on first use. */
+export function ensurePersonalPatch(dd: DataDir, scope: ProfileScope): PatchRevision {
+  return (
+    currentPersonalRevision(dd, scope) ??
+    commitPersonal(dd, scope, personalContent(), "Create Personal scope")
+  );
+}
+
 export function loadPersonalPatchBundle(
   dd: DataDir,
   scope: ProfileScope,

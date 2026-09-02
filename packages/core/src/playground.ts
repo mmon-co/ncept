@@ -52,14 +52,14 @@ export interface SpacedReviewInstruments {
 }
 
 export interface SpacedReviewPlayground {
-  readonly proposeCard: (card: SpacedReviewCard) => void;
-  readonly approveCard: (id: SpacedReviewCardId) => SpacedReviewCard;
-  readonly card: (id: SpacedReviewCardId) => SpacedReviewCard | undefined;
-  readonly cards: () => readonly SpacedReviewCard[];
-  readonly appendGrade: (grade: SpacedReviewGrade) => void;
-  readonly grades: () => readonly SpacedReviewGrade[];
-  readonly appendObservation: (observation: Observation) => void;
-  readonly dueQueue: (now: string, cap: number) => readonly DueCard[];
+  readonly proposeCard: (card: SpacedReviewCard) => Promise<void>;
+  readonly approveCard: (id: SpacedReviewCardId) => Promise<SpacedReviewCard>;
+  readonly card: (id: SpacedReviewCardId) => Promise<SpacedReviewCard | undefined>;
+  readonly cards: () => Promise<readonly SpacedReviewCard[]>;
+  readonly appendGrade: (grade: SpacedReviewGrade) => Promise<void>;
+  readonly grades: () => Promise<readonly SpacedReviewGrade[]>;
+  readonly appendObservation: (observation: Observation) => Promise<void>;
+  readonly dueQueue: (now: string, cap: number) => Promise<readonly DueCard[]>;
   readonly instruments: SpacedReviewInstruments;
   readonly injectContext: (injection: ContextInjection) => void;
 }
@@ -250,37 +250,39 @@ export function spacedReviewPlayground(input: {
   readonly injectContext: (injection: ContextInjection) => void;
 }): SpacedReviewPlayground {
   return {
-    proposeCard(card) {
+    async proposeCard(card) {
       const parsed = parseSpacedReviewCard(card);
       if (parsed.status !== "pending") throw new Error("a proposed card must be pending");
-      if (input.store.readSpacedReviewCard(input.scope, parsed.id) !== undefined)
+      if ((await input.store.readSpacedReviewCard(input.scope, parsed.id)) !== undefined)
         throw new Error(`spaced-review card ${parsed.id} already exists`);
-      input.store.saveSpacedReviewCard(input.scope, parsed);
+      await input.store.saveSpacedReviewCard(input.scope, parsed);
     },
-    approveCard(id) {
-      const card = input.store.readSpacedReviewCard(input.scope, id);
+    async approveCard(id) {
+      const card = await input.store.readSpacedReviewCard(input.scope, id);
       if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
       const approved = parseSpacedReviewCard({ ...card, status: "approved" });
-      input.store.saveSpacedReviewCard(input.scope, approved);
+      await input.store.saveSpacedReviewCard(input.scope, approved);
       return approved;
     },
     card: (id) => input.store.readSpacedReviewCard(input.scope, id),
     cards: () => input.store.listSpacedReviewCards(input.scope),
-    appendGrade(grade) {
+    async appendGrade(grade) {
       const parsed = parseSpacedReviewGrade(grade);
-      if (input.store.readSpacedReviewCard(input.scope, parsed.cardId)?.status !== "approved")
+      if (
+        (await input.store.readSpacedReviewCard(input.scope, parsed.cardId))?.status !== "approved"
+      )
         throw new Error(`grade targets an unapproved spaced-review card ${parsed.cardId}`);
-      input.store.appendSpacedReviewGrade(input.scope, parsed);
+      await input.store.appendSpacedReviewGrade(input.scope, parsed);
     },
     grades: () => input.store.readSpacedReviewGrades(input.scope),
     appendObservation: (observation) => input.trail.appendObservation(input.scope, observation),
-    dueQueue: (now, cap) =>
-      spacedReviewDueQueue({
-        cards: input.store.listSpacedReviewCards(input.scope),
-        grades: input.store.readSpacedReviewGrades(input.scope),
-        now,
-        cap,
-      }),
+    async dueQueue(now, cap) {
+      const [cards, grades] = await Promise.all([
+        input.store.listSpacedReviewCards(input.scope),
+        input.store.readSpacedReviewGrades(input.scope),
+      ]);
+      return spacedReviewDueQueue({ cards, grades, now, cap });
+    },
     instruments: input.instruments,
     injectContext: input.injectContext,
   };

@@ -88,7 +88,7 @@ export function parameterOverride(input: {
 }
 
 /** Persist an accepted parameter proposal as a child of the current Association commit. */
-export function acceptParameterOverride(
+export async function acceptParameterOverride(
   store: AssociationStore,
   scope: ProfileScope,
   input: {
@@ -97,8 +97,8 @@ export function acceptParameterOverride(
     readonly createdAt: string;
     readonly parameters: PedagogicalTheoryParameterOverride;
   },
-): AssociationCommit {
-  const current = store.currentAssociation(scope);
+): Promise<AssociationCommit> {
+  const current = await store.currentAssociation(scope);
   if (current === undefined)
     throw new Error("A current Association commit is required to accept a parameter override");
   const commit: AssociationCommit = {
@@ -112,7 +112,7 @@ export function acceptParameterOverride(
       parameters: input.parameters,
     }),
   };
-  store.commitAssociation(scope, commit);
-  store.setCurrentAssociation(scope, commit.id);
+  await store.commitAssociation(scope, commit);
+  await store.setCurrentAssociation(scope, commit.id);
   return commit;
 }

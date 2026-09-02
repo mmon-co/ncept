@@ -166,8 +166,8 @@ export class LocalDirectoryCoreStore implements CoreStores {
     ensureDataDir(dataDir);
   }
 
-  appendObservation(scope: ProfileScope, observation: Observation): void {
-    const trail = this.readTrail(scope);
+  async appendObservation(scope: ProfileScope, observation: Observation): Promise<void> {
+    const trail = await this.readTrail(scope);
     if (trail.observations.some(({ envelope }) => envelope.id === observation.envelope.id))
       throw new Error(`Observation ${observation.envelope.id} already exists`);
     const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
@@ -175,7 +175,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     appendFileSync(path, `${JSON.stringify(observation)}\n`);
   }
 
-  readTrail(scope: ProfileScope): TrailSnapshot {
+  async readTrail(scope: ProfileScope): Promise<TrailSnapshot> {
     const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
     const observations = !existsSync(path)
       ? []
@@ -190,30 +190,36 @@ export class LocalDirectoryCoreStore implements CoreStores {
     return { observations, revision: contentDigest(observations) };
   }
 
-  commitAssociation(scope: ProfileScope, commit: AssociationCommit): void {
+  async commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void> {
     if (Number.isNaN(Date.parse(commit.createdAt)))
       throw new Error("Association commit createdAt must be an ISO timestamp");
-    if (commit.parent !== undefined && this.readAssociation(scope, commit.parent) === undefined)
+    if (
+      commit.parent !== undefined &&
+      (await this.readAssociation(scope, commit.parent)) === undefined
+    )
       throw new Error(`Association parent ${commit.parent} is unavailable`);
     immutableJson(associationPath(this.dataDir, scope, commit.id), commit);
   }
 
-  readAssociation(scope: ProfileScope, id: AssociationCommitId): AssociationCommit | undefined {
+  async readAssociation(
+    scope: ProfileScope,
+    id: AssociationCommitId,
+  ): Promise<AssociationCommit | undefined> {
     const path = associationPath(this.dataDir, scope, id);
     return existsSync(path) ? readJson(path, isAssociationCommit, "Association commit") : undefined;
   }
 
-  currentAssociation(scope: ProfileScope): AssociationCommit | undefined {
+  async currentAssociation(scope: ProfileScope): Promise<AssociationCommit | undefined> {
     const pointer = join(profileRoot(this.dataDir, scope), "associations", "current");
     if (!existsSync(pointer)) return undefined;
     const id = associationId(readFileSync(pointer, "utf8").trim());
-    const commit = this.readAssociation(scope, id);
+    const commit = await this.readAssociation(scope, id);
     if (commit === undefined) throw new Error(`Current Association ${id} is unavailable`);
     return commit;
   }
 
-  setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): void {
-    if (this.readAssociation(scope, id) === undefined)
+  async setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): Promise<void> {
+    if ((await this.readAssociation(scope, id)) === undefined)
       throw new Error(`Association ${id} is unavailable`);
     const pointer = join(profileRoot(this.dataDir, scope), "associations", "current");
     mkdirSync(dirname(pointer), { recursive: true });
@@ -222,19 +228,19 @@ export class LocalDirectoryCoreStore implements CoreStores {
     renameSync(temporary, pointer);
   }
 
-  saveView(scope: ProfileScope, view: View): void {
+  async saveView(scope: ProfileScope, view: View): Promise<void> {
     if (view.name.trim() === "" || Number.isNaN(Date.parse(view.createdAt)))
       throw new Error("View requires a name and ISO creation timestamp");
     parseGraphQuery(view.query);
     immutableJson(viewPath(this.dataDir, scope, view.id), view);
   }
 
-  readView(scope: ProfileScope, id: ViewId): View | undefined {
+  async readView(scope: ProfileScope, id: ViewId): Promise<View | undefined> {
     const path = viewPath(this.dataDir, scope, id);
     return existsSync(path) ? readJson(path, isView, "View") : undefined;
   }
 
-  listViews(scope: ProfileScope): readonly View[] {
+  async listViews(scope: ProfileScope): Promise<readonly View[]> {
     const root = join(profileRoot(this.dataDir, scope), "views");
     if (!existsSync(root)) return [];
     return readdirSync(root)
@@ -243,29 +249,32 @@ export class LocalDirectoryCoreStore implements CoreStores {
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
-  selectPedagogy(scope: ProfileScope, release: ExactPedagogyRelease): void {
+  async selectPedagogy(scope: ProfileScope, release: ExactPedagogyRelease): Promise<void> {
     atomicJson(join(profileRoot(this.dataDir, scope), "pedagogy.json"), release);
   }
 
-  selectedPedagogy(scope: ProfileScope): ExactPedagogyRelease | undefined {
+  async selectedPedagogy(scope: ProfileScope): Promise<ExactPedagogyRelease | undefined> {
     const path = join(profileRoot(this.dataDir, scope), "pedagogy.json");
     return existsSync(path)
       ? readJson(path, isExactPedagogyRelease, "Pedagogy selection")
       : undefined;
   }
 
-  saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): void {
+  async saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): Promise<void> {
     const parsed = parseSpacedReviewCard(card);
     atomicJson(spacedReviewCardPath(this.dataDir, scope, parsed.id), parsed);
   }
 
-  readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): SpacedReviewCard | undefined {
+  async readSpacedReviewCard(
+    scope: ProfileScope,
+    id: SpacedReviewCardId,
+  ): Promise<SpacedReviewCard | undefined> {
     const path = spacedReviewCardPath(this.dataDir, scope, id);
     if (!existsSync(path)) return undefined;
     return parseSpacedReviewCard(JSON.parse(readFileSync(path, "utf8")));
   }
 
-  listSpacedReviewCards(scope: ProfileScope): readonly SpacedReviewCard[] {
+  async listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]> {
     const root = join(spacedReviewRoot(this.dataDir, scope), "cards");
     if (!existsSync(root)) return [];
     return readdirSync(root)
@@ -277,16 +286,16 @@ export class LocalDirectoryCoreStore implements CoreStores {
       );
   }
 
-  appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): void {
+  async appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): Promise<void> {
     const parsed = parseSpacedReviewGrade(grade);
-    if (this.readSpacedReviewGrades(scope).some(({ id }) => id === parsed.id))
+    if ((await this.readSpacedReviewGrades(scope)).some(({ id }) => id === parsed.id))
       throw new Error(`spaced-review grade ${parsed.id} already exists`);
     const path = spacedReviewGradeLog(this.dataDir, scope);
     mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, `${JSON.stringify(parsed)}\n`);
   }
 
-  readSpacedReviewGrades(scope: ProfileScope): readonly SpacedReviewGrade[] {
+  async readSpacedReviewGrades(scope: ProfileScope): Promise<readonly SpacedReviewGrade[]> {
     const path = spacedReviewGradeLog(this.dataDir, scope);
     if (!existsSync(path)) return [];
     return readFileSync(path, "utf8")
