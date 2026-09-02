@@ -209,8 +209,8 @@ function experienceKey(observation: Observation): string | undefined {
   if (observation.envelope.subject.kind !== "experience") return undefined;
   const scope = observation.envelope.subject.scope;
   if (observation.payload.kind === "mission")
-    return `mission:${scope}:${observation.payload.missionId}`;
-  if (observation.payload.kind === "preferences") return `preferences:${scope}`;
+    return JSON.stringify(["mission", scope, observation.payload.missionId]);
+  if (observation.payload.kind === "preferences") return JSON.stringify(["preferences", scope]);
   return undefined;
 }
 
