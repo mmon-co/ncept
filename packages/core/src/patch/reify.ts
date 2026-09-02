@@ -1,41 +1,31 @@
 import { PatchCompileError } from "./errors";
-import type {
-  ClosedPatchBundle,
-  PatchContent,
-  ReificationTarget,
-  SemanticOperation,
-} from "./model";
-import { resolvePatchBundle } from "./resolve";
+import type { PatchContent, ReificationTarget, SelectedGraph, SemanticOperation } from "./model";
 
-export function reifyPatchBundle(
-  bundle: ClosedPatchBundle,
-  target: ReificationTarget,
-): PatchContent {
-  if (bundle.revisions.some((revision) => revision.ref.identity === target.identity))
+export function reifyView(view: SelectedGraph, target: ReificationTarget): PatchContent {
+  if (view.patchOrder.some((revision) => revision.identity === target.identity))
     throw new PatchCompileError(
       "invalid-bundle",
       "a reified Patch must have a new opaque identity",
     );
 
-  const graph = resolvePatchBundle(bundle);
   const generatedPatchTags = new Set(
-    bundle.revisions.flatMap((revision) =>
-      Object.entries(revision.metadata.properties).flatMap(([key, value]) =>
+    Object.entries(view.patchMetadata).flatMap(([identity, metadata]) =>
+      Object.entries(metadata.properties).flatMap(([key, value]) =>
         key.startsWith("patch:") && value === true
-          ? [`patch:${revision.ref.identity}:${key.slice("patch:".length)}`]
+          ? [`patch:${identity}:${key.slice("patch:".length)}`]
           : [],
       ),
     ),
   );
   const operations: SemanticOperation[] = [
-    ...graph.nodes.map((node) => ({ kind: "add-node" as const, node })),
-    ...graph.edges.map((edge) => ({ kind: "add-edge" as const, edge })),
-    ...graph.metadataSets.map((metadataSet) => ({
+    ...view.nodes.map((node) => ({ kind: "add-node" as const, node })),
+    ...view.edges.map((edge) => ({ kind: "add-edge" as const, edge })),
+    ...view.metadataSets.map((metadataSet) => ({
       kind: "add-metadata-set" as const,
       metadataSet,
     })),
-    ...graph.tags
-      .filter((tag) => !generatedPatchTags.has(tag.name))
+    ...view.tags
+      .filter((tag) => tag.authority === "patch" && !generatedPatchTags.has(tag.name))
       .map((tag) => ({ kind: "define-tag" as const, tag })),
   ];
 
@@ -50,12 +40,12 @@ export function reifyPatchBundle(
         ...target.metadata.citations,
         {
           kind: "reified_from",
-          source: bundle.terminal,
-          formerBases: graph.patchOrder.slice(0, -1),
+          source: view.terminal,
+          formerBases: view.patchOrder.slice(0, -1),
           entities: {
-            nodes: graph.nodes.map(({ id }) => ({ source: id, target: id })),
-            edges: graph.edges.map(({ id }) => ({ source: id, target: id })),
-            metadataSets: graph.metadataSets.map(({ id }) => ({ source: id, target: id })),
+            nodes: view.nodes.map(({ id }) => ({ source: id, target: id })),
+            edges: view.edges.map(({ id }) => ({ source: id, target: id })),
+            metadataSets: view.metadataSets.map(({ id }) => ({ source: id, target: id })),
           },
         },
       ],

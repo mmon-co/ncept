@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { resolvePatchBundle } from "../src/patch";
 import {
   addNotebookLesson,
   createAuthoredBasedPatch,
@@ -12,6 +13,7 @@ import {
   reviseAuthoredRootPatch,
 } from "../src/patch-storage";
 import type { ProfileScope } from "../src/scope";
+import { evaluateView } from "../src/view";
 import { tempDataDir } from "./helpers";
 
 const main: ProfileScope = { principal: "principal-alice", profile: "profile-main" };
@@ -54,8 +56,15 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(afterBased.commit).toBe(head(personal));
   expect(afterBased.commit).not.toBe(afterRoot.commit);
 
+  const source = resolvePatchBundle({ terminal: rootRevision.ref, revisions: [rootRevision] });
   const reified = createAuthoredReifiedPatch(dd, main, {
-    source: { terminal: rootRevision.ref, revisions: [rootRevision] },
+    view: evaluateView(source, {
+      id: "view-geometry",
+      name: "Geometry",
+      createdAt: "2026-09-02T00:00:00.000Z",
+      query: { provenance: rootRevision.ref },
+      metadata: {},
+    }),
     metadata: { properties: { "patch:title": "Geometry copy" }, citations: [] },
   });
   expect(readAuthoredPatchRevision(dd, reified.identity).ref.commit).toBe(

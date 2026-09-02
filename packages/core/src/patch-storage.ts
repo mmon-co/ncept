@@ -8,7 +8,7 @@ import type { ProfileScope } from "./scope";
 import {
   compileGraph,
   exactPatchRefKey,
-  reifyPatchBundle,
+  reifyView,
   resolvePatchBundle,
   sameExactPatchRef,
   type ClosedPatchBundle,
@@ -21,6 +21,7 @@ import {
   type PatchMetadata,
   type PatchRevision,
   type RootPatchDefinition,
+  type SelectedGraph,
   type SemanticDelta,
 } from "./patch";
 
@@ -36,7 +37,7 @@ export interface BasedPatchDefinition {
 }
 
 export interface ReifiedPatchDefinition {
-  readonly source: ClosedPatchBundle;
+  readonly view: SelectedGraph;
   readonly metadata: PatchMetadata;
 }
 
@@ -576,7 +577,7 @@ export function createAuthoredReifiedPatch(
   return createAuthoredContent(
     dd,
     scope,
-    reifyPatchBundle(input.source, { identity, metadata: input.metadata }),
+    reifyView(input.view, { identity, metadata: input.metadata }),
   );
 }
 
