@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NodeId } from "./patch";
+import { builtSkillBundles, tutorSystemPrompt, type BuiltSkillBundle } from "./skills";
 
 export type ContentDigest = `sha256:${string}`;
 export type PedagogyPackageId = `pedagogy-${string}`;
@@ -94,6 +95,8 @@ export interface ResolvedPedagogy {
   readonly release: ExactPedagogyRelease;
   readonly theory: ResolvedTheory;
   readonly basePrompt: string;
+  readonly basePromptDigest: ContentDigest;
+  readonly skillCatalog: SkillCatalogRelease;
   readonly skillCatalogDigest: ContentDigest;
 }
 
@@ -110,8 +113,13 @@ export interface ReferencedTheory {
 export type TheorySelection = ContainedTheory | ReferencedTheory;
 
 export interface SkillCatalogRelease {
-  readonly digest: ContentDigest;
+  readonly bundles: readonly BuiltSkillBundle[];
 }
+
+export type SkillOverlayOperation =
+  | { readonly kind: "add"; readonly bundle: BuiltSkillBundle }
+  | { readonly kind: "replace"; readonly target: string; readonly bundle: BuiltSkillBundle }
+  | { readonly kind: "disable"; readonly target: string };
 
 export interface PlatformPedagogyRelease {
   readonly form: "root";
@@ -127,7 +135,7 @@ export interface PedagogyOverlayRelease {
   readonly platformRoot: ExactPedagogyRelease;
   readonly theory?: TheorySelection;
   readonly basePrompt?: string;
-  readonly skillCatalog?: SkillCatalogRelease;
+  readonly skillOverlay?: readonly SkillOverlayOperation[];
 }
 
 export type PedagogyRelease = PlatformPedagogyRelease | PedagogyOverlayRelease;
@@ -253,6 +261,52 @@ function resolveContainedTheory(
   return resolveContainedTheory(source, next, release.ref, visited);
 }
 
+function validateBundle(bundle: BuiltSkillBundle): void {
+  if (!/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(bundle.name))
+    throw new Error(`invalid Skill name ${bundle.name}`);
+  if (bundle.content.trim() === "") throw new Error(`Skill ${bundle.name} has no bundle content`);
+}
+
+function resolveSkillCatalog(
+  root: SkillCatalogRelease,
+  overlay: readonly SkillOverlayOperation[] = [],
+): SkillCatalogRelease {
+  const rootNames = new Set<string>();
+  const resolved = new Map<string, BuiltSkillBundle>();
+  for (const bundle of root.bundles) {
+    validateBundle(bundle);
+    if (rootNames.has(bundle.name)) throw new Error(`duplicate root Skill ${bundle.name}`);
+    rootNames.add(bundle.name);
+    resolved.set(bundle.name, bundle);
+  }
+  const operated = new Set<string>();
+  for (const operation of overlay) {
+    const target = operation.kind === "add" ? operation.bundle.name : operation.target;
+    if (operated.has(target)) throw new Error(`Skill overlay operates on ${target} more than once`);
+    operated.add(target);
+    if (operation.kind === "add") {
+      validateBundle(operation.bundle);
+      if (rootNames.has(target))
+        throw new Error(`Skill overlay cannot add existing Skill ${target}`);
+      resolved.set(target, operation.bundle);
+    } else {
+      if (!rootNames.has(target))
+        throw new Error(`Skill overlay ${operation.kind} targets missing root Skill ${target}`);
+      if (operation.kind === "replace") {
+        validateBundle(operation.bundle);
+        if (operation.bundle.name !== target)
+          throw new Error(`replacement Skill ${operation.bundle.name} does not match ${target}`);
+        resolved.set(target, operation.bundle);
+      } else resolved.delete(target);
+    }
+  }
+  return { bundles: [...resolved.values()] };
+}
+
+function skillCatalogDigest(catalog: SkillCatalogRelease): ContentDigest {
+  return contentDigest(catalog.bundles);
+}
+
 /** Resolve one exact package release; overlays inherit only from their exact platform root. */
 export function resolvePedagogy(
   source: PedagogyReleaseSource,
@@ -261,11 +315,14 @@ export function resolvePedagogy(
   const release = readRelease(source, selected);
   if (release.form === "root") {
     const theory = resolveContainedTheory(source, release.theory, release.ref, new Set());
+    const skillCatalog = resolveSkillCatalog(release.skillCatalog);
     return {
       release: release.ref,
       theory,
       basePrompt: release.basePrompt,
-      skillCatalogDigest: release.skillCatalog.digest,
+      basePromptDigest: contentDigest(release.basePrompt),
+      skillCatalog,
+      skillCatalogDigest: skillCatalogDigest(skillCatalog),
     };
   }
   const root = readRelease(source, release.platformRoot);
@@ -276,15 +333,21 @@ export function resolvePedagogy(
     release.theory === undefined ? root.ref : release.ref,
     new Set(),
   );
+  const basePrompt = release.basePrompt ?? root.basePrompt;
+  const skillCatalog = resolveSkillCatalog(root.skillCatalog, release.skillOverlay);
   return {
     release: release.ref,
     theory,
-    basePrompt: release.basePrompt ?? root.basePrompt,
-    skillCatalogDigest: release.skillCatalog?.digest ?? root.skillCatalog.digest,
+    basePrompt,
+    basePromptDigest: contentDigest(basePrompt),
+    skillCatalog,
+    skillCatalogDigest: skillCatalogDigest(skillCatalog),
   };
 }
 
 const PLATFORM_THEORY_DIGEST = pedagogicalTheoryDigest(V1_PEDAGOGICAL_THEORY);
+const PLATFORM_BASE_PROMPT = tutorSystemPrompt();
+const PLATFORM_SKILL_CATALOG: SkillCatalogRelease = { bundles: builtSkillBundles() };
 
 export const PLATFORM_PEDAGOGY_RELEASE: PlatformPedagogyRelease = {
   form: "root",
@@ -293,11 +356,11 @@ export const PLATFORM_PEDAGOGY_RELEASE: PlatformPedagogyRelease = {
     version: "1.0.0",
     digest: contentDigest({
       theory: PLATFORM_THEORY_DIGEST,
-      basePrompt: "common-concept-platform-v1",
-      skillCatalog: "common-concept-skill-catalog-v1",
+      basePrompt: contentDigest(PLATFORM_BASE_PROMPT),
+      skillCatalog: skillCatalogDigest(PLATFORM_SKILL_CATALOG),
     }),
   },
   theory: { kind: "contained", theory: V1_PEDAGOGICAL_THEORY },
-  basePrompt: "common-concept-platform-v1",
-  skillCatalog: { digest: contentDigest("common-concept-skill-catalog-v1") },
+  basePrompt: PLATFORM_BASE_PROMPT,
+  skillCatalog: PLATFORM_SKILL_CATALOG,
 };

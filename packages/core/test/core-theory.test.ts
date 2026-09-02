@@ -351,7 +351,7 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     },
     theory: { kind: "contained", theory: changedTheory },
     basePrompt: "changed",
-    skillCatalog: { digest: resolved.skillCatalogDigest },
+    skillCatalog: resolved.skillCatalog,
   };
   const changed = resolvePedagogy(pedagogySource([changedRelease]), changedRelease.ref);
   expect(changed.theory.digest).toBe(pedagogicalTheoryDigest(changedTheory));
@@ -381,6 +381,43 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
       trailRevision: store.readTrail(scope).revision,
     }).staleness,
   ).toEqual({ stale: true, reasons: ["association", "theory"] });
+});
+
+test("Pedagogy overlays resolve typed Skill operations over content-derived root artifacts", () => {
+  const replacement = {
+    name: "lesson",
+    content: "---\nname: lesson\ndescription: Replacement lesson\n---\n\nReplacement body\n",
+  };
+  const addition = {
+    name: "worked-examples",
+    content:
+      "---\nname: worked-examples\ndescription: Worked examples\n---\n\nWorked example body\n",
+  };
+  const overlay: PedagogyRelease = {
+    form: "overlay",
+    ref: {
+      identity: "pedagogy-skill-overlay",
+      version: "1.0.0",
+      digest: contentDigest({ replacement, addition }),
+    },
+    platformRoot: PLATFORM_PEDAGOGY_RELEASE.ref,
+    basePrompt: "Complete replacement base prompt",
+    skillOverlay: [
+      { kind: "replace", target: "lesson", bundle: replacement },
+      { kind: "disable", target: "probing" },
+      { kind: "add", bundle: addition },
+    ],
+  };
+  const resolved = resolvePedagogy(
+    pedagogySource([PLATFORM_PEDAGOGY_RELEASE, overlay]),
+    overlay.ref,
+  );
+
+  expect(resolved.basePromptDigest).toBe(contentDigest(resolved.basePrompt));
+  expect(resolved.skillCatalogDigest).toBe(contentDigest(resolved.skillCatalog.bundles));
+  expect(resolved.skillCatalog.bundles.find(({ name }) => name === "lesson")).toEqual(replacement);
+  expect(resolved.skillCatalog.bundles.some(({ name }) => name === "probing")).toBeFalse();
+  expect(resolved.skillCatalog.bundles.at(-1)).toEqual(addition);
 });
 
 test("an accepted Profile parameter override creates a distinguishable refold without rewriting history", () => {

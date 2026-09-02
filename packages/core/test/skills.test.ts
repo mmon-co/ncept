@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
-import { buildSkillBundles, listSkills, skillBody, tutorSystemPrompt } from "../src/skills";
+import { PLATFORM_PEDAGOGY_RELEASE } from "../src/pedagogy";
+import {
+  buildSkillBundles,
+  builtSkillBundles,
+  listSkills,
+  skillBody,
+  tutorSystemPrompt,
+} from "../src/skills";
 
 // The catalog is data at a path resolved from the module location; the
 // regression this guards is that path or its release build breaking, not the
@@ -20,6 +27,9 @@ test("the Skill catalog loads and builds from its shipped location", () => {
     if (entry.some((who) => who !== "system")) expect(system).toContain(description);
     else expect(system).not.toContain(description);
   }
+
+  expect(PLATFORM_PEDAGOGY_RELEASE.basePrompt).toBe(system);
+  expect(PLATFORM_PEDAGOGY_RELEASE.skillCatalog.bundles).toEqual(builtSkillBundles());
 
   const outputDir = mkdtempSync(join(tmpdir(), "concept-skills-"));
   try {
@@ -48,6 +58,10 @@ test("the Skill catalog loads and builds from its shipped location", () => {
         entry.includes("model") ? undefined : true,
       );
       expect(built.slice(match[0].length).trim()).toBe(skillBody(name));
+      expect(
+        PLATFORM_PEDAGOGY_RELEASE.skillCatalog.bundles.find((bundle) => bundle.name === name)
+          ?.content,
+      ).toBe(built);
     }
 
     buildSkillBundles(outputDir);

@@ -21,6 +21,12 @@ export interface SkillMeta {
   readonly entry: readonly Entry[];
 }
 
+/** The complete Agent Skills-compatible file shipped for one catalog entry. */
+export interface BuiltSkillBundle {
+  readonly name: string;
+  readonly content: string;
+}
+
 interface SkillFile {
   readonly meta: SkillMeta;
   readonly body: string;
@@ -92,28 +98,37 @@ export function skillBody(name: string): string {
   return inlineIncludes(skill.body).trim();
 }
 
-/** Write the complete catalog as deterministic, self-contained Agent Skills bundles. */
+function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {
+  const metadata = {
+    "concept-facet": skill.meta.facet,
+    "concept-entry": skill.meta.entry.join(","),
+  };
+  const frontmatter = {
+    name: skill.meta.name,
+    description: skill.meta.description,
+    metadata,
+    ...(skill.meta.entry.includes("model") ? {} : { "disable-model-invocation": true }),
+  };
+  return {
+    name: skill.meta.name,
+    content: `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n\n${skillBody(skill.meta.name)}\n`,
+  };
+}
+
+/** The immutable catalog payload embedded directly in a Pedagogy release. */
+export function builtSkillBundles(): readonly BuiltSkillBundle[] {
+  return skillFiles().map(builtSkillBundle);
+}
+
+/** Write the release catalog payload as deterministic, self-contained bundle directories. */
 export function buildSkillBundles(outputDir: string): void {
   rmSync(outputDir, { force: true, recursive: true });
   mkdirSync(outputDir, { recursive: true });
 
-  for (const { meta } of skillFiles()) {
-    const metadata = {
-      "concept-facet": meta.facet,
-      "concept-entry": meta.entry.join(","),
-    };
-    const frontmatter = {
-      name: meta.name,
-      description: meta.description,
-      metadata,
-      ...(meta.entry.includes("model") ? {} : { "disable-model-invocation": true }),
-    };
-    const directory = join(outputDir, meta.name);
+  for (const bundle of builtSkillBundles()) {
+    const directory = join(outputDir, bundle.name);
     mkdirSync(directory);
-    writeFileSync(
-      join(directory, "SKILL.md"),
-      `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n\n${skillBody(meta.name)}\n`,
-    );
+    writeFileSync(join(directory, "SKILL.md"), bundle.content);
   }
 }
 
