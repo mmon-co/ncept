@@ -9,16 +9,3 @@ export function tempDataDir(): DataDir {
   ensureDataDir(dd);
   return dd;
 }
-
-export function ev(over: Partial<Record<string, unknown>> = {}): unknown {
-  return {
-    v: 1,
-    vocab_version: 2,
-    ts: "2026-08-01T12:00:00.000Z",
-    domain: "math",
-    nodes: ["b"],
-    kind: "used",
-    source: "lesson",
-    ...over,
-  };
-}

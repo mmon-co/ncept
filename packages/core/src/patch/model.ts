@@ -180,6 +180,8 @@ export interface ResolvedGraph {
 
 export type GraphQuery =
   | { readonly tag: string }
+  | { readonly cone: { readonly targets: readonly [NodeId, ...NodeId[]] } }
+  | { readonly provenance: ExactPatchRef }
   | { readonly union: readonly [GraphQuery, GraphQuery, ...GraphQuery[]] }
   | { readonly intersection: readonly [GraphQuery, GraphQuery, ...GraphQuery[]] }
   | { readonly difference: readonly [GraphQuery, GraphQuery] };

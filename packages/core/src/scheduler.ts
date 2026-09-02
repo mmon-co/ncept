@@ -7,7 +7,8 @@ import {
   type Card as FsrsCard,
   type Grade as FsrsGrade,
 } from "ts-fsrs";
-import type { Grade, ReviewRecord } from "./types";
+import type { Grade } from "./observation";
+import type { ReviewRecord } from "./playground";
 
 const RATING: Record<Grade, FsrsGrade> = {
   again: Rating.Again,

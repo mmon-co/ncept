@@ -4,10 +4,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./observation-associations": "./src/observation-associations.ts",
-    "./observations": "./src/observations.ts",
+    "./association": "./src/association.ts",
+    "./fold": "./src/fold.ts",
+    "./local-directory": "./src/local-directory.ts",
+    "./observation": "./src/observation.ts",
     "./patch": "./src/patch/index.ts",
-    "./patch-storage": "./src/patch-storage.ts"
+    "./patch-storage": "./src/patch-storage.ts",
+    "./pedagogy": "./src/pedagogy.ts",
+    "./playground": "./src/playground.ts",
+    "./storage": "./src/storage.ts",
+    "./view": "./src/view.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
