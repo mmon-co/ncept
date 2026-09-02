@@ -1,5 +1,5 @@
 /** Loader for the pedagogy Skill catalog in `skills/` (see skills/README.md, ADR 0012). */
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -45,10 +45,15 @@ function parseSkillFile(dir: string): SkillFile {
   const description: unknown = Reflect.get(front, "description");
   const facet: unknown = Reflect.get(front, "facet");
   const entry: unknown = Reflect.get(front, "entry");
-  if (typeof name !== "string" || name !== dir)
-    throw new Error(`${path} name must equal its directory name`);
-  if (typeof description !== "string" || description.trim() === "")
-    throw new Error(`${path} needs a description`);
+  if (
+    typeof name !== "string" ||
+    name !== dir ||
+    name.length > 64 ||
+    !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)
+  )
+    throw new Error(`${path} name must equal its directory name and follow Agent Skills naming`);
+  if (typeof description !== "string" || description.trim() === "" || description.length > 1024)
+    throw new Error(`${path} needs an Agent Skills description of at most 1024 characters`);
   if (!isOneOf(FACETS, facet)) throw new Error(`${path} facet must be one of ${FACETS.join(", ")}`);
   const who: Entry[] = [];
   if (Array.isArray(entry)) for (const item of entry) if (isOneOf(ENTRIES, item)) who.push(item);
@@ -85,6 +90,31 @@ export function skillBody(name: string): string {
   const skill = skillFiles().find(({ meta }) => meta.name === name);
   if (skill === undefined) throw new Error(`unknown Skill: ${name}`);
   return inlineIncludes(skill.body).trim();
+}
+
+/** Write the complete catalog as deterministic, self-contained Agent Skills bundles. */
+export function buildSkillBundles(outputDir: string): void {
+  rmSync(outputDir, { force: true, recursive: true });
+  mkdirSync(outputDir, { recursive: true });
+
+  for (const { meta } of skillFiles()) {
+    const metadata = {
+      "concept-facet": meta.facet,
+      "concept-entry": meta.entry.join(","),
+    };
+    const frontmatter = {
+      name: meta.name,
+      description: meta.description,
+      metadata,
+      ...(meta.entry.includes("model") ? {} : { "disable-model-invocation": true }),
+    };
+    const directory = join(outputDir, meta.name);
+    mkdirSync(directory);
+    writeFileSync(
+      join(directory, "SKILL.md"),
+      `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n\n${skillBody(meta.name)}\n`,
+    );
+  }
 }
 
 /** An invocation message: the Skill's body followed by the request-time facts. */

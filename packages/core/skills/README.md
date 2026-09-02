@@ -29,3 +29,11 @@ bundle stands alone. Entries without `model` in `entry` are annotated in
 the index as suggest-only; the model proposes them and the learner starts
 them. Entries with only `system` are absent from the index and are read
 by the host at their event.
+
+`bun run build:skills` writes every entry to the generated
+`packages/core/dist/pedagogy/skills/<name>/SKILL.md` catalog for a platform-root
+Pedagogy-package release. Each bundle has Agent Skills frontmatter and an
+inlined body. Namespaced `concept-facet` and `concept-entry` metadata preserve
+the catalog requirements for release and harness consumers; entries without
+`model` also set `disable-model-invocation: true`. A harness must omit
+system-only bundles from the model's mounted directories.
