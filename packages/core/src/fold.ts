@@ -174,7 +174,10 @@ export function foldLearnerState(input: {
   for (const observation of observations.values()) {
     const mapping = mappings.get(observation.envelope.id);
     if (mapping === undefined) continue;
-    const interpretation = interpretPayload(effectiveTheory, observation.payload);
+    const interpretation =
+      observation.interpretation?.theoryDigest === input.theory.digest
+        ? observation.interpretation.value
+        : interpretPayload(effectiveTheory, observation.payload);
     if (interpretation.kind !== "evidence") continue;
     const effect = parameters.evidence[interpretation.evidence];
     const supportWeight = interpretation.support === "assisted" ? parameters.assistedWeight : 1;

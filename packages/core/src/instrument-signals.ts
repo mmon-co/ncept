@@ -113,7 +113,10 @@ function learnerRecords(input: SignalsInstrumentInput, aggregate: AggregatedTrai
     });
     if (result.kind !== "found") continue;
     const records = result.records.flatMap(({ observation }) => {
-      const interpretation = interpretPayload(input.theory.theory, observation.payload);
+      const interpretation =
+        observation.interpretation?.theoryDigest === input.theory.digest
+          ? observation.interpretation.value
+          : interpretPayload(input.theory.theory, observation.payload);
       return interpretation.kind === "evidence" ? [{ observation, interpretation }] : [];
     });
     records.sort(chronological);

@@ -1,6 +1,6 @@
 import type { AssociationCommit, AssociationCommitId } from "./association";
 import type { TrailSnapshot } from "./fold";
-import type { Observation } from "./observation";
+import type { Observation, ObservationId, ObservationInterpretation } from "./observation";
 import type { ExactPedagogyRelease } from "./pedagogy";
 import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
@@ -8,6 +8,12 @@ import type { View, ViewId } from "./view";
 
 export interface TrailStore {
   appendObservation(scope: ProfileScope, observation: Observation): Promise<void>;
+  /** Fill the evaluator-owned layer once without changing the permanent envelope or native payload. */
+  writeObservationInterpretation(
+    scope: ProfileScope,
+    id: ObservationId,
+    interpretation: ObservationInterpretation,
+  ): Promise<void>;
   readTrail(scope: ProfileScope): Promise<TrailSnapshot>;
 }
 
