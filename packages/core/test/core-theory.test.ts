@@ -39,6 +39,7 @@ const patch: PatchRevision = {
   ref: patchRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: { "patch:title": "Core story" }, citations: [] },
   delta: {
     operations: [

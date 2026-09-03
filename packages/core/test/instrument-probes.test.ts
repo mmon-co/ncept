@@ -28,6 +28,7 @@ const patch: PatchRevision = {
   ref: patchRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [

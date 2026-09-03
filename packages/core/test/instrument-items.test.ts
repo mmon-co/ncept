@@ -19,6 +19,7 @@ const base: PatchRevision = {
   ref: baseRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [
@@ -68,6 +69,7 @@ const overlay: PatchRevision = {
       },
     ],
   },
+  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [

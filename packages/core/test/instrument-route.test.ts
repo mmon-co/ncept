@@ -24,6 +24,7 @@ function resolvedGraph(operations: PatchRevision["delta"]["operations"]) {
     },
     bases: [],
     lock: { entries: [] },
+    materials: [],
     delta: { operations },
     metadata: { properties: {}, citations: [] },
   };

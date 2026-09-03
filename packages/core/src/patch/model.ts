@@ -3,6 +3,7 @@ export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
 export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
+export type MaterialId = `material-${string}`;
 
 export type MetadataValue = string | number | boolean | null | readonly string[];
 
@@ -130,11 +131,22 @@ export interface SemanticDelta {
   readonly operations: readonly SemanticOperation[];
 }
 
+/** A teaching document and its single-Node attachment, versioned by its owning Patch. */
+export interface DocumentMaterial {
+  readonly kind: "document";
+  readonly id: MaterialId;
+  readonly node: NodeId;
+  readonly title: string;
+  readonly body: string;
+  readonly digest: `sha256:${string}`;
+}
+
 export interface PatchContent {
   readonly identity: PatchId;
   readonly bases: readonly BaseRequirement[];
   readonly lock: PatchLock;
   readonly delta: SemanticDelta;
+  readonly materials: readonly DocumentMaterial[];
   readonly metadata: PatchMetadata;
 }
 
@@ -143,6 +155,7 @@ export interface PatchRevision {
   readonly bases: readonly BaseRequirement[];
   readonly lock: PatchLock;
   readonly delta: SemanticDelta;
+  readonly materials: readonly DocumentMaterial[];
   readonly metadata: PatchMetadata;
 }
 
@@ -161,10 +174,16 @@ export interface ContributionProvenance {
   readonly operationIndex: number;
 }
 
+export interface ResolvedMaterial extends DocumentMaterial {
+  /** Exact owning Patch revision; Material identities never imply a version. */
+  readonly source: ExactPatchRef;
+}
+
 export interface ResolvedGraph {
   readonly terminal: ExactPatchRef;
   readonly patchOrder: readonly ExactPatchRef[];
   readonly patchMetadata: Readonly<Record<PatchId, PatchMetadata>>;
+  readonly materials: readonly ResolvedMaterial[];
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];

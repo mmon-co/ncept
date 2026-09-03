@@ -17,6 +17,7 @@ const revision: PatchRevision = {
   },
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: {
     properties: {
       "patch:title": "Linear algebra",
@@ -137,6 +138,7 @@ test("a Personal Notebook is effective content while learner absence stays disti
         },
       ],
     },
+    materials: [],
     metadata: { properties: { "patch:title": "Personal" }, citations: [] },
     delta: {
       operations: [

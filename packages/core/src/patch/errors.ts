@@ -8,6 +8,7 @@ export type PatchCompileErrorCode =
   | "dangling-edge"
   | "dangling-metadata"
   | "dangling-tag"
+  | "invalid-material-attachment"
   | "stale-mask-target"
   | "unknown-tag"
   | "unknown-provenance"

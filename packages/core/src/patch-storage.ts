@@ -12,6 +12,7 @@ import {
   resolvePatchBundle,
   sameExactPatchRef,
   type ClosedPatchBundle,
+  type DocumentMaterial,
   type ExactPatchRef,
   type GraphQuery,
   type LearnerProjection,
@@ -57,6 +58,10 @@ function json(value: unknown): string {
 
 function digest(content: PatchContent): ExactPatchRef["digest"] {
   return `sha256:${createHash("sha256").update(json(content)).digest("hex")}`;
+}
+
+export function materialBodyDigest(body: string): DocumentMaterial["digest"] {
+  return `sha256:${createHash("sha256").update(body).digest("hex")}`;
 }
 
 function patchesRoot(dd: DataDir): string {
@@ -151,19 +156,6 @@ function publishCandidate(
   return candidate;
 }
 
-function commitContent(
-  repository: string,
-  content: PatchContent,
-  message: string,
-  parent?: string,
-): PatchRevision {
-  return publishCandidate(
-    repository,
-    candidateCommit(repository, content, message, parent),
-    parent,
-  );
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -176,6 +168,7 @@ function isPatchContent(value: unknown): value is PatchContent {
     Array.isArray(value.bases) &&
     Array.isArray(value.lock.entries) &&
     Array.isArray(value.delta.operations) &&
+    Array.isArray(value.materials) &&
     isRecord(value.metadata.properties) &&
     Array.isArray(value.metadata.citations)
   );
@@ -267,6 +260,7 @@ function personalContent(current?: PatchRevision): PatchContent {
       bases: current.bases,
       lock: current.lock,
       delta: current.delta,
+      materials: current.materials,
       metadata: current.metadata,
     };
   return {
@@ -274,6 +268,7 @@ function personalContent(current?: PatchRevision): PatchContent {
     bases: [],
     lock: { entries: [] },
     delta: { operations: [] },
+    materials: [],
     metadata: { properties: { "patch:title": "Personal" }, citations: [] },
   };
 }
@@ -324,7 +319,11 @@ function lessonOperations(input: {
   ];
 }
 
-function rootContent(identity: PatchId, definition: RootPatchDefinition): PatchContent {
+function rootContent(
+  identity: PatchId,
+  definition: RootPatchDefinition,
+  materials: readonly DocumentMaterial[] = [],
+): PatchContent {
   return {
     identity,
     bases: [],
@@ -348,6 +347,7 @@ function rootContent(identity: PatchId, definition: RootPatchDefinition): PatchC
         ]),
       ],
     },
+    materials,
     metadata: {
       properties: {
         "patch:title": definition.title,
@@ -513,6 +513,7 @@ export function readAuthoredRootPatchDefinition(
 
 export function reviseAuthoredRootPatch(
   dd: DataDir,
+  scope: ProfileScope,
   identity: PatchId,
   definition: RootPatchDefinition,
 ): AuthoredPatch {
@@ -520,12 +521,14 @@ export function reviseAuthoredRootPatch(
   const current = revisionAt(repository, identity);
   if (current.bases.length !== 0) throw new PatchStoreError(`${identity} is not a root Patch`);
   validateRootPatchDefinition(identity, definition);
-  commitContent(
+  const candidate = candidateCommit(
     repository,
-    rootContent(identity, definition),
+    rootContent(identity, definition, current.materials),
     `Revise ${identity}`,
     current.ref.commit,
   );
+  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
+  publishCandidate(repository, candidate, current.ref.commit);
   return { identity };
 }
 
@@ -565,6 +568,7 @@ export function createAuthoredBasedPatch(
     bases: locked.map(({ requirement }) => requirement),
     lock: { entries: locked },
     delta: input.delta,
+    materials: [],
     metadata: input.metadata,
   });
 }
@@ -635,6 +639,94 @@ export function addNotebookLesson(
     operations: lessonOperations(input),
     summary: `Add Notebook lesson ${input.id}`,
   });
+}
+
+export interface DocumentMaterialInput {
+  readonly id?: DocumentMaterial["id"];
+  readonly node: NodeId;
+  readonly title: string;
+  readonly body: string;
+}
+
+function documentMaterial(input: DocumentMaterialInput): DocumentMaterial {
+  if (
+    !isNodeId(input.node) ||
+    (input.id !== undefined && !/^material-[0-9a-z-]+$/.test(input.id)) ||
+    input.title.trim() === "" ||
+    input.body.trim() === ""
+  )
+    throw new PatchStoreError("invalid document Material");
+  return {
+    kind: "document",
+    id: input.id ?? (`material-${randomUUID()}` as const),
+    node: input.node,
+    title: input.title.trim(),
+    body: input.body,
+    digest: materialBodyDigest(input.body),
+  };
+}
+
+function withMaterial(content: PatchContent, input: DocumentMaterialInput): PatchContent {
+  const material = documentMaterial(input);
+  if (content.materials.some(({ id }) => id === material.id))
+    throw new PatchStoreError(`Material ${material.id} already exists`);
+  return { ...content, materials: [...content.materials, material] };
+}
+
+/** Attach an authored teaching document to exactly one Node and publish a new Patch revision. */
+export function attachAuthoredDocumentMaterial(
+  dd: DataDir,
+  scope: ProfileScope,
+  identity: PatchId,
+  input: DocumentMaterialInput,
+): PatchRevision {
+  const repository = authoredRepository(dd, identity);
+  const current = revisionAt(repository, identity);
+  const candidate = candidateCommit(
+    repository,
+    withMaterial(
+      {
+        identity: current.ref.identity,
+        bases: current.bases,
+        lock: current.lock,
+        delta: current.delta,
+        materials: current.materials,
+        metadata: current.metadata,
+      },
+      input,
+    ),
+    `Attach document Material to ${input.node}`,
+    current.ref.commit,
+  );
+  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
+  return publishCandidate(repository, candidate, current.ref.commit);
+}
+
+/** Save a generated teaching document in the learner's Personal Patch. */
+export function attachPersonalDocumentMaterial(
+  dd: DataDir,
+  scope: ProfileScope,
+  input: DocumentMaterialInput,
+): PatchRevision {
+  const current = currentPersonalRevision(dd, scope);
+  const content = personalContent(current);
+  return commitPersonal(
+    dd,
+    scope,
+    withMaterial(content, input),
+    `Attach learner-local document Material to ${input.node}`,
+  );
+}
+
+export function documentMaterials(
+  dd: DataDir,
+  scope: ProfileScope,
+  node: NodeId,
+  exact?: ExactPatchRef,
+) {
+  const graph = resolvePatchBundle(loadPersonalPatchBundle(dd, scope, exact));
+  if (!graph.nodes.some(({ id }) => id === node)) throw new PatchStoreError(`unknown Node ${node}`);
+  return graph.materials.filter((material) => material.node === node);
 }
 
 export function openPersonalLesson(
