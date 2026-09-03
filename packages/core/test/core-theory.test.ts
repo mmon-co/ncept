@@ -6,6 +6,7 @@ import {
   assessLearnerStateStaleness,
   contentDigest,
   currentExperiences,
+  decideReviewGrade,
   evaluateView,
   foldLearnerState,
   interpretObservation,
@@ -225,9 +226,9 @@ test("Core stories 1-5 compose through the local principal/Profile store", async
     trail: store,
     store,
     instruments: {
-      competency: () => required(liveState, "live competency"),
-      trail: (node) => ({ kind: "missing-node", node }),
-      content: (node) => ({
+      competency: async () => required(liveState, "live competency"),
+      trail: async (node) => ({ kind: "missing-node", node }),
+      content: async (node) => ({
         node,
         label: "Target",
         content: "Differentiate a polynomial",
@@ -270,12 +271,21 @@ test("Core stories 1-5 compose through the local principal/Profile store", async
     id: "srs-card-pending",
     createdAt: "2026-09-01T12:00:00.000Z",
     status: "pending",
-    format: "application",
+    format: "recall",
     category: "calculus",
     front: "Apply the power rule",
     back: "A worked transfer",
     associations: [{ patch: patchRef, node: "node-target" }],
   });
+  expect(
+    await playground.editCard("srs-card-pending", {
+      format: "application",
+      category: "calculus",
+      front: "Apply the power rule to a fresh polynomial",
+      back: "A worked transfer",
+    }),
+  ).toMatchObject({ status: "pending", format: "application" });
+  expect((await playground.declineCard("srs-card-pending")).status).toBe("declined");
   expect(
     (await playground.dueQueue("2026-09-01T12:30:00.000Z", 3)).map(({ card }) => card.id),
   ).toEqual(["srs-card-linearity", "srs-card-derivative", "srs-card-integral"]);
@@ -306,6 +316,17 @@ test("Core stories 1-5 compose through the local principal/Profile store", async
   expect(playground.appendGrade(grade)).rejects.toThrow("already exists");
   playground.injectContext({ mode: "append", content: "review complete" });
   expect(await playground.grades()).toEqual([grade]);
+  expect(() => decideReviewGrade({ answer: "  ", expected: "3x²", latencyMs: 1_200 })).toThrow(
+    "attempt retrieval before revealing",
+  );
+  expect(decideReviewGrade({ answer: "3x²", expected: "3x²", latencyMs: 1_200 })).toEqual({
+    grade: "easy",
+    exactMatch: true,
+    timeNudge: "fast",
+  });
+  expect(
+    decideReviewGrade({ answer: "3 x²", expected: "3x²", latencyMs: 18_000, selfGrade: "good" }),
+  ).toEqual({ grade: "hard", exactMatch: false, timeNudge: "slow" });
   expect(await store.listSpacedReviewCards({ ...scope, profile: "profile-scratch" })).toEqual([]);
   expect(injected).toEqual(["review complete"]);
 
@@ -332,8 +353,8 @@ test("Core stories 1-5 compose through the local principal/Profile store", async
   });
   expect(firstState.nodes["node-target"]?.estimate).toBeGreaterThan(0.5);
   liveState = firstState;
-  expect(playground.instruments.competency()).toBe(firstState);
-  expect(playground.instruments.content("node-target").contentSource).toEqual(patchRef);
+  expect(await playground.instruments.competency()).toBe(firstState);
+  expect((await playground.instruments.content("node-target")).contentSource).toEqual(patchRef);
 
   const changedTheory: PedagogicalTheory = {
     ...V1_PEDAGOGICAL_THEORY,

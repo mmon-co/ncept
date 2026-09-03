@@ -92,13 +92,16 @@ export {
 } from "./storage";
 export { LocalDirectoryCoreStore } from "./local-directory";
 export {
+  decideReviewGrade,
   parseSpacedReviewCard,
   parseSpacedReviewGrade,
   spacedReviewDueQueue,
   spacedReviewPlayground,
   type ContextInjection,
   type DueCard,
+  type ReviewGradeDecision,
   type SpacedReviewCard,
+  type SpacedReviewCardEdit,
   type SpacedReviewCardId,
   type SpacedReviewGrade,
   type SpacedReviewGradeId,
