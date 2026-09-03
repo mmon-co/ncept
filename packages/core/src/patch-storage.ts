@@ -202,12 +202,29 @@ function revisionAt(repository: string, identity: PatchId, commit = "HEAD"): Pat
   };
 }
 
+function releaseTag(version: string): string {
+  if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(version))
+    throw new PatchStoreError(`invalid Patch release ${version}`);
+  return `refs/tags/releases/${version}`;
+}
+
 function revisionForExact(dd: DataDir, scope: ProfileScope, exact: ExactPatchRef): PatchRevision {
   const repository =
     exact.identity === PERSONAL_PATCH_ID
       ? personalRepository(dd, scope)
       : authoredRepository(dd, exact.identity);
-  const revision = revisionAt(repository, exact.identity, exact.commit);
+  if (exact.version !== undefined) {
+    const taggedCommit = runGit(repository, ["rev-parse", `${releaseTag(exact.version)}^{commit}`]);
+    if (taggedCommit !== exact.commit)
+      throw new PatchStoreError(
+        `${exact.identity}@${exact.version}: release does not name the exact Patch commit`,
+      );
+  }
+  const stored = revisionAt(repository, exact.identity, exact.commit);
+  const revision =
+    exact.version === undefined
+      ? stored
+      : { ...stored, ref: { ...stored.ref, version: exact.version } };
   if (!sameExactPatchRef(revision.ref, exact))
     throw new PatchStoreError(
       `${exact.identity}@${exact.commit}: exact Patch digest or release does not match`,
@@ -586,6 +603,51 @@ export function createAuthoredReifiedPatch(
   );
 }
 
+/** Reify a later immutable snapshot under an existing Hub package identity. */
+export function reviseAuthoredReifiedPatch(
+  dd: DataDir,
+  scope: ProfileScope,
+  identity: PatchId,
+  input: ReifiedPatchDefinition,
+): PatchRevision {
+  const repository = authoredRepository(dd, identity);
+  const current = revisionAt(repository, identity);
+  const content = reifyView(input.view, { identity, metadata: input.metadata });
+  const candidate = candidateCommit(repository, content, `Revise ${identity}`, current.ref.commit);
+  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
+  return publishCandidate(repository, candidate, current.ref.commit);
+}
+
+/** Pin the current authored commit to a permanent exact release. */
+export function publishAuthoredPatchRelease(
+  dd: DataDir,
+  identity: PatchId,
+  version: string,
+): ExactPatchRef {
+  const repository = authoredRepository(dd, identity);
+  const revision = revisionAt(repository, identity);
+  const tag = releaseTag(version);
+  const existing = spawnSync("git", ["rev-parse", "--verify", `${tag}^{commit}`], {
+    cwd: repository,
+    encoding: "utf8",
+  });
+  if (existing.status === 0)
+    throw new PatchStoreError(`Patch ${identity}@${version} already exists`);
+  runGit(repository, ["tag", `releases/${version}`, revision.ref.commit]);
+  return { ...revision.ref, version };
+}
+
+export function readAuthoredPatchRelease(
+  dd: DataDir,
+  identity: PatchId,
+  version: string,
+): PatchRevision {
+  const repository = authoredRepository(dd, identity);
+  const commit = runGit(repository, ["rev-parse", `${releaseTag(version)}^{commit}`]);
+  const stored = revisionAt(repository, identity, commit);
+  return { ...stored, ref: { ...stored.ref, version } };
+}
+
 export function readPersonalPatch(
   dd: DataDir,
   scope: ProfileScope,
@@ -608,6 +670,74 @@ export function readPersonalPatch(
       annotations: {},
     }),
   };
+}
+
+/** Adopt one exact Hub release as an independent base of this Profile's Personal scope. */
+export function adoptHubRelease(
+  dd: DataDir,
+  scope: ProfileScope,
+  exact: ExactPatchRef,
+): PatchRevision {
+  if (exact.version === undefined) throw new PatchStoreError("Hub adoption needs an exact release");
+  revisionForExact(dd, scope, exact);
+  const current = currentPersonalRevision(dd, scope);
+  const content = personalContent(current);
+  if (content.lock.entries.some(({ exact: base }) => base.identity === exact.identity))
+    throw new PatchStoreError(`Patch ${exact.identity} is already adopted`);
+  const requirement = { identity: exact.identity, release: exact.version };
+  return commitPersonal(
+    dd,
+    scope,
+    {
+      ...content,
+      bases: [...content.bases, requirement],
+      lock: {
+        entries: [
+          ...content.lock.entries,
+          {
+            requirement,
+            exact,
+            acquisition: { kind: "hub", identity: exact.identity, version: exact.version },
+          },
+        ],
+      },
+    },
+    `Adopt ${exact.identity}@${exact.version}`,
+  );
+}
+
+/** Replace an adopted base with another exact release; conflicting masks fail compilation. */
+export function updateHubRelease(
+  dd: DataDir,
+  scope: ProfileScope,
+  exact: ExactPatchRef,
+): PatchRevision {
+  if (exact.version === undefined) throw new PatchStoreError("Hub update needs an exact release");
+  revisionForExact(dd, scope, exact);
+  const current = currentPersonalRevision(dd, scope);
+  if (current === undefined) throw new PatchStoreError("Personal Patch does not exist");
+  const content = personalContent(current);
+  const index = content.lock.entries.findIndex(
+    ({ exact: base }) => base.identity === exact.identity,
+  );
+  if (index < 0) throw new PatchStoreError(`Patch ${exact.identity} is not adopted`);
+  const requirement = { identity: exact.identity, release: exact.version };
+  const entries = [...content.lock.entries];
+  entries[index] = {
+    requirement,
+    exact,
+    acquisition: { kind: "hub", identity: exact.identity, version: exact.version },
+  };
+  return commitPersonal(
+    dd,
+    scope,
+    {
+      ...content,
+      bases: content.bases.map((base) => (base.identity === exact.identity ? requirement : base)),
+      lock: { entries },
+    },
+    `Update ${exact.identity} to ${exact.version}`,
+  );
 }
 
 /** Commit one accepted graph change to the Profile's Notebook. */
