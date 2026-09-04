@@ -10,6 +10,7 @@ import {
   evaluateView,
   foldLearnerState,
   interpretObservation,
+  interpretPayload,
   pedagogicalTheoryDigest,
   resolvePedagogy,
   spacedReviewPlayground,
@@ -444,6 +445,17 @@ test("Pedagogy overlays resolve typed Skill operations over content-derived root
   expect(resolved.skillCatalog.bundles.find(({ name }) => name === "lesson")).toEqual(replacement);
   expect(resolved.skillCatalog.bundles.some(({ name }) => name === "probing")).toBeFalse();
   expect(resolved.skillCatalog.bundles.at(-1)).toEqual(addition);
+});
+
+test("native interpretation rejects dynamically decoded Artifact and unknown payloads", () => {
+  const interpretDynamic = (payload: unknown) =>
+    Reflect.apply(interpretPayload, undefined, [V1_PEDAGOGICAL_THEORY, payload]);
+  expect(() =>
+    interpretDynamic({ kind: "artifact", vocabularyVersion: 1, artifactId: "artifact-one" }),
+  ).toThrow("Artifact payloads require evaluator interpretation");
+  expect(() => interpretDynamic({ kind: "foreign", vocabularyVersion: 1 })).toThrow(
+    "Unsupported native payload kind foreign",
+  );
 });
 
 test("built-in interpretation and folding reject unsupported Pedagogical-theory versions", () => {

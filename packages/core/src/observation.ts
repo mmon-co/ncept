@@ -143,6 +143,10 @@ function evidence(payload: LessonPayload | QuizPayload): ObservationInterpretati
   };
 }
 
+function dynamicPayloadKind(payload: unknown): unknown {
+  return typeof payload === "object" && payload !== null ? Reflect.get(payload, "kind") : undefined;
+}
+
 /** The v1 native mapping is total; Artifact submissions require evaluator judgement. */
 export function interpretPayload(
   theory: PedagogicalTheory,
@@ -153,6 +157,8 @@ export function interpretPayload(
     throw new Error(
       `payload vocabulary ${payload.vocabularyVersion} is not supported by theory vocabulary ${theory.payloadMapping.vocabularyVersion}`,
     );
+  if (dynamicPayloadKind(payload) === "artifact")
+    throw new Error("Artifact payloads require evaluator interpretation");
   switch (payload.kind) {
     case "lesson":
     case "quiz":
@@ -167,6 +173,8 @@ export function interpretPayload(
       return { kind: "experience", experience: "mission" };
     case "preferences":
       return { kind: "experience", experience: "preferences" };
+    default:
+      throw new Error(`Unsupported native payload kind ${String(dynamicPayloadKind(payload))}`);
   }
 }
 
