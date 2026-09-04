@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import type { AssociationCommit } from "@concept/core/association";
 import type { TrailSnapshot } from "@concept/core/fold";
 import { signals, type AggregatedTrail } from "@concept/core/instrument-signals";
-import { interpretObservation, type Observation } from "@concept/core/observation";
+import {
+  interpretObservation,
+  type NativeInterpretablePayload,
+  type Observation,
+} from "@concept/core/observation";
 import {
   PLATFORM_PEDAGOGY_RELEASE,
   V1_PEDAGOGICAL_THEORY,
@@ -57,7 +61,7 @@ function observation(
   id: `observation-${string}`,
   observedAt: string,
   node: NodeId,
-  payload: Observation["payload"],
+  payload: NativeInterpretablePayload,
 ): Observation {
   return interpretObservation(
     {

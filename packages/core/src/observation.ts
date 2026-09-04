@@ -103,6 +103,7 @@ export type ObservationPayload =
   | SrsPayload
   | ArtifactPayload
   | ExperiencePayload;
+export type NativeInterpretablePayload = Exclude<ObservationPayload, ArtifactPayload>;
 
 export type ObservationSubjectFor<Payload extends ObservationPayload> =
   Payload extends ExperiencePayload ? ExperienceObservationSubject : ObservationSubject;
@@ -142,10 +143,10 @@ function evidence(payload: LessonPayload | QuizPayload): ObservationInterpretati
   };
 }
 
-/** The v1 mapping is total over the v1 native-payload vocabulary. */
+/** The v1 native mapping is total; Artifact submissions require evaluator judgement. */
 export function interpretPayload(
   theory: PedagogicalTheory,
-  payload: ObservationPayload,
+  payload: NativeInterpretablePayload,
 ): ObservationInterpretationValue {
   assertSupportedPedagogicalTheory(theory);
   if (payload.vocabularyVersion !== theory.payloadMapping.vocabularyVersion)
@@ -156,8 +157,6 @@ export function interpretPayload(
     case "lesson":
     case "quiz":
       return evidence(payload);
-    case "artifact":
-      throw new Error("Artifact payloads require evaluator interpretation");
     case "srs":
       return {
         kind: "evidence",
@@ -171,7 +170,7 @@ export function interpretPayload(
   }
 }
 
-export function interpretObservation<Payload extends ObservationPayload>(
+export function interpretObservation<Payload extends NativeInterpretablePayload>(
   envelope: ObservationEnvelope<ObservationSubjectFor<Payload>>,
   payload: Payload,
   theory: {

@@ -47,6 +47,7 @@ export {
   type Grade,
   type LessonPayload,
   type MissionPayload,
+  type NativeInterpretablePayload,
   type Observation,
   type ObservationEnvelope,
   type ObservationId,

@@ -16,6 +16,7 @@ import {
   sessionPedagogyMetadata,
   type AssociationCommit,
   type ExactPedagogyRelease,
+  type NativeInterpretablePayload,
   type Observation,
   type LearnerState,
   type PedagogicalTheory,
@@ -94,7 +95,7 @@ function pedagogySource(releases: readonly PedagogyRelease[]) {
 function observation(
   id: `observation-${string}`,
   observedAt: string,
-  payload: Observation["payload"],
+  payload: NativeInterpretablePayload,
   theory: ResolvedTheory,
   supersedes?: Observation["supersedes"],
 ): Observation {
