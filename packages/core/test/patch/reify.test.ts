@@ -32,6 +32,7 @@ test("reification creates an independent root from exactly the View result", () 
     ref: ref("patch-foundation", "1.0.0", "1"),
     bases: [],
     lock: { entries: [] },
+    materials: [],
     delta: {
       operations: [
         { kind: "add-node", node: { id: "node-foundation" } },
@@ -51,6 +52,7 @@ test("reification creates an independent root from exactly the View result", () 
     ref: ref("patch-source", "2.0.0", "2"),
     bases: [hubBase(foundation.ref).requirement],
     lock: { entries: [hubBase(foundation.ref)] },
+    materials: [],
     delta: {
       operations: [
         { kind: "add-node", node: { id: "node-source" } },
@@ -114,6 +116,7 @@ test("reification creates an independent root from exactly the View result", () 
     bases: reified.bases,
     lock: reified.lock,
     delta: reified.delta,
+    materials: reified.materials,
     metadata: reified.metadata,
   };
   const resolvedTarget = resolvePatchBundle({
@@ -166,6 +169,7 @@ test("non-reification Citations never become Patch dependencies", () => {
     ref: ref("patch-citing", "1.0.0", "4"),
     bases: [],
     lock: { entries: [] },
+    materials: [],
     delta: { operations: [{ kind: "add-node", node: { id: "node-citing" } }] },
     metadata: {
       properties: { "patch:title": "Citing" },

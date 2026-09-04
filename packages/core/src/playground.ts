@@ -13,7 +13,7 @@ export type SpacedReviewGradeId = `srs-grade-${string}`;
 export interface SpacedReviewCard {
   readonly id: SpacedReviewCardId;
   readonly createdAt: string;
-  readonly status: "pending" | "approved";
+  readonly status: "pending" | "approved" | "declined";
   readonly format: "recall" | "application";
   /** Cards in the same category may be confusable and are not queued contiguously. */
   readonly category: string;
@@ -46,20 +46,38 @@ export interface ContextInjection {
 
 /** Closed live reads available to spaced review; none can mutate Learner state. */
 export interface SpacedReviewInstruments {
-  competency(): LearnerState;
-  trail(node: NodeId): TrailResult;
-  content(node: NodeId): ReturnType<typeof openPersonalLesson>;
+  competency(): Promise<LearnerState>;
+  trail(node: NodeId): Promise<TrailResult>;
+  content(node: NodeId): Promise<ReturnType<typeof openPersonalLesson>>;
+}
+
+export interface SpacedReviewCardEdit {
+  readonly format: SpacedReviewCard["format"];
+  readonly category: string;
+  readonly front: string;
+  readonly back: string;
+}
+
+export interface ReviewGradeDecision {
+  readonly grade: Grade;
+  readonly exactMatch: boolean;
+  readonly timeNudge?: "fast" | "slow";
 }
 
 export interface SpacedReviewPlayground {
-  readonly proposeCard: (card: SpacedReviewCard) => void;
-  readonly approveCard: (id: SpacedReviewCardId) => SpacedReviewCard;
-  readonly card: (id: SpacedReviewCardId) => SpacedReviewCard | undefined;
-  readonly cards: () => readonly SpacedReviewCard[];
-  readonly appendGrade: (grade: SpacedReviewGrade) => void;
-  readonly grades: () => readonly SpacedReviewGrade[];
-  readonly appendObservation: (observation: Observation) => void;
-  readonly dueQueue: (now: string, cap: number) => readonly DueCard[];
+  readonly proposeCard: (card: SpacedReviewCard) => Promise<void>;
+  readonly approveCard: (id: SpacedReviewCardId) => Promise<SpacedReviewCard>;
+  readonly editCard: (
+    id: SpacedReviewCardId,
+    edit: SpacedReviewCardEdit,
+  ) => Promise<SpacedReviewCard>;
+  readonly declineCard: (id: SpacedReviewCardId) => Promise<SpacedReviewCard>;
+  readonly card: (id: SpacedReviewCardId) => Promise<SpacedReviewCard | undefined>;
+  readonly cards: () => Promise<readonly SpacedReviewCard[]>;
+  readonly appendGrade: (grade: SpacedReviewGrade) => Promise<void>;
+  readonly grades: () => Promise<readonly SpacedReviewGrade[]>;
+  readonly appendObservation: (observation: Observation) => Promise<void>;
+  readonly dueQueue: (now: string, cap: number) => Promise<readonly DueCard[]>;
   readonly instruments: SpacedReviewInstruments;
   readonly injectContext: (injection: ContextInjection) => void;
 }
@@ -121,7 +139,7 @@ export function parseSpacedReviewCard(value: unknown): SpacedReviewCard {
   if (!isCardId(card.id)) throw new Error("invalid spaced-review card id");
   if (typeof card.createdAt !== "string") throw new Error("invalid spaced-review card createdAt");
   assertTimestamp(card.createdAt, "Card createdAt");
-  if (card.status !== "pending" && card.status !== "approved")
+  if (card.status !== "pending" && card.status !== "approved" && card.status !== "declined")
     throw new Error("invalid spaced-review card status");
   if (card.format !== "recall" && card.format !== "application")
     throw new Error("invalid spaced-review card format");
@@ -182,6 +200,33 @@ export function parseSpacedReviewGrade(value: unknown): SpacedReviewGrade {
     latencyMs: grade.latencyMs,
     grade: grade.grade,
   };
+}
+
+const FAST_REVIEW_MS = 3_000;
+const SLOW_REVIEW_MS = 15_000;
+
+/** Exact answers need no learner judgement; a good judgement is nudged by retrieval time. */
+export function decideReviewGrade(input: {
+  readonly answer: string;
+  readonly expected: string;
+  readonly latencyMs: number;
+  readonly selfGrade?: Grade;
+}): ReviewGradeDecision {
+  if (input.answer.trim() === "") throw new Error("attempt retrieval before revealing the answer");
+  if (!Number.isFinite(input.latencyMs) || input.latencyMs < 0)
+    throw new Error("review latency must be a non-negative finite number");
+  const exactMatch = input.answer.trim() === input.expected.trim();
+  let base: Grade;
+  if (exactMatch) base = "good";
+  else {
+    if (input.selfGrade === undefined)
+      throw new Error("a non-matching answer requires a self-grade");
+    base = input.selfGrade;
+  }
+  if (base !== "good") return { grade: base, exactMatch };
+  if (input.latencyMs <= FAST_REVIEW_MS) return { grade: "easy", exactMatch, timeNudge: "fast" };
+  if (input.latencyMs >= SLOW_REVIEW_MS) return { grade: "hard", exactMatch, timeNudge: "slow" };
+  return { grade: "good", exactMatch };
 }
 
 /** Derive the capped due queue from grade history, round-robin across card categories. */
@@ -250,37 +295,56 @@ export function spacedReviewPlayground(input: {
   readonly injectContext: (injection: ContextInjection) => void;
 }): SpacedReviewPlayground {
   return {
-    proposeCard(card) {
+    async proposeCard(card) {
       const parsed = parseSpacedReviewCard(card);
       if (parsed.status !== "pending") throw new Error("a proposed card must be pending");
-      if (input.store.readSpacedReviewCard(input.scope, parsed.id) !== undefined)
+      if ((await input.store.readSpacedReviewCard(input.scope, parsed.id)) !== undefined)
         throw new Error(`spaced-review card ${parsed.id} already exists`);
-      input.store.saveSpacedReviewCard(input.scope, parsed);
+      await input.store.saveSpacedReviewCard(input.scope, parsed);
     },
-    approveCard(id) {
-      const card = input.store.readSpacedReviewCard(input.scope, id);
+    async approveCard(id) {
+      const card = await input.store.readSpacedReviewCard(input.scope, id);
       if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
+      if (card.status !== "pending") throw new Error(`spaced-review card ${id} is not pending`);
       const approved = parseSpacedReviewCard({ ...card, status: "approved" });
-      input.store.saveSpacedReviewCard(input.scope, approved);
+      await input.store.saveSpacedReviewCard(input.scope, approved);
       return approved;
+    },
+    async editCard(id, edit) {
+      const card = await input.store.readSpacedReviewCard(input.scope, id);
+      if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
+      if (card.status !== "pending") throw new Error(`spaced-review card ${id} is not pending`);
+      const edited = parseSpacedReviewCard({ ...card, ...edit });
+      await input.store.saveSpacedReviewCard(input.scope, edited);
+      return edited;
+    },
+    async declineCard(id) {
+      const card = await input.store.readSpacedReviewCard(input.scope, id);
+      if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
+      if (card.status !== "pending") throw new Error(`spaced-review card ${id} is not pending`);
+      const declined = parseSpacedReviewCard({ ...card, status: "declined" });
+      await input.store.saveSpacedReviewCard(input.scope, declined);
+      return declined;
     },
     card: (id) => input.store.readSpacedReviewCard(input.scope, id),
     cards: () => input.store.listSpacedReviewCards(input.scope),
-    appendGrade(grade) {
+    async appendGrade(grade) {
       const parsed = parseSpacedReviewGrade(grade);
-      if (input.store.readSpacedReviewCard(input.scope, parsed.cardId)?.status !== "approved")
+      if (
+        (await input.store.readSpacedReviewCard(input.scope, parsed.cardId))?.status !== "approved"
+      )
         throw new Error(`grade targets an unapproved spaced-review card ${parsed.cardId}`);
-      input.store.appendSpacedReviewGrade(input.scope, parsed);
+      await input.store.appendSpacedReviewGrade(input.scope, parsed);
     },
     grades: () => input.store.readSpacedReviewGrades(input.scope),
     appendObservation: (observation) => input.trail.appendObservation(input.scope, observation),
-    dueQueue: (now, cap) =>
-      spacedReviewDueQueue({
-        cards: input.store.listSpacedReviewCards(input.scope),
-        grades: input.store.readSpacedReviewGrades(input.scope),
-        now,
-        cap,
-      }),
+    async dueQueue(now, cap) {
+      const [cards, grades] = await Promise.all([
+        input.store.listSpacedReviewCards(input.scope),
+        input.store.readSpacedReviewGrades(input.scope),
+      ]);
+      return spacedReviewDueQueue({ cards, grades, now, cap });
+    },
     instruments: input.instruments,
     injectContext: input.injectContext,
   };

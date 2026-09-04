@@ -34,6 +34,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget): Patch
     bases: [],
     lock: { entries: [] },
     delta: { operations },
+    materials: view.materials.map(({ source: _source, ...material }) => material),
     metadata: {
       ...target.metadata,
       citations: [

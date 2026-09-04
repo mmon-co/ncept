@@ -54,9 +54,12 @@ export interface LessonPayload extends NativePayloadBase {
 export interface QuizPayload extends NativePayloadBase {
   readonly kind: "quiz";
   readonly itemId: string;
+  /** The selected option label, or the literal skip label. */
   readonly response: string;
   readonly correct: boolean;
   readonly assistance: "none" | "hint";
+  readonly skipped?: boolean;
+  readonly comment?: string;
   readonly transfer?: boolean;
   readonly mistake?: "slip" | "bug" | "misconception";
   readonly misconception?: string;
@@ -76,14 +79,7 @@ export interface SrsPayload extends NativePayloadBase {
 export interface ArtifactPayload extends NativePayloadBase {
   readonly kind: "artifact";
   readonly artifactId: string;
-  readonly criterion: string;
   readonly submission: string;
-  readonly result: "demonstrated" | "not-demonstrated";
-  readonly assistance: "none" | "hint";
-  readonly transfer?: boolean;
-  readonly mistake?: "slip" | "bug" | "misconception";
-  readonly misconception?: string;
-  readonly confusedWith?: NodeId;
 }
 
 export interface MissionPayload extends NativePayloadBase {
@@ -107,6 +103,7 @@ export type ObservationPayload =
   | SrsPayload
   | ArtifactPayload
   | ExperiencePayload;
+export type NativeInterpretablePayload = Exclude<ObservationPayload, ArtifactPayload>;
 
 export type ObservationSubjectFor<Payload extends ObservationPayload> =
   Payload extends ExperiencePayload ? ExperienceObservationSubject : ObservationSubject;
@@ -122,13 +119,12 @@ export interface ObservationInterpretation {
 export interface Observation {
   readonly envelope: ObservationEnvelope;
   readonly payload: ObservationPayload;
-  readonly interpretation: ObservationInterpretation;
+  /** Absent while a native payload is waiting for the evaluator sweep. */
+  readonly interpretation?: ObservationInterpretation;
   readonly supersedes?: ObservationId;
 }
 
-function evidence(
-  payload: LessonPayload | QuizPayload | ArtifactPayload,
-): ObservationInterpretationValue {
+function evidence(payload: LessonPayload | QuizPayload): ObservationInterpretationValue {
   const demonstrated =
     payload.kind === "quiz" ? payload.correct : payload.result === "demonstrated";
   if (!demonstrated)
@@ -147,20 +143,25 @@ function evidence(
   };
 }
 
-/** The v1 mapping is total over the v1 native-payload vocabulary. */
+function dynamicPayloadKind(payload: unknown): unknown {
+  return typeof payload === "object" && payload !== null ? Reflect.get(payload, "kind") : undefined;
+}
+
+/** The v1 native mapping is total; Artifact submissions require evaluator judgement. */
 export function interpretPayload(
   theory: PedagogicalTheory,
-  payload: ObservationPayload,
+  payload: NativeInterpretablePayload,
 ): ObservationInterpretationValue {
   assertSupportedPedagogicalTheory(theory);
   if (payload.vocabularyVersion !== theory.payloadMapping.vocabularyVersion)
     throw new Error(
       `payload vocabulary ${payload.vocabularyVersion} is not supported by theory vocabulary ${theory.payloadMapping.vocabularyVersion}`,
     );
+  if (dynamicPayloadKind(payload) === "artifact")
+    throw new Error("Artifact payloads require evaluator interpretation");
   switch (payload.kind) {
     case "lesson":
     case "quiz":
-    case "artifact":
       return evidence(payload);
     case "srs":
       return {
@@ -172,10 +173,12 @@ export function interpretPayload(
       return { kind: "experience", experience: "mission" };
     case "preferences":
       return { kind: "experience", experience: "preferences" };
+    default:
+      throw new Error(`Unsupported native payload kind ${String(dynamicPayloadKind(payload))}`);
   }
 }
 
-export function interpretObservation<Payload extends ObservationPayload>(
+export function interpretObservation<Payload extends NativeInterpretablePayload>(
   envelope: ObservationEnvelope<ObservationSubjectFor<Payload>>,
   payload: Payload,
   theory: {

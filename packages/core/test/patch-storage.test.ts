@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { resolvePatchBundle, type RootPatchDefinition } from "../src/patch";
 import {
   addNotebookLesson,
+  attachAuthoredDocumentMaterial,
   createAuthoredBasedPatch,
   createAuthoredReifiedPatch,
   createAuthoredRootPatch,
@@ -79,13 +80,25 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   );
   expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
 
-  const source = resolvePatchBundle({ terminal: rootRevision.ref, revisions: [rootRevision] });
+  const materialRevision = attachAuthoredDocumentMaterial(dd, main, root.identity, {
+    id: "material-triangles",
+    node: "node-triangles",
+    title: "Triangle worked example",
+    body: "Construct a triangle from three non-collinear points.",
+  });
+  expect(materialRevision.ref.commit).not.toBe(rootRevision.ref.commit);
+  expect(materialRevision.materials).toHaveLength(1);
+
+  const source = resolvePatchBundle({
+    terminal: materialRevision.ref,
+    revisions: [materialRevision],
+  });
   const reified = createAuthoredReifiedPatch(dd, main, {
     view: evaluateView(source, {
       id: "view-geometry",
       name: "Geometry",
       createdAt: "2026-09-02T00:00:00.000Z",
-      query: { provenance: rootRevision.ref },
+      query: { provenance: materialRevision.ref },
       metadata: {},
     }),
     metadata: { properties: { "patch:title": "Geometry copy" }, citations: [] },
@@ -93,12 +106,19 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, reified.identity).ref.commit).toBe(
     head(join(patches, "authored", reified.identity)),
   );
+  expect(readAuthoredPatchRevision(dd, reified.identity).materials[0]?.id).toBe(
+    "material-triangles",
+  );
   expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
 
-  reviseAuthoredRootPatch(dd, root.identity, { ...definition, title: "Revised geometry" });
-  const revised = readAuthoredPatchRevision(dd, root.identity).ref;
-  expect(revised.commit).toBe(head(join(patches, "authored", root.identity)));
-  expect(revised.commit).not.toBe(rootRevision.ref.commit);
+  reviseAuthoredRootPatch(dd, main, root.identity, {
+    ...definition,
+    title: "Revised geometry",
+  });
+  const revisedPatch = readAuthoredPatchRevision(dd, root.identity);
+  expect(revisedPatch.ref.commit).toBe(head(join(patches, "authored", root.identity)));
+  expect(revisedPatch.ref.commit).not.toBe(rootRevision.ref.commit);
+  expect(revisedPatch.materials[0]?.id).toBe("material-triangles");
 
   const notebook = addNotebookLesson(dd, main, {
     id: "node-my-proof",

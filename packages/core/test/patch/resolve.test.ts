@@ -6,6 +6,7 @@ import {
   type LockedBase,
   type PatchRevision,
 } from "../../src/patch";
+import { materialBodyDigest } from "../../src/patch-storage";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
@@ -17,10 +18,50 @@ function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
     },
     bases: [],
     lock: { entries: [] },
+    materials: [],
     metadata: { properties: { "patch:title": "Test" }, citations: [] },
     delta: { operations },
   };
 }
+
+test("Patch Material attachments are single-Node, known-Node and digest exact", () => {
+  const body = "A worked example.";
+  const valid: PatchRevision = {
+    ...root([{ kind: "add-node", node: { id: "node-a" } }]),
+    materials: [
+      {
+        kind: "document",
+        id: "material-example",
+        node: "node-a",
+        title: "Example",
+        body,
+        digest: materialBodyDigest(body),
+      },
+    ],
+  };
+  expect(
+    resolvePatchBundle({ terminal: valid.ref, revisions: [valid] }).materials[0],
+  ).toMatchObject({
+    id: "material-example",
+    node: "node-a",
+    source: valid.ref,
+  });
+
+  function malformed(property: string, value: unknown): PatchRevision {
+    const revision = structuredClone(valid);
+    const material = revision.materials[0];
+    if (material === undefined) throw new Error("test Material missing");
+    Reflect.set(material, property, value);
+    return revision;
+  }
+  for (const revision of [
+    malformed("node", ["node-a", "node-b"]),
+    malformed("node", "node-unknown"),
+    malformed("digest", `sha256:${"0".repeat(64)}`),
+    malformed("title", ""),
+  ])
+    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow();
+});
 
 function ref(identity: `patch-${string}`, version: string, fill: string): ExactPatchRef {
   return {
@@ -57,6 +98,7 @@ function based(
     ref: exact,
     bases: bases.map((base) => base.requirement),
     lock: { entries: bases },
+    materials: [],
     metadata: { properties: { "patch:title": exact.identity }, citations: [] },
     delta: { operations },
   };

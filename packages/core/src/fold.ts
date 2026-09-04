@@ -1,10 +1,11 @@
 import {
   assertAssociationCompatibility,
+  selectedObservationInterpretation,
   type AssociationCommit,
   type ParameterOverride,
 } from "./association";
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
-import { interpretPayload, type Observation, type ObservationId } from "./observation";
+import type { Observation, ObservationId } from "./observation";
 import {
   assertSupportedPedagogicalTheory,
   contentDigest,
@@ -174,8 +175,11 @@ export function foldLearnerState(input: {
   for (const observation of observations.values()) {
     const mapping = mappings.get(observation.envelope.id);
     if (mapping === undefined) continue;
-    const interpretation = interpretPayload(effectiveTheory, observation.payload);
-    if (interpretation.kind !== "evidence") continue;
+    const interpretation = selectedObservationInterpretation(input.association, observation, {
+      ...input.theory,
+      theory: effectiveTheory,
+    });
+    if (interpretation?.kind !== "evidence") continue;
     const effect = parameters.evidence[interpretation.evidence];
     const supportWeight = interpretation.support === "assisted" ? parameters.assistedWeight : 1;
     for (const target of mapping.targets) {

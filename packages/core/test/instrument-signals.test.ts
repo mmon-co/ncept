@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import type { AssociationCommit } from "@concept/core/association";
 import type { TrailSnapshot } from "@concept/core/fold";
 import { signals, type AggregatedTrail } from "@concept/core/instrument-signals";
-import { interpretObservation, type Observation } from "@concept/core/observation";
+import {
+  interpretObservation,
+  type NativeInterpretablePayload,
+  type Observation,
+} from "@concept/core/observation";
 import {
   PLATFORM_PEDAGOGY_RELEASE,
   V1_PEDAGOGICAL_THEORY,
@@ -27,6 +31,7 @@ const patch: PatchRevision = {
   ref: patchRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [
@@ -56,7 +61,7 @@ function observation(
   id: `observation-${string}`,
   observedAt: string,
   node: NodeId,
-  payload: Observation["payload"],
+  payload: NativeInterpretablePayload,
 ): Observation {
   return interpretObservation(
     {
@@ -77,6 +82,7 @@ function aggregate(id: string, observations: readonly Observation[]): Aggregated
     createdAt: "2026-09-02T12:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((record) => ({
       observation: record.envelope.id,
       targets: [

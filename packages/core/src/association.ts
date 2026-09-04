@@ -8,7 +8,12 @@ import {
   type PedagogicalTheoryParameters,
   type ResolvedTheory,
 } from "./pedagogy";
-import type { ObservationId } from "./observation";
+import {
+  interpretPayload,
+  type Observation,
+  type ObservationId,
+  type ObservationInterpretation,
+} from "./observation";
 import type { ProfileScope } from "./scope";
 import type { AssociationStore } from "./storage";
 
@@ -44,6 +49,11 @@ export interface ObservationAssociation {
   }[];
 }
 
+export interface ObservationInterpretationSelection {
+  readonly observation: ObservationId;
+  readonly interpretation: ObservationInterpretation;
+}
+
 export interface AssociationCommit {
   readonly id: AssociationCommitId;
   readonly parent?: AssociationCommitId;
@@ -55,6 +65,25 @@ export interface AssociationCommit {
   };
   readonly parameterOverride?: ParameterOverride;
   readonly associations: readonly ObservationAssociation[];
+  /** Evaluator judgements selected by this immutable interpretation revision. */
+  readonly interpretations: readonly ObservationInterpretationSelection[];
+}
+
+/** Resolve this Association revision's selected judgement, then the theory's native mapping. */
+export function selectedObservationInterpretation(
+  association: AssociationCommit,
+  observation: Observation,
+  theory: ResolvedTheory,
+) {
+  const selected = association.interpretations.find(
+    (candidate) => candidate.observation === observation.envelope.id,
+  )?.interpretation;
+  if (selected?.theoryDigest === theory.digest) return selected.value;
+  if (observation.interpretation?.theoryDigest === theory.digest)
+    return observation.interpretation.value;
+  return observation.payload.kind === "artifact"
+    ? undefined
+    : interpretPayload(theory.theory, observation.payload);
 }
 
 /** Validate the exact Patch and, when supplied, theory inputs named by a commit. */
@@ -88,7 +117,7 @@ export function parameterOverride(input: {
 }
 
 /** Persist an accepted parameter proposal as a child of the current Association commit. */
-export function acceptParameterOverride(
+export async function acceptParameterOverride(
   store: AssociationStore,
   scope: ProfileScope,
   input: {
@@ -97,8 +126,8 @@ export function acceptParameterOverride(
     readonly createdAt: string;
     readonly parameters: PedagogicalTheoryParameterOverride;
   },
-): AssociationCommit {
-  const current = store.currentAssociation(scope);
+): Promise<AssociationCommit> {
+  const current = await store.currentAssociation(scope);
   if (current === undefined)
     throw new Error("A current Association commit is required to accept a parameter override");
   const commit: AssociationCommit = {
@@ -112,7 +141,7 @@ export function acceptParameterOverride(
       parameters: input.parameters,
     }),
   };
-  store.commitAssociation(scope, commit);
-  store.setCurrentAssociation(scope, commit.id);
+  await store.commitAssociation(scope, commit);
+  await store.setCurrentAssociation(scope, commit.id);
   return commit;
 }

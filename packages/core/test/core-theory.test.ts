@@ -6,15 +6,18 @@ import {
   assessLearnerStateStaleness,
   contentDigest,
   currentExperiences,
+  decideReviewGrade,
   evaluateView,
   foldLearnerState,
   interpretObservation,
+  interpretPayload,
   pedagogicalTheoryDigest,
   resolvePedagogy,
   spacedReviewPlayground,
   sessionPedagogyMetadata,
   type AssociationCommit,
   type ExactPedagogyRelease,
+  type NativeInterpretablePayload,
   type Observation,
   type LearnerState,
   type PedagogicalTheory,
@@ -39,6 +42,7 @@ const patch: PatchRevision = {
   ref: patchRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: { "patch:title": "Core story" }, citations: [] },
   delta: {
     operations: [
@@ -92,7 +96,7 @@ function pedagogySource(releases: readonly PedagogyRelease[]) {
 function observation(
   id: `observation-${string}`,
   observedAt: string,
-  payload: Observation["payload"],
+  payload: NativeInterpretablePayload,
   theory: ResolvedTheory,
   supersedes?: Observation["supersedes"],
 ): Observation {
@@ -128,6 +132,7 @@ function association(
     createdAt: "2026-09-01T13:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((record) => ({
       observation: record.envelope.id,
       targets: [{ patch: patchRef, node: "node-target" }],
@@ -135,14 +140,14 @@ function association(
   };
 }
 
-test("Core stories 1-5 compose through the local principal/Profile store", () => {
+test("Core stories 1-5 compose through the local principal/Profile store", async () => {
   const store = new LocalDirectoryCoreStore(tempDataDir());
   const resolved = resolvePedagogy(
     pedagogySource([PLATFORM_PEDAGOGY_RELEASE]),
     PLATFORM_PEDAGOGY_RELEASE.ref,
   );
-  store.selectPedagogy(scope, resolved.release);
-  expect(store.selectedPedagogy(scope)).toEqual(resolved.release);
+  await store.selectPedagogy(scope, resolved.release);
+  expect(await store.selectedPedagogy(scope)).toEqual(resolved.release);
   expect(sessionPedagogyMetadata(resolved)).toEqual({
     pedagogyRelease: resolved.release,
     theoryDigest: resolved.theory.digest,
@@ -158,13 +163,13 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     },
     metadata: {},
   };
-  store.saveView(scope, view);
-  expect(evaluateView(graph, required(store.readView(scope, view.id), "saved View"))).toMatchObject(
-    {
-      nodes: [{ id: "node-prerequisite" }, { id: "node-target" }],
-      edges: [{ id: "edge-dependency" }],
-    },
-  );
+  await store.saveView(scope, view);
+  expect(
+    evaluateView(graph, required(await store.readView(scope, view.id), "saved View")),
+  ).toMatchObject({
+    nodes: [{ id: "node-prerequisite" }, { id: "node-target" }],
+    edges: [{ id: "edge-dependency" }],
+  });
 
   const firstMission = observation(
     "observation-mission-one",
@@ -215,7 +220,7 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     resolved.theory,
   );
   for (const record of [firstMission, currentMission, preferences, lesson])
-    store.appendObservation(scope, record);
+    await store.appendObservation(scope, record);
 
   const injected: string[] = [];
   let liveState: LearnerState | undefined;
@@ -224,9 +229,9 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     trail: store,
     store,
     instruments: {
-      competency: () => required(liveState, "live competency"),
-      trail: (node) => ({ kind: "missing-node", node }),
-      content: (node) => ({
+      competency: async () => required(liveState, "live competency"),
+      trail: async (node) => ({ kind: "missing-node", node }),
+      content: async (node) => ({
         node,
         label: "Target",
         content: "Differentiate a polynomial",
@@ -256,30 +261,37 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
       back: "3x + 3",
     },
   ]) {
-    playground.proposeCard({
+    await playground.proposeCard({
       ...card,
       createdAt: "2026-09-01T12:00:00.000Z",
       status: "pending",
       format: "recall",
       associations: [{ patch: patchRef, node: "node-target" }],
     });
-    playground.approveCard(card.id);
+    await playground.approveCard(card.id);
   }
-  playground.proposeCard({
+  await playground.proposeCard({
     id: "srs-card-pending",
     createdAt: "2026-09-01T12:00:00.000Z",
     status: "pending",
-    format: "application",
+    format: "recall",
     category: "calculus",
     front: "Apply the power rule",
     back: "A worked transfer",
     associations: [{ patch: patchRef, node: "node-target" }],
   });
-  expect(playground.dueQueue("2026-09-01T12:30:00.000Z", 3).map(({ card }) => card.id)).toEqual([
-    "srs-card-linearity",
-    "srs-card-derivative",
-    "srs-card-integral",
-  ]);
+  expect(
+    await playground.editCard("srs-card-pending", {
+      format: "application",
+      category: "calculus",
+      front: "Apply the power rule to a fresh polynomial",
+      back: "A worked transfer",
+    }),
+  ).toMatchObject({ status: "pending", format: "application" });
+  expect((await playground.declineCard("srs-card-pending")).status).toBe("declined");
+  expect(
+    (await playground.dueQueue("2026-09-01T12:30:00.000Z", 3)).map(({ card }) => card.id),
+  ).toEqual(["srs-card-linearity", "srs-card-derivative", "srs-card-integral"]);
 
   const review = observation(
     "observation-review",
@@ -302,36 +314,50 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     latencyMs: 1200,
     grade: "good" as const,
   };
-  playground.appendGrade(grade);
-  playground.appendObservation(review);
-  expect(() => playground.appendGrade(grade)).toThrow("already exists");
+  await playground.appendGrade(grade);
+  await playground.appendObservation(review);
+  expect(playground.appendGrade(grade)).rejects.toThrow("already exists");
   playground.injectContext({ mode: "append", content: "review complete" });
-  expect(playground.grades()).toEqual([grade]);
-  expect(store.listSpacedReviewCards({ ...scope, profile: "profile-scratch" })).toEqual([]);
+  expect(await playground.grades()).toEqual([grade]);
+  expect(() => decideReviewGrade({ answer: "  ", expected: "3x²", latencyMs: 1_200 })).toThrow(
+    "attempt retrieval before revealing",
+  );
+  expect(decideReviewGrade({ answer: "3x²", expected: "3x²", latencyMs: 1_200 })).toEqual({
+    grade: "easy",
+    exactMatch: true,
+    timeNudge: "fast",
+  });
+  expect(
+    decideReviewGrade({ answer: "3 x²", expected: "3x²", latencyMs: 18_000, selfGrade: "good" }),
+  ).toEqual({ grade: "hard", exactMatch: false, timeNudge: "slow" });
+  expect(await store.listSpacedReviewCards({ ...scope, profile: "profile-scratch" })).toEqual([]);
   expect(injected).toEqual(["review complete"]);
 
   expect(
-    currentExperiences(store.readTrail(scope).observations).map(({ envelope }) => envelope.id),
+    currentExperiences((await store.readTrail(scope)).observations).map(
+      ({ envelope }) => envelope.id,
+    ),
   ).toEqual(["observation-mission-two", "observation-preferences"]);
   expect(
-    store.readTrail({ principal: "principal-alice", profile: "profile-scratch" }).observations,
+    (await store.readTrail({ principal: "principal-alice", profile: "profile-scratch" }))
+      .observations,
   ).toHaveLength(0);
 
   const firstAssociation = association("association-first", resolved.theory, [lesson, review]);
-  store.commitAssociation(scope, firstAssociation);
-  store.setCurrentAssociation(scope, firstAssociation.id);
-  expect(() => store.commitAssociation(scope, firstAssociation)).toThrow();
+  await store.commitAssociation(scope, firstAssociation);
+  await store.setCurrentAssociation(scope, firstAssociation.id);
+  expect(store.commitAssociation(scope, firstAssociation)).rejects.toThrow();
   const firstState = foldLearnerState({
     graph,
-    trail: store.readTrail(scope),
-    association: required(store.currentAssociation(scope), "current Association"),
+    trail: await store.readTrail(scope),
+    association: required(await store.currentAssociation(scope), "current Association"),
     theory: resolved.theory,
     evaluatedAt: "2026-09-02T12:30:00.000Z",
   });
   expect(firstState.nodes["node-target"]?.estimate).toBeGreaterThan(0.5);
   liveState = firstState;
-  expect(playground.instruments.competency()).toBe(firstState);
-  expect(playground.instruments.content("node-target").contentSource).toEqual(patchRef);
+  expect(await playground.instruments.competency()).toBe(firstState);
+  expect((await playground.instruments.content("node-target")).contentSource).toEqual(patchRef);
 
   const changedTheory: PedagogicalTheory = {
     ...V1_PEDAGOGICAL_THEORY,
@@ -362,11 +388,11 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
     [lesson, review],
     firstAssociation.id,
   );
-  store.commitAssociation(scope, refoldCommit);
-  store.setCurrentAssociation(scope, refoldCommit.id);
+  await store.commitAssociation(scope, refoldCommit);
+  await store.setCurrentAssociation(scope, refoldCommit.id);
   const refolded = foldLearnerState({
     graph,
-    trail: store.readTrail(scope),
+    trail: await store.readTrail(scope),
     association: refoldCommit,
     theory: changed.theory,
     evaluatedAt: "2026-09-02T12:30:00.000Z",
@@ -379,7 +405,7 @@ test("Core stories 1-5 compose through the local principal/Profile store", () =>
       patchRevision: patchRef,
       associationCommit: refoldCommit.id,
       theoryDigest: changed.theory.digest,
-      trailRevision: store.readTrail(scope).revision,
+      trailRevision: (await store.readTrail(scope)).revision,
     }).staleness,
   ).toEqual({ stale: true, reasons: ["association", "theory"] });
 });
@@ -419,6 +445,17 @@ test("Pedagogy overlays resolve typed Skill operations over content-derived root
   expect(resolved.skillCatalog.bundles.find(({ name }) => name === "lesson")).toEqual(replacement);
   expect(resolved.skillCatalog.bundles.some(({ name }) => name === "probing")).toBeFalse();
   expect(resolved.skillCatalog.bundles.at(-1)).toEqual(addition);
+});
+
+test("native interpretation rejects dynamically decoded Artifact and unknown payloads", () => {
+  const interpretDynamic = (payload: unknown) =>
+    Reflect.apply(interpretPayload, undefined, [V1_PEDAGOGICAL_THEORY, payload]);
+  expect(() =>
+    interpretDynamic({ kind: "artifact", vocabularyVersion: 1, artifactId: "artifact-one" }),
+  ).toThrow("Artifact payloads require evaluator interpretation");
+  expect(() => interpretDynamic({ kind: "foreign", vocabularyVersion: 1 })).toThrow(
+    "Unsupported native payload kind foreign",
+  );
 });
 
 test("built-in interpretation and folding reject unsupported Pedagogical-theory versions", () => {
@@ -503,7 +540,7 @@ test("built-in interpretation and folding reject unsupported Pedagogical-theory 
   ).toThrow("unsupported Pedagogical-theory implementation foreign-fold-v2");
 });
 
-test("an accepted Profile parameter override creates a distinguishable refold without rewriting history", () => {
+test("an accepted Profile parameter override creates a distinguishable refold without rewriting history", async () => {
   const store = new LocalDirectoryCoreStore(tempDataDir());
   const resolved = resolvePedagogy(
     pedagogySource([PLATFORM_PEDAGOGY_RELEASE]),
@@ -522,11 +559,11 @@ test("an accepted Profile parameter override creates a distinguishable refold wi
     },
     resolved.theory,
   );
-  store.appendObservation(scope, lesson);
+  await store.appendObservation(scope, lesson);
   const original = association("association-before-override", resolved.theory, [lesson]);
-  store.commitAssociation(scope, original);
-  store.setCurrentAssociation(scope, original.id);
-  const trailBefore = store.readTrail(scope);
+  await store.commitAssociation(scope, original);
+  await store.setCurrentAssociation(scope, original.id);
+  const trailBefore = await store.readTrail(scope);
   const before = foldLearnerState({
     graph,
     trail: trailBefore,
@@ -537,17 +574,17 @@ test("an accepted Profile parameter override creates a distinguishable refold wi
 
   const invalidVocabularyOverride: PedagogicalTheoryParameterOverride = {};
   Reflect.set(invalidVocabularyOverride, "vocabularyVersion", 2);
-  expect(() =>
+  expect(
     acceptParameterOverride(store, scope, {
       associationId: "association-invalid-vocabulary-override",
       overrideId: "parameter-override-invalid-vocabulary",
       createdAt: "2026-09-02T12:30:00.000Z",
       parameters: invalidVocabularyOverride,
     }),
-  ).toThrow("cannot change payload vocabulary semantics");
-  expect(store.currentAssociation(scope)?.id).toBe(original.id);
+  ).rejects.toThrow("cannot change payload vocabulary semantics");
+  expect((await store.currentAssociation(scope))?.id).toBe(original.id);
 
-  const accepted = acceptParameterOverride(store, scope, {
+  const accepted = await acceptParameterOverride(store, scope, {
     associationId: "association-after-override",
     overrideId: "parameter-override-slower-evidence",
     createdAt: "2026-09-02T13:00:00.000Z",
@@ -555,7 +592,7 @@ test("an accepted Profile parameter override creates a distinguishable refold wi
   });
   const after = foldLearnerState({
     graph,
-    trail: store.readTrail(scope),
+    trail: await store.readTrail(scope),
     association: accepted,
     theory: resolved.theory,
     evaluatedAt: "2026-09-02T12:00:00.000Z",
@@ -571,12 +608,12 @@ test("an accepted Profile parameter override creates a distinguishable refold wi
       digest: contentDigest({ evidence: { used: { delta: 0.05 } } }),
     },
   });
-  expect(store.currentAssociation(scope)?.id).toBe(accepted.id);
+  expect((await store.currentAssociation(scope))?.id).toBe(accepted.id);
   expect(
-    store.currentAssociation({ principal: scope.principal, profile: "profile-other" }),
+    await store.currentAssociation({ principal: scope.principal, profile: "profile-other" }),
   ).toBeUndefined();
-  expect(store.readAssociation(scope, original.id)).toEqual(original);
-  expect(store.readTrail(scope)).toEqual(trailBefore);
+  expect(await store.readAssociation(scope, original.id)).toEqual(original);
+  expect(await store.readTrail(scope)).toEqual(trailBefore);
   expect(after.inputs.theoryDigest).toBe(before.inputs.theoryDigest);
   expect(after.inputs.associationCommit).not.toBe(before.inputs.associationCommit);
   expect(after.nodes["node-target"]?.estimate).not.toBe(before.nodes["node-target"]?.estimate);

@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { frontier } from "@concept/core/instrument-frontier";
 import type { AssociationCommit } from "@concept/core/association";
 import type { TrailSnapshot } from "@concept/core/fold";
-import { interpretObservation, type Observation } from "@concept/core/observation";
+import {
+  interpretObservation,
+  type NativeInterpretablePayload,
+  type Observation,
+} from "@concept/core/observation";
 import {
   PLATFORM_PEDAGOGY_RELEASE,
   V1_PEDAGOGICAL_THEORY,
@@ -28,6 +32,7 @@ const patch: PatchRevision = {
   ref: patchRef,
   bases: [],
   lock: { entries: [] },
+  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [
@@ -69,7 +74,7 @@ function evidence(
   id: `observation-${string}`,
   observedAt: string,
   node: NodeId,
-  payload: Observation["payload"],
+  payload: NativeInterpretablePayload,
 ): Observation {
   return interpretObservation(
     {
@@ -149,6 +154,7 @@ test("frontier gates dependency closures and returns a cited cross-Mission ranki
     createdAt: "2026-09-01T14:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: [...branchEvidence, ...rootEvidence].map((observation) => ({
       observation: observation.envelope.id,
       targets: [

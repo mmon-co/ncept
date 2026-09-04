@@ -1,5 +1,5 @@
 import { trail as nodeTrail } from "./instrument-learning";
-import { interpretPayload, type Observation, type ObservationId } from "./observation";
+import type { Observation, ObservationId } from "./observation";
 import {
   type ContributionProvenance,
   type NodeId,
@@ -7,7 +7,11 @@ import {
   type StructureEdge,
   type StructureNode,
 } from "./patch";
-import { assertAssociationCompatibility, type AssociationCommit } from "./association";
+import {
+  assertAssociationCompatibility,
+  selectedObservationInterpretation,
+  type AssociationCommit,
+} from "./association";
 import type { TrailSnapshot } from "./fold";
 import type { EvidenceInterpretation, ResolvedTheory } from "./pedagogy";
 
@@ -113,8 +117,12 @@ function learnerRecords(input: SignalsInstrumentInput, aggregate: AggregatedTrai
     });
     if (result.kind !== "found") continue;
     const records = result.records.flatMap(({ observation }) => {
-      const interpretation = interpretPayload(input.theory.theory, observation.payload);
-      return interpretation.kind === "evidence" ? [{ observation, interpretation }] : [];
+      const interpretation = selectedObservationInterpretation(
+        aggregate.association,
+        observation,
+        input.theory,
+      );
+      return interpretation?.kind === "evidence" ? [{ observation, interpretation }] : [];
     });
     records.sort(chronological);
     byNode.set(node.id, records);
