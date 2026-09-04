@@ -2,15 +2,38 @@ Writes graph content into the learner's Notebook. No Patch exists until
 publication reifies a View. The authoring ladder is per node and lazy:
 criterion at inventory, items at first probe, material at first teach.
 
+## Mechanism
+
+Graph content is minted by `propose_confirmation` with a `graph-diff`
+payload; the learner accepts it and the Application applies it. That payload
+exists only after the learner has accepted a proposed charting or
+realignment Skill, so propose the Skill and wait for acceptance first. There
+is no other way to create a Node.
+
+A Node is an identifier and nothing else. Everything a learner or an
+Instrument reads about it lives in a Metadata set whose subject is that
+Node:
+
+- `display:label` — the learner-facing label. Required; the graph fails to
+  project without it.
+- `pedagogy:criterion` — the observable demonstration.
+- `pedagogy:knowledge-type` — `factual`, `conceptual`, or `procedural`.
+- `pedagogy:threshold` — boolean.
+- `pedagogy:lesson`, `pedagogy:items` — added by the later rungs, not at
+  inventory.
+
+So one Node at inventory is two operations: `add-node`, then
+`add-metadata-set` over it carrying the first four properties.
+
 ## Inventory
 
 `(model)` Decompose the novel scope into a first slice: the Mission
 target's dependency cone, on the order of 10 to 25 nodes. Per node: a
 learner-facing label, one criterion (an observable demonstration), a
 knowledge type (factual, conceptual, procedural), and a threshold flag for
-the transformative, troublesome ones. Knowledge type and threshold are
-`pedagogy:*` node metadata. `(learner)` Reviews labels and vetoes grain.
-Done when every node has all four fields and no criterion is compound.
+the transformative, troublesome ones. `(learner)` Reviews labels and vetoes
+grain. Done when every node has all four fields and no criterion is
+compound.
 
 ## Edges
 
