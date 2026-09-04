@@ -7,14 +7,15 @@ entry: [learner]
 
 # Charting
 
-Reads: `coverage(scope)`, `mission(scope?)`, `preferences()`, hub search,
-personal recall search.
+Reads: `coverage(scope)`, `mission(scope?)`, `preferences()`, `query({ store:
+"nodes", text })`, hub search.
 
 1. Coverage. `(query)` `coverage` over the User graph for the Mission's
-   terms; hub search when the Hub is worth searching. `(model)` Existing
-   regions or an adoptable Patch that cover part of the scope → propose
-   targeting or adopting them. `(learner)` Confirms. Done when the novel
-   scope is stated.
+   terms, then the dashboard `query` over Nodes before proposing anything new;
+   hub search when the Hub is worth searching. `(model)` Existing Notebook
+   Nodes, other regions, or an adoptable Patch that cover part of the scope →
+   propose targeting or adopting them, never a duplicate. `(learner)` Confirms.
+   Done when the novel scope is stated.
 2. Author the novel scope, per slice:
 
 @procedures/graph-authoring.md
