@@ -803,6 +803,22 @@ function withMaterial(content: PatchContent, input: DocumentMaterialInput): Patc
   return { ...content, materials: [...content.materials, material] };
 }
 
+function withRevisedMaterial(
+  content: PatchContent,
+  materialId: DocumentMaterial["id"],
+  body: string,
+): PatchContent {
+  if (body.trim() === "") throw new PatchStoreError("invalid document Material");
+  const index = content.materials.findIndex(({ id }) => id === materialId);
+  if (index === -1) throw new PatchStoreError(`Material ${materialId} does not exist`);
+  return {
+    ...content,
+    materials: content.materials.map((material, candidate) =>
+      candidate === index ? { ...material, body, digest: materialBodyDigest(body) } : material,
+    ),
+  };
+}
+
 /** Attach an authored teaching document to exactly one Node and publish a new Patch revision. */
 export function attachAuthoredDocumentMaterial(
   dd: DataDir,
@@ -846,6 +862,52 @@ export function attachPersonalDocumentMaterial(
     withMaterial(content, input),
     `Attach learner-local document Material to ${input.node}`,
   );
+}
+
+/** Replace a learner-local document body under the same identity in a new Personal revision. */
+export function revisePersonalDocumentMaterial(
+  dd: DataDir,
+  scope: ProfileScope,
+  materialId: DocumentMaterial["id"],
+  body: string,
+): PatchRevision {
+  const current = currentPersonalRevision(dd, scope);
+  return commitPersonal(
+    dd,
+    scope,
+    withRevisedMaterial(personalContent(current), materialId, body),
+    `Revise learner-local document Material ${materialId}`,
+  );
+}
+
+/** Replace an authored document body if its owning Patch has not advanced since proposal. */
+export function reviseAuthoredDocumentMaterial(
+  dd: DataDir,
+  scope: ProfileScope,
+  source: ExactPatchRef,
+  materialId: DocumentMaterial["id"],
+  body: string,
+): PatchRevision {
+  const repository = authoredRepository(dd, source.identity);
+  const current = revisionAt(repository, source.identity);
+  if (current.ref.commit !== source.commit || current.ref.digest !== source.digest)
+    throw new PatchStoreError(`Patch ${source.identity} changed before the Material edit landed`);
+  const content: PatchContent = {
+    identity: current.ref.identity,
+    bases: current.bases,
+    lock: current.lock,
+    delta: current.delta,
+    materials: current.materials,
+    metadata: current.metadata,
+  };
+  const candidate = candidateCommit(
+    repository,
+    withRevisedMaterial(content, materialId, body),
+    `Revise document Material ${materialId}`,
+    current.ref.commit,
+  );
+  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
+  return publishCandidate(repository, candidate, current.ref.commit);
 }
 
 export function documentMaterials(
