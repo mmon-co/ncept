@@ -49,6 +49,7 @@ export interface PersonalPatchChange {
   readonly operations: SemanticDelta["operations"];
   readonly citations?: PatchMetadata["citations"];
   readonly summary: string;
+  readonly expectedBase?: ExactPatchRef;
 }
 
 export interface AuthoredPatch {
@@ -751,6 +752,11 @@ export function revisePersonalPatch(dd: DataDir, scope: ProfileScope, change: Pe
   if (change.summary.trim() === "")
     throw new PatchStoreError("a Personal Patch change needs a summary");
   const current = currentPersonalRevision(dd, scope);
+  if (
+    change.expectedBase !== undefined &&
+    (current === undefined || !sameExactPatchRef(current.ref, change.expectedBase))
+  )
+    throw new PatchStoreError("the Personal Patch changed after this graph diff compiled");
   const content = personalContent(current);
   const next = {
     ...content,
