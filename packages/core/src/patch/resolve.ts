@@ -21,7 +21,7 @@ import type {
   ResolvedMaterial,
   TaggedSet,
 } from "./model";
-import { exactPatchRefKey, sameExactPatchRef } from "./model";
+import { exactPatchRefKey, isMaterialId, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
@@ -153,10 +153,6 @@ function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
     leftKeys.length === rightKeys.length &&
     leftKeys.every((key, index) => key === rightKeys[index])
   );
-}
-
-function isMaterialId(value: unknown): value is `material-${string}` {
-  return typeof value === "string" && /^material-[0-9a-z-]+$/.test(value);
 }
 
 function isNodeId(value: unknown): value is NodeId {

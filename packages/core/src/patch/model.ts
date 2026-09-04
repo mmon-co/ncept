@@ -5,6 +5,11 @@ export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
 export type MaterialId = `material-${string}`;
 
+/** Return whether a value uses the canonical Material identity grammar. */
+export function isMaterialId(value: unknown): value is MaterialId {
+  return typeof value === "string" && /^material-[0-9a-z-]+$/.test(value);
+}
+
 export type MetadataValue = string | number | boolean | null | readonly string[];
 
 export interface ExactPatchRef {

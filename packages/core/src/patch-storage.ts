@@ -8,6 +8,7 @@ import type { ProfileScope } from "./scope";
 import {
   compileGraph,
   exactPatchRefKey,
+  isMaterialId,
   reifyView,
   resolvePatchBundle,
   sameExactPatchRef,
@@ -781,7 +782,7 @@ export interface DocumentMaterialInput {
 function documentMaterial(input: DocumentMaterialInput): DocumentMaterial {
   if (
     !isNodeId(input.node) ||
-    (input.id !== undefined && !/^material-[0-9a-z-]+$/.test(input.id)) ||
+    (input.id !== undefined && !isMaterialId(input.id)) ||
     input.title.trim() === "" ||
     input.body.trim() === ""
   )
