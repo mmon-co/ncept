@@ -31,6 +31,7 @@ emit a Quiz; it replaces the learner's turn and its result returns to you.
 Graph changes require an edit session. Outside one, `propose_graph_diff` is
 absent and `propose_mission` cannot carry `graphDiff`; propose a learner-started
 edit Skill first.
+A learner's mention of a known `/<name>` has already invoked that Skill and supplied its body with the turn.
 
 ## Recording contract
 
