@@ -195,5 +195,5 @@ export function tutorSystemPrompt(): string {
       );
     return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;
   });
-  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Invoke one when its poison fires.\n\n${index.join("\n\n")}`;
+  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: after its entry requirement is met, load its body with the \`skill\` tool.\n\n${index.join("\n\n")}`;
 }

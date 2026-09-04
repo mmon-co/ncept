@@ -9,7 +9,7 @@ import type {
   VisualNodeAppearance,
   VisualProjectionInput,
 } from "./model";
-import { exactPatchRefKey } from "./model";
+import { exactPatchRefKey, NODE_LABEL_PROPERTY, NODE_LESSON_PROPERTY } from "./model";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
   return graph.metadataSets.filter((set) =>
@@ -101,7 +101,7 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
     property(
       graph,
       metadataForNode(graph, node),
-      "pedagogy:lesson",
+      NODE_LESSON_PROPERTY,
       (value): value is string => typeof value === "string",
     )?.source ??
     graph.provenance.nodes[node]?.at(-1)?.patch ??
@@ -130,11 +130,11 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   });
   const nodes = input.graph.nodes.map((node) => {
     const sets = metadataForNode(input.graph, node.id);
-    const label = stringProperty(input.graph, sets, "display:label");
+    const label = stringProperty(input.graph, sets, NODE_LABEL_PROPERTY);
     if (label === undefined)
       throw new PatchCompileError(
         "missing-display-metadata",
-        `node '${node.id}' is missing display:label metadata`,
+        `node '${node.id}' is missing ${NODE_LABEL_PROPERTY} metadata`,
       );
     const source = effectiveSource(input.graph, node.id);
     return {

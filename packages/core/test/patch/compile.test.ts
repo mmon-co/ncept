@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { compileGraph } from "../../src/patch/compile";
+import { compileGraph, compileGraphDiff, GraphDiffCompileError } from "../../src/patch/compile";
 import type { ClosedPatchBundle, PatchRevision } from "../../src/patch/model";
 
 function versionOf(revision: PatchRevision): string {
@@ -114,6 +114,113 @@ test("a native root Patch compiles from the empty graph into a content-only Visu
     },
   ]);
   expect(JSON.stringify(graph)).not.toMatch(/mastery|estimate|uncertainty|artifact/i);
+});
+
+test("a proposed graph diff reports its target cone and suspicious fan-in", () => {
+  const fan = Array.from({ length: 6 }, (_, index) => `node-fan-${index}` as const);
+  const operations = fan.flatMap((node, index) => [
+    { kind: "add-node" as const, node: { id: node } },
+    {
+      kind: "add-metadata-set" as const,
+      metadataSet: {
+        id: `metadata-fan-${index}` as const,
+        subjects: [{ kind: "node" as const, id: node }],
+        properties: { "display:label": `Fan ${index}` },
+      },
+    },
+    {
+      kind: "add-edge" as const,
+      edge: {
+        id: `edge-fan-${index}` as const,
+        from: node,
+        to: "node-vectors" as const,
+      },
+    },
+  ]);
+
+  const { report } = compileGraphDiff(bundle, operations, ["node-vectors"]);
+
+  expect(report).toMatchObject({
+    valid: true,
+    compiledAgainst: revision.ref,
+    cycles: [],
+    danglingEndpoints: [],
+    missingDisplayLabels: [],
+    roots: [
+      "node-fan-0",
+      "node-fan-1",
+      "node-fan-2",
+      "node-fan-3",
+      "node-fan-4",
+      "node-fan-5",
+      "node-spans",
+    ],
+    cone: {
+      targets: ["node-vectors"],
+      missingTargets: [],
+      nodes: [
+        "node-fan-0",
+        "node-fan-1",
+        "node-fan-2",
+        "node-fan-3",
+        "node-fan-4",
+        "node-fan-5",
+        "node-spans",
+        "node-vectors",
+      ],
+      edges: [
+        "edge-fan-0",
+        "edge-fan-1",
+        "edge-fan-2",
+        "edge-fan-3",
+        "edge-fan-4",
+        "edge-fan-5",
+        "edge-spans-vectors",
+      ],
+      coveredRoots: [
+        "node-fan-0",
+        "node-fan-1",
+        "node-fan-2",
+        "node-fan-3",
+        "node-fan-4",
+        "node-fan-5",
+        "node-spans",
+      ],
+    },
+    highInDegreeThreshold: 5,
+    highInDegreeNodes: [{ node: "node-vectors", inDegree: 7 }],
+  });
+});
+
+test("an invalid proposed graph diff returns structural and target failures together", () => {
+  try {
+    compileGraphDiff(
+      bundle,
+      [
+        { kind: "add-node", node: { id: "node-unlabelled" } },
+        {
+          kind: "add-edge",
+          edge: { id: "edge-cycle", from: "node-vectors", to: "node-spans" },
+        },
+        {
+          kind: "add-edge",
+          edge: { id: "edge-dangling", from: "node-unlabelled", to: "node-absent" },
+        },
+      ],
+      ["node-absent"],
+    );
+    throw new Error("expected graph diff compilation to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(GraphDiffCompileError);
+    if (!(error instanceof GraphDiffCompileError)) throw error;
+    expect(error.report).toMatchObject({
+      valid: false,
+      cycles: [["node-spans", "node-vectors"]],
+      danglingEndpoints: [{ edge: "edge-dangling", missing: ["node-absent"] }],
+      missingDisplayLabels: ["node-unlabelled"],
+      cone: { targets: ["node-absent"], missingTargets: ["node-absent"], nodes: [] },
+    });
+  }
 });
 
 test("a Personal Notebook is effective content while learner absence stays distinct from no evidence", () => {

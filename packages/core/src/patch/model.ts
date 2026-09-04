@@ -83,6 +83,17 @@ export interface StructureNode {
   readonly id: NodeId;
 }
 
+/**
+ * A Node is an identifier; everything readable about it lives in a Metadata set over it. These are
+ * the properties authoring writes and projection and the Instruments read.
+ */
+export const NODE_LABEL_PROPERTY = "display:label";
+export const NODE_CRITERION_PROPERTY = "pedagogy:criterion";
+export const NODE_KNOWLEDGE_TYPE_PROPERTY = "pedagogy:knowledge-type";
+export const NODE_THRESHOLD_PROPERTY = "pedagogy:threshold";
+export const NODE_LESSON_PROPERTY = "pedagogy:lesson";
+export const NODE_KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
+
 export interface StructureEdge {
   readonly id: EdgeId;
   readonly from: NodeId;

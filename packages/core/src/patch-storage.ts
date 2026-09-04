@@ -9,6 +9,8 @@ import {
   compileGraph,
   exactPatchRefKey,
   isMaterialId,
+  NODE_LABEL_PROPERTY,
+  NODE_LESSON_PROPERTY,
   reifyView,
   resolvePatchBundle,
   sameExactPatchRef,
@@ -47,6 +49,7 @@ export interface PersonalPatchChange {
   readonly operations: SemanticDelta["operations"];
   readonly citations?: PatchMetadata["citations"];
   readonly summary: string;
+  readonly expectedBase?: ExactPatchRef;
 }
 
 export interface AuthoredPatch {
@@ -331,7 +334,10 @@ function lessonOperations(input: {
       metadataSet: {
         id: metadataId(input.id),
         subjects: [{ kind: "node", id: input.id }],
-        properties: { "display:label": input.label, "pedagogy:lesson": input.lesson },
+        properties: {
+          [NODE_LABEL_PROPERTY]: input.label,
+          [NODE_LESSON_PROPERTY]: input.lesson,
+        },
       },
     },
   ];
@@ -503,8 +509,8 @@ export function readAuthoredRootPatchDefinition(
     nodes: revision.delta.operations.flatMap((operation) => {
       if (operation.kind !== "add-node") return [];
       const properties = metadataBySubject.get(`node:${operation.node.id}`);
-      const label = properties?.["display:label"];
-      const lesson = properties?.["pedagogy:lesson"];
+      const label = properties?.[NODE_LABEL_PROPERTY];
+      const lesson = properties?.[NODE_LESSON_PROPERTY];
       if (typeof label !== "string" || typeof lesson !== "string")
         throw new PatchStoreError(`Node ${operation.node.id} is missing authored content`);
       return [{ id: operation.node.id, label, lesson }];
@@ -746,6 +752,11 @@ export function revisePersonalPatch(dd: DataDir, scope: ProfileScope, change: Pe
   if (change.summary.trim() === "")
     throw new PatchStoreError("a Personal Patch change needs a summary");
   const current = currentPersonalRevision(dd, scope);
+  if (
+    change.expectedBase !== undefined &&
+    (current === undefined || !sameExactPatchRef(current.ref, change.expectedBase))
+  )
+    throw new PatchStoreError("the Personal Patch changed after this graph diff compiled");
   const content = personalContent(current);
   const next = {
     ...content,
@@ -938,7 +949,7 @@ export function openPersonalLesson(
       operation.metadataSet.subjects.some(
         (subject) => subject.kind === "node" && subject.id === node,
       )
-        ? [operation.metadataSet.properties["pedagogy:lesson"]]
+        ? [operation.metadataSet.properties[NODE_LESSON_PROPERTY]]
         : [],
     )
     .find((value): value is string => typeof value === "string");
