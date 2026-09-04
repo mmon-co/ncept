@@ -86,6 +86,7 @@ test("probes returns the complete cited scope ranking from theory-owned uncertai
     createdAt: "2026-09-02T12:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((observation) => ({
       observation: observation.envelope.id,
       targets: [

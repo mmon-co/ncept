@@ -78,6 +78,7 @@ function aggregate(id: string, observations: readonly Observation[]): Aggregated
     createdAt: "2026-09-02T12:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((record) => ({
       observation: record.envelope.id,
       targets: [

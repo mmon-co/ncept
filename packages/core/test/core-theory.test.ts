@@ -130,6 +130,7 @@ function association(
     createdAt: "2026-09-01T13:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((record) => ({
       observation: record.envelope.id,
       targets: [{ patch: patchRef, node: "node-target" }],

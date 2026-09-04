@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import type { AssociationCommit, AssociationCommitId, ParameterOverride } from "./association";
 import { ensureDataDir, type DataDir } from "./datadir";
 import type { TrailSnapshot } from "./fold";
-import type { Observation, ObservationId, ObservationInterpretation } from "./observation";
+import type { Observation } from "./observation";
 import { contentDigest, type ExactPedagogyRelease } from "./pedagogy";
 import { parseGraphQuery } from "./patch";
 import {
@@ -76,7 +76,8 @@ function isAssociationCommit(value: unknown): value is AssociationCommit {
     isRecord(value.patchRevision) &&
     isRecord(value.theory) &&
     (value.parameterOverride === undefined || isParameterOverride(value.parameterOverride)) &&
-    Array.isArray(value.associations)
+    Array.isArray(value.associations) &&
+    Array.isArray(value.interpretations)
   );
 }
 
@@ -140,15 +141,6 @@ function immutableJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
 }
 
-function atomicJsonLines(path: string, values: readonly unknown[]): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(temporary, values.map((value) => JSON.stringify(value)).join("\n") + "\n", {
-    flag: "wx",
-  });
-  renameSync(temporary, path);
-}
-
 function associationPath(dd: DataDir, scope: ProfileScope, id: AssociationCommitId): string {
   return join(profileRoot(dd, scope), "associations", `${component(id, "Association id")}.json`);
 }
@@ -182,23 +174,6 @@ export class LocalDirectoryCoreStore implements CoreStores {
     const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
     mkdirSync(dirname(path), { recursive: true });
     appendFileSync(path, `${JSON.stringify(observation)}\n`);
-  }
-
-  async writeObservationInterpretation(
-    scope: ProfileScope,
-    id: ObservationId,
-    interpretation: ObservationInterpretation,
-  ): Promise<void> {
-    const trail = await this.readTrail(scope);
-    const index = trail.observations.findIndex(({ envelope }) => envelope.id === id);
-    const observation = trail.observations[index];
-    if (observation === undefined) throw new Error(`Observation ${id} is unavailable`);
-    if (observation.interpretation !== undefined)
-      throw new Error(`Observation ${id} is already interpreted`);
-    const observations = [...trail.observations];
-    observations[index] = { ...observation, interpretation };
-    const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
-    atomicJsonLines(path, observations);
   }
 
   async readTrail(scope: ProfileScope): Promise<TrailSnapshot> {

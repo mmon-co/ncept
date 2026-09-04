@@ -97,6 +97,7 @@ test("learning instruments return cited trail, live competency, and explicit cov
     createdAt: "2026-09-03T13:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: observations.map((observation) => ({
       observation: observation.envelope.id,
       targets: [

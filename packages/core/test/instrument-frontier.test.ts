@@ -150,6 +150,7 @@ test("frontier gates dependency closures and returns a cited cross-Mission ranki
     createdAt: "2026-09-01T14:00:00.000Z",
     patchRevision: patchRef,
     theory: { origin: theory.origin, digest: theory.digest },
+    interpretations: [],
     associations: [...branchEvidence, ...rootEvidence].map((observation) => ({
       observation: observation.envelope.id,
       targets: [

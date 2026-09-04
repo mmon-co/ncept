@@ -79,14 +79,7 @@ export interface SrsPayload extends NativePayloadBase {
 export interface ArtifactPayload extends NativePayloadBase {
   readonly kind: "artifact";
   readonly artifactId: string;
-  readonly criterion: string;
   readonly submission: string;
-  readonly result: "demonstrated" | "not-demonstrated";
-  readonly assistance: "none" | "hint";
-  readonly transfer?: boolean;
-  readonly mistake?: "slip" | "bug" | "misconception";
-  readonly misconception?: string;
-  readonly confusedWith?: NodeId;
 }
 
 export interface MissionPayload extends NativePayloadBase {
@@ -130,9 +123,7 @@ export interface Observation {
   readonly supersedes?: ObservationId;
 }
 
-function evidence(
-  payload: LessonPayload | QuizPayload | ArtifactPayload,
-): ObservationInterpretationValue {
+function evidence(payload: LessonPayload | QuizPayload): ObservationInterpretationValue {
   const demonstrated =
     payload.kind === "quiz" ? payload.correct : payload.result === "demonstrated";
   if (!demonstrated)
@@ -164,8 +155,9 @@ export function interpretPayload(
   switch (payload.kind) {
     case "lesson":
     case "quiz":
-    case "artifact":
       return evidence(payload);
+    case "artifact":
+      throw new Error("Artifact payloads require evaluator interpretation");
     case "srs":
       return {
         kind: "evidence",
