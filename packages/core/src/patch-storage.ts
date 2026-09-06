@@ -98,7 +98,14 @@ function personalRepository(dd: DataDir, scope: ProfileScope): string {
   );
 }
 
-function isPatchId(value: unknown): value is PatchId {
+/** Execution-cache location; repository identities, not paths, cross storage boundaries. */
+export function patchRepositoryPath(dd: DataDir, scope: ProfileScope, identity: PatchId): string {
+  return identity === PERSONAL_PATCH_ID
+    ? personalRepository(dd, scope)
+    : authoredRepository(dd, identity);
+}
+
+export function isPatchId(value: unknown): value is PatchId {
   return typeof value === "string" && /^patch-[0-9a-z-]+$/.test(value);
 }
 
@@ -623,6 +630,41 @@ export function reviseAuthoredReifiedPatch(
   const candidate = candidateCommit(repository, content, `Revise ${identity}`, current.ref.commit);
   resolvePatchBundle(bundleForRevision(dd, scope, candidate));
   return publishCandidate(repository, candidate, current.ref.commit);
+}
+
+/** Reify a public-only lineage; private authored HEAD is never a release parent. */
+export function reifyAuthoredPatchRelease(
+  dd: DataDir,
+  scope: ProfileScope,
+  identity: PatchId,
+  input: ReifiedPatchDefinition,
+  version: string,
+  previousPublic?: ExactPatchRef,
+): ExactPatchRef {
+  if (previousPublic !== undefined) {
+    if (previousPublic.identity !== identity || previousPublic.version === undefined)
+      throw new PatchStoreError("a public parent must be an exact release of this Patch");
+    revisionForExact(dd, scope, previousPublic);
+  }
+  const repository = authoredRepository(dd, identity);
+  // Keep every private tip reachable even though publication switches to the reified lineage.
+  if (existsSync(join(repository, ".git"))) {
+    const current = revisionAt(repository, identity);
+    runGit(repository, [
+      "update-ref",
+      `refs/private-history/${current.ref.commit}`,
+      current.ref.commit,
+    ]);
+  }
+  const candidate = candidateCommit(
+    repository,
+    reifyView(input.view, { identity, metadata: input.metadata }),
+    `Reify ${identity}@${version}`,
+    previousPublic?.commit,
+  );
+  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
+  publishCandidate(repository, candidate);
+  return publishAuthoredPatchRelease(dd, identity, version);
 }
 
 /** Pin the current authored commit to a permanent exact release. */
