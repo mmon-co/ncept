@@ -20,7 +20,8 @@
     "./pedagogy": "./src/pedagogy.ts",
     "./playground": "./src/playground.ts",
     "./storage": "./src/storage.ts",
-    "./view": "./src/view.ts"
+    "./view": "./src/view.ts",
+    "./model-spec": "./src/model-spec.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
