@@ -3,6 +3,7 @@ export { type PrincipalId, type ProfileId, type ProfileScope } from "./scope";
 export * from "./pedagogy";
 export * from "./record";
 export * from "./platform-records";
+export * from "./pedagogy/default";
 export { evaluateView, type View, type ViewId } from "./view";
 export {
   type AssociationStore,
@@ -19,6 +20,7 @@ export {
   parseSpacedReviewCard,
   parseSpacedReviewGrade,
   spacedReviewDueQueue,
+  spacedReviewDemonstration,
   spacedReviewPlayground,
   type ContextInjection,
   type DueCard,
@@ -32,7 +34,13 @@ export {
   type SpacedReviewPlayground,
 } from "./playground";
 export { sessionPedagogyMetadata, type SessionPedagogyMetadata } from "./session";
-export { deriveSchedulerState, isDue, type ReviewRecord, type SchedulerState } from "./scheduler";
+export {
+  deriveSchedulerState,
+  isDue,
+  type Grade,
+  type ReviewRecord,
+  type SchedulerState,
+} from "./scheduler";
 export {
   DEFAULT_MODEL,
   EFFORTS,

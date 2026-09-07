@@ -1,9 +1,17 @@
-import type { LearnerState } from "./fold";
-import type { TrailResult } from "./instrument-learning";
-import type { Grade, Observation } from "./observation";
+import type { LearnerState } from "./pedagogy";
+import { DEMONSTRATION_SCHEMA, type Demonstration } from "./pedagogy/default/records";
+import type { NodeState } from "./pedagogy/default/labels";
+import {
+  parseRecord,
+  validateRecordJson,
+  serializeRecord,
+  type NodeRef,
+  type RecordValidationContext,
+  type Record as LogRecord,
+} from "./record";
 import type { ExactPatchRef, NodeId } from "./patch";
 import type { openPersonalLesson } from "./patch-storage";
-import { deriveSchedulerState, isDue } from "./scheduler";
+import { deriveSchedulerState, isDue, type Grade } from "./scheduler";
 import type { ProfileScope } from "./scope";
 import type { SpacedReviewStore, TrailStore } from "./storage";
 
@@ -19,10 +27,9 @@ export interface SpacedReviewCard {
   readonly category: string;
   readonly front: string;
   readonly back: string;
-  readonly associations: readonly {
-    readonly patch: ExactPatchRef;
-    readonly node: NodeId;
-  }[];
+  readonly node: NodeRef;
+  /** Set explicitly at approval; pending/declined cards have no approved demand judgement. */
+  readonly unaided?: boolean;
 }
 
 export interface SpacedReviewGrade {
@@ -46,8 +53,8 @@ export interface ContextInjection {
 
 /** Closed live reads available to spaced review; none can mutate Learner state. */
 export interface SpacedReviewInstruments {
-  competency(): Promise<LearnerState>;
-  trail(node: NodeId): Promise<TrailResult>;
+  learnerState(): Promise<LearnerState<NodeState>>;
+  trail(node: NodeId): Promise<readonly LogRecord[]>;
   content(node: NodeId): Promise<ReturnType<typeof openPersonalLesson>>;
 }
 
@@ -66,7 +73,7 @@ export interface ReviewGradeDecision {
 
 export interface SpacedReviewPlayground {
   readonly proposeCard: (card: SpacedReviewCard) => Promise<void>;
-  readonly approveCard: (id: SpacedReviewCardId) => Promise<SpacedReviewCard>;
+  readonly approveCard: (id: SpacedReviewCardId, unaided: boolean) => Promise<SpacedReviewCard>;
   readonly editCard: (
     id: SpacedReviewCardId,
     edit: SpacedReviewCardEdit,
@@ -76,7 +83,6 @@ export interface SpacedReviewPlayground {
   readonly cards: () => Promise<readonly SpacedReviewCard[]>;
   readonly appendGrade: (grade: SpacedReviewGrade) => Promise<void>;
   readonly grades: () => Promise<readonly SpacedReviewGrade[]>;
-  readonly appendObservation: (observation: Observation) => Promise<void>;
   readonly dueQueue: (now: string, cap: number) => Promise<readonly DueCard[]>;
   readonly instruments: SpacedReviewInstruments;
   readonly injectContext: (injection: ContextInjection) => void;
@@ -152,13 +158,10 @@ export function parseSpacedReviewCard(value: unknown): SpacedReviewCard {
     card.back.trim() === ""
   )
     throw new Error("a spaced-review card needs a category, front, and back");
-  if (!Array.isArray(card.associations) || card.associations.length === 0)
-    throw new Error("a spaced-review card needs at least one Node association");
-  const associations = card.associations.map((value) => {
-    const association = record(value, "spaced-review Node association");
-    if (!isNodeId(association.node)) throw new Error("invalid spaced-review Node association");
-    return { patch: exactPatchRef(association.patch), node: association.node };
-  });
+  const node = record(card.node, "spaced-review Node reference");
+  if (!isNodeId(node.node)) throw new Error("invalid spaced-review Node reference");
+  if (card.status === "approved" ? typeof card.unaided !== "boolean" : card.unaided !== undefined)
+    throw new Error("unaided must be fixed explicitly at card approval");
   return {
     id: card.id,
     createdAt: card.createdAt,
@@ -167,7 +170,8 @@ export function parseSpacedReviewCard(value: unknown): SpacedReviewCard {
     category: card.category,
     front: card.front,
     back: card.back,
-    associations,
+    node: { node: node.node, provenance: exactPatchRef(node.provenance) },
+    ...(typeof card.unaided === "boolean" ? { unaided: card.unaided } : {}),
   };
 }
 
@@ -286,10 +290,43 @@ export function spacedReviewDueQueue(input: {
   return result;
 }
 
+/** A retrieval attempt contributes exactly one demonstration to the card's approved Node. */
+export function spacedReviewDemonstration(
+  card: SpacedReviewCard,
+  grade: SpacedReviewGrade,
+): LogRecord<Demonstration> {
+  parseSpacedReviewCard(card);
+  parseSpacedReviewGrade(grade);
+  if (card.status !== "approved" || typeof card.unaided !== "boolean" || card.id !== grade.cardId)
+    throw new Error("a demonstration needs its approved spaced-review card");
+  if (grade.answer.trim() === "") throw new Error("attempt retrieval before revealing the answer");
+  const exactMatch = grade.answer.trim() === card.back.trim();
+  if (exactMatch && grade.grade === "again")
+    throw new Error("an exact match cannot be graded as failure");
+  return {
+    envelope: {
+      id: `record-${grade.id}`,
+      at: grade.gradedAt,
+      origin: { kind: "playground", namespace: "spaced-review", recordId: card.id },
+      schema: DEMONSTRATION_SCHEMA.ref,
+    },
+    payload: {
+      kind: "demonstration",
+      node: card.node,
+      outcome: grade.grade === "again" ? "failure" : "success",
+      unaided: card.unaided,
+      grader: exactMatch ? "mechanical" : "learner",
+      task: card.front,
+      response: grade.answer,
+    },
+  };
+}
+
 /** Construct the spaced-review surface from only its permitted stores and live reads. */
 export function spacedReviewPlayground(input: {
   readonly scope: ProfileScope;
   readonly trail: TrailStore;
+  readonly validation: RecordValidationContext;
   readonly store: SpacedReviewStore;
   readonly instruments: SpacedReviewInstruments;
   readonly injectContext: (injection: ContextInjection) => void;
@@ -302,11 +339,11 @@ export function spacedReviewPlayground(input: {
         throw new Error(`spaced-review card ${parsed.id} already exists`);
       await input.store.saveSpacedReviewCard(input.scope, parsed);
     },
-    async approveCard(id) {
+    async approveCard(id, unaided) {
       const card = await input.store.readSpacedReviewCard(input.scope, id);
       if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
       if (card.status !== "pending") throw new Error(`spaced-review card ${id} is not pending`);
-      const approved = parseSpacedReviewCard({ ...card, status: "approved" });
+      const approved = parseSpacedReviewCard({ ...card, status: "approved", unaided });
       await input.store.saveSpacedReviewCard(input.scope, approved);
       return approved;
     },
@@ -314,7 +351,13 @@ export function spacedReviewPlayground(input: {
       const card = await input.store.readSpacedReviewCard(input.scope, id);
       if (card === undefined) throw new Error(`unknown spaced-review card ${id}`);
       if (card.status !== "pending") throw new Error(`spaced-review card ${id} is not pending`);
-      const edited = parseSpacedReviewCard({ ...card, ...edit });
+      const edited = parseSpacedReviewCard({
+        ...card,
+        format: edit.format,
+        category: edit.category,
+        front: edit.front,
+        back: edit.back,
+      });
       await input.store.saveSpacedReviewCard(input.scope, edited);
       return edited;
     },
@@ -330,14 +373,34 @@ export function spacedReviewPlayground(input: {
     cards: () => input.store.listSpacedReviewCards(input.scope),
     async appendGrade(grade) {
       const parsed = parseSpacedReviewGrade(grade);
-      if (
-        (await input.store.readSpacedReviewCard(input.scope, parsed.cardId))?.status !== "approved"
-      )
+      const card = await input.store.readSpacedReviewCard(input.scope, parsed.cardId);
+      if (card?.status !== "approved")
         throw new Error(`grade targets an unapproved spaced-review card ${parsed.cardId}`);
-      await input.store.appendSpacedReviewGrade(input.scope, parsed);
+      const demonstration = spacedReviewDemonstration(card, parsed);
+      const serialized = serializeRecord(demonstration);
+      validateRecordJson(serialized, input.validation);
+      const previousGrade = (await input.store.readSpacedReviewGrades(input.scope)).find(
+        ({ id }) => id === parsed.id,
+      );
+      if (
+        previousGrade !== undefined &&
+        JSON.stringify(parseSpacedReviewGrade(previousGrade)) !== JSON.stringify(parsed)
+      )
+        throw new Error(
+          `spaced-review attempt ${parsed.id} already exists with different contents`,
+        );
+      const previous = await input.trail.readRecordJson(input.scope, demonstration.envelope.id);
+      if (previous === undefined)
+        await input.trail.appendRecord(input.scope, demonstration, input.validation);
+      else if (serializeRecord(parseRecord(previous)) !== serialized)
+        throw new Error(
+          `spaced-review attempt ${parsed.id} already exists with different evidence`,
+        );
+      // A crash between stores is retried against the exact same immutable attempt, not a new record.
+      if (previousGrade === undefined)
+        await input.store.appendSpacedReviewGrade(input.scope, parsed);
     },
     grades: () => input.store.readSpacedReviewGrades(input.scope),
-    appendObservation: (observation) => input.trail.appendObservation(input.scope, observation),
     async dueQueue(now, cap) {
       const [cards, grades] = await Promise.all([
         input.store.listSpacedReviewCards(input.scope),

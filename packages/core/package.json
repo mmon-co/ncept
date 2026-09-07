@@ -17,6 +17,7 @@
     "./patch": "./src/patch/index.ts",
     "./patch-storage": "./src/patch-storage.ts",
     "./pedagogy": "./src/pedagogy.ts",
+    "./pedagogy/default": "./src/pedagogy/default/index.ts",
     "./playground": "./src/playground.ts",
     "./storage": "./src/storage.ts",
     "./view": "./src/view.ts",
