@@ -934,6 +934,45 @@ export function revisePersonalDocumentMaterial(
   );
 }
 
+function prepareAuthoredDocumentMaterialRevision(
+  dd: DataDir,
+  scope: ProfileScope,
+  source: ExactPatchRef,
+  materialId: DocumentMaterial["id"],
+  body: string,
+) {
+  const repository = authoredRepository(dd, source.identity);
+  const current = revisionAt(repository, source.identity);
+  if (current.ref.commit !== source.commit || current.ref.digest !== source.digest)
+    throw new PatchStoreError(`Patch ${source.identity} changed before the Material edit landed`);
+  const content = withRevisedMaterial(
+    {
+      identity: current.ref.identity,
+      bases: current.bases,
+      lock: current.lock,
+      delta: current.delta,
+      materials: current.materials,
+      metadata: current.metadata,
+    },
+    materialId,
+    body,
+  );
+  // Resolve the prospective content in memory; do not write even unreachable Git objects.
+  resolvePatchBundle(bundleForRevision(dd, scope, { ...content, ref: current.ref }));
+  return { repository, current, content };
+}
+
+/** Dry-run an authored Material edit without writing a Patch or Git object. */
+export function validateAuthoredDocumentMaterialRevision(
+  dd: DataDir,
+  scope: ProfileScope,
+  source: ExactPatchRef,
+  materialId: DocumentMaterial["id"],
+  body: string,
+): void {
+  prepareAuthoredDocumentMaterialRevision(dd, scope, source, materialId, body);
+}
+
 /** Replace an authored document body if its owning Patch has not advanced since proposal. */
 export function reviseAuthoredDocumentMaterial(
   dd: DataDir,
@@ -942,25 +981,19 @@ export function reviseAuthoredDocumentMaterial(
   materialId: DocumentMaterial["id"],
   body: string,
 ): PatchRevision {
-  const repository = authoredRepository(dd, source.identity);
-  const current = revisionAt(repository, source.identity);
-  if (current.ref.commit !== source.commit || current.ref.digest !== source.digest)
-    throw new PatchStoreError(`Patch ${source.identity} changed before the Material edit landed`);
-  const content: PatchContent = {
-    identity: current.ref.identity,
-    bases: current.bases,
-    lock: current.lock,
-    delta: current.delta,
-    materials: current.materials,
-    metadata: current.metadata,
-  };
+  const { repository, current, content } = prepareAuthoredDocumentMaterialRevision(
+    dd,
+    scope,
+    source,
+    materialId,
+    body,
+  );
   const candidate = candidateCommit(
     repository,
-    withRevisedMaterial(content, materialId, body),
+    content,
     `Revise document Material ${materialId}`,
     current.ref.commit,
   );
-  resolvePatchBundle(bundleForRevision(dd, scope, candidate));
   return publishCandidate(repository, candidate, current.ref.commit);
 }
 
