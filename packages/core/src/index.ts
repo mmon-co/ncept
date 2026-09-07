@@ -34,7 +34,15 @@ export {
   type SpacedReviewInstruments,
   type SpacedReviewPlayground,
 } from "./playground";
-export { sessionPedagogyMetadata, type SessionPedagogyMetadata } from "./session";
+export {
+  canOpen,
+  isExpired,
+  sessionPedagogyMetadata,
+  type Session,
+  type SessionOpenResult,
+  type SessionPedagogyMetadata,
+  type SessionViewRef,
+} from "./session";
 export {
   deriveSchedulerState,
   isDue,
