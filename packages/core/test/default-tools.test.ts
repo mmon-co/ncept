@@ -10,6 +10,7 @@ import {
   memoryDefault,
   projectDefault,
   type DefaultToolContext,
+  type DefaultBackgroundContext,
 } from "../src/pedagogy/default";
 import {
   attachNodeMemory,
@@ -254,9 +255,9 @@ test("keyed components keep optional error strings verbatim and grade mechanical
   );
 });
 
-test("assembled package exposes every tool factory and delegates to its supplied real update boundary", async () => {
+test("release factory exposes every tool factory and preserves its supplied update function", async () => {
   let updates = 0;
-  // Test fixture only: the integration assembly supplies #321's actual updateDefault.
+  // Factory customization fixture; default-catalog.test.ts exercises the concrete release.
   const release = createDefaultPedagogyRelease((_state, _graph, next, records, clock) => {
     updates++;
     return projectDefault(records, next, clock);
@@ -265,9 +266,15 @@ test("assembled package exposes every tool factory and delegates to its supplied
   const fixture = host();
   const tools = Object.assign(
     {},
-    ...resolved.theory.theory.tools.map((factory) => factory(fixture.ports)),
+    ...resolved.theory.theory.tools.map((factory) =>
+      factory({
+        ...fixture.ports,
+        projection: { context: () => context, save: async () => {} },
+      } satisfies DefaultBackgroundContext),
+    ),
   );
   expect(Object.keys(tools).sort()).toEqual([
+    "attach_claim",
     "coverage",
     "frontier",
     "items",
@@ -278,6 +285,7 @@ test("assembled package exposes every tool factory and delegates to its supplied
     "record_claim",
     "record_demonstration",
     "record_retraction",
+    "refine_records",
     "route",
     "trail",
     "warnings",

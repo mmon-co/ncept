@@ -7,7 +7,6 @@ export * from "./pedagogy/default";
 export * from "./node-memory";
 export { evaluateView, type View, type ViewId } from "./view";
 export {
-  type AssociationStore,
   type CoreStores,
   type PedagogySelectionStore,
   type ParameterOverrideStore,

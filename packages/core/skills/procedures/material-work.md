@@ -1,22 +1,12 @@
-A material is a criterion-delivery vehicle: worked example first, faded
-practice after, citations to trusted sources, nothing else. Applets follow
-the compiled runtime rules (ADR 0001). Reads: the node's criterion,
-`items(node)`, `preferences()`.
+Read the capability statement, `items(node)`, `trail(node)` and `preferences()`.
+Use a worked example, minimal supporting exposition, faded practice and trusted
+citations. Draft only what the current capability needs, not an entire course.
 
-Draft, at first teach of a node with no material: `(model)` generate or
-collect a draft for that node only. Drafting a slice up front is a
-publication option, not the default. The draft is mutable until
-publication; confusions recorded against it in real use return here.
+If refining, compare the actual learner confusion and posed tasks with the
+material. Fix the passage that obstructs the capability; avoid polishing text
+that no task requires. Material reading is not demonstration evidence.
 
-Refine, per material: `(query)` criterion and items alongside the material.
-`(model)` Does it teach what the items test? Cut or move passages no item
-tests; flag criteria it never addresses back to graph authoring; remove
-decoration rather than polishing it. `(learner or author)` Reads, works an
-exercise, marks confusions. Confusions are refinement input, and evidence
-only in a genuine learning session. Done when the alignment check passes
-and the reader found no dead passage.
-
-Publish: `(query)` orphan materials, nodes whose materials skip their
-criterion, audience mismatches. `(author)` Resolves each line. The draft
-becomes an immutable revision with the Patch. Personalized variants follow
-the same steps in the Personal scope, never in the shared Patch.
+Use the host's available material presentation affordance for a temporary draft.
+Saving or revising graph content requires an accepted edit session and the
+mounted material/graph Confirmation tool. Without it, present a suggestion;
+never claim the Patch changed. Publication is outside this procedure.

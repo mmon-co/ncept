@@ -37,3 +37,16 @@ inlined body. Namespaced `concept-facet` and `concept-entry` metadata preserve
 the catalog requirements for release and harness consumers; entries without
 `model` also set `disable-model-invocation: true`. A harness must omit
 system-only bundles from the model's mounted directories.
+
+## Executable boundary
+
+The concrete `defaultPedagogicalTheory` supplies read, recording and background
+factories. `attach_claim` and `refine_records` are for system sweep/revision
+work; the host mounts them only with its full-log, revision-fenced projection
+port. Recording tools append Records, never accept a learner label as input.
+The catalog names every theory tool; `default-catalog.test.ts` compares that
+vocabulary with the real assembled factories and walks stories A–C through
+live in-memory host ports. It is Core composition evidence, not evidence that
+an Application has mounted the package or implemented its background jobs.
+Host graph/Confirmation/task/review affordances are conditional on what is
+actually mounted; the catalog never claims a missing operation succeeded.

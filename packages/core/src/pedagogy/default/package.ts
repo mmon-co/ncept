@@ -11,9 +11,14 @@ import { indicatorsDefault } from "./indicators";
 import { acceptsDefaultParameters, DEFAULT_PARAMETERS, type NodeState } from "./labels";
 import { projectDefault } from "./projection";
 import { convertDefault, DEFAULT_RECORD_SCHEMAS, type DefaultRecordPayload } from "./records";
-import { defaultInstrumentTools, defaultRecordingTools, type DefaultToolContext } from "./tools";
+import {
+  defaultBackgroundTools,
+  defaultInstrumentTools,
+  defaultRecordingTools,
+  type DefaultBackgroundContext,
+} from "./tools";
 
-type DefaultTheory = PedagogicalTheory<DefaultRecordPayload, NodeState, DefaultToolContext>;
+type DefaultTheory = PedagogicalTheory<DefaultRecordPayload, NodeState, DefaultBackgroundContext>;
 
 /** Assembly requires the real revision-update implementation and its trusted build artifact digest.
  * No fallback update is supplied: a package without update is not a complete theory.
@@ -31,7 +36,7 @@ export function createDefaultPedagogicalTheory(
     update,
     display: displayDefault,
     queryTokens: defaultQueryTokens,
-    tools: [defaultInstrumentTools, defaultRecordingTools],
+    tools: [defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools],
     skills: { bundles: builtSkillBundles() },
     basePrompt: tutorSystemPrompt(),
     indicators: indicatorsDefault,
@@ -42,7 +47,7 @@ export function createDefaultPedagogicalTheory(
 export function createDefaultPedagogyRelease(
   update: DefaultTheory["update"],
   implementationDigest: ContentDigest,
-): PlatformPedagogyRelease<DefaultRecordPayload, NodeState, DefaultToolContext> {
+): PlatformPedagogyRelease<DefaultRecordPayload, NodeState, DefaultBackgroundContext> {
   const theory = createDefaultPedagogicalTheory(update, implementationDigest);
   return {
     form: "root",

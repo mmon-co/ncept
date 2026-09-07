@@ -223,7 +223,7 @@ test("an invalid proposed graph diff returns structural and target failures toge
   }
 });
 
-test("a Personal Notebook is effective content while learner absence stays distinct from no evidence", () => {
+test("a Personal Notebook keeps effective content when optional theory displays are supplied", () => {
   const course = revision;
   const personal: PatchRevision = {
     ref: {
@@ -277,11 +277,17 @@ test("a Personal Notebook is effective content while learner absence stays disti
   const learnerAware = compileGraph({
     bundle: personalBundle,
     learner: {
-      kind: "associated",
-      userGraphRevision: personal.ref,
-      associationRevision: "association-1",
-      nodes: { "node-vectors": { kind: "no-evidence" } },
-      stale: false,
+      kind: "projected",
+      patchRevision: personal.ref,
+      theoryDigest: "sha256:theory-display",
+      nodes: {
+        "node-vectors": {
+          label: "arbitrary",
+          caption: "a theory fact",
+          citations: [],
+          style: { color: "purple" },
+        },
+      },
     },
     annotations: {},
   });
@@ -297,8 +303,13 @@ test("a Personal Notebook is effective content while learner absence stays disti
     contentSource: personal.ref,
   });
   expect(learnerAware.nodes.find((node) => node.id === "node-vectors")?.appearance).toEqual({
-    kind: "no-evidence",
-    stale: false,
+    kind: "projected",
+    display: {
+      label: "arbitrary",
+      caption: "a theory fact",
+      citations: [],
+      style: { color: "purple" },
+    },
   });
 });
 

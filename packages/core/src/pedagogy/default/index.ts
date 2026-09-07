@@ -8,3 +8,5 @@ export * from "./indicators";
 export * from "./instruments";
 export * from "./tools";
 export * from "./package";
+export * from "./attachments";
+export * from "./release";

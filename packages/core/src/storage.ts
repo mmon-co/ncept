@@ -1,4 +1,3 @@
-import type { AssociationCommit, AssociationCommitId } from "./association";
 import type { Record, RecordId, RecordValidationContext, TrailSnapshot } from "./record";
 import type { ExactPedagogyRelease, ParameterOverride, ParameterOverrideId } from "./pedagogy";
 import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
@@ -31,16 +30,6 @@ export interface ParameterOverrideStore {
   setCurrentParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<void>;
 }
 
-export interface AssociationStore {
-  commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void>;
-  readAssociation(
-    scope: ProfileScope,
-    id: AssociationCommitId,
-  ): Promise<AssociationCommit | undefined>;
-  currentAssociation(scope: ProfileScope): Promise<AssociationCommit | undefined>;
-  setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): Promise<void>;
-}
-
 export interface ViewStore {
   saveView(scope: ProfileScope, view: View): Promise<void>;
   readView(scope: ProfileScope, id: ViewId): Promise<View | undefined>;
@@ -67,7 +56,6 @@ export interface CoreStores
   extends
     TrailStore,
     ParameterOverrideStore,
-    AssociationStore,
     ViewStore,
     PedagogySelectionStore,
     SpacedReviewStore {}

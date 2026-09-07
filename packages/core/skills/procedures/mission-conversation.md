@@ -1,16 +1,15 @@
-`(model)` Ask why the learner wants this until the answer is a concrete
-outcome ("read genomics papers by June", not "learn biology"), with a rough
-horizon and explicit out-of-scope exclusions. On first contact the same
-conversation gathers learning preferences. `(learner)` Confirms the
-statement and sets the Mission's priority against their other Missions.
-Emit any preference Observations here.
+Ask for a concrete outcome, a rough horizon, and what is out of scope. Read
+`mission(scope?)` and `preferences()` to avoid repeating earlier questions.
+Ask about practical learning preferences within this conversation; save them
+only through the host's mounted preference-recording affordance. Competence
+self-reports instead use `record_claim`, including the eliciting prompt.
 
-A Mission Observation attaches to a View over target Nodes, so it can only
-be emitted once those Nodes exist in the graph. When they do not, the
-confirmed statement is a prospective pursuit, not yet a Mission: propose
-charting and let it mint the Nodes and define the View. A revised or retired
-Mission is a new Observation, never an edit.
+If existing Nodes cover the outcome, use the host's Mission Confirmation tool
+and wait for approval before calling the goal saved. If content is missing,
+keep the outcome prospective and offer learner-started charting. Never invoke
+an edit Skill yourself. Retargeting an existing Mission/View is not implemented
+by this procedure; do not multiply Missions or claim an invisible rewrite.
 
-Done when the statement names an outcome, a horizon, and at least one
-exclusion, and is either emitted as a Mission over existing Nodes or handed
-to charting.
+Done when the learner confirms the outcome and exclusions, and either a Mission
+has been approved over concrete Nodes or the missing content is stated for an
+accepted editing activity.

@@ -111,18 +111,16 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
 
 function appearance(input: VisualProjectionInput, node: NodeId): VisualNodeAppearance {
   if (input.learner.kind === "absent") return { kind: "content" };
-  const learner = input.learner.nodes[node];
-  if (learner === undefined || learner.kind === "no-evidence")
-    return { kind: "no-evidence", stale: input.learner.stale };
-  return {
-    kind: "observed",
-    estimate: learner.estimate,
-    uncertainty: learner.uncertainty,
-    stale: input.learner.stale,
-  };
+  const display = input.learner.nodes[node];
+  return display === undefined ? { kind: "content" } : { kind: "projected", display };
 }
 
 export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
+  if (
+    input.learner.kind === "projected" &&
+    exactPatchRefKey(input.learner.patchRevision) !== exactPatchRefKey(input.graph.terminal)
+  )
+    throw new Error("Learner display does not match graph revision");
   const ranks = rankNodes(input.graph);
   const groups = input.graph.patchOrder.map((ref) => {
     const title = input.graph.patchMetadata[ref.identity]?.properties["patch:title"];
@@ -157,6 +155,9 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
       from: edge.from,
       to: edge.to,
       role: "dependency" as const,
+      ...(input.learner.kind === "projected" && input.learner.edges?.[edge.id] !== undefined
+        ? { display: input.learner.edges[edge.id] }
+        : {}),
       ...(strength === undefined ? {} : { strength }),
     };
   });

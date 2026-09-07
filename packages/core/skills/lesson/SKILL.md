@@ -1,33 +1,29 @@
 ---
 name: lesson
-description: Conducting a lesson, with a target in hand from planning or the learner. One session, one node, one demonstrable win - review, present, practice, close. Uses or makes materials and quizzes as needed.
+description: A target is in hand and the learner is ready to work. Teach a route step, its target and not-known prerequisites, with a separate demonstration for each capability. Retrieve, present, practice, recount.
 facet: advance
 entry: [learner, model]
 ---
 
 # Lesson
 
-Reads: `route(target)`, `trail(node)`, the target's Material, `items(target)`.
-
-1. `(model)` Scope to a single tangible win on the target, sized to the
-   learner's preferences. Open the node's Material as the Primary
-   material; no material → material work below, draft mode.
-2. Retrieval opener. `(learner)` Answers two or three recall questions from
-   `route(target)`, weighted toward stale trails. Evaluate each. A revealed
-   gap re-plans to the gap node.
-3. Present. `(model)` New content in small steps, from the support level the
-   trail justifies. Use the exact Patch content; cite it.
-4. Guided practice. `(learner)` Works the frontier steps; demonstrate
-   mastered steps briefly rather than making the learner grind them. Use
-   items from the bank; empty bank → quiz authoring below. Keyed answers
-   grade mechanically; comments and free work go through evaluate. Emit an
-   Observation at each direct demonstration.
-5. Close. `(learner)` One unaided check on the target's criterion.
-   `(model)` Propose review cards for nodes with new evidence (front
-   exercises the criterion, back is the demonstration just given), then
-   recount exactly what was recorded and what the frontier looks like now.
-   Done when the learner has heard the record and answered the card
-   proposals.
+1. Read `route(target)` and use its Node set as the host-opened Session scope.
+   Read prefetched `memory(node)` and `trail(node)` for every scoped Node.
+   The memory delta from another Session is context, not evidence.
+2. Pose retrieval checks on relevant prior capabilities. Record only actual
+   attempts. A gap can change the teaching order; a new scope requires the
+   host's concurrency check rather than quietly expanding this Session.
+3. Present a small worked example using the capability's content. Use material
+   work below if needed. Then fade help through practice from `items(node)`.
+4. Evaluate posed work as it happens. A Quiz's keyed attempts record themselves;
+   use the Record tools for free work, requested Artifact sections and checks.
+   Never count a helped completion as a second unaided demonstration.
+5. When ready, pose each Node's unaided close check. Read `trail(node)` and
+   `frontier(scope?)` now, not after close. Recount exactly what was recorded.
+   Suggest review cards for new unaided successes or tutor-graded failures;
+   the host Playground proposal/approval affordance owns the cards. If it is
+   unavailable, leave a suggestion in conversation, not a claimed saved card.
+   Do not block closing on cards or any background job.
 
 ## Evaluate
 

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
-import { PLATFORM_PEDAGOGY_RELEASE } from "../src/pedagogy";
+import { PLATFORM_PEDAGOGY_RELEASE } from "../src";
 import {
   buildSkillBundles,
   builtSkillBundles,

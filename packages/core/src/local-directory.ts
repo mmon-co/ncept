@@ -8,7 +8,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AssociationCommit, AssociationCommitId } from "./association";
 import { ensureDataDir, type DataDir } from "./datadir";
 import {
   parseRecord,
@@ -72,22 +71,6 @@ function isParameterOverride(value: unknown): value is ParameterOverride {
   );
 }
 
-function isAssociationCommit(value: unknown): value is AssociationCommit {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    value.id.startsWith("association-") &&
-    (value.parent === undefined ||
-      (typeof value.parent === "string" && value.parent.startsWith("association-"))) &&
-    typeof value.createdAt === "string" &&
-    isRecord(value.patchRevision) &&
-    isRecord(value.theory) &&
-    (value.parameterOverride === undefined || isParameterOverride(value.parameterOverride)) &&
-    Array.isArray(value.associations) &&
-    Array.isArray(value.interpretations)
-  );
-}
-
 function isView(value: unknown): value is View {
   if (
     !isRecord(value) ||
@@ -127,15 +110,6 @@ function readJson<Value>(
   return value;
 }
 
-function isAssociationId(value: string): value is AssociationCommitId {
-  return value.startsWith("association-");
-}
-
-function associationId(value: string): AssociationCommitId {
-  if (!isAssociationId(value)) throw new Error("invalid Association pointer");
-  return value;
-}
-
 function atomicJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}`;
@@ -146,10 +120,6 @@ function atomicJson(path: string, value: unknown): void {
 function immutableJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
-}
-
-function associationPath(dd: DataDir, scope: ProfileScope, id: AssociationCommitId): string {
-  return join(profileRoot(dd, scope), "associations", `${component(id, "Association id")}.json`);
 }
 
 function viewPath(dd: DataDir, scope: ProfileScope, id: ViewId): string {
@@ -260,44 +230,6 @@ export class LocalDirectoryCoreStore implements CoreStores {
     if ((await this.readParameterOverride(scope, id)) === undefined)
       throw new Error(`Parameter override ${id} is unavailable`);
     atomicJson(join(profileRoot(this.dataDir, scope), "parameter-overrides", "current.json"), id);
-  }
-
-  async commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void> {
-    if (Number.isNaN(Date.parse(commit.createdAt)))
-      throw new Error("Association commit createdAt must be an ISO timestamp");
-    if (
-      commit.parent !== undefined &&
-      (await this.readAssociation(scope, commit.parent)) === undefined
-    )
-      throw new Error(`Association parent ${commit.parent} is unavailable`);
-    immutableJson(associationPath(this.dataDir, scope, commit.id), commit);
-  }
-
-  async readAssociation(
-    scope: ProfileScope,
-    id: AssociationCommitId,
-  ): Promise<AssociationCommit | undefined> {
-    const path = associationPath(this.dataDir, scope, id);
-    return existsSync(path) ? readJson(path, isAssociationCommit, "Association commit") : undefined;
-  }
-
-  async currentAssociation(scope: ProfileScope): Promise<AssociationCommit | undefined> {
-    const pointer = join(profileRoot(this.dataDir, scope), "associations", "current");
-    if (!existsSync(pointer)) return undefined;
-    const id = associationId(readFileSync(pointer, "utf8").trim());
-    const commit = await this.readAssociation(scope, id);
-    if (commit === undefined) throw new Error(`Current Association ${id} is unavailable`);
-    return commit;
-  }
-
-  async setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): Promise<void> {
-    if ((await this.readAssociation(scope, id)) === undefined)
-      throw new Error(`Association ${id} is unavailable`);
-    const pointer = join(profileRoot(this.dataDir, scope), "associations", "current");
-    mkdirSync(dirname(pointer), { recursive: true });
-    const temporary = `${pointer}.tmp-${process.pid}`;
-    writeFileSync(temporary, `${id}\n`, { flag: "wx" });
-    renameSync(temporary, pointer);
   }
 
   async saveView(scope: ProfileScope, view: View): Promise<void> {

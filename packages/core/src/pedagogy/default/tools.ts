@@ -1,6 +1,14 @@
 import { jsonSchema, tool, type ToolSet } from "ai";
 import type { NodeMemory } from "../../node-memory";
-import type { NodeId } from "../../patch";
+import { exactPatchRefKey, type NodeId } from "../../patch";
+import type { ProjectionContext } from "../../pedagogy";
+import { attachDefaultClaim } from "./attachments";
+import {
+  refineDefaultUpdate,
+  updateDefault,
+  type DefaultLearnerState,
+  type DefaultRehomingModel,
+} from "./update";
 import {
   serializeRecord,
   validateRecordJson,
@@ -50,6 +58,18 @@ export interface DefaultToolContext {
     readonly scope?: readonly NodeId[];
     /** Host serializes read/transition/save per Profile + Node. A failed save may be retried. */
     updateMemory(node: NodeId, transition: (memory: NodeMemory) => NodeMemory): Promise<void>;
+  };
+}
+
+/** Background calls receive a complete projection and an atomic compare-and-save port.
+ * Hosts fence both log changes and graph/overlay changes against `expected` before saving.
+ * Rejected saves retry from a fresh read; no log payload is changed.
+ */
+export interface DefaultBackgroundContext extends DefaultToolContext {
+  readonly projection: {
+    context(): ProjectionContext;
+    save(expected: DefaultInstrumentContext, next: DefaultLearnerState): Promise<void>;
+    readonly rehomingModel?: DefaultRehomingModel;
   };
 }
 
@@ -229,5 +249,100 @@ export function keyedDemonstration(
     grader: "mechanical",
     outcome: option.correct ? "success" : "failure",
     response: option.error === undefined ? input.response : `${input.response}\n${option.error}`,
+  };
+}
+
+async function backgroundSnapshot(context: DefaultBackgroundContext, revision: string) {
+  const current = await context.read();
+  const clock = context.projection.context();
+  if (revision !== exactPatchRefKey(current.graph.terminal))
+    throw new Error("Background request targets a different graph revision");
+  if (
+    clock.scope !== undefined ||
+    current.state.theoryDigest !== clock.theoryDigest ||
+    current.graph.nodes.some(({ id }) => current.state.nodes[id] === undefined)
+  )
+    throw new Error("Background work requires a complete current theory projection");
+  return { current, clock };
+}
+
+async function saveBackground(
+  context: DefaultBackgroundContext,
+  current: DefaultInstrumentContext,
+  next: DefaultLearnerState,
+) {
+  await context.projection.save(current, next);
+  // Complete batches are replay-safe even if a prior save stopped after only some Nodes.
+  for (const { id } of current.graph.nodes)
+    await context.recording.updateMemory(id, (memory) =>
+      attachDefaultRecordMemory(memory, next.nodes[id]?.records ?? []),
+    );
+  return { revision: next.homing.revisionKey, pending: next.homing.pending };
+}
+
+/** Mounted for the system sweep/revision pass, not a second learner-state writer. */
+export function defaultBackgroundTools(context: DefaultBackgroundContext): ToolSet {
+  return {
+    attach_claim: tool({
+      description:
+        "Attach an active claim to current Nodes by their capability statements, never Edges. An empty nodes list explicitly leaves it homeless.",
+      inputSchema: jsonSchema<{
+        record: LogRecord["envelope"]["id"];
+        nodes: readonly NodeId[];
+        revision: string;
+      }>({
+        type: "object",
+        properties: {
+          record: { type: "string", pattern: "^record-.+" },
+          nodes: { type: "array", items: nodeProperties.node, uniqueItems: true },
+          revision: { type: "string" },
+        },
+        required: ["record", "nodes", "revision"],
+        additionalProperties: false,
+      }),
+      execute: async ({ record: id, nodes, revision }) => {
+        const { current, clock } = await backgroundSnapshot(context, revision);
+        const record = current.records.find(({ envelope }) => envelope.id === id);
+        if (!record) throw new Error("Claim attachment names a missing Record");
+        validateRecordJson(serializeRecord(record), context.recording.validation);
+        const next = attachDefaultClaim(
+          current.state,
+          current.graph,
+          current.records,
+          clock,
+          id,
+          nodes,
+        );
+        return { ...(await saveBackground(context, current, next)), citations: [id] };
+      },
+    }),
+    refine_records: tool({
+      description:
+        "Re-home pending demonstrations by verbatim task text after a Patch edit, preserve claim homes, and attach all current Record strings to Node memory. No new evidence is inferred.",
+      inputSchema: jsonSchema<{ revision: string }>({
+        type: "object",
+        properties: { revision: { type: "string" } },
+        required: ["revision"],
+        additionalProperties: false,
+      }),
+      execute: async ({ revision }) => {
+        const { current, clock } = await backgroundSnapshot(context, revision);
+        const provisional = updateDefault(
+          current.state,
+          current.graph,
+          current.graph,
+          current.records,
+          clock,
+        );
+        const next = await refineDefaultUpdate(
+          provisional,
+          current.graph,
+          current.records,
+          clock,
+          context.projection.rehomingModel,
+        );
+        return saveBackground(context, current, next);
+      },
+    }),
   };
 }
