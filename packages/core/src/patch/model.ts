@@ -238,7 +238,6 @@ export interface RootPatchDefinition {
     readonly from: NodeId;
     readonly to: NodeId;
     readonly role: EdgeRole;
-    readonly strength?: number;
   }[];
 }
 
@@ -281,7 +280,6 @@ export interface VisualEdge {
   readonly from: NodeId;
   readonly to: NodeId;
   readonly role: EdgeRole;
-  readonly strength?: number;
 }
 
 export interface VisualGroup {

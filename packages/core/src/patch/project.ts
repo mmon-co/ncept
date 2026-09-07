@@ -1,6 +1,6 @@
 import { PatchCompileError } from "./errors";
+import { lastMetadataContribution } from "./metadata";
 import type {
-  EdgeId,
   ExactPatchRef,
   MetadataSet,
   NodeId,
@@ -17,41 +17,23 @@ function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
   );
 }
 
-function metadataForEdge(graph: SelectedGraph, edge: EdgeId): MetadataSet[] {
-  return graph.metadataSets.filter((set) =>
-    set.subjects.some((subject) => subject.kind === "edge" && subject.id === edge),
-  );
-}
-
 function property<T extends string | number>(
   graph: SelectedGraph,
   sets: readonly MetadataSet[],
   key: string,
   accepts: (value: unknown) => value is T,
 ): { value: T; source: ExactPatchRef } | undefined {
-  const patchOrder = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
-  let selected:
-    | { value: T; source: ExactPatchRef; patchIndex: number; operationIndex: number }
-    | undefined;
-  for (const set of sets) {
-    const value = set.properties[key];
-    const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
-    if (!accepts(value) || source === undefined) continue;
-    const candidate = {
-      value,
-      source: source.patch,
-      patchIndex: patchOrder.get(exactPatchRefKey(source.patch)) ?? -1,
-      operationIndex: source.operationIndex,
-    };
-    if (
-      selected === undefined ||
-      candidate.patchIndex > selected.patchIndex ||
-      (candidate.patchIndex === selected.patchIndex &&
-        candidate.operationIndex > selected.operationIndex)
-    )
-      selected = candidate;
-  }
-  return selected;
+  const selected = lastMetadataContribution(
+    graph,
+    sets.flatMap((set) => {
+      const value = set.properties[key];
+      const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+      return accepts(value) && source !== undefined ? [{ value, source }] : [];
+    }),
+  );
+  return selected === undefined
+    ? undefined
+    : { value: selected.value, source: selected.source.patch };
 }
 
 function stringProperty(
@@ -60,19 +42,6 @@ function stringProperty(
   key: string,
 ): string | undefined {
   return property(graph, sets, key, (value): value is string => typeof value === "string")?.value;
-}
-
-function numberProperty(
-  graph: SelectedGraph,
-  sets: readonly MetadataSet[],
-  key: string,
-): number | undefined {
-  return property(
-    graph,
-    sets,
-    key,
-    (value): value is number => typeof value === "number" && Number.isFinite(value),
-  )?.value;
 }
 
 function rankNodes(graph: SelectedGraph): Map<NodeId, number> {
@@ -148,8 +117,6 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   });
   nodes.sort((left, right) => left.id.localeCompare(right.id));
   const edges = input.graph.edges.map((edge) => {
-    const sets = metadataForEdge(input.graph, edge.id);
-    const strength = numberProperty(input.graph, sets, "graph:strength");
     return {
       id: edge.id,
       from: edge.from,
@@ -158,7 +125,6 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
       ...(input.learner.kind === "projected" && input.learner.edges?.[edge.id] !== undefined
         ? { display: input.learner.edges[edge.id] }
         : {}),
-      ...(strength === undefined ? {} : { strength }),
     };
   });
   edges.sort((left, right) => left.id.localeCompare(right.id));

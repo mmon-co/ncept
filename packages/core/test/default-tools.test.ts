@@ -3,7 +3,8 @@ import type { ToolSet } from "ai";
 import {
   DEFAULT_RECORD_SCHEMAS,
   attachDefaultRecordMemory,
-  createDefaultPedagogyRelease,
+  PLATFORM_PEDAGOGY_RELEASE,
+  updateDefault,
   defaultInstrumentTools,
   defaultRecordingTools,
   keyedDemonstration,
@@ -18,7 +19,8 @@ import {
   emptyNodeMemory,
   type NodeMemory,
 } from "../src/node-memory";
-import { contentDigest, resolvePedagogy } from "../src/pedagogy";
+import { resolvePedagogy } from "../src/pedagogy";
+import { exactPatchRefKey } from "../src/patch";
 import type { Record as LogRecord, RecordId } from "../src/record";
 import { context, demonstration, fixtureGraph, patchRef, claim } from "./default-theory-fixture";
 
@@ -255,13 +257,8 @@ test("keyed components keep optional error strings verbatim and grade mechanical
   );
 });
 
-test("release factory exposes every tool factory and preserves its supplied update function", async () => {
-  let updates = 0;
-  // Factory customization fixture; default-catalog.test.ts exercises the concrete release.
-  const release = createDefaultPedagogyRelease((_state, _graph, next, records, clock) => {
-    updates++;
-    return projectDefault(records, next, clock);
-  }, contentDigest("explicit-test-update-artifact"));
+test("concrete release binds revision update and refinement tools to the default implementation", async () => {
+  const release = PLATFORM_PEDAGOGY_RELEASE;
   const resolved = resolvePedagogy({ get: () => release }, release.ref);
   const fixture = host();
   const tools = Object.assign(
@@ -296,8 +293,12 @@ test("release factory exposes every tool factory and preserves its supplied upda
     expect(await invoke(tools, name, { node: "node-base" })).toBeObject();
   expect(await invoke(tools, "route", { target: "node-target" })).toBeArray();
   const input = await fixture.ports.read();
-  resolved.theory.theory.update(input.state, input.graph, input.graph, [], context);
-  expect(updates).toBe(1);
+  expect(resolved.theory.theory.update(input.state, input.graph, input.graph, [], context)).toEqual(
+    updateDefault(input.state, input.graph, input.graph, [], context),
+  );
+  expect(
+    await invoke(tools, "refine_records", { revision: exactPatchRefKey(input.graph.terminal) }),
+  ).toMatchObject({ pending: [] });
   expect(resolved.skillCatalog.bundles.length).toBeGreaterThan(0);
   expect(resolved.basePrompt.length).toBeGreaterThan(0);
 });

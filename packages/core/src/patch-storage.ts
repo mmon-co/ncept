@@ -371,7 +371,6 @@ function rootContent(
               subjects: [{ kind: "edge" as const, id: edge.id }],
               properties: {
                 "graph:role": edge.role,
-                ...(edge.strength === undefined ? {} : { "graph:strength": edge.strength }),
               },
             },
           },
@@ -426,13 +425,10 @@ export function validateRootPatchDefinition(
         !nodeIds.has(edge.from) ||
         !nodeIds.has(edge.to) ||
         edge.from === edge.to ||
-        !hasDependencyRole(edge) ||
-        (edge.strength !== undefined && !Number.isFinite(edge.strength)),
+        !hasDependencyRole(edge),
     )
   )
-    invalidRoot(
-      "every Edge needs distinct existing endpoints, the dependency role, and a finite strength",
-    );
+    invalidRoot("every Edge needs distinct existing endpoints and the dependency role");
   const metadataIds = [
     ...definition.nodes.map(({ id }) => metadataId(id)),
     ...definition.edges.map(({ id }) => metadataId(id)),
@@ -526,14 +522,12 @@ export function readAuthoredRootPatchDefinition(
       if (operation.kind !== "add-edge") return [];
       const properties = metadataBySubject.get(`edge:${operation.edge.id}`);
       const role = properties?.["graph:role"];
-      const strength = properties?.["graph:strength"];
-      if (role !== "dependency" || (strength !== undefined && typeof strength !== "number"))
+      if (role !== "dependency")
         throw new PatchStoreError(`Edge ${operation.edge.id} is missing authored content`);
       return [
         {
           ...operation.edge,
           role,
-          ...(strength === undefined ? {} : { strength }),
         },
       ];
     }),

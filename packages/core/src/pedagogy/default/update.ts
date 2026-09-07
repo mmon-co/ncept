@@ -1,6 +1,7 @@
 import { completeJson, type LlmOptions } from "../../llm";
 import {
   exactPatchRefKey,
+  lastMetadataContribution,
   NODE_CRITERION_PROPERTY,
   sameExactPatchRef,
   type ExactPatchRef,
@@ -180,7 +181,6 @@ export function defaultRehomingModel(options: LlmOptions = {}): DefaultRehomingM
 }
 
 function candidates(graph: ResolvedGraph): DefaultRehomingRequest["candidates"] {
-  const order = new Map(graph.patchOrder.map((ref, i) => [exactPatchRefKey(ref), i]));
   return Object.freeze(
     graph.nodes.map(({ id }) => {
       const statements = graph.metadataSets.flatMap((set) => {
@@ -192,16 +192,9 @@ function candidates(graph: ResolvedGraph): DefaultRehomingRequest["candidates"] 
           graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
         if (typeof statement !== "string" || source === undefined)
           throw new Error(`Invalid capability statement for ${id}`);
-        return [
-          {
-            statement,
-            patch: order.get(exactPatchRefKey(source.patch)) ?? -1,
-            operation: source.operationIndex,
-          },
-        ];
+        return [{ value: statement, source }];
       });
-      statements.sort((a, b) => a.patch - b.patch || a.operation - b.operation);
-      const statement = statements.at(-1)?.statement;
+      const statement = lastMetadataContribution(graph, statements)?.value;
       if (statement === undefined) throw new Error(`Missing capability statement for ${id}`);
       return Object.freeze({ node: id, statement });
     }),

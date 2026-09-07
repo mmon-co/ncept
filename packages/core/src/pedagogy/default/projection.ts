@@ -1,4 +1,4 @@
-import { exactPatchRefKey, type NodeId, type ResolvedGraph } from "../../patch";
+import { lastMetadataContribution, type NodeId, type ResolvedGraph } from "../../patch";
 import type { LearnerState, ProjectionContext } from "../../pedagogy";
 import { recordUsesSchema } from "../../platform-records";
 import { isRecordTimestamp, type Record as LogRecord, type RecordId } from "../../record";
@@ -86,30 +86,20 @@ export function defaultNodeParameters(
   node: NodeId,
   parameters: DefaultParameters,
 ): DefaultParameters {
-  const order = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   function property(key: string): unknown {
-    let selected: { value: unknown; patch: number; operation: number } | undefined;
-    for (const set of graph.metadataSets) {
-      if (
-        !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
-        !(key in set.properties)
-      )
-        continue;
-      const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
-      if (source === undefined) throw new Error(`Missing provenance for ${key} on ${node}`);
-      const candidate = {
-        value: set.properties[key],
-        patch: order.get(exactPatchRefKey(source.patch)) ?? -1,
-        operation: source.operationIndex,
-      };
-      if (
-        selected === undefined ||
-        candidate.patch > selected.patch ||
-        (candidate.patch === selected.patch && candidate.operation > selected.operation)
-      )
-        selected = candidate;
-    }
-    return selected?.value;
+    return lastMetadataContribution(
+      graph,
+      graph.metadataSets.flatMap((set) => {
+        if (
+          !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
+          !(key in set.properties)
+        )
+          return [];
+        const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+        if (source === undefined) throw new Error(`Missing provenance for ${key} on ${node}`);
+        return [{ value: set.properties[key], source }];
+      }),
+    )?.value;
   }
   const size = property(WINDOW_SIZE_PROPERTY);
   const required = property(WINDOW_REQUIRED_PROPERTY);

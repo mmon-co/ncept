@@ -20,7 +20,11 @@ import {
 } from "../src/patch";
 import { claim, context, demonstration, patchRef, retraction } from "./default-theory-fixture";
 
-function graph(revision: string, statements: Partial<Record<NodeId, string>>) {
+function graph(
+  revision: string,
+  statements: Partial<Record<NodeId, string>>,
+  metadata: readonly SemanticOperation[] = [],
+) {
   const ref = {
     ...patchRef,
     commit: contentDigest(revision).slice(7, 47),
@@ -50,7 +54,7 @@ function graph(revision: string, statements: Partial<Record<NodeId, string>>) {
         lock: { entries: [] },
         materials: [],
         metadata: { properties: {}, citations: [] },
-        delta: { operations },
+        delta: { operations: [...operations, ...metadata] },
       },
     ],
   });
@@ -131,6 +135,39 @@ test("split uses every declared successor provisionally, then verbatim tasks sel
   const redo = await refineDefaultUpdate(state, split, records, context, async () => "node-other");
   expect(redo.nodes["node-other"]?.k).toBe(3);
   expect(refined.nodes["node-other"]?.k).toBe(0);
+});
+
+test("re-homing capability statements use contribution order rather than metadata-set identity", async () => {
+  const next = graph("statement-order", { "node-next": "Original statement" }, [
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-z-first",
+        subjects: [{ kind: "node", id: "node-next" }],
+        properties: { [NODE_CRITERION_PROPERTY]: "Earlier statement" },
+      },
+    },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-a-last",
+        subjects: [{ kind: "node", id: "node-next" }],
+        properties: { [NODE_CRITERION_PROPERTY]: "Final capability statement" },
+      },
+    },
+  ]);
+  const state = updateDefault(projectDefault(records, old, context), old, next, records, context);
+  const refined = await refineDefaultUpdate(
+    state,
+    next,
+    records,
+    context,
+    async ({ candidates }) => {
+      expect(candidates).toEqual([{ node: "node-next", statement: "Final capability statement" }]);
+      return "node-next";
+    },
+  );
+  expect(refined.nodes["node-next"]?.citations).toEqual(records.map(({ envelope }) => envelope.id));
 });
 
 test("retained UUID is a no-op even when its statement changes, with platform-compatible update signature", async () => {

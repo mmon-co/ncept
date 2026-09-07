@@ -55,7 +55,7 @@ const revision: PatchRevision = {
         metadataSet: {
           id: "metadata-dependency",
           subjects: [{ kind: "edge", id: "edge-spans-vectors" }],
-          properties: { "graph:role": "dependency", "graph:strength": 0.8 },
+          properties: { "graph:role": "dependency" },
         },
       },
       {
@@ -110,7 +110,6 @@ test("a native root Patch compiles from the empty graph into a content-only Visu
       from: "node-spans",
       to: "node-vectors",
       role: "dependency",
-      strength: 0.8,
     },
   ]);
   expect(JSON.stringify(graph)).not.toMatch(/mastery|estimate|uncertainty|artifact/i);
