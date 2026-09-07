@@ -13,6 +13,8 @@ import {
   readAuthoredPatchRevision,
   reviseAuthoredRootPatch,
   validateRootPatchDefinition,
+  validateAuthoredDocumentMaterialRevision,
+  reviseAuthoredDocumentMaterial,
 } from "../src/patch-storage";
 import type { ProfileScope } from "../src/scope";
 import { evaluateView } from "../src/view";
@@ -148,4 +150,60 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(existsSync(join(patches, "personal-transaction.json"))).toBeFalse();
   expect(existsSync(join(patches, "deferred-patch-updates"))).toBeFalse();
   expect(existsSync(join(patches, "reconciliation"))).toBeFalse();
+});
+
+test("authored Material dry runs share acceptance validation without writing Git objects", () => {
+  const dd = tempDataDir();
+  const patch = createAuthoredRootPatch(dd, main, {
+    title: "Geometry",
+    author: "Euclid",
+    labels: ["course"],
+    nodes: [{ id: "node-lines", label: "Lines", lesson: "Straight lines" }],
+    edges: [],
+  });
+  const revision = attachAuthoredDocumentMaterial(dd, main, patch.identity, {
+    id: "material-lines",
+    node: "node-lines",
+    title: "Lines",
+    body: "A straight line",
+  });
+  const repository = join(dd.root, "patches", "authored", patch.identity);
+  const files = readdirSync(repository, { recursive: true });
+  validateAuthoredDocumentMaterialRevision(
+    dd,
+    main,
+    revision.ref,
+    "material-lines",
+    "The revised line",
+  );
+  expect(readAuthoredPatchRevision(dd, patch.identity)).toEqual(revision);
+  expect(readdirSync(repository, { recursive: true })).toEqual(files);
+  for (const [material, body] of [
+    ["material-missing", "Body"],
+    ["material-lines", " "],
+  ] as const) {
+    expect(() =>
+      validateAuthoredDocumentMaterialRevision(dd, main, revision.ref, material, body),
+    ).toThrow();
+    expect(() => reviseAuthoredDocumentMaterial(dd, main, revision.ref, material, body)).toThrow();
+    expect(readAuthoredPatchRevision(dd, patch.identity)).toEqual(revision);
+    expect(readdirSync(repository, { recursive: true })).toEqual(files);
+  }
+  const applied = reviseAuthoredDocumentMaterial(
+    dd,
+    main,
+    revision.ref,
+    "material-lines",
+    "The revised line",
+  );
+  expect(applied.materials[0]?.body).toBe("The revised line");
+  expect(() =>
+    validateAuthoredDocumentMaterialRevision(
+      dd,
+      main,
+      revision.ref,
+      "material-lines",
+      "Another edit",
+    ),
+  ).toThrow("changed before");
 });
