@@ -23,7 +23,8 @@
     "./view": "./src/view.ts",
     "./model-spec": "./src/model-spec.ts",
     "./record": "./src/record.ts",
-    "./platform-records": "./src/platform-records.ts"
+    "./platform-records": "./src/platform-records.ts",
+    "./node-memory": "./src/node-memory.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",

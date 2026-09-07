@@ -4,6 +4,7 @@ export * from "./pedagogy";
 export * from "./record";
 export * from "./platform-records";
 export * from "./pedagogy/default";
+export * from "./node-memory";
 export { evaluateView, type View, type ViewId } from "./view";
 export {
   type AssociationStore,
