@@ -7,7 +7,8 @@ entry: [learner, model]
 
 # Lesson
 
-1. Read `route(target)` and use its Node set as the host-opened Session scope.
+1. Read `route(target)`. Use the selected target plus the route's Nodes as the
+   host-opened Session scope, even when the target is already known.
    Read prefetched `memory(node)` and `trail(node)` for every scoped Node.
    The memory delta from another Session is context, not evidence.
 2. Pose retrieval checks on relevant prior capabilities. Record only actual

@@ -17,7 +17,8 @@ entry: [learner, model]
    still merit a check; `probes(scope?)` lists suspect and probably-known Nodes.
    Offer learner-started probing when uncertainty about the learner matters.
 4. Read `route(target)` for the chosen target's not-known prerequisite cone in
-   dependency order. Ask the host to open that scope; if another open Session
+   dependency order. Ask the host to open the selected target plus the route's
+   Nodes, including a known target omitted by the route. If another open Session
    overlaps, continue it or choose a disjoint step, never silently steal Nodes.
 5. Explain the choice and leave a target for the lesson. Warnings are facts:
    inspect citations and offer realignment if content is defective; nothing

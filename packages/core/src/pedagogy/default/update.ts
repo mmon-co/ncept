@@ -255,5 +255,8 @@ export function homelessDefaultRecords(
   const overlay = overlayOf(state);
   if (overlay === undefined || !sameExactPatchRef(state.patchRevision, graph.terminal))
     throw new Error("Homeless query requires the overlay's graph revision");
-  return homeDefaultRecords(records, graph, overlay, at).homeless;
+  // An absent claim decision is pending sweep work, not an established lack of a home.
+  return homeDefaultRecords(records, graph, overlay, at).homeless.filter(
+    (record) => record.payload.kind !== "claim" || overlay.claims[record.envelope.id] !== undefined,
+  );
 }

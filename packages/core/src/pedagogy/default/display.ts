@@ -17,8 +17,8 @@ export function displayDefault(
   state: LearnerState<NodeState>,
 ): TheoryDisplay {
   if ("from" in subject) {
-    const dependent = defaultNodeState(state, subject.from);
-    const prerequisite = defaultNodeState(state, subject.to);
+    const dependent = defaultNodeState(state, subject.to);
+    const prerequisite = defaultNodeState(state, subject.from);
     const gating = !isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
     const frontier = isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
     return {
@@ -49,8 +49,8 @@ const reachable: QueryToken = (state, graph) =>
     graph.nodes
       .filter(({ id }) =>
         graph.edges
-          .filter(({ from }) => from === id)
-          .every(({ to }) => isDefaultKnown(defaultNodeState(state, to))),
+          .filter(({ to }) => to === id)
+          .every(({ from }) => isDefaultKnown(defaultNodeState(state, from))),
       )
       .map(({ id }) => id),
   );

@@ -21,6 +21,8 @@ import {
   type PreferencesPayload,
 } from "../src/platform-records";
 import type { Record as LogRecord } from "../src/record";
+import { selectGraph } from "../src/patch";
+import { route } from "../src/instrument-route";
 import { claim, context, demonstration, fixtureGraph, patchRef } from "./default-theory-fixture";
 
 function fixture(): DefaultInstrumentContext {
@@ -77,6 +79,20 @@ test("route returns not-known prerequisite cone in dependency order including ta
     ),
   ).toEqual(["node-base", "node-middle", "node-target"]);
   expect(() => routeDefault(input, "node-missing")).toThrow("Missing Node");
+});
+
+test("resolved Patch cone and default route agree on prerequisite-to-dependent Edges", () => {
+  const graph = fixtureGraph();
+  const state = projectDefault([], graph, context);
+  const nodes = routeDefault({ graph, state, records: [] }, "node-target").map(({ node }) => node);
+  expect(nodes).toEqual(["node-base", "node-middle", "node-target"]);
+  expect(route(graph, "node-target")).toEqual({
+    kind: "found",
+    nodes: nodes.map((id) => ({ id })),
+  });
+  expect(new Set(nodes)).toEqual(
+    new Set(selectGraph(graph, { cone: { targets: ["node-target"] } }).nodes.map(({ id }) => id)),
+  );
 });
 
 test("trail returns newest original records and the actual precedence rule; probes explain coverage", () => {
@@ -216,14 +232,14 @@ test("display alone captions Nodes and distinguishes gating/frontier/known Edges
     style: { class: "demonstrated" },
   });
   expect(
-    displayDefault({ id: "edge-one", from: "node-middle", to: "node-base" }, input.state),
+    displayDefault({ id: "edge-one", from: "node-base", to: "node-middle" }, input.state),
   ).toMatchObject({
     label: "not-gating",
     style: { class: "frontier", frontier: true, gating: false },
     citations: ["record-base1", "record-base2"],
   });
   expect(
-    displayDefault({ id: "edge-two", from: "node-target", to: "node-middle" }, input.state),
+    displayDefault({ id: "edge-two", from: "node-middle", to: "node-target" }, input.state),
   ).toMatchObject({ label: "gating", style: { gating: true } });
   expect(() => displayDefault({ id: "node-base" }, { ...input.state, nodes: {} })).toThrow(
     "not been projected",

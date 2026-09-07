@@ -1,4 +1,5 @@
 import { items } from "../../instrument-items";
+import { route } from "../../instrument-route";
 import { emptyNodeMemory, memory, type NodeMemory } from "../../node-memory";
 import type { NodeId, ResolvedGraph } from "../../patch";
 import type { LearnerState } from "../../pedagogy";
@@ -40,24 +41,15 @@ function nodesInScope(
 }
 
 function prerequisiteOrder(graph: ResolvedGraph, targets: readonly NodeId[]): readonly NodeId[] {
-  const visited = new Set<NodeId>();
-  const visiting = new Set<NodeId>();
-  const ordered: NodeId[] = [];
-  function visit(id: NodeId) {
-    if (!graph.nodes.some((node) => node.id === id)) throw new Error(`Missing Node ${id}`);
-    if (visiting.has(id)) throw new Error("Dependency cycle in route");
-    if (visited.has(id)) return;
-    visiting.add(id);
-    for (const edge of graph.edges
-      .filter(({ from }) => from === id)
-      .toSorted((a, b) => a.to.localeCompare(b.to)))
-      visit(edge.to);
-    visiting.delete(id);
-    visited.add(id);
-    ordered.push(id);
-  }
-  for (const target of targets) visit(target);
-  return ordered;
+  return [
+    ...new Set(
+      targets.flatMap((target) => {
+        const result = route(graph, target);
+        if (result.kind === "missing-target") throw new Error(`Missing Node ${target}`);
+        return result.nodes.map(({ id }) => id);
+      }),
+    ),
+  ];
 }
 
 export function missionDefault(context: DefaultInstrumentContext, scope?: readonly NodeId[]) {
@@ -110,11 +102,11 @@ export function frontierDefault(context: DefaultInstrumentContext, scope?: reado
     .map((id) => ({
       ...candidate(context, id),
       prerequisites: context.graph.edges
-        .filter(({ from }) => from === id)
-        .map(({ to }) => ({
-          node: to,
-          label: defaultNodeState(context.state, to).label,
-          citations: defaultNodeState(context.state, to).citations,
+        .filter(({ to }) => to === id)
+        .map(({ from }) => ({
+          node: from,
+          label: defaultNodeState(context.state, from).label,
+          citations: defaultNodeState(context.state, from).citations,
         })),
     }));
 }

@@ -39,11 +39,11 @@ export function fixtureGraph(metadata: readonly SemanticOperation[] = []) {
             ),
             {
               kind: "add-edge",
-              edge: { id: "edge-middle-base", from: "node-middle", to: "node-base" },
+              edge: { id: "edge-middle-base", from: "node-base", to: "node-middle" },
             },
             {
               kind: "add-edge",
-              edge: { id: "edge-target-middle", from: "node-target", to: "node-middle" },
+              edge: { id: "edge-target-middle", from: "node-middle", to: "node-target" },
             },
             ...metadata,
           ],

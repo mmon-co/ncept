@@ -109,10 +109,10 @@ export function indicatorsDefault(
     }
   }
   for (const edge of graph.edges) {
-    const successes = demonstrations(state.nodes[edge.from]?.records ?? []).filter(
+    const successes = demonstrations(state.nodes[edge.to]?.records ?? []).filter(
       ({ payload }) => payload.unaided && payload.outcome === "success",
     );
-    const failures = demonstrations(state.nodes[edge.to]?.records ?? []).filter(
+    const failures = demonstrations(state.nodes[edge.from]?.records ?? []).filter(
       ({ payload }) => payload.unaided && payload.outcome === "failure",
     );
     for (const failure of failures) {

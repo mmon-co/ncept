@@ -6,6 +6,7 @@ import {
   defaultPedagogicalTheory,
   updateDefault,
   homelessDefaultRecords,
+  routeDefault,
   canOpen,
   compactNodeMemory,
   emptyNodeMemory,
@@ -73,6 +74,7 @@ function host() {
   let failSave = false;
   let failMemory = false;
   let modelCalls = 0;
+  let scope: readonly NodeId[] = ["node-base", "node-middle", "node-target"];
   const ports: DefaultBackgroundContext = {
     read: async () => {
       const state = updateDefault(saved, graph, graph, records, { ...clock, at: now });
@@ -105,7 +107,9 @@ function host() {
             throw new Error("Conflicting attempt retry");
         } else records.push(record);
       },
-      scope: ["node-base", "node-middle", "node-target"],
+      get scope() {
+        return scope;
+      },
       updateMemory: async (node, transition) => {
         const next = transition(memories.get(node) ?? emptyNodeMemory(node));
         if (failMemory) {
@@ -170,6 +174,9 @@ function host() {
       failMemory = true;
     },
     modelCalls: () => modelCalls,
+    scope(nodes: readonly NodeId[]) {
+      scope = nodes;
+    },
     revise(next: ResolvedGraph) {
       saved = defaultPedagogicalTheory.update(saved, graph, next, records, { ...clock, at: now });
       graph = next;
@@ -263,7 +270,13 @@ test("catalog story A: empty trail to claims, approved scope, probing and first 
   expect(await fixture.call("mission", {})).toMatchObject([
     { record: { payload: { missionId: "classics" } } },
   ]);
-  const open = session(["node-base", "node-middle", "node-target"]);
+  const open = session([
+    ...new Set([
+      ...routeDefault(await fixture.ports.read(), "node-target").map(({ node }) => node),
+      "node-target" as const,
+    ]),
+  ]);
+  fixture.scope(open.view.nodeIds);
   expect(canOpen([], open, at, 60_000).kind).toBe("ok");
   expect(canOpen([open], session(["node-middle"]), at, 60_000)).toMatchObject({
     kind: "refused",
@@ -301,6 +314,77 @@ test("catalog story A: empty trail to claims, approved scope, probing and first 
   // Distinct checks on one Node both count; no segment/Node-level deduplication.
   expect((await fixture.state()).nodes["node-base"]?.label).toBe("demonstrated");
   expect(fixture.records).toHaveLength(5);
+});
+
+test("probably-known probe target stays in route-derived scope, overlap checks and memory inputs", async () => {
+  const fixture = host();
+  await fixture.call("record_claim", { statement: "I know it", stance: "knows" });
+  await fixture.call("attach_claim", {
+    record: "record-1",
+    nodes: ["node-isolated"],
+    revision: fixture.revision(),
+  });
+  expect(await fixture.call("probes", {})).toMatchObject([
+    { node: "node-isolated", label: "probably-known" },
+  ]);
+  expect(await fixture.call("route", { target: "node-isolated" })).toEqual([]);
+  const route = routeDefault(await fixture.ports.read(), "node-isolated");
+  const scope = [...new Set([...route.map(({ node }) => node), "node-isolated" as const])];
+  const open = session(scope);
+  fixture.scope(open.view.nodeIds);
+  expect(canOpen([], open, at, 60_000).kind).toBe("ok");
+  expect(canOpen([open], session(scope), at, 60_000)).toMatchObject({
+    kind: "refused",
+    reason: "scope-overlap",
+  });
+  expect(await Promise.all(scope.map((node) => fixture.call("memory", { node })))).toMatchObject([
+    { node: "node-isolated", citations: ["record-1"] },
+  ]);
+  const outsideMemory = fixture.memories.get("node-base");
+  fixture.next("record-probe");
+  await fixture.call("record_demonstration", { ...attempt, node: "node-isolated" });
+  expect(fixture.memories.get("node-isolated")?.originals.map(({ text }) => text)).toEqual([
+    "I know it",
+    attempt.task,
+    attempt.response,
+  ]);
+  expect(fixture.memories.get("node-base")).toBe(outsideMemory);
+});
+
+test("claim warnings exclude pending decisions but retain explicit homelessness and lost homes", async () => {
+  const fixture = host();
+  const homeless = async () => {
+    const input = await fixture.ports.read();
+    return input.homeless?.map(({ envelope }) => envelope.id);
+  };
+  await fixture.call("record_claim", { statement: "I know it", stance: "knows" });
+  expect(await homeless()).toEqual([]);
+  expect(await fixture.call("warnings", {})).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ kind: "homeless" })]),
+  );
+  await fixture.call("attach_claim", {
+    record: "record-1",
+    nodes: [],
+    revision: fixture.revision(),
+  });
+  expect(await homeless()).toEqual(["record-1"]);
+  await fixture.call("attach_claim", {
+    record: "record-1",
+    nodes: ["node-isolated"],
+    revision: fixture.revision(),
+  });
+  expect(await homeless()).toEqual([]);
+  const prior = (await fixture.ports.read()).graph;
+  fixture.revise({
+    ...prior,
+    terminal: { ...prior.terminal, commit: "claim-deleted" },
+    nodes: prior.nodes.filter(({ id }) => id !== "node-isolated"),
+  });
+  expect(await fixture.call("warnings", {})).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ kind: "homeless", citations: ["record-1"] }),
+    ]),
+  );
 });
 
 test("catalog story B: returning lesson records requested artifact work, sweep survives retries and close is only a recount", async () => {

@@ -121,17 +121,17 @@ export function defaultNodeParameters(
   return { ...parameters, window };
 }
 
-/** Graph edges point from dependent to prerequisite; the strict cone excludes the queried Node. */
+/** Graph edges point from prerequisite to dependent; the strict cone excludes the queried Node. */
 export function defaultDependentCone(graph: ResolvedGraph, node: NodeId): readonly NodeId[] {
   const seen = new Set<NodeId>([node]);
   const pending = [node];
   const result: NodeId[] = [];
   for (let current = pending.shift(); current !== undefined; current = pending.shift()) {
     for (const edge of graph.edges) {
-      if (edge.to !== current || seen.has(edge.from)) continue;
-      seen.add(edge.from);
-      pending.push(edge.from);
-      result.push(edge.from);
+      if (edge.from !== current || seen.has(edge.to)) continue;
+      seen.add(edge.to);
+      pending.push(edge.to);
+      result.push(edge.to);
     }
   }
   return result.sort();
