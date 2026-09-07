@@ -8,11 +8,26 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AssociationCommit, AssociationCommitId, ParameterOverride } from "./association";
+import type { AssociationCommit, AssociationCommitId } from "./association";
 import { ensureDataDir, type DataDir } from "./datadir";
-import type { TrailSnapshot } from "./fold";
-import type { Observation } from "./observation";
-import { contentDigest, type ExactPedagogyRelease } from "./pedagogy";
+import {
+  parseRecord,
+  serializeRecord,
+  validateRecordJson,
+  isContentDigest,
+  isRecordTimestamp,
+  type Record as LogRecord,
+  type RecordId,
+  type RecordValidationContext,
+  type TrailSnapshot,
+} from "./record";
+import { assertPlatformRetraction } from "./platform-records";
+import {
+  contentDigest,
+  type ExactPedagogyRelease,
+  type ParameterOverride,
+  type ParameterOverrideId,
+} from "./pedagogy";
 import { parseGraphQuery } from "./patch";
 import {
   parseSpacedReviewCard,
@@ -42,26 +57,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isObservation(value: unknown): value is Observation {
-  return (
-    isRecord(value) &&
-    isRecord(value.envelope) &&
-    typeof value.envelope.id === "string" &&
-    value.envelope.id.startsWith("observation-") &&
-    isRecord(value.payload) &&
-    (value.interpretation === undefined || isRecord(value.interpretation))
-  );
-}
-
 function isParameterOverride(value: unknown): value is ParameterOverride {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
     value.id.startsWith("parameter-override-") &&
-    typeof value.createdAt === "string" &&
-    typeof value.digest === "string" &&
-    value.digest.startsWith("sha256:") &&
-    isRecord(value.parameters)
+    isRecordTimestamp(value.createdAt) &&
+    isContentDigest(value.digest) &&
+    isRecord(value.theory) &&
+    isExactPedagogyRelease(value.theory.origin) &&
+    isContentDigest(value.theory.digest) &&
+    isRecord(value.parameters) &&
+    value.digest === contentDigest({ theory: value.theory, parameters: value.parameters })
   );
 }
 
@@ -167,28 +174,92 @@ export class LocalDirectoryCoreStore implements CoreStores {
     ensureDataDir(dataDir);
   }
 
-  async appendObservation(scope: ProfileScope, observation: Observation): Promise<void> {
-    const trail = await this.readTrail(scope);
-    if (trail.observations.some(({ envelope }) => envelope.id === observation.envelope.id))
-      throw new Error(`Observation ${observation.envelope.id} already exists`);
-    const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
+  private recordJson(scope: ProfileScope): string[] {
+    const path = join(profileRoot(this.dataDir, scope), "records.jsonl");
+    if (!existsSync(path)) return [];
+    // Each physical line wraps the original JSON string, so even multiline payloads stay verbatim.
+    return readFileSync(path, "utf8")
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line, index) => {
+        const value: unknown = JSON.parse(line);
+        if (typeof value !== "string") throw new Error(`${path}:${index + 1}: invalid Record JSON`);
+        parseRecord(value);
+        return value;
+      });
+  }
+
+  async appendRecord(
+    scope: ProfileScope,
+    record: LogRecord,
+    context: RecordValidationContext,
+  ): Promise<void> {
+    await this.appendRecordJson(scope, serializeRecord(record), context);
+  }
+
+  async appendRecordJson(
+    scope: ProfileScope,
+    serialized: string,
+    context: RecordValidationContext,
+  ): Promise<void> {
+    const record = validateRecordJson(serialized, context);
+    const prior = this.recordJson(scope).map(parseRecord);
+    if (prior.some(({ envelope }) => envelope.id === record.envelope.id))
+      throw new Error(`Record ${record.envelope.id} already exists`);
+    assertPlatformRetraction(record, prior);
+    const path = join(profileRoot(this.dataDir, scope), "records.jsonl");
     mkdirSync(dirname(path), { recursive: true });
-    appendFileSync(path, `${JSON.stringify(observation)}\n`);
+    appendFileSync(path, `${JSON.stringify(serialized)}\n`);
+  }
+
+  async readRecordJson(scope: ProfileScope, id: RecordId): Promise<string | undefined> {
+    return this.recordJson(scope).find((serialized) => parseRecord(serialized).envelope.id === id);
   }
 
   async readTrail(scope: ProfileScope): Promise<TrailSnapshot> {
-    const path = join(profileRoot(this.dataDir, scope), "trail.jsonl");
-    const observations = !existsSync(path)
-      ? []
-      : readFileSync(path, "utf8")
-          .split("\n")
-          .filter((line) => line !== "")
-          .map((line, index) => {
-            const value: unknown = JSON.parse(line);
-            if (!isObservation(value)) throw new Error(`${path}:${index + 1}: invalid Observation`);
-            return value;
-          });
-    return { observations, revision: contentDigest(observations) };
+    const serialized = this.recordJson(scope);
+    return { records: serialized.map(parseRecord), revision: contentDigest(serialized) };
+  }
+
+  async saveParameterOverride(scope: ProfileScope, override: ParameterOverride): Promise<void> {
+    if (!isParameterOverride(override)) throw new Error("Invalid parameter override");
+    immutableJson(this.parameterOverridePath(scope, override.id), override);
+  }
+
+  private parameterOverridePath(scope: ProfileScope, id: ParameterOverrideId): string {
+    return join(
+      profileRoot(this.dataDir, scope),
+      "parameter-overrides",
+      `${component(id, "Parameter override id")}.json`,
+    );
+  }
+
+  async readParameterOverride(
+    scope: ProfileScope,
+    id: ParameterOverrideId,
+  ): Promise<ParameterOverride | undefined> {
+    const path = this.parameterOverridePath(scope, id);
+    return existsSync(path) ? readJson(path, isParameterOverride, "parameter override") : undefined;
+  }
+
+  async currentParameterOverride(scope: ProfileScope): Promise<ParameterOverride | undefined> {
+    const path = join(profileRoot(this.dataDir, scope), "parameter-overrides", "current.json");
+    if (!existsSync(path)) return undefined;
+    const id = readJson(
+      path,
+      (value): value is ParameterOverrideId =>
+        typeof value === "string" && /^parameter-override-.+/.test(value),
+      "parameter override pointer",
+    );
+    const override = await this.readParameterOverride(scope, id);
+    if (override === undefined) throw new Error(`Current parameter override ${id} is unavailable`);
+    return override;
+  }
+
+  async setCurrentParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<void> {
+    if ((await this.readParameterOverride(scope, id)) === undefined)
+      throw new Error(`Parameter override ${id} is unavailable`);
+    atomicJson(join(profileRoot(this.dataDir, scope), "parameter-overrides", "current.json"), id);
   }
 
   async commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void> {

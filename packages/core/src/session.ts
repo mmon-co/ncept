@@ -7,7 +7,9 @@ export interface SessionPedagogyMetadata {
   readonly skillCatalogDigest: ContentDigest;
 }
 
-export function sessionPedagogyMetadata(pedagogy: ResolvedPedagogy): SessionPedagogyMetadata {
+export function sessionPedagogyMetadata<S, N, Context>(
+  pedagogy: ResolvedPedagogy<S, N, Context>,
+): SessionPedagogyMetadata {
   return {
     pedagogyRelease: pedagogy.release,
     theoryDigest: pedagogy.theory.digest,

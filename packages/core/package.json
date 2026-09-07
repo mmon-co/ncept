@@ -14,14 +14,15 @@
     "./instrument-route": "./src/instrument-route.ts",
     "./instrument-signals": "./src/instrument-signals.ts",
     "./local-directory": "./src/local-directory.ts",
-    "./observation": "./src/observation.ts",
     "./patch": "./src/patch/index.ts",
     "./patch-storage": "./src/patch-storage.ts",
     "./pedagogy": "./src/pedagogy.ts",
     "./playground": "./src/playground.ts",
     "./storage": "./src/storage.ts",
     "./view": "./src/view.ts",
-    "./model-spec": "./src/model-spec.ts"
+    "./model-spec": "./src/model-spec.ts",
+    "./record": "./src/record.ts",
+    "./platform-records": "./src/platform-records.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
