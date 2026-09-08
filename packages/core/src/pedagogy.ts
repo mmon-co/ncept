@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./digest";
 import type { ToolSet } from "ai";
 import type { ExactPatchRef, NodeId, ResolvedGraph, StructureNode, StructureEdge } from "./patch";
 import {
@@ -185,7 +185,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function contentDigest(value: unknown): ContentDigest {
-  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+  return `sha256:${sha256Hex(canonicalJson(value))}`;
 }
 
 /** Package labels and Skills do not affect projection identity; schema artifacts and parameters do. */

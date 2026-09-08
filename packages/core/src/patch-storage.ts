@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { sha256Hex } from "./digest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,11 +62,11 @@ function json(value: unknown): string {
 }
 
 function digest(content: PatchContent): ExactPatchRef["digest"] {
-  return `sha256:${createHash("sha256").update(json(content)).digest("hex")}`;
+  return `sha256:${sha256Hex(json(content))}`;
 }
 
 export function materialBodyDigest(body: string): DocumentMaterial["digest"] {
-  return `sha256:${createHash("sha256").update(body).digest("hex")}`;
+  return `sha256:${sha256Hex(body)}`;
 }
 
 function patchesRoot(dd: DataDir): string {
