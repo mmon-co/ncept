@@ -36,15 +36,18 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
       return malformed(`${label}.tag must be a non-empty string`);
     return { tag: raw.tag };
   }
-  if (keys[0] === "cone") {
-    if (!isRecord(raw.cone) || Object.keys(raw.cone).some((key) => key !== "targets"))
-      return malformed(`${label}.cone must contain only targets`);
-    if (!isArray(raw.cone.targets) || !raw.cone.targets.every(isNodeId))
-      return malformed(`${label}.cone.targets must contain Node ids`);
-    const [first, ...rest] = raw.cone.targets;
+  if (keys[0] === "cone" || keys[0] === "dependents") {
+    const operation = keys[0];
+    const term = raw[operation];
+    if (!isRecord(term) || Object.keys(term).some((key) => key !== "targets"))
+      return malformed(`${label}.${operation} must contain only targets`);
+    if (!isArray(term.targets) || !term.targets.every(isNodeId))
+      return malformed(`${label}.${operation}.targets must contain Node ids`);
+    const [first, ...rest] = term.targets;
     if (first === undefined)
-      return malformed(`${label}.cone.targets must contain at least one Node id`);
-    return { cone: { targets: [first, ...rest] } };
+      return malformed(`${label}.${operation}.targets must contain at least one Node id`);
+    const targets: [NodeId, ...NodeId[]] = [first, ...rest];
+    return operation === "cone" ? { cone: { targets } } : { dependents: { targets } };
   }
   if (keys[0] === "provenance") {
     if (!isRecord(raw.provenance))
@@ -168,7 +171,11 @@ function tagFragment(graph: ResolvedGraph, name: string): Fragment {
   return { nodes, edges, metadataSets };
 }
 
-function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[]): Fragment {
+function coneFragment(
+  graph: ResolvedGraph,
+  targets: readonly NodeId[],
+  dependents = false,
+): Fragment {
   const nodes = new Set<NodeId>();
   const edges = new Set<EdgeId>();
   const pending = [...targets];
@@ -176,12 +183,15 @@ function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[]): Fragmen
     const node = pending.shift();
     if (node === undefined || nodes.has(node)) continue;
     if (!graph.nodes.some(({ id }) => id === node))
-      throw new PatchCompileError("dangling-query", `cone targets missing node '${node}'`);
+      throw new PatchCompileError(
+        "dangling-query",
+        `${dependents ? "dependents" : "cone"} targets missing node '${node}'`,
+      );
     nodes.add(node);
     for (const edge of graph.edges)
-      if (edge.to === node) {
+      if ((dependents ? edge.from : edge.to) === node) {
         edges.add(edge.id);
-        pending.push(edge.from);
+        pending.push(dependents ? edge.to : edge.from);
       }
   }
   const metadataSets = new Set(
@@ -245,6 +255,7 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
 function evaluate(graph: ResolvedGraph, query: GraphQuery): Fragment {
   if ("tag" in query) return tagFragment(graph, query.tag);
   if ("cone" in query) return coneFragment(graph, query.cone.targets);
+  if ("dependents" in query) return coneFragment(graph, query.dependents.targets, true);
   if ("provenance" in query) return provenanceFragment(graph, query.provenance);
   if ("difference" in query)
     return combine(
