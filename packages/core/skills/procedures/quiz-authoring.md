@@ -1,10 +1,13 @@
-Invoked when a node's item bank is empty at first probe or first teach, or
-front-loaded for threshold nodes. `(model)` Elicit the classic wrong
-answers for the node, then author at least one item matching its criterion
-and knowledge type: factual → recall; conceptual → misconception-mapped
-distractors; procedural → slip distractors. Each keyed option carries its
-default interpretation, so a commentless answer grades mechanically.
-Options of equal length; each distractor a named error; skip means "I don't
-know". Every item must be failable: name the wrong answer a real learner
-would give. `(learner or author)` Reviews for the domain's actual
-misconceptions.
+Read `items(node)` before making a new task. An item is format-free content,
+not a new Node. Match the capability statement, not a taxonomy of formats.
+
+Choose a task that a real learner could fail. Use competing wrong answers
+where keyed choice fits; optionally give each option an `error` string that
+preserves the actual mistake wording in the response. No fixed error taxonomy
+is required. A skip produces no Record. Decide unaided conditions before posing;
+choice on a production capability is aided even when mechanically correct.
+
+Pose with the available task component or conversational check. The component
+appends its own demonstration, or evaluate free work with `record_demonstration`.
+Do not double-record. Saving an item bank is an approved host content edit, not
+an evidence write; without that affordance the item stays in conversation.

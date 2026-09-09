@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "../digest";
 import { PatchCompileError } from "./errors";
 import type {
   BaseRequirement,
@@ -209,7 +209,7 @@ function validateMaterials(
           "invalid-material-attachment",
           `Material ${material.id} targets unknown Node ${material.node}`,
         );
-      const actual = `sha256:${createHash("sha256").update(material.body).digest("hex")}`;
+      const actual = `sha256:${sha256Hex(material.body)}`;
       if (material.digest !== actual)
         throw new PatchCompileError(
           "invalid-material-attachment",

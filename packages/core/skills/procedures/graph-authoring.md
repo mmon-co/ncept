@@ -1,73 +1,26 @@
-Writes graph content into the learner's Notebook. No Patch exists until
-publication reifies a View. The authoring ladder is per node and lazy:
-criterion at inventory, items at first probe, material at first teach.
+Write graph content into the Notebook only through the host's mounted
+Confirmation affordance in a learner-approved exclusive edit session. A
+Personal scope is already a Patch; publication is not part of this procedure.
 
-## Mechanism
-
-Graph content is minted by `propose_confirmation` with a `graph-diff`
-payload; the learner accepts it and the Application applies it. That payload
-exists only after the learner has accepted a proposed charting or
-realignment Skill, so propose the Skill and wait for acceptance first. There
-is no other way to create a Node.
-
-A Node is an identifier and nothing else. Everything a learner or an
-Instrument reads about it lives in a Metadata set whose subject is that
-Node:
-
-- `display:label` — the learner-facing label. Required; the graph fails to
-  project without it.
-- `pedagogy:criterion` — the observable demonstration.
-- `pedagogy:knowledge-type` — `factual`, `conceptual`, or `procedural`.
-- `pedagogy:threshold` — boolean.
-- `pedagogy:lesson`, `pedagogy:items` — added by the later rungs, not at
-  inventory.
-
-So one Node at inventory is two operations: `add-node`, then
-`add-metadata-set` over it carrying the first four properties.
-
-## Inventory
-
-`(model)` Decompose the novel scope into a first slice: the Mission
-target's dependency cone, on the order of 10 to 25 nodes. Per node: a
-learner-facing label, one criterion (an observable demonstration), a
-knowledge type (factual, conceptual, procedural), and a threshold flag for
-the transformative, troublesome ones. `(learner)` Reviews labels and vetoes
-grain. Done when every node has all four fields and no criterion is
-compound.
-
-## Edges
-
-`(model)` For each candidate dependency: can a learner demonstrate the
-dependent's criterion without the prerequisite? Only "no" mints the edge;
-when unsure, omit it. `(query)` Cycles and dangling endpoints are rejected
-at entry; edge role is `dependency`. Done when the graph compiles as a DAG
-and every edge has a one-line justification.
-
-## Grounding
-
-`(model)` Verify the decomposition against syllabi, textbooks, and canonical
-references by web search; harvest documented misconceptions for later
-distractors; record citations. Search verifies structure; it is not prose
-to paste. Done when the slice has one external corroboration or a recorded
-reason none exists.
-
-## Publication
-
-The only Patch-surfacing flow. `(query)` Coverage over the View: unreachable
-nodes, nodes without items or materials, edges without justification. These
-gate sharing, not personal use. `(model)` Presents the report; `(author)`
-resolves each line. Reify the View into a fresh Patch and publish an
-immutable revision. Materials version with the Patch (ADR 0002).
+1. Inventory a small useful slice. Each Node asserts one capability, with
+   `display:label` and `pedagogy:criterion` in a Metadata set attached to its
+   UUID. Knowledge type and threshold flags are optional authoring hints.
+   Items and lesson material are lazy, not prerequisites for charting.
+2. Test each Edge: can the dependent be demonstrated without the prerequisite?
+   Only "no" warrants necessity. Teaching order and presentation are not Edges.
+   The host rejects cycles and dangling endpoints before approval.
+3. Ground the slice in the learner's actual target and available trusted sources.
+   Explain uncertainty, rather than fabricate corroboration or a Hub result.
+4. Submit the graph diff, or a Mission carrying the diff, through the host's
+   mounted proposal tool. Wait for acceptance and successful application before
+   referring to the Nodes as existing. A failed Confirmation is not a saved edit.
 
 ## Structure guidelines
 
-- Inventorying nodes → a node is a measurement, not a topic: mint it only
-  when its criterion stands alone and its state would change routing.
-- One topic yields "explain X" and "do X" → two criteria, two nodes; link
-  only by definitional necessity, which often fails.
-- Writing a criterion → if it needs "and", split the node.
-- Creating or revising a node → criterion and one item before any material.
-- Proposing an edge → definitional necessity or no edge. Teaching custom and
-  the expert's own path are not necessity.
-- Scoping a chart → slice before course; flag threshold concepts and spend
-  extra items and lesson budget there.
+- Different task presentations → one capability Node, not separate identities.
+- Unclear grain → ask whether the parts have different necessary Edges.
+- Same capability in a revision → retain UUID; a new UUID is a new identity.
+- Removed identities → successors are provisional hints, not evidence. The
+  theory's update and background content pass own record homes, not graph Edges.
+- Unavailable edit affordance → discuss the proposed content without claiming
+  that a Node, View, item or material has been saved.

@@ -1,3 +1,5 @@
+import type { ContentDigest, TheoryDisplay } from "../pedagogy";
+
 export type PatchId = `patch-${string}`;
 export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
@@ -236,7 +238,6 @@ export interface RootPatchDefinition {
     readonly from: NodeId;
     readonly to: NodeId;
     readonly role: EdgeRole;
-    readonly strength?: number;
   }[];
 }
 
@@ -248,34 +249,19 @@ export interface PatchViewDefinition {
 
 export interface SelectedGraph extends ResolvedGraph {}
 
-export type LearnerNodeProjection =
-  | { readonly kind: "no-evidence" }
-  | {
-      readonly kind: "observed";
-      readonly estimate: number;
-      readonly uncertainty: number;
-      readonly lastObserved?: string;
-    };
-
 export type LearnerProjection =
   | { readonly kind: "absent" }
   | {
-      readonly kind: "associated";
-      readonly userGraphRevision: ExactPatchRef;
-      readonly associationRevision: string;
-      readonly nodes: Readonly<Partial<Record<NodeId, LearnerNodeProjection>>>;
-      readonly stale: boolean;
+      readonly kind: "projected";
+      readonly patchRevision: ExactPatchRef;
+      readonly theoryDigest: ContentDigest;
+      readonly nodes: Readonly<Partial<Record<NodeId, TheoryDisplay>>>;
+      readonly edges?: Readonly<Partial<Record<EdgeId, TheoryDisplay>>>;
     };
 
 export type VisualNodeAppearance =
   | { readonly kind: "content" }
-  | { readonly kind: "no-evidence"; readonly stale: boolean }
-  | {
-      readonly kind: "observed";
-      readonly estimate: number;
-      readonly uncertainty: number;
-      readonly stale: boolean;
-    };
+  | { readonly kind: "projected"; readonly display: TheoryDisplay };
 
 export interface VisualNode {
   readonly id: NodeId;
@@ -289,11 +275,11 @@ export interface VisualNode {
 }
 
 export interface VisualEdge {
+  readonly display?: TheoryDisplay;
   readonly id: EdgeId;
   readonly from: NodeId;
   readonly to: NodeId;
   readonly role: EdgeRole;
-  readonly strength?: number;
 }
 
 export interface VisualGroup {

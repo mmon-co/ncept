@@ -1,27 +1,26 @@
-import { currentExperiences, type Observation, type ObservationId } from "./observation";
-import type { NodeId } from "./patch";
-import type { TrailSnapshot } from "./fold";
+import {
+  currentExperiences,
+  experienceHistory,
+  MISSION_SCHEMA,
+  PREFERENCES_SCHEMA,
+  recordUsesSchema,
+  type MissionPayload,
+  type PreferencesPayload,
+} from "./platform-records";
+import type { Record, RecordId, TrailSnapshot } from "./record";
 
-export interface MissionInstrumentRecord {
-  /** Citation for the current Mission fact. */
-  readonly observationId: ObservationId;
-  readonly observedAt: string;
-  readonly experienceScope: string;
-  readonly missionId: string;
-  readonly statement: string;
-  readonly viewId: string;
-  readonly targetNodes: readonly NodeId[];
-  readonly priority: number;
+export interface MissionInstrumentRecord extends MissionPayload {
+  readonly recordId: RecordId;
+  readonly at: string;
   readonly historyAvailable: boolean;
+  readonly history: readonly Record[];
 }
 
-export interface PreferencesInstrumentRecord {
-  /** Citation for the current Learning preferences fact. */
-  readonly observationId: ObservationId;
-  readonly observedAt: string;
-  readonly experienceScope: string;
-  readonly values: Readonly<Record<string, string | number | boolean | readonly string[]>>;
+export interface PreferencesInstrumentRecord extends PreferencesPayload {
+  readonly recordId: RecordId;
+  readonly at: string;
   readonly historyAvailable: boolean;
+  readonly history: readonly Record[];
 }
 
 export interface MissionInstrumentResult {
@@ -32,56 +31,43 @@ export interface PreferencesInstrumentResult {
   readonly records: readonly PreferencesInstrumentRecord[];
 }
 
-function currentExperienceRecords(observations: readonly Observation[]): readonly Observation[] {
-  return currentExperiences(observations).filter(
-    ({ envelope }) => envelope.subject.kind === "experience",
-  );
+/** Current platform Missions, not a pedagogical selection among them. */
+export function mission(trail: TrailSnapshot, scope?: string): MissionInstrumentResult {
+  return {
+    records: currentExperiences(trail.records).flatMap((record) => {
+      if (
+        !recordUsesSchema(record, MISSION_SCHEMA) ||
+        (scope !== undefined && record.payload.scope !== scope)
+      )
+        return [];
+      const history = experienceHistory(record, trail.records);
+      return [
+        {
+          ...record.payload,
+          recordId: record.envelope.id,
+          at: record.envelope.at,
+          historyAvailable: history.length > 1,
+          history,
+        },
+      ];
+    }),
+  };
 }
 
-/** Reads current Mission facts without choosing among them. */
-export function mission(trail: TrailSnapshot, experienceScope?: string): MissionInstrumentResult {
-  const records = currentExperienceRecords(trail.observations).flatMap((observation) => {
-    if (
-      observation.payload.kind !== "mission" ||
-      observation.envelope.subject.kind !== "experience" ||
-      (experienceScope !== undefined && observation.envelope.subject.scope !== experienceScope)
-    )
-      return [];
-
-    return [
-      {
-        observationId: observation.envelope.id,
-        observedAt: observation.envelope.observedAt,
-        experienceScope: observation.envelope.subject.scope,
-        missionId: observation.payload.missionId,
-        statement: observation.payload.statement,
-        viewId: observation.payload.viewId,
-        targetNodes: observation.payload.targetNodes,
-        priority: observation.payload.priority,
-        historyAvailable: observation.supersedes !== undefined,
-      },
-    ];
-  });
-  return { records };
-}
-
-/** Reads the current Learning preferences facts without making a choice from them. */
 export function preferences(trail: TrailSnapshot): PreferencesInstrumentResult {
-  const records = currentExperienceRecords(trail.observations).flatMap((observation) => {
-    if (
-      observation.payload.kind !== "preferences" ||
-      observation.envelope.subject.kind !== "experience"
-    )
-      return [];
-    return [
-      {
-        observationId: observation.envelope.id,
-        observedAt: observation.envelope.observedAt,
-        experienceScope: observation.envelope.subject.scope,
-        values: observation.payload.values,
-        historyAvailable: observation.supersedes !== undefined,
-      },
-    ];
-  });
-  return { records };
+  return {
+    records: currentExperiences(trail.records).flatMap((record) => {
+      if (!recordUsesSchema(record, PREFERENCES_SCHEMA)) return [];
+      const history = experienceHistory(record, trail.records);
+      return [
+        {
+          ...record.payload,
+          recordId: record.envelope.id,
+          at: record.envelope.at,
+          historyAvailable: history.length > 1,
+          history,
+        },
+      ];
+    }),
+  };
 }

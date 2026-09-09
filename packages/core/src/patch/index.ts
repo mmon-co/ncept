@@ -1,4 +1,5 @@
 export * from "./model";
+export * from "./metadata";
 export * from "./errors";
 export * from "./resolve";
 export * from "./reify";

@@ -7,7 +7,7 @@ import {
   type Card as FsrsCard,
   type Grade as FsrsGrade,
 } from "ts-fsrs";
-import type { Grade } from "./observation";
+export type Grade = "again" | "hard" | "good" | "easy";
 
 export interface ReviewRecord {
   readonly ts: string;

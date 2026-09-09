@@ -1,33 +1,30 @@
 ---
 name: recording-review
-description: Something already recorded seems wrong. Fires when the learner disputes a recount or trail view, or when you suspect a record yourself. Differential - one record is local; the same complaint recurring across nodes is structural, either the theory's parameters or the topology. Topology goes to realignment.
+description: A recorded task, outcome or claim seems wrong. Inspect and correct the cited Record. A recurring content defect is different from a local recording error; state labels are not editable source data.
 facet: position
 entry: [learner, model]
 ---
 
 # Recording review
 
-Observations are append-only. Every correction is a new commit with
-history; nothing is rewritten.
-
-1. `(query)` `trail(node)`: the node's Observations in learner terms: when,
-   what happened, how it was interpreted.
-2. Local, one record:
-   - Wrong node → re-point the association. New Association commit; the
-     Observation is untouched.
-   - Wrong interpretation → re-interpret the payload under the current
-     theory through evaluate below. The old interpretation is superseded.
-   - Stale claim ("I've forgotten this") → a new experience Observation.
-     Uncertainty aging already prices time.
-3. Structural, the complaint recurs across nodes:
-   - Parameters (estimates move too fast or too slow, guided work counts
-     too much, uncertainty ages wrongly) → propose one named parameter
-     override with the records behind it. This is gated: the learner
-     accepts before you write it. On acceptance write the user-scoped
-     override and refold. Never edit the theory or the code.
-   - Topology (the same failure sits on nodes sharing a suspect edge or
-     grain) → realignment.
-4. `(query)` Refold. `(model)` Confirm to the learner what changed.
+1. Read `trail(node)` and the original task, response and rule. Use `memory(node)`
+   for context only. Distinguish incorrect recording from a disagreeable but
+   correctly applied label rule.
+2. Confirm the disputed Record with the learner. Use `record_retraction({of})`
+   to retract that demonstration or claim. Never target a retraction or a
+   platform Mission/preferences Record with this tool.
+3. Wrong Node or recorded outcome → retract, then append a corrected
+   `record_demonstration` preserving the task/response. Do not pretend that
+   retraction plus replacement is one atomic operation: if replacement fails,
+   report the completed retraction and retry the replacement with its identity.
+   A new self-report such as "I've forgotten" uses `record_claim`, not deletion
+   of a genuine earlier success. The sweep attaches it by capability content.
+4. Read `trail(node)` again and explain what changed. Nothing waits for close.
+   Repeated topology complaints → inspect `warnings(scope?)` and offer
+   learner-started realignment with citations, never edit here. Repeated policy
+   complaints → explain the current window/horizon and retain the request in
+   conversation; this catalog has no parameter-editing tool. Do not claim to
+   have changed parameters or the learner's label manually.
 
 ## Evaluate
 

@@ -1,32 +1,25 @@
 ---
 name: charting
-description: A Mission or prospective pursuit has no adequate graph content backing it. Chart it - search for reuse or adoption first, author a slice only for the novel remainder, then hand off to probing. Differential - content that exists but misfits the Mission is realignment. A long patch-editing process; propose it and let the learner start it.
+description: A proposed pursuit has no adequate graph content. Inspect existing content first and author only the missing slice. Existing content that misfits needs realignment instead. The learner must start this editing activity.
 facet: chart
 entry: [learner]
 ---
 
 # Charting
 
-Reads: `coverage(scope)`, `mission(scope?)`, `preferences()`, `query({ store:
-"nodes", text })`, hub search.
-
-1. Coverage. `(query)` `coverage` over the User graph for the Mission's
-   terms, then the dashboard `query` over Nodes before proposing anything new;
-   hub search when the Hub is worth searching. `(model)` Existing Notebook
-   Nodes, other regions, or an adoptable Patch that cover part of the scope →
-   propose targeting or adopting them, never a duplicate. `(learner)` Confirms.
-   Done when the novel scope is stated.
-2. Author the novel scope, per slice:
+1. Read `mission(scope?)` and `preferences()`. Ask what the learner wants to do.
+   Use the host's content query to inspect existing Nodes before proposing new
+   ones. `coverage(scope?)` is evidence absence, not a search for missing topics.
+   A useful existing Node is reused even when its trail is empty.
+2. In the learner-approved exclusive edit session, author the missing slice:
 
 @procedures/graph-authoring.md
 
-3. Define the View: the Mission's target Nodes and their dependency cone.
-   A prospective pursuit becomes a Mission only now, once a View exists.
-4. Handoff. `(model)` Hand the Mission and every Observation from this
-   conversation to probing over the new slice. The first lesson is a
-   separate session after probing has mapped the learner's position.
-   Charting produces no learning evidence.
-
-## Quiz authoring
-
-@procedures/quiz-authoring.md
+3. Once concrete target identities and the proposed graph pass the host's
+   validation, propose the Mission with that graph diff through its Confirmation
+   affordance. A goal remains prospective until approval; do not write a Mission
+   to nonexistent Nodes. Read `mission` and `coverage` after approval.
+4. Offer learner-started probing over the approved slice, or leave a lesson
+   target if enough evidence already exists. Never invoke probing yourself.
+   Record any genuine competence claims with `record_claim` verbatim; charting
+   text alone is not a demonstration. Claims can attach after content exists.

@@ -1,6 +1,14 @@
-import { createHash } from "node:crypto";
-import type { NodeId } from "./patch";
-import { builtSkillBundles, tutorSystemPrompt, type BuiltSkillBundle } from "./skills";
+import { sha256Hex } from "./digest";
+import type { ToolSet } from "ai";
+import type { ExactPatchRef, NodeId, ResolvedGraph, StructureNode, StructureEdge } from "./patch";
+import {
+  isContentDigest,
+  isRecordTimestamp,
+  type Record as LogRecord,
+  type RecordId,
+  type RecordSchema,
+} from "./record";
+import type { BuiltSkillBundle } from "./skills";
 
 export type ContentDigest = `sha256:${string}`;
 export type PedagogyPackageId = `pedagogy-${string}`;
@@ -11,98 +19,179 @@ export interface ExactPedagogyRelease {
   readonly digest: ContentDigest;
 }
 
-export type EvidenceKind = "used" | "generalized" | "recalled" | "not-recalled";
-export type EvidenceSupport = "independent" | "assisted";
-export type MistakeKind = "slip" | "bug" | "misconception";
+export type ParameterValue =
+  | null
+  | string
+  | number
+  | boolean
+  | readonly ParameterValue[]
+  | { readonly [key: string]: ParameterValue };
+export type TheoryParameters = Readonly<{ [key: string]: ParameterValue }>;
 
-export interface EvidenceInterpretation {
-  readonly kind: "evidence";
-  readonly evidence: EvidenceKind;
-  readonly support: EvidenceSupport;
-  readonly mistake?: MistakeKind;
-  readonly misconception?: string;
-  readonly confusedWith?: NodeId;
+export interface LearnerState<N = unknown> {
+  readonly patchRevision: ExactPatchRef;
+  readonly theoryDigest: ContentDigest;
+  readonly nodes: Readonly<Partial<Record<NodeId, N>>>;
 }
 
-export interface ExperienceInterpretation {
-  readonly kind: "experience";
-  readonly experience: "mission" | "preferences";
+/** Time and effective parameters are inputs: projections never read an ambient clock. */
+export interface ProjectionContext {
+  readonly at: string;
+  readonly scope?: readonly NodeId[];
+  readonly parameters: TheoryParameters;
+  readonly theoryDigest: ContentDigest;
 }
 
-export type ObservationInterpretationValue = EvidenceInterpretation | ExperienceInterpretation;
-
-export interface EvidenceEffect {
-  readonly delta: number;
-  readonly information: number;
+export interface TheoryDisplay {
+  readonly label: string;
+  readonly caption: string;
+  readonly citations: readonly RecordId[];
+  readonly style: Readonly<Record<string, string | number | boolean>>;
 }
 
-export interface PedagogicalTheoryParameters {
-  readonly initialEstimate: number;
-  readonly masteryGate: number;
-  /** The highest estimate recall evidence alone can establish. */
-  readonly recallRungCeiling: number;
-  readonly evidence: Readonly<Record<EvidenceKind, EvidenceEffect>>;
-  readonly assistedWeight: number;
-  readonly propagation: {
-    readonly success: number;
-    readonly failure: number;
-    readonly defaultEdgeStrength: number;
-  };
-  /** Exponential rate per day at which old certainty decays back toward total uncertainty. */
-  readonly uncertaintyAgingRate: number;
-  readonly frontierRanking: {
-    readonly missionImportanceWeight: number;
-    readonly uncertaintyWeight: number;
-    readonly stalenessWeight: number;
-    readonly rungCeilingWeight: number;
-    /** Age at which an observed estimate contributes maximum staleness to ranking. */
-    readonly stalenessHorizonDays: number;
-  };
-  readonly probeRanking: {
-    readonly uncertaintyWeight: number;
-    readonly topologicalValueWeight: number;
-    readonly stalenessWeight: number;
-    /** Age at which an observed estimate contributes maximum staleness to ranking. */
-    readonly stalenessHorizonDays: number;
-  };
-  readonly revisionSignals: {
-    readonly minimumMistakeClusterSize: number;
-    readonly minimumPrerequisiteContradictions: number;
-    /** Number of recent outcomes considered when looking for non-converging alternation. */
-    readonly outcomeWindow: number;
-    readonly minimumOutcomeAlternations: number;
-    readonly minimumItemAttempts: number;
-  };
+export interface Indicator {
+  readonly kind: string;
+  readonly nodes: readonly NodeId[];
+  readonly citations: readonly RecordId[];
+  readonly message: string;
 }
 
-export interface PayloadVocabularyMapping {
-  readonly vocabularyVersion: number;
+/** A package chooses its host ports; the platform does not define a pedagogical tool vocabulary. */
+export type ToolFactory<Context = never> = (context: Context) => ToolSet;
+
+/**
+ * A Playground hook (ADR 0015): a named event with the shape of the input the Playground
+ * emits and the shape of the output it accepts back. The platform validates both sides.
+ */
+export interface PlaygroundHook<Input = unknown, Output = unknown> {
+  readonly name: string;
+  readonly accepts: (input: unknown) => input is Input;
+  readonly returns: (output: unknown) => output is Output;
 }
 
-export interface PedagogicalTheory {
-  readonly implementationVersion: string;
-  readonly payloadMapping: PayloadVocabularyMapping;
-  readonly parameters: PedagogicalTheoryParameters;
+export interface PlaygroundContract<
+  Hooks extends Readonly<Record<string, PlaygroundHook>> = Readonly<Record<string, PlaygroundHook>>,
+> {
+  readonly id: string;
+  readonly hooks: Hooks;
 }
 
-export interface ResolvedTheory {
+type HookInput<Hook> = Hook extends PlaygroundHook<infer Input, unknown> ? Input : never;
+type HookOutput<Hook> = Hook extends PlaygroundHook<unknown, infer Output> ? Output : never;
+
+/** A theory's handlers for one Playground: any subset of its hooks, typed by the contract. */
+export type PlaygroundHandlers<Contract extends PlaygroundContract, Context> = {
+  readonly [Hook in keyof Contract["hooks"]]?: (
+    input: HookInput<Contract["hooks"][Hook]>,
+    context: Context,
+  ) => Promise<HookOutput<Contract["hooks"][Hook]>> | HookOutput<Contract["hooks"][Hook]>;
+};
+
+/** What the theory interface stores: handlers erased to the platform's validation boundary. */
+export type PlaygroundHandlerMap<Context> = Readonly<
+  Record<string, Readonly<Record<string, (input: never, context: Context) => unknown>>>
+>;
+
+/** Binds typed handlers to a contract; the map key is the Playground's identity. */
+export function implementPlayground<Contract extends PlaygroundContract, Context>(
+  contract: Contract,
+  handlers: PlaygroundHandlers<Contract, Context>,
+): PlaygroundHandlerMap<Context> {
+  const erased: Record<string, (input: never, context: Context) => unknown> = {};
+  for (const [hook, handler] of Object.entries(handlers)) {
+    if (contract.hooks[hook]?.name !== hook)
+      throw new Error(`${contract.id} declares no hook ${hook}`);
+    if (handler) erased[hook] = handler;
+  }
+  return { [contract.id]: erased };
+}
+
+export type HookResult<Output> =
+  | { readonly kind: "handled"; readonly output: Output }
+  | { readonly kind: "unhandled" };
+
+/**
+ * Runs one Playground hook through the theory: the input must satisfy the Playground's
+ * schema and the output the hook's, or the call throws. A theory that implements nothing
+ * for the Playground or the hook yields `unhandled`, and the Playground keeps working.
+ */
+export async function runPlaygroundHook<Input, Output, Context>(
+  theory: Pick<PedagogicalTheory<unknown, unknown, Context>, "playgrounds">,
+  contract: PlaygroundContract,
+  hook: PlaygroundHook<Input, Output>,
+  input: Input,
+  context: Context,
+): Promise<HookResult<Output>> {
+  if (contract.hooks[hook.name] !== hook)
+    throw new Error(`${contract.id} declares no hook ${hook.name}`);
+  if (!hook.accepts(input)) throw new Error(`Invalid ${contract.id}.${hook.name} input`);
+  const handler = theory.playgrounds[contract.id]?.[hook.name];
+  if (handler === undefined) return { kind: "unhandled" };
+  const output: unknown = await Reflect.apply(handler, undefined, [input, context]);
+  if (!hook.returns(output)) throw new Error(`Invalid ${contract.id}.${hook.name} output`);
+  return { kind: "handled", output };
+}
+
+export interface PedagogicalTheory<S = unknown, N = unknown, Context = never> {
+  /** Trusted build-provided identity of the executable artifact, not verification of caller-supplied code. */
+  readonly implementationDigest: ContentDigest;
+  readonly schemas: readonly RecordSchema<S>[];
+  readonly parameters: TheoryParameters;
+  acceptsParameters(parameters: unknown): parameters is TheoryParameters;
+  project(
+    records: readonly LogRecord[],
+    graph: ResolvedGraph,
+    context: ProjectionContext,
+  ): LearnerState<N>;
+  update(
+    state: LearnerState<N>,
+    graph: ResolvedGraph,
+    graphNext: ResolvedGraph,
+    records: readonly LogRecord[],
+    context: ProjectionContext,
+  ): LearnerState<N>;
+  display(subject: StructureNode | StructureEdge, state: LearnerState<N>): TheoryDisplay;
+  readonly queryTokens: Readonly<
+    Record<string, (state: LearnerState<N>, graph: ResolvedGraph) => ReadonlySet<NodeId>>
+  >;
+  readonly tools: readonly ToolFactory<Context>[];
+  /** Handlers for the Playgrounds this theory knows, by Playground identity (ADR 0015). */
+  readonly playgrounds: PlaygroundHandlerMap<Context>;
+  readonly skills: SkillCatalogRelease;
+  readonly basePrompt: string;
+  indicators(state: LearnerState<N>, graph: ResolvedGraph): readonly Indicator[];
+  convert?(foreign: readonly LogRecord[]): readonly LogRecord<S>[];
+}
+
+export type ParameterOverrideId = `parameter-override-${string}`;
+
+/** Complete effective parameters, scoped to the exact theory revision they were accepted against. */
+export interface ParameterOverride {
+  readonly id: ParameterOverrideId;
+  readonly createdAt: string;
+  readonly theory: { readonly origin: ExactPedagogyRelease; readonly digest: ContentDigest };
+  readonly parameters: TheoryParameters;
+  readonly digest: ContentDigest;
+}
+
+export interface ResolvedTheory<S = unknown, N = unknown, Context = never> {
   readonly origin: ExactPedagogyRelease;
   readonly digest: ContentDigest;
-  readonly theory: PedagogicalTheory;
+  readonly theory: PedagogicalTheory<S, N, Context>;
 }
 
-export interface ResolvedPedagogy {
+export interface ResolvedPedagogy<S = unknown, N = unknown, Context = never> {
   readonly release: ExactPedagogyRelease;
-  readonly theory: ResolvedTheory;
+  readonly theory: ResolvedTheory<S, N, Context>;
   readonly basePrompt: string;
   readonly basePromptDigest: ContentDigest;
   readonly skillCatalog: SkillCatalogRelease;
   readonly skillCatalogDigest: ContentDigest;
 }
 
-export interface ContainedTheory {
+export interface ContainedTheory<S = unknown, N = unknown, Context = never> {
   readonly kind: "contained";
-  readonly theory: PedagogicalTheory;
+  readonly theory: PedagogicalTheory<S, N, Context>;
 }
 
 export interface ReferencedTheory {
@@ -110,7 +199,9 @@ export interface ReferencedTheory {
   readonly release: ExactPedagogyRelease;
 }
 
-export type TheorySelection = ContainedTheory | ReferencedTheory;
+export type TheorySelection<S = unknown, N = unknown, Context = never> =
+  | ContainedTheory<S, N, Context>
+  | ReferencedTheory;
 
 export interface SkillCatalogRelease {
   readonly bundles: readonly BuiltSkillBundle[];
@@ -121,84 +212,30 @@ export type SkillOverlayOperation =
   | { readonly kind: "replace"; readonly target: string; readonly bundle: BuiltSkillBundle }
   | { readonly kind: "disable"; readonly target: string };
 
-export interface PlatformPedagogyRelease {
+export interface PlatformPedagogyRelease<S = unknown, N = unknown, Context = never> {
   readonly form: "root";
   readonly ref: ExactPedagogyRelease;
-  readonly theory: ContainedTheory;
+  readonly theory: ContainedTheory<S, N, Context>;
   readonly basePrompt: string;
   readonly skillCatalog: SkillCatalogRelease;
 }
 
-export interface PedagogyOverlayRelease {
+export interface PedagogyOverlayRelease<S = unknown, N = unknown, Context = never> {
   readonly form: "overlay";
   readonly ref: ExactPedagogyRelease;
   readonly platformRoot: ExactPedagogyRelease;
-  readonly theory?: TheorySelection;
+  readonly theory?: TheorySelection<S, N, Context>;
   readonly basePrompt?: string;
   readonly skillOverlay?: readonly SkillOverlayOperation[];
 }
 
-export type PedagogyRelease = PlatformPedagogyRelease | PedagogyOverlayRelease;
+export type PedagogyRelease<S = unknown, N = unknown, Context = never> =
+  | PlatformPedagogyRelease<S, N, Context>
+  | PedagogyOverlayRelease<S, N, Context>;
 
-export interface PedagogyReleaseSource {
-  get(ref: ExactPedagogyRelease): PedagogyRelease | undefined;
+export interface PedagogyReleaseSource<S = unknown, N = unknown, Context = never> {
+  get(ref: ExactPedagogyRelease): PedagogyRelease<S, N, Context> | undefined;
 }
-
-export const V1_FOLD_IMPLEMENTATION = "common-concept-fold-v1";
-export const V1_PAYLOAD_VOCABULARY = 1;
-
-/** Guard the only theory implementation and payload mapping executable in this build. */
-export function assertSupportedPedagogicalTheory(theory: PedagogicalTheory): void {
-  if (theory.implementationVersion !== V1_FOLD_IMPLEMENTATION)
-    throw new Error(
-      `unsupported Pedagogical-theory implementation ${theory.implementationVersion}`,
-    );
-  if (theory.payloadMapping.vocabularyVersion !== V1_PAYLOAD_VOCABULARY)
-    throw new Error(
-      `unsupported Pedagogical-theory payload mapping ${theory.payloadMapping.vocabularyVersion}`,
-    );
-}
-
-export const V1_PEDAGOGICAL_PARAMETERS: PedagogicalTheoryParameters = {
-  initialEstimate: 0.5,
-  masteryGate: 0.8,
-  recallRungCeiling: 0.8,
-  evidence: {
-    used: { delta: 0.18, information: 1 },
-    generalized: { delta: 0.28, information: 1.5 },
-    recalled: { delta: 0.12, information: 0.8 },
-    "not-recalled": { delta: -0.22, information: 1 },
-  },
-  assistedWeight: 0.5,
-  propagation: { success: 0.35, failure: 0.1, defaultEdgeStrength: 0.5 },
-  uncertaintyAgingRate: 0.015,
-  frontierRanking: {
-    missionImportanceWeight: 1,
-    uncertaintyWeight: 0.6,
-    stalenessWeight: 0.3,
-    rungCeilingWeight: 0.5,
-    stalenessHorizonDays: 30,
-  },
-  probeRanking: {
-    uncertaintyWeight: 1,
-    topologicalValueWeight: 0.5,
-    stalenessWeight: 0.4,
-    stalenessHorizonDays: 30,
-  },
-  revisionSignals: {
-    minimumMistakeClusterSize: 2,
-    minimumPrerequisiteContradictions: 2,
-    outcomeWindow: 4,
-    minimumOutcomeAlternations: 3,
-    minimumItemAttempts: 3,
-  },
-};
-
-export const V1_PEDAGOGICAL_THEORY: PedagogicalTheory = {
-  implementationVersion: V1_FOLD_IMPLEMENTATION,
-  payloadMapping: { vocabularyVersion: V1_PAYLOAD_VOCABULARY },
-  parameters: V1_PEDAGOGICAL_PARAMETERS,
-};
 
 function canonicalValue(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string")
@@ -223,16 +260,76 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function contentDigest(value: unknown): ContentDigest {
-  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+  return `sha256:${sha256Hex(canonicalJson(value))}`;
 }
 
-/** A theory digest deliberately excludes package labels and hashes only executable fold identity and parameters. */
-export function pedagogicalTheoryDigest(theory: PedagogicalTheory): ContentDigest {
+/** Package labels and Skills do not affect projection identity; schema artifacts and parameters do. */
+export function pedagogicalTheoryDigest<S, N, Context>(
+  theory: PedagogicalTheory<S, N, Context>,
+  parameters = theory.parameters,
+): ContentDigest {
+  if (!isContentDigest(theory.implementationDigest))
+    throw new Error("Invalid theory implementation digest");
+  if (!theory.acceptsParameters(parameters)) throw new Error("Invalid theory parameters");
+  const schemaIds = new Set<string>();
+  for (const { ref } of theory.schemas) {
+    if (!ref.id.trim() || !isContentDigest(ref.digest))
+      throw new Error("Invalid theory schema identity");
+    if (ref.id.startsWith("platform/") || schemaIds.has(ref.id))
+      throw new Error(`Invalid theory schema ${ref.id}`);
+    schemaIds.add(ref.id);
+  }
   return contentDigest({
-    implementationVersion: theory.implementationVersion,
-    payloadMapping: theory.payloadMapping,
-    parameters: theory.parameters,
+    implementationDigest: theory.implementationDigest,
+    schemas: theory.schemas
+      .map(({ ref }) => ref)
+      .toSorted((left, right) => left.id.localeCompare(right.id)),
+    parameters,
   });
+}
+
+export function parameterOverride<S, N, Context>(
+  theory: ResolvedTheory<S, N, Context>,
+  input: {
+    readonly id: ParameterOverrideId;
+    readonly createdAt: string;
+    readonly parameters: TheoryParameters;
+  },
+): ParameterOverride {
+  if (!/^parameter-override-.+/.test(input.id) || !isRecordTimestamp(input.createdAt))
+    throw new Error("Parameter override requires an identity and ISO timestamp");
+  if (pedagogicalTheoryDigest(theory.theory) !== theory.digest)
+    throw new Error("Invalid resolved theory digest");
+  if (!theory.theory.acceptsParameters(input.parameters))
+    throw new Error("Invalid theory parameters");
+  const target = { origin: theory.origin, digest: theory.digest };
+  // Clone JSON parameters so subsequent edits to a proposal cannot alter an accepted value.
+  const parameters: TheoryParameters = JSON.parse(canonicalJson(input.parameters));
+  return {
+    ...input,
+    theory: target,
+    parameters,
+    digest: contentDigest({ theory: target, parameters }),
+  };
+}
+
+export function resolveTheoryParameters<S, N, Context>(
+  theory: ResolvedTheory<S, N, Context>,
+  override?: ParameterOverride,
+): TheoryParameters {
+  if (override === undefined) return theory.theory.parameters;
+  if (
+    !sameRelease(override.theory.origin, theory.origin) ||
+    override.theory.digest !== theory.digest
+  )
+    throw new Error("Parameter override targets a different Pedagogical theory");
+  if (
+    override.digest !== contentDigest({ theory: override.theory, parameters: override.parameters })
+  )
+    throw new Error("Invalid parameter override digest");
+  if (!theory.theory.acceptsParameters(override.parameters))
+    throw new Error("Invalid theory parameters");
+  return override.parameters;
 }
 
 function sameRelease(left: ExactPedagogyRelease, right: ExactPedagogyRelease): boolean {
@@ -243,19 +340,22 @@ function sameRelease(left: ExactPedagogyRelease, right: ExactPedagogyRelease): b
   );
 }
 
-function readRelease(source: PedagogyReleaseSource, ref: ExactPedagogyRelease): PedagogyRelease {
+function readRelease<S, N, Context>(
+  source: PedagogyReleaseSource<S, N, Context>,
+  ref: ExactPedagogyRelease,
+): PedagogyRelease<S, N, Context> {
   const release = source.get(ref);
   if (release === undefined || !sameRelease(release.ref, ref))
     throw new Error(`Pedagogy release ${ref.identity}@${ref.version} is unavailable`);
   return release;
 }
 
-function resolveContainedTheory(
-  source: PedagogyReleaseSource,
-  selection: TheorySelection,
+function resolveContainedTheory<S, N, Context>(
+  source: PedagogyReleaseSource<S, N, Context>,
+  selection: TheorySelection<S, N, Context>,
   containingRelease: ExactPedagogyRelease,
   visited: Set<string>,
-): ResolvedTheory {
+): ResolvedTheory<S, N, Context> {
   if (selection.kind === "contained")
     return {
       origin: containingRelease,
@@ -321,10 +421,10 @@ function skillCatalogDigest(catalog: SkillCatalogRelease): ContentDigest {
 }
 
 /** Resolve one exact package release; overlays inherit only from their exact platform root. */
-export function resolvePedagogy(
-  source: PedagogyReleaseSource,
+export function resolvePedagogy<S, N, Context>(
+  source: PedagogyReleaseSource<S, N, Context>,
   selected: ExactPedagogyRelease,
-): ResolvedPedagogy {
+): ResolvedPedagogy<S, N, Context> {
   const release = readRelease(source, selected);
   if (release.form === "root") {
     const theory = resolveContainedTheory(source, release.theory, release.ref, new Set());
@@ -357,23 +457,3 @@ export function resolvePedagogy(
     skillCatalogDigest: skillCatalogDigest(skillCatalog),
   };
 }
-
-const PLATFORM_THEORY_DIGEST = pedagogicalTheoryDigest(V1_PEDAGOGICAL_THEORY);
-const PLATFORM_BASE_PROMPT = tutorSystemPrompt();
-const PLATFORM_SKILL_CATALOG: SkillCatalogRelease = { bundles: builtSkillBundles() };
-
-export const PLATFORM_PEDAGOGY_RELEASE: PlatformPedagogyRelease = {
-  form: "root",
-  ref: {
-    identity: "pedagogy-common-platform",
-    version: "1.0.0",
-    digest: contentDigest({
-      theory: PLATFORM_THEORY_DIGEST,
-      basePrompt: contentDigest(PLATFORM_BASE_PROMPT),
-      skillCatalog: skillCatalogDigest(PLATFORM_SKILL_CATALOG),
-    }),
-  },
-  theory: { kind: "contained", theory: V1_PEDAGOGICAL_THEORY },
-  basePrompt: PLATFORM_BASE_PROMPT,
-  skillCatalog: PLATFORM_SKILL_CATALOG,
-};

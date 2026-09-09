@@ -1,17 +1,13 @@
 ---
 name: mission
-description: No Mission covers what the learner wants, or the Mission has drifted - the target cone is exhausted or the learner keeps overriding plans. Differential - planning matches intent to an existing Mission first; come here when nothing fits. First contact starts freely; re-running as a drift check-in repurposes the session, so propose it.
+description: No current Mission matches the learner's intent. Clarify a concrete outcome and reuse existing content where possible. Propose an edit activity only when content is missing, not simply because the trail is empty.
 facet: chart
 entry: [learner, model]
 ---
 
 # Mission
 
-A drifted Mission poisons every plan made from it. Reads: `mission(scope?)`,
-`preferences()`.
+Read `mission(scope?)` and `preferences()` before inventing another goal.
+If an existing Mission fits, leave it alone and return a target for planning.
 
 @procedures/mission-conversation.md
-
-If the Mission has no graph content backing it, propose charting. If it
-stands but its slice is exhausted, charting extends the slice; do not
-extend it here.

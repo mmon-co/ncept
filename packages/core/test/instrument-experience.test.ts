@@ -1,263 +1,220 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
 import { mission, preferences } from "@concept/core/instrument-experience";
-import type { TrailSnapshot } from "@concept/core/fold";
 import {
-  interpretObservation,
-  type ExperienceObservationSubject,
-  type MissionPayload,
-  type Observation,
-  type ObservationEnvelope,
-  type ObservationId,
-  type PreferencesPayload,
-} from "@concept/core/observation";
-import {
-  PLATFORM_PEDAGOGY_RELEASE,
-  V1_PEDAGOGICAL_THEORY,
+  LocalDirectoryCoreStore,
+  MISSION_SCHEMA,
+  PLATFORM_RETRACTION_SCHEMA,
+  PREFERENCES_SCHEMA,
   contentDigest,
-  pedagogicalTheoryDigest,
-} from "@concept/core/pedagogy";
+  currentExperiences,
+  type MissionPayload,
+  type PreferencesPayload,
+  type Record,
+  type RecordId,
+  type RecordSchema,
+  type TrailSnapshot,
+} from "../src";
+import { tempDataDir } from "./helpers";
+import { patchRef, sampleRecord, scope, validation } from "./record-fixture";
 
-const theory = {
-  origin: PLATFORM_PEDAGOGY_RELEASE.ref,
-  digest: pedagogicalTheoryDigest(V1_PEDAGOGICAL_THEORY),
-  theory: V1_PEDAGOGICAL_THEORY,
-};
-
-function experience(
-  id: ObservationId,
-  observedAt: string,
-  experienceScope: string,
-  payload: MissionPayload | PreferencesPayload,
-  supersedes?: ObservationId,
-): Observation {
-  return interpretObservation(
-    {
+function record<P>(id: RecordId, at: string, schema: RecordSchema<P>, payload: P): Record<P> {
+  return {
+    envelope: {
       id,
-      observedAt,
-      source: { kind: "session", sessionId: "session-experience" },
-      subject: { kind: "experience", scope: experienceScope },
+      at,
+      origin: { kind: "session", sessionId: "session-mission" },
+      schema: schema.ref,
     },
     payload,
-    theory,
-    supersedes,
-  );
+  };
 }
 
-function trail(observations: readonly Observation[]): TrailSnapshot {
-  return { observations, revision: contentDigest(observations) };
-}
-
-test("experience instruments preserve current Mission and preference chains independently by exact scope", () => {
-  const firstMission = experience(
-    "observation-mission-first",
-    "2026-09-01T09:00:00.000Z",
-    "patch:calculus",
-    {
-      kind: "mission",
-      vocabularyVersion: 1,
-      missionId: "calculus",
-      statement: "Understand derivatives",
-      viewId: "view-calculus",
-      targetNodes: ["node-derivative"],
-      priority: 1,
-    },
-  );
-  const currentMission = experience(
-    "observation-mission-current",
-    "2026-09-01T10:00:00.000Z",
-    "patch:calculus",
-    {
-      kind: "mission",
-      vocabularyVersion: 1,
-      missionId: "calculus",
-      statement: "Apply derivatives",
-      viewId: "view-calculus",
-      targetNodes: ["node-derivative", "node-chain-rule"],
-      priority: 3,
-    },
-    firstMission.envelope.id,
-  );
-  const sameIdDifferentScope = experience(
-    "observation-mission-view",
-    "2026-09-01T10:30:00.000Z",
-    "view:calculus",
-    {
-      kind: "mission",
-      vocabularyVersion: 1,
-      missionId: "calculus",
-      statement: "Review the calculus view",
-      viewId: "view-calculus",
-      targetNodes: ["node-derivative"],
-      priority: 2,
-    },
-  );
-  const independentMission = experience(
-    "observation-mission-language",
-    "2026-09-01T11:00:00.000Z",
-    "patch:language",
-    {
-      kind: "mission",
-      vocabularyVersion: 1,
-      missionId: "language",
-      statement: "Read a short story",
-      viewId: "view-language",
-      targetNodes: ["node-reading"],
-      priority: 2,
-    },
-  );
-  const firstPreferences = experience(
-    "observation-preferences-first",
-    "2026-09-01T12:00:00.000Z",
-    "profile",
-    {
-      kind: "preferences",
-      vocabularyVersion: 1,
-      values: { pace: "quick" },
-    },
-  );
-  const currentPreferences = experience(
-    "observation-preferences-current",
-    "2026-09-01T13:00:00.000Z",
-    "profile",
-    {
-      kind: "preferences",
-      vocabularyVersion: 1,
-      values: { pace: "deliberate", formats: ["examples", "diagrams"] },
-    },
-    firstPreferences.envelope.id,
-  );
-  const independentPreferences = experience(
-    "observation-preferences-workshop",
-    "2026-09-01T14:00:00.000Z",
-    "workshop",
-    {
-      kind: "preferences",
-      vocabularyVersion: 1,
-      values: { pace: "quick" },
-    },
-  );
-  const records = trail([
-    firstMission,
-    currentMission,
-    sameIdDifferentScope,
-    independentMission,
-    firstPreferences,
-    currentPreferences,
-    independentPreferences,
-  ]);
-
-  expect(mission(records)).toEqual({
-    records: [
-      {
-        observationId: "observation-mission-current",
-        observedAt: "2026-09-01T10:00:00.000Z",
-        experienceScope: "patch:calculus",
-        missionId: "calculus",
-        statement: "Apply derivatives",
-        viewId: "view-calculus",
-        targetNodes: ["node-derivative", "node-chain-rule"],
-        priority: 3,
-        historyAvailable: true,
-      },
-      {
-        observationId: "observation-mission-view",
-        observedAt: "2026-09-01T10:30:00.000Z",
-        experienceScope: "view:calculus",
-        missionId: "calculus",
-        statement: "Review the calculus view",
-        viewId: "view-calculus",
-        targetNodes: ["node-derivative"],
-        priority: 2,
-        historyAvailable: false,
-      },
-      {
-        observationId: "observation-mission-language",
-        observedAt: "2026-09-01T11:00:00.000Z",
-        experienceScope: "patch:language",
-        missionId: "language",
-        statement: "Read a short story",
-        viewId: "view-language",
-        targetNodes: ["node-reading"],
-        priority: 2,
-        historyAvailable: false,
-      },
-    ],
-  });
-  expect(mission(records, "view:calculus").records.map(({ missionId }) => missionId)).toEqual([
-    "calculus",
-  ]);
-  expect(mission(records, "patch:calculus").records.map(({ statement }) => statement)).toEqual([
-    "Apply derivatives",
-  ]);
-
-  expect(preferences(records)).toEqual({
-    records: [
-      {
-        observationId: "observation-preferences-current",
-        observedAt: "2026-09-01T13:00:00.000Z",
-        experienceScope: "profile",
-        values: { pace: "deliberate", formats: ["examples", "diagrams"] },
-        historyAvailable: true,
-      },
-      {
-        observationId: "observation-preferences-workshop",
-        observedAt: "2026-09-01T14:00:00.000Z",
-        experienceScope: "workshop",
-        values: { pace: "quick" },
-        historyAvailable: false,
-      },
-    ],
-  });
-
-  const empty = trail([]);
-  expect(mission(empty)).toEqual({ records: [] });
-  expect(preferences(empty)).toEqual({ records: [] });
-});
-
-test("experience construction and supersession reject subjects outside the exact chain scope", () => {
-  const payload: MissionPayload = {
-    kind: "mission",
-    vocabularyVersion: 1,
+function missionRecord(
+  id: RecordId,
+  at: string,
+  overrides: Partial<MissionPayload> = {},
+): Record<MissionPayload> {
+  return record(id, at, MISSION_SCHEMA, {
+    scope: "profile",
     missionId: "calculus",
     statement: "Understand derivatives",
     viewId: "view-calculus",
-    targetNodes: ["node-derivative"],
+    targetNodes: [{ node: "node-sample", provenance: patchRef }],
     priority: 1,
-  };
-  const invalidEnvelope: ObservationEnvelope<ExperienceObservationSubject> = {
-    id: "observation-invalid-subject",
-    observedAt: "2026-09-01T09:00:00.000Z",
-    source: { kind: "session", sessionId: "session-experience" },
-    subject: { kind: "experience", scope: "patch:calculus" },
-  };
-  Reflect.set(invalidEnvelope, "subject", {
-    kind: "node",
-    node: "node-derivative",
-    effectiveProvenance: {
-      identity: "patch-calculus",
-      version: "1.0.0",
-      commit: "0123456789abcdef0123456789abcdef01234567",
-      digest: `sha256:${"a".repeat(64)}`,
-    },
+    ...overrides,
   });
-  expect(() => interpretObservation(invalidEnvelope, payload, theory)).toThrow(
-    "mission Observations require an experience subject",
-  );
+}
 
-  const first = experience(
-    "observation-first-scope",
-    "2026-09-01T09:00:00.000Z",
-    "patch:calculus",
-    payload,
+function preferenceRecord(
+  id: RecordId,
+  at: string,
+  scope = "profile",
+  values: PreferencesPayload["values"] = { pace: "quick" },
+) {
+  return record(id, at, PREFERENCES_SCHEMA, { scope, values });
+}
+
+function retract(id: RecordId, of: RecordId) {
+  return record(id, "2026-09-07T15:00:00.000Z", PLATFORM_RETRACTION_SCHEMA, { of });
+}
+
+function trail(records: readonly Record[]): TrailSnapshot {
+  return { records, revision: contentDigest(records) };
+}
+
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+test("platform Missions and preferences keep latest values, exact scopes and history without supersession pointers", () => {
+  const first = missionRecord("record-mission-first", "2026-09-07T09:00:00.000Z");
+  const latest = missionRecord("record-mission-latest", "2026-09-07T10:00:00.000Z", {
+    statement: "Apply derivatives",
+    priority: 3,
+  });
+  const otherScope = missionRecord("record-mission-other-scope", "2026-09-07T11:00:00.000Z", {
+    scope: "view:calculus",
+  });
+  const otherMission = missionRecord("record-mission-other", "2026-09-07T12:00:00.000Z", {
+    missionId: "language",
+  });
+  const preferenceFirst = preferenceRecord("record-preferences-first", "2026-09-07T10:00:00.000Z");
+  const preferenceLatest = preferenceRecord(
+    "record-preferences-latest",
+    "2026-09-07T11:00:00.000Z",
+    "profile",
+    { pace: "deliberate", formats: ["examples", "diagrams"], time: 20, audio: false },
   );
-  const crossScope = experience(
-    "observation-cross-scope",
-    "2026-09-01T10:00:00.000Z",
-    "view:calculus",
-    payload,
-    first.envelope.id,
+  const preferenceOther = preferenceRecord(
+    "record-preferences-other",
+    "2026-09-07T12:00:00.000Z",
+    "workshop",
   );
-  expect(() => mission(trail([first, crossScope]))).toThrow(
-    "crosses an experience supersession chain",
+  const snapshot = trail([
+    latest,
+    preferenceLatest,
+    otherScope,
+    otherMission,
+    first,
+    preferenceFirst,
+    preferenceOther,
+  ]);
+  expect(mission(snapshot).records.map(({ recordId }) => recordId)).toEqual([
+    latest.envelope.id,
+    otherScope.envelope.id,
+    otherMission.envelope.id,
+  ]);
+  expect(mission(snapshot, "view:calculus").records.map(({ recordId }) => recordId)).toEqual([
+    otherScope.envelope.id,
+  ]);
+  expect(mission(snapshot).records[0]).toMatchObject({
+    ...latest.payload,
+    recordId: latest.envelope.id,
+    at: latest.envelope.at,
+    historyAvailable: true,
+    history: [first, latest],
+  });
+  expect(mission(snapshot).records[1]?.historyAvailable).toBeFalse();
+  expect(preferences(snapshot).records.map(({ recordId }) => recordId)).toEqual([
+    preferenceLatest.envelope.id,
+    preferenceOther.envelope.id,
+  ]);
+  expect(preferences(snapshot).records[0]).toMatchObject({
+    values: preferenceLatest.payload.values,
+    historyAvailable: true,
+    history: [preferenceFirst, preferenceLatest],
+  });
+  expect(mission(trail([])).records).toEqual([]);
+  expect(preferences(trail([])).records).toEqual([]);
+});
+
+test("retracting current values exposes the latest non-retracted value, and retains correction history", async () => {
+  const dataDir = tempDataDir();
+  roots.push(dataDir.root);
+  const store = new LocalDirectoryCoreStore(dataDir);
+  const first = missionRecord("record-mission-first", "2026-09-07T09:00:00.000Z");
+  const latest = missionRecord("record-mission-latest", "2026-09-07T10:00:00.000Z");
+  const preference = preferenceRecord("record-preference", "2026-09-07T11:00:00.000Z");
+  const correction = retract("record-retract-mission", latest.envelope.id);
+  // Platform schemas are available even to a theory with no schemas.
+  const platformContext = { ...validation, schemas: [] };
+  for (const entry of [first, latest, preference, correction])
+    await store.appendRecord(scope, entry, platformContext);
+  const snapshot = await store.readTrail(scope);
+  expect(mission(snapshot).records[0]).toMatchObject({
+    recordId: first.envelope.id,
+    historyAvailable: true,
+    history: [first, latest, correction],
+  });
+  expect(preferences(snapshot).records[0]?.recordId).toBe(preference.envelope.id);
+  await store.appendRecord(
+    scope,
+    retract("record-retract-first", first.envelope.id),
+    platformContext,
   );
+  await store.appendRecord(
+    scope,
+    retract("record-retract-preference", preference.envelope.id),
+    platformContext,
+  );
+  expect(currentExperiences((await store.readTrail(scope)).records)).toEqual([]);
+  expect((await store.readTrail(scope)).records).toHaveLength(6);
+  expect(await store.readRecordJson(scope, first.envelope.id)).toBe(JSON.stringify(first));
+});
+
+test("platform retractions cannot cross into theory corrections or refer to absent or correction records", async () => {
+  const dataDir = tempDataDir();
+  roots.push(dataDir.root);
+  const store = new LocalDirectoryCoreStore(dataDir);
+  expect(
+    store.appendRecord(scope, retract("record-missing", "record-unavailable"), validation),
+  ).rejects.toThrow("missing Record");
+  await store.appendRecord(scope, sampleRecord(), validation);
+  expect(
+    store.appendRecord(scope, retract("record-foreign-target", "record-sample"), validation),
+  ).rejects.toThrow("must target a Mission or preferences");
+  const first = missionRecord("record-mission", "2026-09-07T09:00:00.000Z");
+  await store.appendRecord(scope, first, validation);
+  await store.appendRecord(scope, retract("record-retract", first.envelope.id), validation);
+  expect(
+    store.appendRecord(scope, retract("record-retract-retraction", "record-retract"), validation),
+  ).rejects.toThrow("must target a Mission or preferences");
+  expect((await store.readTrail(scope)).records).toHaveLength(3);
+});
+
+test("current-value ordering compares instants and breaks ties by identity independent of append order", () => {
+  const earlier = missionRecord("record-z-earlier", "2026-09-07T10:00:00+02:00");
+  const later = missionRecord("record-b-later", "2026-09-07T09:00:00Z");
+  const tied = missionRecord("record-c-tied", "2026-09-07T09:00:00.000Z");
+  for (const records of [
+    [earlier, later, tied],
+    [tied, later, earlier],
+  ])
+    expect(currentExperiences(records).map(({ envelope }) => envelope.id)).toEqual([
+      tied.envelope.id,
+    ]);
+});
+
+test("platform schemas validate Mission NodeRefs and reject malformed preferences", async () => {
+  const dataDir = tempDataDir();
+  roots.push(dataDir.root);
+  const store = new LocalDirectoryCoreStore(dataDir);
+  const unresolved = missionRecord("record-missing-node", "2026-09-07T09:00:00Z", {
+    targetNodes: [{ node: "node-missing", provenance: patchRef }],
+  });
+  expect(store.appendRecord(scope, unresolved, validation)).rejects.toThrow("Unresolvable NodeRef");
+  const invalid = record("record-bad-preferences", "2026-09-07T09:00:00Z", PREFERENCES_SCHEMA, {
+    scope: "profile",
+    values: { pace: "quick" },
+  });
+  expect(
+    store.appendRecordJson(
+      scope,
+      JSON.stringify({ ...invalid, payload: { scope: "profile", values: { nested: {} } } }),
+      validation,
+    ),
+  ).rejects.toThrow("Invalid payload");
+  expect((await store.readTrail(scope)).records).toEqual([]);
 });

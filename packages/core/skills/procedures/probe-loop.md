@@ -1,22 +1,15 @@
-Shrink uncertainty where it blocks a decision, at the lowest evidence cost
-that works. Reads: `probes(scope)`, `competency(scope)`, `items(node)`,
-`trail(node)`.
+Read `coverage(scope?)`, `probes(scope?)`, `items(node)` and `trail(node)`.
+Coverage finds untouched Nodes; probes lists suspect and probably-known Nodes
+with dates and what covers them. Neither chooses or stops the loop for you.
 
-1. `(query)` `probes(scope)`: nodes ranked by uncertainty weighted by
-   topological value and staleness.
-2. `(model)` Agree a budget with the learner: question count, and that they
-   may stop early. Ask their own sense of what they know; it is experience,
-   and it orders the probes.
-3. Loop until step 4 stops it:
-   - `(model)` Pick the next probe from the ranking. Use an authored item
-     from `items(node)`; an empty bank invokes quiz authoring below.
-   - Emit the Quiz. `(learner)` Answers, optionally with a comment.
-   - Grade: a commentless keyed choice grades mechanically through its
-     option's interpretation. A comment or free response goes through
-     evaluate below.
-   - Surprise in either direction: climb the format ladder for that region
-     before moving on.
-4. Stop on: budget spent; the region's uncertainty below the theory's
-   stopping threshold; the learner ends it. Every stop is legitimate.
-5. `(query)` Refold. `(model)` Show the updated map in plain terms: solid,
-   shaky, untouched, and what the next lesson would be.
+1. Agree a question/time budget and the decision it serves. Ask what the learner
+   believes they know; record their words with `record_claim`, not preferences.
+2. Choose a failable task by capability, relevance and cost. Use an authored
+   item or make one lazily. State the unaided conditions before posing it.
+3. Pose the task through a mounted task component or in conversation. Keyed
+   components record themselves; evaluate free work through the Record tools.
+   Inspect surprises and pose a second check if it would change the next action.
+4. Stop when the decision has enough evidence, the budget is spent, or the
+   learner ends it. There is no hidden stopping threshold. Read `trail` and
+   `frontier` now; recount demonstrated, probably-known, suspect and unknown
+   Nodes in plain terms and leave a proposed next lesson target.

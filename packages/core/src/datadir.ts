@@ -6,7 +6,7 @@ export const STORE_FORMAT_VERSION = 5;
 
 export interface DataDir {
   root: string;
-  /** Principal/Profile-keyed trails, association commits, Views, selections, and Playgrounds. */
+  /** Principal/Profile-keyed trails, parameter overrides, Views, selections, and Playgrounds. */
   profilesDir: string;
   /** Application-owned persisted conversation history. */
   sessionsDir: string;

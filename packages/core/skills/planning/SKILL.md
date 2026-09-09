@@ -1,32 +1,28 @@
 ---
 name: planning
-description: We don't know what to do next. Fires at session start or when the learner asks for a plan. Match intent to a Mission, choose a target the learner hears the reason for, and hand it to the lesson. Differential - nothing fits any Mission is the mission Skill; no trail at all is probing.
+description: We do not know what to do next. Match intent to a Mission and choose a target with a reason. No fitting Mission needs a goal conversation; missing evidence calls for an offered probe, not a fabricated estimate.
 facet: advance
 entry: [learner, model]
 ---
 
 # Planning
 
-Reads: `mission(scope?)`, `preferences()`, `competency(scope)`,
-`coverage(scope)`, `frontier(scope?)`, `route(node)`, `trail(node)`.
-
-1. `(model)` Match what the learner brought to a Mission. No fit → the
-   mission conversation below, then charting if nothing backs it.
-2. `(query)` Coverage. Essentially no trail in scope → propose probing
-   first; a frontier over pure priors is noise.
-3. `(query)` `frontier` ranked across Missions by learner priorities, each
-   node's importance to each Mission, uncertainty, staleness, and rung
-   ceilings; or restricted to the learner's request. Each candidate arrives
-   with estimate, uncertainty, staleness, route, and trail summary.
-4. `(model)` Choose the target and say why in one sentence ("X is the last
-   thing between you and Y, and your evidence on it is three weeks old").
-   Evaluate the ranking rather than obeying it; the frontier guarantees
-   prerequisite soundness, and the choice weighs Missions, recency, energy,
-   stated preference. A node pinned at a rung ceiling by review needs a
-   transfer task; reviews alone never demonstrate used or generalized. The
-   learner may override; teaching past a failed gate is allowed only after
-   saying which prerequisites are shaky.
-5. Hand the target to the lesson.
+1. Read `mission(scope?)` and `preferences()`. Match the learner's request to
+   an existing goal. No fit → conduct the conversation below.
+2. Read `coverage(scope?)`, `frontier(scope?)`, and `warnings(scope?)` even on
+   an empty trail. They need no prior close event. Coverage lists Nodes with
+   no Records; frontier lists reachable not-known Nodes, not an ordering.
+3. Choose by goal membership, last success, label, available time and open
+   Session membership. Read `trail(node)` for the rationale. Known content may
+   still merit a check; `probes(scope?)` lists suspect and probably-known Nodes.
+   Offer learner-started probing when uncertainty about the learner matters.
+4. Read `route(target)` for the chosen target's not-known prerequisite cone in
+   dependency order. Ask the host to open the selected target plus the route's
+   Nodes, including a known target omitted by the route. If another open Session
+   overlaps, continue it or choose a disjoint step, never silently steal Nodes.
+5. Explain the choice and leave a target for the lesson. Warnings are facts:
+   inspect citations and offer realignment if content is defective; nothing
+   automatically starts an edit activity.
 
 ## Mission conversation
 

@@ -1,24 +1,33 @@
-import type { AssociationCommit, AssociationCommitId } from "./association";
-import type { TrailSnapshot } from "./fold";
-import type { Observation } from "./observation";
-import type { ExactPedagogyRelease } from "./pedagogy";
+import type { Record, RecordId, RecordValidationContext, TrailSnapshot } from "./record";
+import type { ExactPedagogyRelease, ParameterOverride, ParameterOverrideId } from "./pedagogy";
 import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
 import type { View, ViewId } from "./view";
 
 export interface TrailStore {
-  appendObservation(scope: ProfileScope, observation: Observation): Promise<void>;
+  appendRecord(
+    scope: ProfileScope,
+    record: Record,
+    context: RecordValidationContext,
+  ): Promise<void>;
+  /** Raw JSON is retained exactly, including whitespace, escapes, and number spellings. */
+  appendRecordJson(
+    scope: ProfileScope,
+    serialized: string,
+    context: RecordValidationContext,
+  ): Promise<void>;
+  readRecordJson(scope: ProfileScope, id: RecordId): Promise<string | undefined>;
   readTrail(scope: ProfileScope): Promise<TrailSnapshot>;
 }
 
-export interface AssociationStore {
-  commitAssociation(scope: ProfileScope, commit: AssociationCommit): Promise<void>;
-  readAssociation(
+export interface ParameterOverrideStore {
+  saveParameterOverride(scope: ProfileScope, override: ParameterOverride): Promise<void>;
+  readParameterOverride(
     scope: ProfileScope,
-    id: AssociationCommitId,
-  ): Promise<AssociationCommit | undefined>;
-  currentAssociation(scope: ProfileScope): Promise<AssociationCommit | undefined>;
-  setCurrentAssociation(scope: ProfileScope, id: AssociationCommitId): Promise<void>;
+    id: ParameterOverrideId,
+  ): Promise<ParameterOverride | undefined>;
+  currentParameterOverride(scope: ProfileScope): Promise<ParameterOverride | undefined>;
+  setCurrentParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<void>;
 }
 
 export interface ViewStore {
@@ -39,9 +48,16 @@ export interface SpacedReviewStore {
     id: SpacedReviewCardId,
   ): Promise<SpacedReviewCard | undefined>;
   listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]>;
+  /** Delete is the only removal; grades on the item remain in the log. */
+  deleteSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<void>;
   appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): Promise<void>;
   readSpacedReviewGrades(scope: ProfileScope): Promise<readonly SpacedReviewGrade[]>;
 }
 
 export interface CoreStores
-  extends TrailStore, AssociationStore, ViewStore, PedagogySelectionStore, SpacedReviewStore {}
+  extends
+    TrailStore,
+    ParameterOverrideStore,
+    ViewStore,
+    PedagogySelectionStore,
+    SpacedReviewStore {}
