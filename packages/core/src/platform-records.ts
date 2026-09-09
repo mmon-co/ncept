@@ -9,6 +9,7 @@ export interface MissionPayload {
   readonly viewId: ViewId;
   readonly targetNodes: readonly NodeRef[];
   readonly priority: number;
+  readonly retired?: boolean;
 }
 
 export interface PreferencesPayload {
@@ -32,7 +33,7 @@ export const MISSION_SCHEMA: RecordSchema<MissionPayload> = {
   ref: {
     id: "platform/mission",
     digest: contentDigest({
-      version: 1,
+      version: 2,
       fields: {
         scope: "string",
         missionId: "string",
@@ -40,6 +41,7 @@ export const MISSION_SCHEMA: RecordSchema<MissionPayload> = {
         viewId: "view-id",
         targetNodes: "NodeRef[]",
         priority: "finite number",
+        retired: "optional boolean",
       },
     }),
   },
@@ -56,7 +58,8 @@ export const MISSION_SCHEMA: RecordSchema<MissionPayload> = {
         (ref: unknown) => object(ref) && "node" in ref && "provenance" in ref,
       ) &&
       typeof payload.priority === "number" &&
-      Number.isFinite(payload.priority)
+      Number.isFinite(payload.priority) &&
+      (payload.retired === undefined || typeof payload.retired === "boolean")
     );
   },
   nodeRefs: (payload) => payload.targetNodes,
@@ -145,7 +148,7 @@ export function compareRecords(left: Record, right: Record): number {
   );
 }
 
-/** Current value per exact scope/key, with old values retained when a newer value is retracted. */
+/** Latest non-retracted value per exact scope/key; a retired Mission hides the whole chain. */
 export function currentExperiences(
   records: readonly Record[],
 ): readonly Record<MissionPayload | PreferencesPayload>[] {
@@ -164,7 +167,9 @@ export function currentExperiences(
     const current = latest.get(key);
     if (current === undefined || compareRecords(record, current) > 0) latest.set(key, record);
   }
-  return [...latest.values()].sort(compareRecords);
+  return [...latest.values()]
+    .filter((record) => !recordUsesSchema(record, MISSION_SCHEMA) || !record.payload.retired)
+    .sort(compareRecords);
 }
 
 export function experienceHistory(current: Record, records: readonly Record[]): readonly Record[] {

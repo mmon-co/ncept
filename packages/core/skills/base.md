@@ -25,8 +25,10 @@ The theory supplies `mission`, `preferences`, `coverage`, `frontier`, `route`,
 supplies conversation, graph content, task components, Confirmation and review
 UI affordances. Use only mounted host tools; never invent a transition to
 compensate for a missing one. Do not mutate graph content outside an accepted
-edit session. Publication, Hub discovery, Mission retargeting, and parameter
-editing are not procedures in this catalog.
+edit session. A moved goal retargets its existing Mission through a Confirmation
+the learner approves; a second goal gets a new Mission. Retiring a goal also
+requires approval. Publication, Hub discovery, and parameter editing are not
+procedures in this catalog.
 
 ## Recording contract
 
