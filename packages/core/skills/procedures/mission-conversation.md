@@ -10,7 +10,9 @@ the learner's goal moved, revise the existing Mission: cite its current Record
 in **revises**, keep **missionId** and **viewId**, and supply the new
 **targetNodes**. Approval rewrites that View's dependency cone, retaining its
 other data and the Mission's history. Create a new Mission only for a second
-goal, not as a workaround for drift.
+goal, not as a workaround for drift. Give the second Mission a distinct View;
+its Nodes may overlap, but never reuse another Mission's View, even after
+retirement or retraction.
 
 If content is missing, keep the outcome prospective and offer learner-started
 charting. Within that approved edit activity, a revising Mission proposal can
