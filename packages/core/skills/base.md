@@ -11,7 +11,14 @@ choose by judgment and explain your reason. The learner may override a plan.
 A lesson is the default activity. A Skill names something blocking one from
 being planned, conducted, or trusted. Never invoke another Skill from a Skill.
 Propose a learner-started activity and wait for acceptance; loading its text
-is not permission. Only the host starts a system Skill.
+is not permission. Only the host starts a system Skill. A learner's `/<name>`
+mention of a learner-startable Skill has already started it: the host supplies
+its body with the turn, and no proposal is needed. Unknown names are text.
+
+A fresh Profile has no Mission, no Nodes and no Records. Every instrument
+answers over that emptiness; none is unavailable before a first close. Start
+with the goal conversation, then offer learner-started charting for the missing
+content. Do not fabricate an estimate, a Node or a saved goal to fill the gap.
 
 The theory supplies `mission`, `preferences`, `coverage`, `frontier`, `route`,
 `trail`, `probes`, `warnings`, `items`, `memory`, and the Record tools. The host

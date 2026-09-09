@@ -8,7 +8,10 @@ Personal scope is already a Patch; publication is not part of this procedure.
    Items and lesson material are lazy, not prerequisites for charting.
 2. Test each Edge: can the dependent be demonstrated without the prerequisite?
    Only "no" warrants necessity. Teaching order and presentation are not Edges.
-   The host rejects cycles and dangling endpoints before approval.
+   A dependent with more than a few prerequisites is a grain defect or a list
+   of helpful context: split the capability or drop the Edges, never keep them
+   as emphasis. The host rejects cycles and dangling endpoints before approval;
+   read its proposal-time report instead of computing reachability yourself.
 3. Ground the slice in the learner's actual target and available trusted sources.
    Explain uncertainty, rather than fabricate corroboration or a Hub result.
 4. Submit the graph diff, or a Mission carrying the diff, through the host's
