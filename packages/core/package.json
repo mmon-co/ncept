@@ -14,6 +14,7 @@
     "./pedagogy": "./src/pedagogy.ts",
     "./pedagogy/default": "./src/pedagogy/default/index.ts",
     "./playground": "./src/playground.ts",
+    "./scheduler": "./src/scheduler.ts",
     "./storage": "./src/storage.ts",
     "./view": "./src/view.ts",
     "./model-spec": "./src/model-spec.ts",
