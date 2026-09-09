@@ -7,6 +7,7 @@
     "./instrument-experience": "./src/instrument-experience.ts",
     "./instrument-items": "./src/instrument-items.ts",
     "./instrument-route": "./src/instrument-route.ts",
+    "./session": "./src/session.ts",
     "./local-directory": "./src/local-directory.ts",
     "./patch": "./src/patch/index.ts",
     "./patch-storage": "./src/patch-storage.ts",
