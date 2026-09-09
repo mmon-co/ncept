@@ -11,6 +11,7 @@ import { indicatorsDefault } from "./indicators";
 import { acceptsDefaultParameters, DEFAULT_PARAMETERS, type NodeState } from "./labels";
 import { projectDefault } from "./projection";
 import { updateDefault } from "./update";
+import { defaultPlaygrounds } from "./playgrounds";
 import { convertDefault, DEFAULT_RECORD_SCHEMAS, type DefaultRecordPayload } from "./records";
 import {
   defaultBackgroundTools,
@@ -33,6 +34,7 @@ function createDefaultPedagogicalTheory(implementationDigest: ContentDigest) {
     display: displayDefault,
     queryTokens: defaultQueryTokens,
     tools: [defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools],
+    playgrounds: defaultPlaygrounds,
     skills: { bundles: builtSkillBundles() },
     basePrompt: tutorSystemPrompt(),
     indicators: indicatorsDefault,

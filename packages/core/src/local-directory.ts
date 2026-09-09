@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -276,6 +277,10 @@ export class LocalDirectoryCoreStore implements CoreStores {
     const path = spacedReviewCardPath(this.dataDir, scope, id);
     if (!existsSync(path)) return undefined;
     return parseSpacedReviewCard(JSON.parse(readFileSync(path, "utf8")));
+  }
+
+  async deleteSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<void> {
+    rmSync(spacedReviewCardPath(this.dataDir, scope, id), { force: true });
   }
 
   async listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]> {

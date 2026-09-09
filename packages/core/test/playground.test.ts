@@ -3,12 +3,20 @@ import { rmSync } from "node:fs";
 import {
   DEFAULT_RECORD_SCHEMAS,
   LocalDirectoryCoreStore,
+  SPACED_REVIEW_PLAYGROUND,
+  attemptSpacedReview,
+  authorSpacedReview,
   decideReviewGrade,
+  defaultPlaygrounds,
   projectDefault,
+  runPlaygroundHook,
+  serializeRecord,
   spacedReviewPlayground,
   parseSpacedReviewCard,
+  validateRecordJson,
   type SpacedReviewCard,
   type SpacedReviewGrade,
+  type SpacedReviewItem,
   type SpacedReviewStore,
   type RecordValidationContext,
 } from "../src";
@@ -25,33 +33,32 @@ const validation: RecordValidationContext = {
   schemas: DEFAULT_RECORD_SCHEMAS,
   resolveGraph: (ref) => (sameExactPatchRef(ref, patchRef) ? fixtureGraph() : undefined),
 };
-const proposed: SpacedReviewCard = {
+const item: SpacedReviewItem = {
   id: "srs-card-test",
   createdAt: "2026-09-01T12:00:00.000Z",
-  status: "pending",
   format: "recall",
   category: "test",
   front: "  State the answer\n",
   back: "42",
-  node: { node: "node-base", provenance: patchRef },
+  nodes: [{ node: "node-base", provenance: patchRef }],
 };
 const grade: SpacedReviewGrade = {
   id: "srs-grade-first",
-  cardId: proposed.id,
+  cardId: item.id,
   gradedAt: context.at,
   answer: " 42\n",
   latencyMs: 5000,
   grade: "good",
 };
+/** The default theory's handlers as the platform sees them: a map by Playground identity. */
+const theory = { playgrounds: defaultPlaygrounds };
 function setup(decorate: (store: LocalDirectoryCoreStore) => SpacedReviewStore = (store) => store) {
   const dataDir = tempDataDir();
   roots.push(dataDir.root);
   const store = new LocalDirectoryCoreStore(dataDir);
   const playground = spacedReviewPlayground({
     scope,
-    trail: store,
     store: decorate(store),
-    validation,
     instruments: {
       learnerState: async () =>
         projectDefault((await store.readTrail(scope)).records, fixtureGraph(), context),
@@ -68,25 +75,65 @@ function setup(decorate: (store: LocalDirectoryCoreStore) => SpacedReviewStore =
     },
     injectContext: () => {},
   });
-  return { store, playground };
+  /** The host's side of ADR 0015: run `author` for the annotation, `attempt` for the Records,
+   * validate and append them under the Playground's origin, then keep the grade. */
+  async function author(draft: SpacedReviewItem): Promise<SpacedReviewCard> {
+    const result = await runPlaygroundHook(
+      theory,
+      SPACED_REVIEW_PLAYGROUND,
+      SPACED_REVIEW_PLAYGROUND.hooks.author,
+      { item: draft },
+      undefined,
+    );
+    return playground.author(draft, result.kind === "handled" ? result.output : null);
+  }
+  async function attempt(attempted: SpacedReviewGrade): Promise<void> {
+    const card = await playground.card(attempted.cardId);
+    if (!card) throw new Error("unknown card");
+    const result = await runPlaygroundHook(
+      theory,
+      SPACED_REVIEW_PLAYGROUND,
+      SPACED_REVIEW_PLAYGROUND.hooks.attempt,
+      { item: card, grade: attempted },
+      undefined,
+    );
+    if (result.kind === "handled")
+      for (const record of result.output) {
+        const serialized = serializeRecord(record);
+        validateRecordJson(serialized, validation);
+        const previous = await store.readRecordJson(scope, record.envelope.id);
+        if (previous === undefined) await store.appendRecord(scope, record, validation);
+        else if (previous !== serialized)
+          throw new Error("attempt already exists with different evidence");
+      }
+    await playground.appendGrade(attempted);
+  }
+  return { store, playground, author, attempt };
 }
 
-test("Playground appends one mechanical or learner demonstration per card attempt, with approval-fixed unaided", async () => {
-  const { store, playground } = setup();
-  await playground.proposeCard(proposed);
-  expect(playground.appendGrade(grade)).rejects.toThrow("unapproved");
-  await playground.approveCard(proposed.id, true);
-  await playground.appendGrade(grade);
-  expect((await store.readTrail(scope)).records[0]?.payload).toEqual({
+test("an attempt reaches the log only through the theory's attempt hook: one demonstration per attached Node, unaided from author", async () => {
+  const { store, playground, author, attempt } = setup();
+  const card = await author(item);
+  expect(card.annotation).toEqual({ unaided: true });
+  expect(playground.appendGrade({ ...grade, cardId: "srs-card-missing" })).rejects.toThrow(
+    "unknown spaced-review card",
+  );
+  await attempt(grade);
+  const records = (await store.readTrail(scope)).records;
+  expect(records[0]?.envelope).toMatchObject({
+    id: "record-srs-grade-first-1",
+    origin: { kind: "playground", namespace: "spaced-review", recordId: card.id },
+  });
+  expect(records[0]?.payload).toEqual({
     kind: "demonstration",
-    node: proposed.node,
+    node: item.nodes[0],
     outcome: "success",
     unaided: true,
     grader: "mechanical",
-    task: proposed.front,
+    task: item.front,
     response: grade.answer,
   });
-  await playground.appendGrade({ ...grade, id: "srs-grade-second", answer: "forty-two" });
+  await attempt({ ...grade, id: "srs-grade-second", answer: "forty-two" });
   expect((await store.readTrail(scope)).records[1]?.payload).toMatchObject({
     grader: "learner",
     outcome: "success",
@@ -95,48 +142,97 @@ test("Playground appends one mechanical or learner demonstration per card attemp
   expect((await playground.instruments.learnerState()).nodes["node-base"]?.label).toBe(
     "demonstrated",
   );
-  await playground.appendGrade({
-    ...grade,
-    id: "srs-grade-third",
-    answer: "I don't recall",
-    grade: "again",
-  });
+  await attempt({ ...grade, id: "srs-grade-third", answer: "I don't recall", grade: "again" });
   expect((await store.readTrail(scope)).records[2]?.payload).toMatchObject({
     grader: "learner",
     outcome: "failure",
     unaided: true,
   });
+  // A theory that implements nothing for the Playground yields no evidence; the store still works.
+  const silent = { playgrounds: {} };
   expect(
-    playground.editCard(proposed.id, {
-      format: "application",
-      category: "test",
-      front: "New task",
-      back: "42",
-    }),
-  ).rejects.toThrow("not pending");
-  expect(playground.approveCard(proposed.id, false)).rejects.toThrow("not pending");
-  expect(Object.keys(playground)).not.toContain("appendObservation");
+    await runPlaygroundHook(
+      silent,
+      SPACED_REVIEW_PLAYGROUND,
+      SPACED_REVIEW_PLAYGROUND.hooks.attempt,
+      { item: card, grade },
+      undefined,
+    ),
+  ).toEqual({ kind: "unhandled" });
+  expect(Object.keys(playground)).not.toContain("appendRecord");
   expect(Object.keys(playground)).not.toContain("writeLearnerState");
 });
 
-test("aided card success is practice only, skips append nothing, and exact matches cannot be reported as failure", async () => {
-  const { playground, store } = setup();
-  await playground.proposeCard(proposed);
-  await playground.approveCard(proposed.id, false);
-  await playground.appendGrade(grade);
+test("the platform validates hook inputs and outputs against the Playground's declaration", async () => {
+  expect(
+    runPlaygroundHook(
+      theory,
+      SPACED_REVIEW_PLAYGROUND,
+      SPACED_REVIEW_PLAYGROUND.hooks.attempt,
+      { item: { ...item, annotation: { unaided: true } }, grade: { ...grade, latencyMs: -1 } },
+      undefined,
+    ),
+  ).rejects.toThrow("Invalid spaced-review.attempt input");
+  const lying = {
+    playgrounds: { "spaced-review": { attempt: () => [{ not: "a record" }] } },
+  };
+  expect(
+    runPlaygroundHook(
+      lying,
+      SPACED_REVIEW_PLAYGROUND,
+      SPACED_REVIEW_PLAYGROUND.hooks.attempt,
+      { item: { ...item, annotation: { unaided: true } }, grade },
+      undefined,
+    ),
+  ).rejects.toThrow("Invalid spaced-review.attempt output");
+  // A card another theory annotated cannot yield this theory's demonstrations.
+  expect(() => attemptSpacedReview({ item: { ...item, annotation: "aided" }, grade })).toThrow(
+    "annotation",
+  );
+});
+
+test("author decides unaided from the card's form and follows every edit; two Nodes give two demonstrations", async () => {
+  expect(authorSpacedReview(item)).toEqual({ unaided: true });
+  expect(authorSpacedReview({ ...item, front: "The answer is 42; state it" })).toEqual({
+    unaided: false,
+  });
+  expect(authorSpacedReview({ ...item, front: "Which of these?\na) 41\nb) 42" })).toEqual({
+    unaided: false,
+  });
+  const { playground, author, attempt, store } = setup();
+  const card = await author({ ...item, front: "Pick one:\n- 42\n- 41" });
+  expect(card.annotation).toEqual({ unaided: false });
+  await attempt(grade);
   expect((await playground.instruments.learnerState()).nodes["node-base"]).toMatchObject({
     label: "unknown",
     k: 0,
     aidedPractice: 1,
   });
-  expect(playground.appendGrade({ ...grade, id: "srs-grade-blank", answer: " " })).rejects.toThrow(
+  const edited = await playground.edit(
+    card.id,
+    { format: "application", category: "test", front: "Find the answer", back: "42" },
+    authorSpacedReview({ ...card, front: "Find the answer" }),
+  );
+  expect(edited).toMatchObject({ format: "application", annotation: { unaided: true } });
+  // The earlier attempt snapshotted the card as it was: its evidence does not change.
+  expect((await store.readTrail(scope)).records[0]?.payload).toMatchObject({ unaided: false });
+  const paired = attemptSpacedReview({
+    item: {
+      ...edited,
+      nodes: [...edited.nodes, { node: "node-dependent", provenance: patchRef }],
+    },
+    grade: { ...grade, id: "srs-grade-pair" },
+  });
+  expect(paired.map((r) => [r.envelope.id, r.payload.node.node])).toEqual([
+    ["record-srs-grade-pair-1", "node-base"],
+    ["record-srs-grade-pair-2", "node-dependent"],
+  ]);
+  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, answer: " " } })).toThrow(
     "attempt retrieval",
   );
-  expect(
-    playground.appendGrade({ ...grade, id: "srs-grade-invalid", grade: "again" }),
-  ).rejects.toThrow("exact match");
-  expect((await store.readTrail(scope)).records).toHaveLength(1);
-  expect(await playground.grades()).toHaveLength(1);
+  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, grade: "again" } })).toThrow(
+    "exact match",
+  );
   expect(decideReviewGrade({ answer: "42", expected: "42", latencyMs: 1000 })).toEqual({
     grade: "easy",
     exactMatch: true,
@@ -144,12 +240,13 @@ test("aided card success is practice only, skips append nothing, and exact match
   });
 });
 
-test("a failure between demonstration and grade writes is retryable without duplicate evidence or changed identity", async () => {
+test("a failure between the log and the grade store is retryable without duplicate evidence or changed identity", async () => {
   let failOnce = true;
-  const { playground, store } = setup((store) => ({
+  const { playground, store, author, attempt } = setup((store) => ({
     saveSpacedReviewCard: (scope, card) => store.saveSpacedReviewCard(scope, card),
     readSpacedReviewCard: (scope, id) => store.readSpacedReviewCard(scope, id),
     listSpacedReviewCards: (scope) => store.listSpacedReviewCards(scope),
+    deleteSpacedReviewCard: (scope, id) => store.deleteSpacedReviewCard(scope, id),
     readSpacedReviewGrades: (scope) => store.readSpacedReviewGrades(scope),
     async appendSpacedReviewGrade(scope, grade) {
       if (failOnce) {
@@ -159,45 +256,36 @@ test("a failure between demonstration and grade writes is retryable without dupl
       await store.appendSpacedReviewGrade(scope, grade);
     },
   }));
-  await playground.proposeCard(proposed);
-  await playground.approveCard(proposed.id, true);
-  expect(playground.appendGrade(grade)).rejects.toThrow("injected grade-store failure");
+  await author(item);
+  expect(attempt(grade)).rejects.toThrow("injected grade-store failure");
   expect((await store.readTrail(scope)).records).toHaveLength(1);
   expect(await playground.grades()).toHaveLength(0);
-  expect(playground.appendGrade({ ...grade, answer: "wrong", grade: "again" })).rejects.toThrow(
+  expect(attempt({ ...grade, answer: "wrong", grade: "again" })).rejects.toThrow(
     "different evidence",
   );
-  await playground.appendGrade(grade);
-  await playground.appendGrade(grade);
+  await attempt(grade);
+  await attempt(grade);
   expect((await store.readTrail(scope)).records).toHaveLength(1);
   expect(await playground.grades()).toEqual([grade]);
   expect(playground.appendGrade({ ...grade, latencyMs: 6000 })).rejects.toThrow(
     "different contents",
   );
-  expect(playground.appendGrade({ ...grade, answer: "wrong", grade: "again" })).rejects.toThrow(
-    "different contents",
-  );
 });
 
-test("card approval demands an explicit aid fact; pending edits, rejection, due scheduling and cap remain method-local", async () => {
-  const { playground } = setup();
-  expect(() => parseSpacedReviewCard({ ...proposed, status: "approved" })).toThrow(
-    "fixed explicitly",
-  );
-  expect(() => parseSpacedReviewCard({ ...proposed, unaided: true })).toThrow("fixed explicitly");
-  await playground.proposeCard(proposed);
-  const edited = await playground.editCard(proposed.id, {
-    format: "application",
-    category: "test",
-    front: "Find the answer",
-    back: "42",
-  });
-  expect(edited).toMatchObject({ status: "pending", format: "application" });
-  await playground.approveCard(proposed.id, false);
+test("cards are live items: create, edit, delete, due scheduling and cap are method-local", async () => {
+  const { playground, author, attempt } = setup();
+  expect(() => parseSpacedReviewCard({ ...item, nodes: [] })).toThrow("at least one Node");
+  expect(() => parseSpacedReviewCard(item)).toThrow("annotation");
+  await author(item);
+  expect(author(item)).rejects.toThrow("already exists");
   expect(await playground.dueQueue(context.at, 1)).toHaveLength(1);
   expect(await playground.dueQueue(context.at, 0)).toHaveLength(0);
-  await playground.appendGrade(grade);
+  await attempt(grade);
   expect(await playground.dueQueue(context.at, 1)).toHaveLength(0);
-  await playground.proposeCard({ ...proposed, id: "srs-card-declined" });
-  expect((await playground.declineCard("srs-card-declined")).status).toBe("declined");
+  await author({ ...item, id: "srs-card-second" });
+  expect((await playground.cards()).map(({ id }) => id)).toEqual(["srs-card-second", item.id]);
+  await playground.delete("srs-card-second");
+  expect((await playground.cards()).map(({ id }) => id)).toEqual([item.id]);
+  expect(playground.delete("srs-card-second")).rejects.toThrow("unknown spaced-review card");
+  expect(await playground.grades()).toHaveLength(1);
 });

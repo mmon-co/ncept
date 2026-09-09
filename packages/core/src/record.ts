@@ -127,6 +127,11 @@ function isNodeRef(value: unknown): value is NodeRef {
   );
 }
 
+/** The envelope-and-payload shape every Record has, before any schema check. */
+export function isRecordShape(value: unknown): value is Record {
+  return isRecord(value);
+}
+
 function isRecord(value: unknown): value is Record {
   return (
     object(value) &&

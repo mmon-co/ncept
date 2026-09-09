@@ -152,6 +152,7 @@ export function sampleTheory(): PedagogicalTheory<Sample, SampleState, SampleToo
         return {};
       },
     ],
+    playgrounds: {},
     skills: { bundles: [{ name: "sample", content: "Sample Skill" }] },
     basePrompt: "Sample base prompt",
     indicators: () => [],

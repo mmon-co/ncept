@@ -48,6 +48,8 @@ export interface SpacedReviewStore {
     id: SpacedReviewCardId,
   ): Promise<SpacedReviewCard | undefined>;
   listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]>;
+  /** Delete is the only removal; grades on the item remain in the log. */
+  deleteSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<void>;
   appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): Promise<void>;
   readSpacedReviewGrades(scope: ProfileScope): Promise<readonly SpacedReviewGrade[]>;
 }
