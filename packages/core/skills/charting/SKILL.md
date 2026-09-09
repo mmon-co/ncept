@@ -17,7 +17,10 @@ entry: [learner]
 
 3. Once concrete target identities and the proposed graph pass the host's
    validation, propose the Mission with that graph diff through its Confirmation
-   affordance. A goal remains prospective until approval; do not write a Mission
+   affordance. If an existing goal moved, keep its Mission and View identities
+   and cite the current Record in **revises**, with the new targets and
+   **graphDiff** in that one Confirmation. Use a new Mission for a second goal.
+   A goal remains prospective until approval; do not write a Mission
    to nonexistent Nodes. Read `mission` and `coverage` after approval.
 4. Offer learner-started probing over the approved slice, or leave a lesson
    target if enough evidence already exists. Never invoke probing yourself.
