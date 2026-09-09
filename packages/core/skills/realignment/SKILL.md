@@ -14,7 +14,10 @@ entry: [learner]
 2. Wrong task/outcome recording → explain the local correction rather than
    changing content. Defective edge or capability grain → graph authoring.
    Defective task or exposition → quiz authoring or material work.
-   Goal/View drift → discuss it; there is no View-retargeting procedure here.
+   Goal/View drift → revise the existing Mission through its Confirmation,
+   keeping its View identity and citing the current Record; use new targets
+   when the goal moved, a new Mission for a second goal, or retirement when
+   the learner no longer wants it. All require learner approval.
 3. With the learner's edit-session authority, propose only the supported host
    graph/material change and wait for Confirmation before applying it. Explain
    which retained UUIDs still assert the same capability and which are removed.
