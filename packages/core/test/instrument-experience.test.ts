@@ -8,6 +8,7 @@ import {
   PREFERENCES_SCHEMA,
   contentDigest,
   currentExperiences,
+  experienceHistory,
   type MissionPayload,
   type PreferencesPayload,
   type Record,
@@ -128,6 +129,44 @@ test("platform Missions and preferences keep latest values, exact scopes and his
   });
   expect(mission(trail([])).records).toEqual([]);
   expect(preferences(trail([])).records).toEqual([]);
+});
+
+test("retiring a latest Mission hides its chain without losing history or other scopes", async () => {
+  const dataDir = tempDataDir();
+  roots.push(dataDir.root);
+  const store = new LocalDirectoryCoreStore(dataDir);
+  const first = missionRecord("record-first", "2026-09-07T09:00:00Z");
+  const revised = missionRecord("record-revised", "2026-09-07T10:00:00Z", {
+    statement: "Apply derivatives",
+  });
+  const retired = missionRecord("record-retired", "2026-09-07T11:00:00Z", { retired: true });
+  const otherScope = missionRecord("record-other-scope", "2026-09-07T12:00:00Z", {
+    scope: "view:other",
+  });
+  const preference = preferenceRecord("record-preference", "2026-09-07T12:00:00Z");
+  const entries = [retired, otherScope, revised, preference, first];
+  for (const entry of entries) await store.appendRecord(scope, entry, validation);
+  const snapshot = await store.readTrail(scope);
+  expect(snapshot.records).toEqual(entries);
+  expect(currentExperiences(snapshot.records)).toEqual([otherScope, preference]);
+  expect(mission(snapshot, "profile").records).toEqual([]);
+  expect(mission(snapshot).records.map(({ recordId }) => recordId)).toEqual([
+    otherScope.envelope.id,
+  ]);
+  expect(preferences(snapshot).records[0]?.recordId).toBe(preference.envelope.id);
+  expect(experienceHistory(retired, snapshot.records)).toEqual([first, revised, retired]);
+  expect(
+    store.appendRecordJson(
+      scope,
+      JSON.stringify({
+        ...retired,
+        envelope: { ...retired.envelope, id: "record-malformed" },
+        payload: { ...retired.payload, retired: "yes" },
+      }),
+      validation,
+    ),
+  ).rejects.toThrow("Invalid payload");
+  expect((await store.readTrail(scope)).records).toEqual(entries);
 });
 
 test("retracting current values exposes the latest non-retracted value, and retains correction history", async () => {

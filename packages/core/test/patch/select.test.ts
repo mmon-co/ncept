@@ -137,3 +137,38 @@ test("unknown tags and malformed restricted queries fail with typed errors", () 
     }
   }
 });
+
+test("dependent cones include their targets and walk outgoing edges, composing with the tag algebra", () => {
+  const dependents = parseGraphQuery({ dependents: { targets: ["node-b"] } });
+  expect(dependents).toEqual({ dependents: { targets: ["node-b"] } });
+  expect(selectedIds(dependents).nodes).toEqual(["node-b", "node-c"]);
+  expect(selectedIds(dependents).edges).toEqual(["edge-bc"]);
+  expect(selectedIds({ dependents: { targets: ["node-c", "node-a"] } }).nodes).toEqual([
+    "node-a",
+    "node-b",
+    "node-c",
+  ]);
+  expect(selectedIds({ intersection: [dependents, { tag: "left" }] }).nodes).toEqual(["node-b"]);
+  expect(selectedIds({ union: [dependents, { cone: { targets: ["node-a"] } }] }).nodes).toEqual([
+    "node-a",
+    "node-b",
+    "node-c",
+  ]);
+  expect(
+    selectedIds({ difference: [{ cone: { targets: ["node-c"] } }, dependents] }).nodes,
+  ).toEqual(["node-a"]);
+  expect(selectedIds({ difference: [dependents, { tag: "left" }] }).nodes).toEqual(["node-c"]);
+});
+
+test("dependent selectors reject malformed targets and dangling Nodes through public operations", () => {
+  for (const query of [
+    { dependents: {} },
+    { dependents: { targets: [] } },
+    { dependents: { targets: ["not-a-node"] } },
+    { dependents: { targets: ["node-a"], direction: "backwards" } },
+  ])
+    expect(() => parseGraphQuery(query)).toThrow(PatchCompileError);
+  expect(() => selectGraph(graph, { dependents: { targets: ["node-missing"] } })).toThrow(
+    /dependents targets missing node/,
+  );
+});
