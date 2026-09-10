@@ -7,9 +7,6 @@ entry: [learner, model]
 
 # Mission
 
-Read `mission(scope?)` and `preferences()` before inventing another goal.
-If an existing Mission fits, leave it alone and return a target for planning.
-If the goal moved, retarget that Mission; create another only for a second goal.
-Retirement also needs the learner's approval.
+Read `mission(scope?)` and `preferences()` before inventing another goal. If an existing Mission fits, leave it alone and return a target for planning. If the goal moved, retarget that Mission; create another only for a second goal. Retirement also needs the learner's approval.
 
 @procedures/mission-conversation.md
