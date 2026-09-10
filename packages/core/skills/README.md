@@ -5,8 +5,8 @@ a thin poison entry: its description states a condition under which one
 Facet cannot advance, its body holds the differential against neighboring
 poisons and sequences shared procedures. Designs that are not model
 instruction (instruments, the spaced-review Playground) live in
-`docs/pedagogy`; citations for every guideline live in
-`docs/pedagogy/evidence.md`.
+`docs/attachments/default-pedagogical-theory.md`; citations for every guideline live in
+`docs/attachments/default-theory-evidence.md`.
 
 ## Layout
 
