@@ -56,6 +56,7 @@ export interface SpacedReviewInstruments {
 }
 
 export interface SpacedReviewCardEdit {
+  readonly nodes?: SpacedReviewItem["nodes"];
   readonly format: SpacedReviewCard["format"];
   readonly category: string;
   readonly front: string;
@@ -373,6 +374,7 @@ export function spacedReviewPlayground(input: {
       const card = await existing(id);
       const edited = parseSpacedReviewCard({
         ...card,
+        nodes: edit.nodes ?? card.nodes,
         format: edit.format,
         category: edit.category,
         front: edit.front,
