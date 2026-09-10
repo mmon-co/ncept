@@ -22,11 +22,8 @@ import {
 } from "./record";
 import { assertPlatformRetraction } from "./platform-records";
 import { contentDigest, isContentDigest } from "./digest";
-import {
-  type ExactPedagogyRelease,
-  type ParameterOverride,
-  type ParameterOverrideId,
-} from "./pedagogy";
+import type { ExactPedagogyRelease } from "./pedagogy/release";
+import type { ParameterOverride, ParameterOverrideId } from "./pedagogy/theory";
 import { parseGraphQuery } from "./patch";
 import {
   parseSpacedReviewCard,

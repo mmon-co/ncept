@@ -1,10 +1,7 @@
 import { contentDigest, type ContentDigest } from "../../digest";
-import {
-  pedagogicalTheoryDigest,
-  type PedagogicalTheory,
-  type PlatformPedagogyRelease,
-} from "../../pedagogy";
-import { builtSkillBundles, tutorSystemPrompt } from "../../skills";
+import type { PedagogicalTheory } from "../theory";
+import { pedagogicalTheoryDigest, type PlatformPedagogyRelease } from "../release";
+import { builtSkillBundles, tutorSystemPrompt } from "./skills";
 import { displayDefault, defaultQueryTokens } from "./display";
 import { indicatorsDefault } from "./indicators";
 import { acceptsDefaultParameters, DEFAULT_PARAMETERS, type NodeState } from "./labels";

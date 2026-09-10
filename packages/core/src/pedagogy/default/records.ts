@@ -1,6 +1,7 @@
 import { contentDigest } from "../../digest";
 import { compareRecords, recordUsesSchema } from "../../platform-records";
-import { isRecordId, type NodeRef, type Record, type RecordSchema } from "../../record";
+import { isRecordId, type NodeRef, type Record } from "../../record";
+import type { RecordSchema } from "../theory";
 
 export interface Demonstration {
   readonly kind: "demonstration";

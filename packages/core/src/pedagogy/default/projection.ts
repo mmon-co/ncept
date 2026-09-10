@@ -1,5 +1,6 @@
 import { lastMetadataContribution, type NodeId, type ResolvedGraph } from "../../patch";
-import type { LearnerState, ProjectionContext } from "../../pedagogy";
+import type { ProjectionContext } from "../theory";
+import type { LearnerState } from "../../profile/state";
 import { recordUsesSchema } from "../../platform-records";
 import { isRecordTimestamp, type Record as LogRecord, type RecordId } from "../../record";
 import {

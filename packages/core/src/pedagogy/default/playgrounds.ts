@@ -1,4 +1,4 @@
-import { implementPlayground } from "../../pedagogy";
+import { implementPlayground } from "../theory";
 import {
   SPACED_REVIEW_PLAYGROUND,
   type SpacedReviewAttempt,

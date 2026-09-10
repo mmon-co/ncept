@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { MockLanguageModelV3 } from "ai/test";
 import {
   contentDigest,
-  defaultRehomingModel,
   homelessDefaultRecords,
   projectDefault,
   refineDefaultUpdate,
@@ -324,38 +322,6 @@ test("revision mismatch, invalid successors and out-of-candidate model choices f
   expect(JSON.stringify(state)).toBe(before);
 });
 
-test("LLM boundary retries invalid categorical output and transmits verbatim evidence with statements", async () => {
-  let calls = 0;
-  const model = new MockLanguageModelV3({
-    doGenerate: async () => ({
-      content: [
-        {
-          type: "text",
-          text: ++calls === 1 ? '{"node":"node-missing"}' : '{"node":"node-single"}',
-        },
-      ],
-      finishReason: { unified: "stop", raw: "stop" },
-      usage: {
-        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 1, text: 1, reasoning: 0 },
-      },
-      warnings: [],
-    }),
-  });
-  const judge = defaultRehomingModel({ model });
-  const request: DefaultRehomingRequest = {
-    recordId: "record-single",
-    task: "  2 + 3?\n",
-    response: "  疒奀\t",
-    candidates: [{ node: "node-single", statement: "Add single-digit numbers" }],
-  };
-  expect(await judge(request)).toBe("node-single");
-  expect(calls).toBe(2);
-  expect(JSON.stringify(model.doGenerateCalls[0]?.prompt)).toContain(
-    JSON.stringify(JSON.stringify(request)).slice(1, -1),
-  );
-});
-
 test("explicit homeless overrides stay empty and caller-owned attachment lists cannot mutate the overlay", () => {
   const original = projectDefault(records, old, context);
   const homes: NodeId[] = [];
@@ -384,31 +350,6 @@ test("future retractions do not erase the as-of provisional or refined evidence"
   expect(refined.nodes["node-single"]?.citations).toEqual(
     records.map(({ envelope }) => envelope.id),
   );
-});
-
-test("LLM boundary accepts none and rejects persistently invalid homes", async () => {
-  let text = '{"node":null}';
-  const model = new MockLanguageModelV3({
-    doGenerate: async () => ({
-      content: [{ type: "text", text }],
-      finishReason: { unified: "stop", raw: "stop" },
-      usage: {
-        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 1, text: 1, reasoning: 0 },
-      },
-      warnings: [],
-    }),
-  });
-  const judge = defaultRehomingModel({ model });
-  const request: DefaultRehomingRequest = {
-    recordId: "record-single",
-    task: "2 + 3",
-    response: "5",
-    candidates: [],
-  };
-  expect(await judge(request)).toBeNull();
-  text = '{"node":"node-base"}';
-  expect(judge(request)).rejects.toThrow("LLM produced invalid structured output");
 });
 
 test("complete log preserves unaffected global evidence and claim attachments from a scoped previous state", () => {

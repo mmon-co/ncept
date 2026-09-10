@@ -1,6 +1,7 @@
 import type { NodeMemory } from "../../node-memory";
 import type { NodeId, ResolvedGraph } from "../../patch";
-import type { Indicator, LearnerState } from "../../pedagogy";
+import type { Indicator } from "../theory";
+import type { LearnerState } from "../../profile/state";
 import type { Record as LogRecord } from "../../record";
 import type { NodeState } from "./labels";
 import { validateMistakeAssessments, type MistakeAssessment } from "./memory";

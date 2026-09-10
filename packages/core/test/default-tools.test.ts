@@ -266,7 +266,11 @@ test("concrete release binds revision update and refinement tools to the default
     ...resolved.theory.theory.tools.map((factory) =>
       factory({
         ...fixture.ports,
-        projection: { context: () => context, save: async () => {} },
+        projection: {
+          context: () => context,
+          save: async () => {},
+          rehomingModel: async () => null,
+        },
       } satisfies DefaultBackgroundContext),
     ),
   );

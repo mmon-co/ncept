@@ -1,5 +1,6 @@
 import type { NodeId, ResolvedGraph, StructureEdge, StructureNode } from "../../patch";
-import type { LearnerState, TheoryDisplay } from "../../pedagogy";
+import type { TheoryDisplay } from "../theory";
+import type { LearnerState } from "../../profile/state";
 import type { NodeState } from "./labels";
 
 export function defaultNodeState(state: LearnerState<NodeState>, node: NodeId): NodeState {

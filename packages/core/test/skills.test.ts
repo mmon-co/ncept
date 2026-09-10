@@ -10,7 +10,7 @@ import {
   listSkills,
   skillBody,
   tutorSystemPrompt,
-} from "../src/skills";
+} from "../src/pedagogy/default/skills";
 
 // The catalog is data at a path resolved from the module location; the
 // regression this guards is that path or its release build breaking, not the

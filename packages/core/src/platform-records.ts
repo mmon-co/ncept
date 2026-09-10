@@ -1,5 +1,6 @@
 import { contentDigest } from "./digest";
-import type { NodeRef, Record, RecordId, RecordSchema, SchemaRef } from "./record";
+import type { NodeRef, Record, RecordId } from "./record";
+import type { RecordSchema, SchemaRef } from "./pedagogy/theory";
 import type { ViewId } from "./patch/view";
 
 export interface MissionPayload {

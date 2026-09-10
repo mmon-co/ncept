@@ -1,22 +1,23 @@
-/** Loader for the pedagogy Skill catalog in `skills/` (see skills/README.md, ADR 0012). */
+/** Loader for the default theory's Skill catalog in `skills/` (see skills/README.md, ADR 0012). */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import YAML from "yaml";
-import basePromptSource from "../skills/base.md?raw";
-import chartingSource from "../skills/charting/SKILL.md?raw";
-import evaluatorSweepSource from "../skills/evaluator-sweep/SKILL.md?raw";
-import lessonSource from "../skills/lesson/SKILL.md?raw";
-import missionSource from "../skills/mission/SKILL.md?raw";
-import planningSource from "../skills/planning/SKILL.md?raw";
-import probingSource from "../skills/probing/SKILL.md?raw";
-import evaluateSource from "../skills/procedures/evaluate.md?raw";
-import graphAuthoringSource from "../skills/procedures/graph-authoring.md?raw";
-import materialWorkSource from "../skills/procedures/material-work.md?raw";
-import missionConversationSource from "../skills/procedures/mission-conversation.md?raw";
-import probeLoopSource from "../skills/procedures/probe-loop.md?raw";
-import quizAuthoringSource from "../skills/procedures/quiz-authoring.md?raw";
-import realignmentSource from "../skills/realignment/SKILL.md?raw";
-import recordingReviewSource from "../skills/recording-review/SKILL.md?raw";
+import type { BuiltSkillBundle } from "../skills";
+import basePromptSource from "./skills/base.md?raw";
+import chartingSource from "./skills/charting/SKILL.md?raw";
+import evaluatorSweepSource from "./skills/evaluator-sweep/SKILL.md?raw";
+import lessonSource from "./skills/lesson/SKILL.md?raw";
+import missionSource from "./skills/mission/SKILL.md?raw";
+import planningSource from "./skills/planning/SKILL.md?raw";
+import probingSource from "./skills/probing/SKILL.md?raw";
+import evaluateSource from "./skills/procedures/evaluate.md?raw";
+import graphAuthoringSource from "./skills/procedures/graph-authoring.md?raw";
+import materialWorkSource from "./skills/procedures/material-work.md?raw";
+import missionConversationSource from "./skills/procedures/mission-conversation.md?raw";
+import probeLoopSource from "./skills/procedures/probe-loop.md?raw";
+import quizAuthoringSource from "./skills/procedures/quiz-authoring.md?raw";
+import realignmentSource from "./skills/realignment/SKILL.md?raw";
+import recordingReviewSource from "./skills/recording-review/SKILL.md?raw";
 
 const SKILL_SOURCES: Readonly<Record<string, string>> = {
   charting: chartingSource,
@@ -50,12 +51,6 @@ export interface SkillMeta {
   readonly description: string;
   readonly facet: Facet;
   readonly entry: readonly Entry[];
-}
-
-/** The complete Agent Skills-compatible file shipped for one catalog entry. */
-export interface BuiltSkillBundle {
-  readonly name: string;
-  readonly content: string;
 }
 
 interface SkillFile {

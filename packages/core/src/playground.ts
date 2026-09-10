@@ -1,4 +1,5 @@
-import type { LearnerState, PlaygroundContract, PlaygroundHook } from "./pedagogy";
+import type { PlaygroundContract, PlaygroundHook } from "./pedagogy/theory";
+import type { LearnerState } from "./profile/state";
 import type { NodeState } from "./pedagogy/default/labels";
 import { isRecordShape, type NodeRef, type Record as LogRecord } from "./record";
 import type { ExactPatchRef, NodeId } from "./patch";

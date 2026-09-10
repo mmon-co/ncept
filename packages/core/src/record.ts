@@ -1,13 +1,10 @@
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
 import { isContentDigest, type ContentDigest } from "./digest";
+// A theory declares the schemas its Records are validated against; envelopes name that identity.
+import type { RecordSchema, SchemaRef } from "./pedagogy/theory";
 import { PLATFORM_RECORD_SCHEMAS } from "./platform-records";
 
 export type RecordId = `record-${string}`;
-
-export interface SchemaRef {
-  readonly id: string;
-  readonly digest: ContentDigest;
-}
 
 export type SessionRef = { readonly kind: "session"; readonly sessionId: string };
 export type PlaygroundRef = {
@@ -35,13 +32,6 @@ export interface Record<P = unknown> {
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
-}
-
-/** Trusted repository code; ref.digest identifies both validation and NodeRef extraction. */
-export interface RecordSchema<P = unknown> {
-  readonly ref: SchemaRef;
-  accepts(payload: unknown): payload is P;
-  nodeRefs(payload: P): readonly NodeRef[];
 }
 
 export interface RecordValidationContext {

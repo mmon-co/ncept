@@ -1,5 +1,6 @@
 import type { Record, RecordId, RecordValidationContext, TrailSnapshot } from "./record";
-import type { ExactPedagogyRelease, ParameterOverride, ParameterOverrideId } from "./pedagogy";
+import type { ExactPedagogyRelease } from "./pedagogy/release";
+import type { ParameterOverride, ParameterOverrideId } from "./pedagogy/theory";
 import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
 import type { View, ViewId } from "./patch/view";

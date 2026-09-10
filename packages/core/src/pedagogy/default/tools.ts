@@ -1,7 +1,7 @@
 import { jsonSchema, tool, type ToolSet } from "ai";
 import type { NodeMemory } from "../../node-memory";
 import { exactPatchRefKey, type NodeId } from "../../patch";
-import type { ProjectionContext } from "../../pedagogy";
+import type { ProjectionContext, SchemaRef } from "../theory";
 import { attachDefaultClaim } from "./attachments";
 import {
   refineDefaultUpdate,
@@ -16,7 +16,6 @@ import {
   type Record as LogRecord,
   type RecordEnvelope,
   type RecordValidationContext,
-  type SchemaRef,
 } from "../../record";
 import {
   coverageDefault,
@@ -69,7 +68,8 @@ export interface DefaultBackgroundContext extends DefaultToolContext {
   readonly projection: {
     context(): ProjectionContext;
     save(expected: DefaultInstrumentContext, next: DefaultLearnerState): Promise<void>;
-    readonly rehomingModel?: DefaultRehomingModel;
+    /** Host-supplied judgment for pending demonstrations; the theory calls no provider itself. */
+    readonly rehomingModel: DefaultRehomingModel;
   };
 }
 

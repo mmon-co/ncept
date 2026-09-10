@@ -6,6 +6,7 @@ export * from "./record";
 export * from "./platform-records";
 export * from "./pedagogy/default";
 export * from "./node-memory";
+export { type LearnerState } from "./profile/state";
 export { evaluateView, type View, type ViewId } from "./patch/view";
 export {
   addNotebookLesson,
@@ -66,36 +67,3 @@ export {
   type ReviewRecord,
   type SchedulerState,
 } from "./scheduler";
-export {
-  DEFAULT_MODEL,
-  EFFORTS,
-  complete,
-  completeJson,
-  defaultModel,
-  effortProviderOptions,
-  fastModel,
-  formatModelSpec,
-  parseModelSpec,
-  registerConfiguredProviders,
-  registeredProviders,
-  registerProvider,
-  resolveModel,
-  resolveConfiguredModelSpec,
-  resolveModelSpec,
-  type Effort,
-  type LlmOptions,
-  type ModelSpec,
-  type OpenAICompatibleProviderConfig,
-  type ProviderKeys,
-  type ResolvedLanguageModel,
-} from "./llm";
-export {
-  buildSkillBundles,
-  builtSkillBundles,
-  listSkills,
-  skillBody,
-  skillInvocation,
-  tutorSystemPrompt,
-  type BuiltSkillBundle,
-  type SkillMeta,
-} from "./skills";

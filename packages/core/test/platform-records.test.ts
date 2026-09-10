@@ -1,12 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { mission, preferences } from "@concept/core/instrument-experience";
 import {
   LocalDirectoryCoreStore,
   MISSION_SCHEMA,
   PLATFORM_RETRACTION_SCHEMA,
   PREFERENCES_SCHEMA,
-  contentDigest,
   currentExperiences,
   experienceHistory,
   type MissionPayload,
@@ -14,7 +12,6 @@ import {
   type Record,
   type RecordId,
   type RecordSchema,
-  type TrailSnapshot,
 } from "../src";
 import { tempDataDir } from "./helpers";
 import { patchRef, sampleRecord, scope, validation } from "./record-fixture";
@@ -60,75 +57,9 @@ function retract(id: RecordId, of: RecordId) {
   return record(id, "2026-09-07T15:00:00.000Z", PLATFORM_RETRACTION_SCHEMA, { of });
 }
 
-function trail(records: readonly Record[]): TrailSnapshot {
-  return { records, revision: contentDigest(records) };
-}
-
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-
-test("platform Missions and preferences keep latest values, exact scopes and history without supersession pointers", () => {
-  const first = missionRecord("record-mission-first", "2026-09-07T09:00:00.000Z");
-  const latest = missionRecord("record-mission-latest", "2026-09-07T10:00:00.000Z", {
-    statement: "Apply derivatives",
-    priority: 3,
-  });
-  const otherScope = missionRecord("record-mission-other-scope", "2026-09-07T11:00:00.000Z", {
-    scope: "view:calculus",
-  });
-  const otherMission = missionRecord("record-mission-other", "2026-09-07T12:00:00.000Z", {
-    missionId: "language",
-  });
-  const preferenceFirst = preferenceRecord("record-preferences-first", "2026-09-07T10:00:00.000Z");
-  const preferenceLatest = preferenceRecord(
-    "record-preferences-latest",
-    "2026-09-07T11:00:00.000Z",
-    "profile",
-    { pace: "deliberate", formats: ["examples", "diagrams"], time: 20, audio: false },
-  );
-  const preferenceOther = preferenceRecord(
-    "record-preferences-other",
-    "2026-09-07T12:00:00.000Z",
-    "workshop",
-  );
-  const snapshot = trail([
-    latest,
-    preferenceLatest,
-    otherScope,
-    otherMission,
-    first,
-    preferenceFirst,
-    preferenceOther,
-  ]);
-  expect(mission(snapshot).records.map(({ recordId }) => recordId)).toEqual([
-    latest.envelope.id,
-    otherScope.envelope.id,
-    otherMission.envelope.id,
-  ]);
-  expect(mission(snapshot, "view:calculus").records.map(({ recordId }) => recordId)).toEqual([
-    otherScope.envelope.id,
-  ]);
-  expect(mission(snapshot).records[0]).toMatchObject({
-    ...latest.payload,
-    recordId: latest.envelope.id,
-    at: latest.envelope.at,
-    historyAvailable: true,
-    history: [first, latest],
-  });
-  expect(mission(snapshot).records[1]?.historyAvailable).toBeFalse();
-  expect(preferences(snapshot).records.map(({ recordId }) => recordId)).toEqual([
-    preferenceLatest.envelope.id,
-    preferenceOther.envelope.id,
-  ]);
-  expect(preferences(snapshot).records[0]).toMatchObject({
-    values: preferenceLatest.payload.values,
-    historyAvailable: true,
-    history: [preferenceFirst, preferenceLatest],
-  });
-  expect(mission(trail([])).records).toEqual([]);
-  expect(preferences(trail([])).records).toEqual([]);
 });
 
 test("retiring a latest Mission hides its chain without losing history or other scopes", async () => {
@@ -149,11 +80,6 @@ test("retiring a latest Mission hides its chain without losing history or other 
   const snapshot = await store.readTrail(scope);
   expect(snapshot.records).toEqual(entries);
   expect(currentExperiences(snapshot.records)).toEqual([otherScope, preference]);
-  expect(mission(snapshot, "profile").records).toEqual([]);
-  expect(mission(snapshot).records.map(({ recordId }) => recordId)).toEqual([
-    otherScope.envelope.id,
-  ]);
-  expect(preferences(snapshot).records[0]?.recordId).toBe(preference.envelope.id);
   expect(experienceHistory(retired, snapshot.records)).toEqual([first, revised, retired]);
   expect(
     store.appendRecordJson(
@@ -182,12 +108,8 @@ test("retracting current values exposes the latest non-retracted value, and reta
   for (const entry of [first, latest, preference, correction])
     await store.appendRecord(scope, entry, platformContext);
   const snapshot = await store.readTrail(scope);
-  expect(mission(snapshot).records[0]).toMatchObject({
-    recordId: first.envelope.id,
-    historyAvailable: true,
-    history: [first, latest, correction],
-  });
-  expect(preferences(snapshot).records[0]?.recordId).toBe(preference.envelope.id);
+  expect(currentExperiences(snapshot.records)).toEqual([first, preference]);
+  expect(experienceHistory(first, snapshot.records)).toEqual([first, latest, correction]);
   await store.appendRecord(
     scope,
     retract("record-retract-first", first.envelope.id),

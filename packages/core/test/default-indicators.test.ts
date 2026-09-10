@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
-import { MockLanguageModelV3 } from "ai/test";
 import {
-  assessDefaultMistakes,
   attachDefaultRecordMemory,
   indicatorsDefault,
   projectDefault,
@@ -83,26 +81,9 @@ const assessment: MistakeAssessment = {
   misconception: "Reverses numerator and denominator",
   recordIds: ["record-failure", "record-other-failure"],
 };
-function modelResponse(value: unknown) {
-  return new MockLanguageModelV3({
-    doGenerate: {
-      content: [{ type: "text", text: JSON.stringify(value) }],
-      finishReason: { unified: "stop", raw: "stop" },
-      usage: {
-        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 1, text: 1, reasoning: 0 },
-      },
-      warnings: [],
-    },
-  });
-}
-
 test("all seven warnings have positive dogfood cases and cite original evidence", async () => {
   const input = await fixture();
-  const model = modelResponse([assessment]);
-  const mistakes = await assessDefaultMistakes(input.state, input.memories, { model });
-  expect(model.doGenerateCalls).toHaveLength(1);
-  expect(JSON.stringify(model.doGenerateCalls[0])).toContain("Reverses numerator and denominator");
+  const mistakes = [assessment];
   const warnings = warningsDefault({ ...input, mistakes });
   expect([...new Set(warnings.map(({ kind }) => kind))].sort()).toEqual([
     "edge-contradiction",
@@ -178,22 +159,14 @@ test("mistake assessment rejects fabricated, retracted, non-summary and single-N
   expect(() => validateMistakeAssessments([assessment], remapped, input.memories)).toThrow(
     "unsupported Record",
   );
-  const model = modelResponse([
-    { ...assessment, recordIds: ["record-failure", "record-invented"] },
-  ]);
-  expect(assessDefaultMistakes(input.state, input.memories, { model })).rejects.toThrow(
-    "LLM produced invalid structured output",
-  );
-  expect(model.doGenerateCalls).toHaveLength(2);
 });
 
-test("summaries never alter labels; no summary means no model assessment", async () => {
+test("a summary-backed assessment spans its Nodes and never alters the projected state", async () => {
   const input = await fixture();
   const before = JSON.stringify(input.state);
-  const model = modelResponse([assessment]);
-  expect(await assessDefaultMistakes(input.state, [], { model })).toEqual([]);
-  expect(model.doGenerateCalls).toHaveLength(0);
-  await assessDefaultMistakes(input.state, input.memories, { model });
+  expect(
+    validateMistakeAssessments([assessment], input.state, input.memories).map(({ nodes }) => nodes),
+  ).toEqual([["node-base", "node-middle"]]);
   expect(JSON.stringify(input.state)).toBe(before);
 });
 

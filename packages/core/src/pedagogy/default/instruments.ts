@@ -2,7 +2,7 @@ import { items } from "../../patch/items";
 import { route } from "../../patch/route";
 import { emptyNodeMemory, memory, type NodeMemory } from "../../node-memory";
 import type { NodeId, ResolvedGraph } from "../../patch";
-import type { LearnerState } from "../../pedagogy";
+import type { LearnerState } from "../../profile/state";
 import {
   currentExperiences,
   experienceHistory,
