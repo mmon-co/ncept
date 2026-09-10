@@ -210,22 +210,29 @@ test("author decides unaided from the card's form and follows every edit; two No
   });
   const edited = await playground.edit(
     card.id,
-    { format: "application", category: "test", front: "Find the answer", back: "42" },
+    {
+      format: "application",
+      category: "test",
+      front: "Find the answer",
+      back: "42",
+      nodes: [{ node: "node-dependent", provenance: patchRef }],
+    },
     authorSpacedReview({ ...card, front: "Find the answer" }),
   );
   expect(edited).toMatchObject({ format: "application", annotation: { unaided: true } });
   // The earlier attempt snapshotted the card as it was: its evidence does not change.
   expect((await store.readTrail(scope)).records[0]?.payload).toMatchObject({ unaided: false });
+  expect(edited.nodes).toEqual([{ node: "node-dependent", provenance: patchRef }]);
   const paired = attemptSpacedReview({
     item: {
       ...edited,
-      nodes: [...edited.nodes, { node: "node-dependent", provenance: patchRef }],
+      nodes: [...edited.nodes, { node: "node-base", provenance: patchRef }],
     },
     grade: { ...grade, id: "srs-grade-pair" },
   });
   expect(paired.map((r) => [r.envelope.id, r.payload.node.node])).toEqual([
-    ["record-srs-grade-pair-1", "node-base"],
-    ["record-srs-grade-pair-2", "node-dependent"],
+    ["record-srs-grade-pair-1", "node-dependent"],
+    ["record-srs-grade-pair-2", "node-base"],
   ]);
   expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, answer: " " } })).toThrow(
     "attempt retrieval",
