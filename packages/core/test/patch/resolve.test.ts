@@ -6,7 +6,7 @@ import {
   type LockedBase,
   type PatchRevision,
 } from "../../src/patch";
-import { materialBodyDigest } from "../../src/patch-storage";
+import { materialBodyDigest } from "../../src/patch/release";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {

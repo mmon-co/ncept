@@ -22,7 +22,7 @@ import {
 } from "../src/platform-records";
 import type { Record as LogRecord } from "../src/record";
 import { selectGraph } from "../src/patch";
-import { route } from "../src/instrument-route";
+import { route } from "../src/patch/route";
 import { claim, context, demonstration, fixtureGraph, patchRef } from "./default-theory-fixture";
 
 function fixture(): DefaultInstrumentContext {

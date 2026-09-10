@@ -1,8 +1,7 @@
-import { sha256Hex } from "./digest";
+import { canonicalJson, contentDigest, isContentDigest, type ContentDigest } from "./digest";
 import type { ToolSet } from "ai";
 import type { ExactPatchRef, NodeId, ResolvedGraph, StructureNode, StructureEdge } from "./patch";
 import {
-  isContentDigest,
   isRecordTimestamp,
   type Record as LogRecord,
   type RecordId,
@@ -10,7 +9,6 @@ import {
 } from "./record";
 import type { BuiltSkillBundle } from "./skills";
 
-export type ContentDigest = `sha256:${string}`;
 export type PedagogyPackageId = `pedagogy-${string}`;
 
 export interface ExactPedagogyRelease {
@@ -235,32 +233,6 @@ export type PedagogyRelease<S = unknown, N = unknown, Context = never> =
 
 export interface PedagogyReleaseSource<S = unknown, N = unknown, Context = never> {
   get(ref: ExactPedagogyRelease): PedagogyRelease<S, N, Context> | undefined;
-}
-
-function canonicalValue(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "string")
-    return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value))
-      throw new TypeError("canonical content cannot contain non-finite numbers");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;
-  if (typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalValue(entry)}`)
-      .join(",")}}`;
-  }
-  throw new TypeError(`canonical content cannot contain ${typeof value}`);
-}
-
-export function canonicalJson(value: unknown): string {
-  return canonicalValue(value);
-}
-
-export function contentDigest(value: unknown): ContentDigest {
-  return `sha256:${sha256Hex(canonicalJson(value))}`;
 }
 
 /** Package labels and Skills do not affect projection identity; schema artifacts and parameters do. */

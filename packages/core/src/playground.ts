@@ -2,7 +2,7 @@ import type { LearnerState, PlaygroundContract, PlaygroundHook } from "./pedagog
 import type { NodeState } from "./pedagogy/default/labels";
 import { isRecordShape, type NodeRef, type Record as LogRecord } from "./record";
 import type { ExactPatchRef, NodeId } from "./patch";
-import type { openPersonalLesson } from "./patch-storage";
+import type { openPersonalLesson } from "./profile/personal";
 import { deriveSchedulerState, isDue, type Grade } from "./scheduler";
 import type { ProfileScope } from "./scope";
 import type { SpacedReviewStore } from "./storage";

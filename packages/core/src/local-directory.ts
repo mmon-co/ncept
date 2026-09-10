@@ -14,7 +14,6 @@ import {
   parseRecord,
   serializeRecord,
   validateRecordJson,
-  isContentDigest,
   isRecordTimestamp,
   type Record as LogRecord,
   type RecordId,
@@ -22,8 +21,8 @@ import {
   type TrailSnapshot,
 } from "./record";
 import { assertPlatformRetraction } from "./platform-records";
+import { contentDigest, isContentDigest } from "./digest";
 import {
-  contentDigest,
   type ExactPedagogyRelease,
   type ParameterOverride,
   type ParameterOverrideId,
@@ -38,7 +37,7 @@ import {
 } from "./playground";
 import type { ProfileScope } from "./scope";
 import type { CoreStores } from "./storage";
-import type { View, ViewId } from "./view";
+import type { View, ViewId } from "./patch/view";
 
 function component(value: string, label: string): string {
   if (value.length === 0 || value === "." || value === "..") throw new Error(`${label} is invalid`);

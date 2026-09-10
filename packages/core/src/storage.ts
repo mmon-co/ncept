@@ -2,7 +2,7 @@ import type { Record, RecordId, RecordValidationContext, TrailSnapshot } from ".
 import type { ExactPedagogyRelease, ParameterOverride, ParameterOverrideId } from "./pedagogy";
 import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./playground";
 import type { ProfileScope } from "./scope";
-import type { View, ViewId } from "./view";
+import type { View, ViewId } from "./patch/view";
 
 export interface TrailStore {
   appendRecord(

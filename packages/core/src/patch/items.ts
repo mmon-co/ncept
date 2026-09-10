@@ -4,7 +4,7 @@ import type {
   NodeId,
   ResolvedGraph,
   StructureNode,
-} from "./patch";
+} from "./model";
 
 /** A string-array Metadata property whose entries are JSON-encoded authored item fact objects. */
 export const ITEM_BANK_METADATA_PROPERTY = "pedagogy:items";

@@ -1,5 +1,5 @@
-import { items } from "../../instrument-items";
-import { route } from "../../instrument-route";
+import { items } from "../../patch/items";
+import { route } from "../../patch/route";
 import { emptyNodeMemory, memory, type NodeMemory } from "../../node-memory";
 import type { NodeId, ResolvedGraph } from "../../patch";
 import type { LearnerState } from "../../pedagogy";
@@ -12,7 +12,7 @@ import {
 } from "../../platform-records";
 import type { Record as LogRecord } from "../../record";
 import type { SessionViewRef } from "../../session";
-import type { ViewId } from "../../view";
+import type { ViewId } from "../../patch/view";
 import { defaultNodeState, defaultQueryTokens, isDefaultKnown } from "./display";
 import { indicatorsDefault, type DefaultIndicatorContext } from "./indicators";
 import type { NodeState } from "./labels";

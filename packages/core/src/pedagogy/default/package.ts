@@ -1,7 +1,6 @@
+import { contentDigest, type ContentDigest } from "../../digest";
 import {
-  contentDigest,
   pedagogicalTheoryDigest,
-  type ContentDigest,
   type PedagogicalTheory,
   type PlatformPedagogyRelease,
 } from "../../pedagogy";

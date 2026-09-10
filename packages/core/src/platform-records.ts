@@ -1,6 +1,6 @@
-import { contentDigest } from "./pedagogy";
+import { contentDigest } from "./digest";
 import type { NodeRef, Record, RecordId, RecordSchema, SchemaRef } from "./record";
-import type { ViewId } from "./view";
+import type { ViewId } from "./patch/view";
 
 export interface MissionPayload {
   readonly scope: string;

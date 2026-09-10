@@ -5,19 +5,24 @@ import { spawnSync } from "node:child_process";
 import { resolvePatchBundle, type RootPatchDefinition } from "../src/patch";
 import {
   addNotebookLesson,
+  adoptHubRelease,
+  loadPersonalPatchBundle,
+  readPersonalPatch,
+} from "../src/profile/personal";
+import {
   attachAuthoredDocumentMaterial,
   createAuthoredBasedPatch,
   createAuthoredReifiedPatch,
   createAuthoredRootPatch,
-  loadPersonalPatchBundle,
   readAuthoredPatchRevision,
+  publishAuthoredPatchRelease,
   reviseAuthoredRootPatch,
   validateRootPatchDefinition,
   validateAuthoredDocumentMaterialRevision,
   reviseAuthoredDocumentMaterial,
-} from "../src/patch-storage";
+} from "../src/patch/release";
 import type { ProfileScope } from "../src/scope";
-import { evaluateView } from "../src/view";
+import { evaluateView } from "../src/patch/view";
 import { tempDataDir } from "./helpers";
 
 const main: ProfileScope = { principal: "principal-alice", profile: "profile-main" };
@@ -206,4 +211,36 @@ test("authored Material dry runs share acceptance validation without writing Git
       "Another edit",
     ),
   ).toThrow("changed before");
+});
+
+test("an adopted release keeps its Profile's later edits out of the exact revision it was read at", () => {
+  const dd = tempDataDir();
+  const course = createAuthoredRootPatch(dd, main, {
+    title: "Geometry",
+    author: "Euclid",
+    labels: ["course"],
+    nodes: [{ id: "node-triangles", label: "Triangles", lesson: "Three sides" }],
+    edges: [],
+  });
+  const release = publishAuthoredPatchRelease(dd, course.identity, "1.0.0");
+  const adopted = adoptHubRelease(dd, main, release);
+  expect(adopted.bases).toEqual([{ identity: course.identity, release: "1.0.0" }]);
+
+  const notebook = addNotebookLesson(dd, main, {
+    id: "node-my-proof",
+    label: "My proof",
+    lesson: "Construct a proof",
+  });
+  const current = readPersonalPatch(dd, main, { kind: "absent" });
+  expect(current.ref.commit).toBe(notebook.ref.commit);
+  expect(current.bases).toEqual([release]);
+  expect(current.graph.nodes.map(({ id }) => id).toSorted()).toEqual([
+    "node-my-proof",
+    "node-triangles",
+  ]);
+
+  const atAdoption = readPersonalPatch(dd, main, { kind: "absent" }, undefined, adopted.ref);
+  expect(atAdoption.graph.nodes.map(({ id }) => id)).toEqual(["node-triangles"]);
+  expect(() => loadPersonalPatchBundle(dd, scratch)).toThrow("Personal Patch does not exist");
+  expect(() => adoptHubRelease(dd, main, release)).toThrow("already adopted");
 });

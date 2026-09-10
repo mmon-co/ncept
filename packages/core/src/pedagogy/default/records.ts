@@ -1,4 +1,4 @@
-import { contentDigest } from "../../pedagogy";
+import { contentDigest } from "../../digest";
 import { compareRecords, recordUsesSchema } from "../../platform-records";
 import { isRecordId, type NodeRef, type Record, type RecordSchema } from "../../record";
 

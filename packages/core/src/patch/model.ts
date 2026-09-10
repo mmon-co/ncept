@@ -1,4 +1,5 @@
-import type { ContentDigest, TheoryDisplay } from "../pedagogy";
+import type { ContentDigest } from "../digest";
+import type { TheoryDisplay } from "../pedagogy";
 
 export type PatchId = `patch-${string}`;
 export type NodeId = `node-${string}`;

@@ -6,7 +6,7 @@ import {
   type LockedBase,
   type PatchRevision,
 } from "../../src/patch";
-import { evaluateView } from "../../src/view";
+import { evaluateView } from "../../src/patch/view";
 
 function ref(identity: `patch-${string}`, version: string, fill: string): ExactPatchRef {
   return {

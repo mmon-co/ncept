@@ -1,4 +1,5 @@
-import { selectGraph, type GraphQuery, type ResolvedGraph, type SelectedGraph } from "./patch";
+import type { GraphQuery, ResolvedGraph, SelectedGraph } from "./model";
+import { selectGraph } from "./select";
 
 export type ViewId = `view-${string}`;
 

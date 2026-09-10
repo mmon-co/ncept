@@ -1,7 +1,8 @@
 import type { NodeId } from "./patch";
-import type { ContentDigest, ExactPedagogyRelease, ResolvedPedagogy } from "./pedagogy";
+import type { ContentDigest } from "./digest";
+import type { ExactPedagogyRelease, ResolvedPedagogy } from "./pedagogy";
 import { isRecordTimestamp } from "./record";
-import type { ViewId } from "./view";
+import type { ViewId } from "./patch/view";
 
 /** The host-resolved Node set of a saved View, captured when a Session opens. */
 export interface SessionViewRef {

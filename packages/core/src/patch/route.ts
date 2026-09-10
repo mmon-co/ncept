@@ -1,6 +1,6 @@
-import { PatchCompileError } from "./patch/errors";
-import type { NodeId, ResolvedGraph, StructureNode } from "./patch/model";
-import { selectGraph } from "./patch/select";
+import { PatchCompileError } from "./errors";
+import type { NodeId, ResolvedGraph, StructureNode } from "./model";
+import { selectGraph } from "./select";
 
 export type RouteResult =
   | { readonly kind: "found"; readonly nodes: readonly StructureNode[] }

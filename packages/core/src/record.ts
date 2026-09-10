@@ -1,5 +1,5 @@
 import { sameExactPatchRef, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
-import type { ContentDigest } from "./pedagogy";
+import { isContentDigest, type ContentDigest } from "./digest";
 import { PLATFORM_RECORD_SCHEMAS } from "./platform-records";
 
 export type RecordId = `record-${string}`;
@@ -62,10 +62,6 @@ function object(value: unknown): value is { [key: string]: unknown } {
 
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-export function isContentDigest(value: unknown): value is ContentDigest {
-  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value);
 }
 
 export function isSchemaRef(value: unknown): value is SchemaRef {
