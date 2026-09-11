@@ -1,12 +1,12 @@
-import type { PlaygroundContract, PlaygroundHook } from "./pedagogy/theory";
-import type { LearnerState } from "./profile/state";
-import type { NodeState } from "./pedagogy/default/labels";
-import { isRecordShape, type NodeRef, type Record as LogRecord } from "./record";
-import type { ExactPatchRef, NodeId } from "./patch";
-import type { openPersonalLesson } from "./profile/personal";
+import type { PlaygroundContract, PlaygroundHook } from "../../pedagogy/theory";
+import type { LearnerState } from "../state";
+import type { NodeState } from "../../pedagogy/default/labels";
+import { isRecordShape, type NodeRef, type Record as LogRecord } from "../observations";
+import type { ExactPatchRef, NodeId } from "../../patch";
+import type { openPersonalLesson } from "../personal";
 import { deriveSchedulerState, isDue, type Grade } from "./scheduler";
-import type { ProfileScope } from "./scope";
-import type { SpacedReviewStore } from "./storage";
+import type { ProfileScope } from "../scope";
+import type { SpacedReviewStore } from "../storage";
 
 export type SpacedReviewCardId = `srs-card-${string}`;
 export type SpacedReviewGradeId = `srs-grade-${string}`;

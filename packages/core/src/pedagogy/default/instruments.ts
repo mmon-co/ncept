@@ -1,17 +1,19 @@
 import { items } from "../../patch/items";
 import { route } from "../../patch/route";
-import { emptyNodeMemory, memory, type NodeMemory } from "../../node-memory";
-import type { NodeId, ResolvedGraph } from "../../patch";
-import type { LearnerState } from "../../profile/state";
 import {
   currentExperiences,
+  emptyNodeMemory,
   experienceHistory,
+  memory,
   MISSION_SCHEMA,
   PREFERENCES_SCHEMA,
   recordUsesSchema,
-} from "../../platform-records";
-import type { Record as LogRecord } from "../../record";
-import type { SessionViewRef } from "../../session";
+  type NodeMemory,
+  type Record as LogRecord,
+} from "../../profile/observations";
+import type { NodeId, ResolvedGraph } from "../../patch";
+import type { LearnerState } from "../../profile/state";
+import type { SessionViewRef } from "../../profile/session";
 import type { ViewId } from "../../patch/view";
 import { defaultNodeState, defaultQueryTokens, isDefaultKnown } from "./display";
 import { indicatorsDefault, type DefaultIndicatorContext } from "./indicators";

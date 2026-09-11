@@ -4,8 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import type { DataDir } from "../datadir";
-import type { ProfileScope } from "../scope";
+import type { DataDir } from "../profile/datadir";
+import type { ProfileScope } from "../profile/scope";
 import { compileGraph } from "./compile";
 import {
   exactPatchRefKey,

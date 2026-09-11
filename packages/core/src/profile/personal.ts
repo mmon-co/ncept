@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { DataDir } from "../datadir";
-import type { ProfileScope } from "../scope";
+import type { DataDir } from "./datadir";
+import type { ProfileScope } from "./scope";
 import {
   compileGraph,
   resolvePatchBundle,

@@ -21,7 +21,7 @@ import {
   validateAuthoredDocumentMaterialRevision,
   reviseAuthoredDocumentMaterial,
 } from "../src/patch/release";
-import type { ProfileScope } from "../src/scope";
+import type { ProfileScope } from "../src/profile/scope";
 import { evaluateView } from "../src/patch/view";
 import { tempDataDir } from "./helpers";
 

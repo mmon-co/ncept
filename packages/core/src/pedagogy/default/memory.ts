@@ -1,7 +1,11 @@
-import { attachNodeMemory, expandNodeMemory, type NodeMemory } from "../../node-memory";
+import {
+  attachNodeMemory,
+  expandNodeMemory,
+  type NodeMemory,
+  type RecordId,
+} from "../../profile/observations";
 import type { NodeId } from "../../patch";
 import type { LearnerState } from "../../profile/state";
-import type { RecordId } from "../../record";
 import type { NodeState } from "./labels";
 import type { HomedRecord } from "./records";
 

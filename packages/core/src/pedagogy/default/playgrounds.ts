@@ -3,8 +3,8 @@ import {
   SPACED_REVIEW_PLAYGROUND,
   type SpacedReviewAttempt,
   type SpacedReviewItem,
-} from "../../playground";
-import type { Record as LogRecord } from "../../record";
+} from "../../profile/spaced-review/playground";
+import type { Record as LogRecord } from "../../profile/observations";
 import { DEMONSTRATION_SCHEMA, type Demonstration } from "./records";
 
 /** What this theory attaches to a spaced-review card: whether its form demands as much as

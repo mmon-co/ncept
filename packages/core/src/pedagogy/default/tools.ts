@@ -1,5 +1,13 @@
 import { jsonSchema, tool, type ToolSet } from "ai";
-import type { NodeMemory } from "../../node-memory";
+import {
+  serializeRecord,
+  validateRecordJson,
+  type NodeMemory,
+  type NodeRef,
+  type Record as LogRecord,
+  type RecordEnvelope,
+  type RecordValidationContext,
+} from "../../profile/observations";
 import { exactPatchRefKey, type NodeId } from "../../patch";
 import type { ProjectionContext, SchemaRef } from "../theory";
 import { attachDefaultClaim } from "./attachments";
@@ -9,14 +17,6 @@ import {
   type DefaultLearnerState,
   type DefaultRehomingModel,
 } from "./update";
-import {
-  serializeRecord,
-  validateRecordJson,
-  type NodeRef,
-  type Record as LogRecord,
-  type RecordEnvelope,
-  type RecordValidationContext,
-} from "../../record";
 import {
   coverageDefault,
   frontierDefault,

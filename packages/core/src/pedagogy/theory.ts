@@ -7,7 +7,7 @@ import {
   type NodeRef,
   type Record as LogRecord,
   type RecordId,
-} from "../record";
+} from "../profile/observations";
 import {
   pedagogicalTheoryDigest,
   sameRelease,

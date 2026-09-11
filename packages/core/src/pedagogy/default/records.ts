@@ -1,6 +1,11 @@
 import { contentDigest } from "../../digest";
-import { compareRecords, recordUsesSchema } from "../../platform-records";
-import { isRecordId, type NodeRef, type Record } from "../../record";
+import {
+  compareRecords,
+  isRecordId,
+  recordUsesSchema,
+  type NodeRef,
+  type Record,
+} from "../../profile/observations";
 import type { RecordSchema } from "../theory";
 
 export interface Demonstration {

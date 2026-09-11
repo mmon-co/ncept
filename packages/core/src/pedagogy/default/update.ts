@@ -9,7 +9,7 @@ import {
 } from "../../patch";
 import type { ProjectionContext } from "../theory";
 import type { LearnerState } from "../../profile/state";
-import type { Record as LogRecord, RecordId } from "../../record";
+import type { Record as LogRecord, RecordId } from "../../profile/observations";
 import type { NodeState } from "./labels";
 import { homeDefaultRecords, projectDefault, type DefaultAttachments } from "./projection";
 import { activeDefaultRecords } from "./records";

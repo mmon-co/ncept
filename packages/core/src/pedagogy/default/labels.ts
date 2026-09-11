@@ -1,5 +1,5 @@
 import type { NodeId } from "../../patch";
-import type { Record, RecordId } from "../../record";
+import type { Record, RecordId } from "../../profile/observations";
 import type { Demonstration, HomedRecord } from "./records";
 
 export type NodeLabel = "demonstrated" | "probably-known" | "suspect" | "unknown";

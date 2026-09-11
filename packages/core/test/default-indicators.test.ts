@@ -8,7 +8,7 @@ import {
   type DefaultInstrumentContext,
   type MistakeAssessment,
 } from "../src/pedagogy/default";
-import { compactNodeMemory, emptyNodeMemory } from "../src/node-memory";
+import { compactNodeMemory, emptyNodeMemory } from "../src/profile/observations";
 import {
   claim,
   context,

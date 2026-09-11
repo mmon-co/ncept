@@ -11,6 +11,7 @@ import {
 import { dirname, join } from "node:path";
 import { ensureDataDir, type DataDir } from "./datadir";
 import {
+  assertPlatformRetraction,
   parseRecord,
   serializeRecord,
   validateRecordJson,
@@ -19,22 +20,21 @@ import {
   type RecordId,
   type RecordValidationContext,
   type TrailSnapshot,
-} from "./record";
-import { assertPlatformRetraction } from "./platform-records";
-import { contentDigest, isContentDigest } from "./digest";
-import type { ExactPedagogyRelease } from "./pedagogy/release";
-import type { ParameterOverride, ParameterOverrideId } from "./pedagogy/theory";
-import { parseGraphQuery } from "./patch";
+} from "./observations";
+import { contentDigest, isContentDigest } from "../digest";
+import type { ExactPedagogyRelease } from "../pedagogy/release";
+import type { ParameterOverride, ParameterOverrideId } from "../pedagogy/theory";
+import { parseGraphQuery } from "../patch";
 import {
   parseSpacedReviewCard,
   parseSpacedReviewGrade,
   type SpacedReviewCard,
   type SpacedReviewCardId,
   type SpacedReviewGrade,
-} from "./playground";
+} from "./spaced-review/playground";
 import type { ProfileScope } from "./scope";
 import type { CoreStores } from "./storage";
-import type { View, ViewId } from "./patch/view";
+import type { View, ViewId } from "../patch/view";
 
 function component(value: string, label: string): string {
   if (value.length === 0 || value === "." || value === "..") throw new Error(`${label} is invalid`);

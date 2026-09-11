@@ -1,11 +1,14 @@
-export { STORE_FORMAT_VERSION, ensureDataDir, resolveDataDir, type DataDir } from "./datadir";
-export { type PrincipalId, type ProfileId, type ProfileScope } from "./scope";
+export {
+  STORE_FORMAT_VERSION,
+  ensureDataDir,
+  resolveDataDir,
+  type DataDir,
+} from "./profile/datadir";
+export { type PrincipalId, type ProfileId, type ProfileScope } from "./profile/scope";
 export { canonicalJson, contentDigest, isContentDigest, type ContentDigest } from "./digest";
 export * from "./pedagogy";
-export * from "./record";
-export * from "./platform-records";
+export * from "./profile/observations";
 export * from "./pedagogy/default";
-export * from "./node-memory";
 export { type LearnerState } from "./profile/state";
 export { evaluateView, type View, type ViewId } from "./patch/view";
 export {
@@ -29,8 +32,8 @@ export {
   type SpacedReviewStore,
   type TrailStore,
   type ViewStore,
-} from "./storage";
-export { LocalDirectoryCoreStore } from "./local-directory";
+} from "./profile/storage";
+export { LocalDirectoryCoreStore } from "./profile/local-directory";
 export {
   decideReviewGrade,
   parseSpacedReviewCard,
@@ -50,7 +53,7 @@ export {
   type SpacedReviewInstruments,
   type SpacedReviewItem,
   type SpacedReviewPlayground,
-} from "./playground";
+} from "./profile/spaced-review/playground";
 export {
   canOpen,
   isExpired,
@@ -59,11 +62,11 @@ export {
   type SessionOpenResult,
   type SessionPedagogyMetadata,
   type SessionViewRef,
-} from "./session";
+} from "./profile/session";
 export {
   deriveSchedulerState,
   isDue,
   type Grade,
   type ReviewRecord,
   type SchedulerState,
-} from "./scheduler";
+} from "./profile/spaced-review/scheduler";

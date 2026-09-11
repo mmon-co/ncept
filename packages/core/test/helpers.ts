@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureDataDir, resolveDataDir, type DataDir } from "../src/datadir";
+import { ensureDataDir, resolveDataDir, type DataDir } from "../src/profile/datadir";
 
 export function tempDataDir(): DataDir {
   const root = mkdtempSync(join(tmpdir(), "tutor-test-"));

@@ -1,7 +1,7 @@
 import type { NodeId, ResolvedGraph } from "../../patch";
 import type { ProjectionContext } from "../theory";
 import type { LearnerState } from "../../profile/state";
-import type { Record as LogRecord, RecordId } from "../../record";
+import type { Record as LogRecord, RecordId } from "../../profile/observations";
 import type { NodeState } from "./labels";
 import { activeDefaultRecords } from "./records";
 import { updateDefault } from "./update";

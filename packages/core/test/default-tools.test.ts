@@ -18,10 +18,11 @@ import {
   compactNodeMemory,
   emptyNodeMemory,
   type NodeMemory,
-} from "../src/node-memory";
+  type Record as LogRecord,
+  type RecordId,
+} from "../src/profile/observations";
 import { resolvePedagogy } from "../src/pedagogy";
 import { exactPatchRefKey } from "../src/patch";
-import type { Record as LogRecord, RecordId } from "../src/record";
 import { context, demonstration, fixtureGraph, patchRef, claim } from "./default-theory-fixture";
 
 async function invoke(tools: ToolSet, name: string, input: unknown) {

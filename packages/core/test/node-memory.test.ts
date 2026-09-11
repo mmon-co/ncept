@@ -212,7 +212,9 @@ test("Node memory failures do not mutate context or lose originals", async () =>
 });
 
 test("Node memory has no runtime import path to a theory or state function", async () => {
-  const source = await Bun.file(new URL("../src/node-memory.ts", import.meta.url)).text();
+  const source = await Bun.file(new URL("../src/profile/observations.ts", import.meta.url)).text();
   const transpiler = new Bun.Transpiler({ loader: "ts" });
-  expect(transpiler.scanImports(source)).toEqual([]);
+  // The Patch algebra and the digest mechanism are all the observation module runs; a theory's
+  // schemas and Learner state reach it as erased types only.
+  expect(transpiler.scanImports(source).map(({ path }) => path)).toEqual(["../patch", "../digest"]);
 });

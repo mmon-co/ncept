@@ -16,11 +16,11 @@ import {
 } from "../src/pedagogy/default";
 import {
   MISSION_SCHEMA,
-  PREFERENCES_SCHEMA,
   PLATFORM_RETRACTION_SCHEMA,
+  PREFERENCES_SCHEMA,
   type PreferencesPayload,
-} from "../src/platform-records";
-import type { Record as LogRecord } from "../src/record";
+  type Record as LogRecord,
+} from "../src/profile/observations";
 import { selectGraph } from "../src/patch";
 import { route } from "../src/patch/route";
 import { claim, context, demonstration, fixtureGraph, patchRef } from "./default-theory-fixture";
