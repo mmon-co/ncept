@@ -19,7 +19,7 @@ test("script every read selector with next(response), preserving source identiti
     [
       read.observations({ about: ["node-a"], surface: "surface-lesson" }),
       { kind: "observations", about: ["node-a"], surface: "surface-lesson" },
-      [],
+      [{ id: "obs-abandoned", at, by: "platform", standing: "abandoned", payload: {} }] satisfies Observation[],
     ],
     [
       read.transcript("surface-lesson", { from: "message-first", to: "message-last" }),
@@ -90,4 +90,6 @@ test("a synchronous Program receives and cites each host-assigned write identity
   const invalid = write({ payload: {} });
   invalid.next();
   expect(() => invalid.next("not-an-observation")).toThrow("host-assigned");
+  const forged = { payload: {}, standing: "selected" as const };
+  expect(() => write(forged).next()).toThrow("host-assigned read context");
 });

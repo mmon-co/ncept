@@ -557,9 +557,14 @@ function projectMemory(
   };
 }
 
-/** Pure default policy: complete effective values plus an explicit evaluation instant. */
+/** Default policy: retain history in the host, but ignore abandoned evidence here. */
+export function electedObservations(observations: readonly Observation[]): readonly Observation[] {
+  return observations.filter(({ standing }) => standing !== "abandoned");
+}
+
+/** Pure default policy: history-annotated values plus an explicit evaluation instant. */
 export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
-  const observations = effectiveObservations(supplied, now);
+  const observations = effectiveObservations(electedObservations(supplied), now);
   const records = activeDefaultRecords(observations);
   const nodeIds = new Set(graph.nodes.map(({ id }) => id));
   const homes: Partial<Record<ObservationId, readonly NodeId[]>> = {};

@@ -232,6 +232,7 @@ test("retractions read effective evidence and never retract platform, foreign, a
     [],
     [{ ...claim, by: "platform" as const }],
     [{ ...claim, by: { theory: "foreign", version: "1" } }],
+    [{ ...claim, standing: "abandoned" as const }],
     [claim, retraction],
     [claim, { ...claim, id: "obs-replacement" as const, supersedes: claim.id }],
   ]) {

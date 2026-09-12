@@ -559,6 +559,12 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
   expect(memory(stateDefault(graph(), [p, q, batch, summary], at)).entries[0]?.kind).toBe("summary");
   const remaining = memory(stateDefault(graph(), [q, batch, summary], at));
   expect(remaining.entries.map(({ text }) => text)).toEqual([q.id]);
+  const abandoned: Observation = { ...p, standing: "abandoned" };
+  expect(memory(stateDefault(graph(), [abandoned, q, batch, summary], at))).toEqual(remaining);
+  const record = demonstration("standing", 0);
+  expect(stateDefault(graph(), [{ ...record, standing: "abandoned" }], at).records).toEqual([]);
+  expect(stateDefault(graph(), [{ ...record, standing: "selected" }], at).records).toHaveLength(1);
+  expect(stateDefault(graph(), [{ ...record, standing: "unscoped" }], at).records).toHaveLength(1);
   const rebuilt = obs(
     "rebuilt",
     {

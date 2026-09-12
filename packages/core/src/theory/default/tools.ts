@@ -13,6 +13,7 @@ import type { ChatContext, Tool } from "../theory";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
+  electedObservations,
   assertDefaultRetraction,
   emptyNodeMemory,
   isClaim,
@@ -273,7 +274,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     schema: schema({ of: { type: "string", pattern: "^obs-.+" } }, ["of"]),
     *run(raw, ctx) {
       const of = observationId(args(raw, ["of"], ["of"]).of);
-      const observations = effectiveObservations(yield* read.observations({}), ctx.now);
+      const observations = effectiveObservations(electedObservations(yield* read.observations({})), ctx.now);
       assertDefaultRetraction(of, observations);
       const observation = {
         at: ctx.now,
@@ -307,7 +308,7 @@ export const defaultBackgroundTools: readonly DefaultTool[] = [
       const homes = nodes(input.nodes);
       nodesInScope(ctx, homes);
       if (new Set(homes).size !== homes.length) throw new Error("Claim attachment requires distinct current Nodes");
-      const observations = effectiveObservations(yield* read.observations({}), ctx.now);
+      const observations = effectiveObservations(electedObservations(yield* read.observations({})), ctx.now);
       const claim = activeDefaultRecords(observations).find(({ id }) => id === of);
       if (claim?.payload.kind !== "claim") throw new Error("Attachment requires an active default claim");
       const observation = {

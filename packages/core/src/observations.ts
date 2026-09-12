@@ -4,7 +4,10 @@ export type ObservationId = `obs-${string}`;
 export type SurfaceId = `surface-${string}`;
 export type ObjectId = `object-${string}`;
 export type TheoryRef = Readonly<{ theory: string; version: string }>;
+/** Host-computed relation to selected history; not authored evidence. */
+export type SourceStanding = "selected" | "abandoned" | "unscoped";
 export interface Observation<P = unknown> {
+  readonly standing?: SourceStanding;
   readonly id: ObservationId;
   readonly at: string;
   readonly by: "platform" | TheoryRef;
@@ -16,7 +19,9 @@ export interface Observation<P = unknown> {
   readonly supersedes?: ObservationId;
   readonly payload: P;
 }
-export type ObservationWrite<P = unknown> = Omit<Observation<P>, "id" | "at" | "by"> & { readonly at?: string };
+export type ObservationWrite<P = unknown> = Omit<Observation<P>, "id" | "at" | "by" | "standing"> & {
+  readonly at?: string;
+};
 export type TranscriptSpan = Readonly<{ from: string; to: string }>;
 export interface Transcript {
   readonly surface: SurfaceId;
@@ -106,6 +111,7 @@ export function* judge<T>(
   return parse(yield { kind: "judge", instruction, input, schema });
 }
 export function* write<P>(observation: ObservationWrite<P>): Program<ObservationId> {
+  if ("standing" in observation) throw new Error("Observation standing is host-assigned read context");
   const id = yield { kind: "write", observation };
   if (!isObservationId(id)) throw new Error("Write requires a host-assigned observation identity");
   return id;
@@ -134,7 +140,7 @@ export function isObservationTimestamp(value: unknown): value is string {
     Number(match[6]) < 60
   );
 }
-/** Host exclusion is already applied; collapse supplied supersession chains without inventing a journal. */
+/** Collapse supplied supersession chains; evidence selection belongs to the consuming theory. */
 export function effectiveObservations(observations: readonly Observation[], now: string): readonly Observation[] {
   if (!isObservationTimestamp(now)) throw new Error("State requires an ISO timestamp");
   const present = observations.filter((observation) => {
