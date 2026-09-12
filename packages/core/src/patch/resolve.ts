@@ -1,13 +1,11 @@
 import { sha256Hex } from "../digest";
 import { PatchCompileError } from "./errors";
 import type {
-  BaseRequirement,
   ClosedPatchBundle,
   ContributionProvenance,
   EdgeId,
   ExactContributionMask,
   ExactPatchRef,
-  LockedBase,
   MetadataSet,
   MetadataSetId,
   NodeId,
@@ -28,49 +26,7 @@ function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
 }
 
 function exactRelease(ref: ExactPatchRef): string {
-  return ref.version ?? `commit:${ref.commit}`;
-}
-
-function sameRequirement(left: BaseRequirement, right: BaseRequirement): boolean {
-  return left.identity === right.identity && left.release === right.release;
-}
-
-function lockedBases(revision: PatchRevision): LockedBase[] {
-  if (revision.lock.entries.length !== revision.bases.length)
-    throw new PatchCompileError(
-      "invalid-bundle",
-      `Patch ${revision.ref.identity} lock must contain exactly one entry for each ordered base`,
-    );
-  const used = new Set<number>();
-  return revision.bases.map((requirement) => {
-    const matches = revision.lock.entries.flatMap((entry, index) =>
-      sameRequirement(entry.requirement, requirement) ? [{ entry, index }] : [],
-    );
-    const match = matches[0];
-    if (matches.length !== 1 || match === undefined || used.has(match.index))
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `Patch ${revision.ref.identity} base ${requirement.identity}@${requirement.release} does not have one exact lock entry`,
-      );
-    const { entry, index } = match;
-    used.add(index);
-    if (entry.exact.identity !== requirement.identity || exactRelease(entry.exact) !== requirement.release)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `exact lock ${entry.exact.identity}@${exactRelease(entry.exact)} does not satisfy ${requirement.identity}@${requirement.release}`,
-      );
-    if (entry.acquisition.identity !== entry.exact.identity)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `acquisition for ${requirement.identity}@${requirement.release} names a different Patch`,
-      );
-    if (entry.acquisition.kind === "hub" && entry.acquisition.version !== entry.exact.version)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `Hub acquisition for ${requirement.identity}@${requirement.release} does not name its exact version`,
-      );
-    return entry;
-  });
+  return ref.digest;
 }
 
 function orderRevisions(bundle: ClosedPatchBundle): {
@@ -113,13 +69,13 @@ function orderRevisions(bundle: ClosedPatchBundle): {
     selectedByIdentity.set(revision.ref.identity, revision.ref);
     active.add(key);
     const dependencyClosure = new Set<string>();
-    for (const locked of lockedBases(revision)) {
-      const dependencyKey = exactPatchRefKey(locked.exact);
+    for (const base of revision.bases) {
+      const dependencyKey = exactPatchRefKey(base);
       const dependency = revisions.get(dependencyKey);
       if (dependency === undefined)
         throw new PatchCompileError(
           "unresolvable-dependency",
-          `locked Patch revision ${locked.exact.identity}@${exactRelease(locked.exact)} is missing`,
+          `Patch revision ${base.identity}@${base.digest} is missing`,
         );
       visit(dependency);
       for (const member of closure.get(dependencyKey) ?? []) dependencyClosure.add(member);

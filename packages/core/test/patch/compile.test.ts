@@ -2,21 +2,14 @@ import { expect, test } from "bun:test";
 import { compileGraph, compileGraphDiff, GraphDiffCompileError } from "../../src/patch/compile";
 import type { ClosedPatchBundle, PatchRevision } from "../../src/patch/model";
 
-function versionOf(revision: PatchRevision): string {
-  const version = revision.ref.version;
-  if (version === undefined) throw new Error("test Patch needs a version");
-  return version;
-}
-
 const revision: PatchRevision = {
   ref: {
     identity: "patch-linear-algebra",
-    version: "1.0.0",
-    commit: "0123456789abcdef0123456789abcdef01234567",
+
     digest: `sha256:${"a".repeat(64)}`,
   },
   bases: [],
-  lock: { entries: [] },
+
   materials: [],
   metadata: {
     properties: {
@@ -76,7 +69,7 @@ const bundle: ClosedPatchBundle = { terminal: revision.ref, revisions: [revision
 test("a native root Patch compiles from the empty graph into a content-only Visual graph", () => {
   const graph = compileGraph({
     bundle,
-    learner: { kind: "absent" },
+
     annotations: { "node-spans": ["featured"] },
   });
 
@@ -87,9 +80,9 @@ test("a native root Patch compiles from the empty graph into a content-only Visu
       label: "Spans",
       groupId: "patch-linear-algebra",
       rank: 1,
-      appearance: { kind: "content" },
+      tags: [],
       annotations: ["featured"],
-      inspectorRef: "patch-linear-algebra@0123456789abcdef0123456789abcdef01234567/node/node-spans",
+      inspectorRef: `patch-linear-algebra@${revision.ref.digest}/node/node-spans`,
       contentSource: revision.ref,
     },
     {
@@ -97,14 +90,15 @@ test("a native root Patch compiles from the empty graph into a content-only Visu
       label: "Vectors",
       groupId: "patch-linear-algebra",
       rank: 0,
-      appearance: { kind: "content" },
+      tags: [],
       annotations: [],
-      inspectorRef: "patch-linear-algebra@0123456789abcdef0123456789abcdef01234567/node/node-vectors",
+      inspectorRef: `patch-linear-algebra@${revision.ref.digest}/node/node-vectors`,
       contentSource: revision.ref,
     },
   ]);
   expect(graph.edges).toEqual([
     {
+      tags: [],
       id: "edge-spans-vectors",
       from: "node-spans",
       to: "node-vectors",
@@ -202,23 +196,11 @@ test("a Personal Notebook keeps effective content when optional theory displays 
   const personal: PatchRevision = {
     ref: {
       identity: "patch-personal",
-      commit: "fedcba9876543210fedcba9876543210fedcba98",
+
       digest: `sha256:${"b".repeat(64)}`,
     },
-    bases: [{ identity: course.ref.identity, release: "1.0.0" }],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: course.ref.identity, release: "1.0.0" },
-          exact: course.ref,
-          acquisition: {
-            kind: "hub",
-            identity: course.ref.identity,
-            version: "1.0.0",
-          },
-        },
-      ],
-    },
+    bases: [course.ref],
+
     materials: [],
     metadata: { properties: { "patch:title": "Personal" }, citations: [] },
     delta: {
@@ -245,22 +227,14 @@ test("a Personal Notebook keeps effective content when optional theory displays 
   const courseLabelled = compileGraph({
     bundle: personalBundle,
     query: { tag: "patch:course" },
-    learner: { kind: "absent" },
+
     annotations: {},
   });
   const learnerAware = compileGraph({
     bundle: personalBundle,
-    learner: {
-      kind: "projected",
-      patchRevision: personal.ref,
-      theoryDigest: "sha256:theory-display",
+    appearance: {
       nodes: {
-        "node-vectors": {
-          label: "arbitrary",
-          caption: "a theory fact",
-          citations: [],
-          style: { color: "purple" },
-        },
+        "node-vectors": [{ tag: "arbitrary", caption: "a theory fact", cites: ["obs-source"] }],
       },
     },
     annotations: {},
@@ -271,21 +245,15 @@ test("a Personal Notebook keeps effective content when optional theory displays 
   );
   expect(courseLabelled.nodes.find((node) => node.id === "node-vectors")).toMatchObject({
     label: "Vectors from my Notebook",
-    appearance: { kind: "content" },
+    tags: [],
     contentSource: personal.ref,
   });
-  expect(learnerAware.nodes.find((node) => node.id === "node-vectors")?.appearance).toEqual({
-    kind: "projected",
-    display: {
-      label: "arbitrary",
-      caption: "a theory fact",
-      citations: [],
-      style: { color: "purple" },
-    },
-  });
+  expect(learnerAware.nodes.find((node) => node.id === "node-vectors")?.tags).toEqual([
+    { tag: "arbitrary", caption: "a theory fact", cites: ["obs-source"] },
+  ]);
 });
 
-test("metadata precedence uses the whole exact Patch ref when commits happen to match", () => {
+test("metadata precedence uses the whole exact Patch ref", () => {
   const first: PatchRevision = {
     ...revision,
     delta: {
@@ -322,38 +290,14 @@ test("metadata precedence uses the whole exact Patch ref when commits happen to 
   const personal: PatchRevision = {
     ...revision,
     ref: { ...revision.ref, identity: "patch-personal", digest: `sha256:${"d".repeat(64)}` },
-    bases: [
-      { identity: first.ref.identity, release: "1.0.0" },
-      { identity: second.ref.identity, release: "1.0.0" },
-    ],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: first.ref.identity, release: "1.0.0" },
-          exact: first.ref,
-          acquisition: {
-            kind: "hub",
-            identity: first.ref.identity,
-            version: versionOf(first),
-          },
-        },
-        {
-          requirement: { identity: second.ref.identity, release: "1.0.0" },
-          exact: second.ref,
-          acquisition: {
-            kind: "hub",
-            identity: second.ref.identity,
-            version: versionOf(second),
-          },
-        },
-      ],
-    },
+    bases: [first.ref, second.ref],
+
     delta: { operations: [] },
   };
 
   const graph = compileGraph({
     bundle: { terminal: personal.ref, revisions: [first, second, personal] },
-    learner: { kind: "absent" },
+
     annotations: {},
   });
 
@@ -365,20 +309,8 @@ test("property provenance keeps a merged lesson at the Patch that last changed t
   const contribution: PatchRevision = {
     ...revision,
     ref: { ...revision.ref, identity: "patch-contribution", digest: `sha256:${"f".repeat(64)}` },
-    bases: [{ identity: foundation.ref.identity, release: "1.0.0" }],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: foundation.ref.identity, release: "1.0.0" },
-          exact: foundation.ref,
-          acquisition: {
-            kind: "hub",
-            identity: foundation.ref.identity,
-            version: "1.0.0",
-          },
-        },
-      ],
-    },
+    bases: [foundation.ref],
+
     delta: {
       operations: [
         {
@@ -395,7 +327,7 @@ test("property provenance keeps a merged lesson at the Patch that last changed t
 
   const graph = compileGraph({
     bundle: { terminal: contribution.ref, revisions: [contribution, foundation] },
-    learner: { kind: "absent" },
+
     annotations: {},
   });
 

@@ -1,37 +1,20 @@
 import { expect, test } from "bun:test";
-import {
-  reifyView,
-  resolvePatchBundle,
-  type ExactPatchRef,
-  type LockedBase,
-  type PatchRevision,
-} from "../../src/patch";
+import { reifyView, resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "../../src/patch";
 import { evaluateView } from "../../src/patch/view";
 
-function ref(identity: `patch-${string}`, version: string, fill: string): ExactPatchRef {
+function ref(identity: `patch-${string}`, fill: string): ExactPatchRef {
   return {
     identity,
-    version,
-    commit: fill.repeat(40),
-    digest: `sha256:${fill.repeat(64)}`,
-  };
-}
 
-function hubBase(exact: ExactPatchRef): LockedBase {
-  const version = exact.version;
-  if (version === undefined) throw new Error("test Hub base needs a version");
-  return {
-    requirement: { identity: exact.identity, release: version },
-    exact,
-    acquisition: { kind: "hub", identity: exact.identity, version },
+    digest: `sha256:${fill.repeat(64)}`,
   };
 }
 
 test("reification creates an independent root from exactly the View result", () => {
   const foundation: PatchRevision = {
-    ref: ref("patch-foundation", "1.0.0", "1"),
+    ref: ref("patch-foundation", "1"),
     bases: [],
-    lock: { entries: [] },
+
     materials: [],
     delta: {
       operations: [
@@ -49,9 +32,9 @@ test("reification creates an independent root from exactly the View result", () 
     metadata: { properties: { "patch:title": "Foundation" }, citations: [] },
   };
   const source: PatchRevision = {
-    ref: ref("patch-source", "2.0.0", "2"),
-    bases: [hubBase(foundation.ref).requirement],
-    lock: { entries: [hubBase(foundation.ref)] },
+    ref: ref("patch-source", "2"),
+    bases: [foundation.ref],
+
     materials: [],
     delta: {
       operations: [
@@ -112,9 +95,9 @@ test("reification creates an independent root from exactly the View result", () 
   };
   const reified = reifyView(selected, target);
   const targetRevision: PatchRevision = {
-    ref: ref(reified.identity, "1.0.0", "3"),
+    ref: ref(reified.identity, "3"),
     bases: reified.bases,
-    lock: reified.lock,
+
     delta: reified.delta,
     materials: reified.materials,
     metadata: reified.metadata,
@@ -125,7 +108,6 @@ test("reification creates an independent root from exactly the View result", () 
   });
 
   expect(reified.bases).toEqual([]);
-  expect(reified.lock.entries).toEqual([]);
   expect({
     nodes: resolvedTarget.nodes,
     edges: resolvedTarget.edges,
@@ -164,17 +146,17 @@ test("reification creates an independent root from exactly the View result", () 
 
 test("non-reification Citations never become Patch dependencies", () => {
   const revision: PatchRevision = {
-    ref: ref("patch-citing", "1.0.0", "4"),
+    ref: ref("patch-citing", "4"),
     bases: [],
-    lock: { entries: [] },
+
     materials: [],
     delta: { operations: [{ kind: "add-node", node: { id: "node-citing" } }] },
     metadata: {
       properties: { "patch:title": "Citing" },
       citations: [
-        { kind: "derived_from", source: ref("patch-derived-source", "1.0.0", "5") },
-        { kind: "based_on", source: ref("patch-based-source", "1.0.0", "6") },
-        { kind: "inspired_by", source: ref("patch-inspiration", "1.0.0", "7") },
+        { kind: "derived_from", source: ref("patch-derived-source", "5") },
+        { kind: "based_on", source: ref("patch-based-source", "6") },
+        { kind: "inspired_by", source: ref("patch-inspiration", "7") },
         { kind: "external_source", source: "https://example.com/source" },
       ],
     },

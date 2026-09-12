@@ -27,7 +27,6 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget): Patch
   return {
     identity: target.identity,
     bases: [],
-    lock: { entries: [] },
     delta: { operations },
     materials: view.materials.map(({ source: _source, ...material }) => material),
     metadata: {

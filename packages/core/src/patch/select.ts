@@ -1,3 +1,5 @@
+import type { TagIndex } from "../theory/theory";
+import { isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
 import { sameExactPatchRef } from "./model";
 import type { EdgeId, ExactPatchRef, GraphQuery, MetadataSetId, NodeId, ResolvedGraph, SelectedGraph } from "./model";
@@ -45,16 +47,13 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     const ref = raw.provenance;
     if (
       !isPatchId(ref.identity) ||
-      (ref.version !== undefined && typeof ref.version !== "string") ||
-      typeof ref.commit !== "string" ||
-      !isDigest(ref.digest)
+      !isContentDigest(ref.digest) ||
+      Object.keys(ref).some((key) => key !== "identity" && key !== "digest")
     )
       return malformed(`${label}.provenance must be an exact Patch reference`);
     return {
       provenance: {
         identity: ref.identity,
-        ...(ref.version === undefined ? {} : { version: ref.version }),
-        commit: ref.commit,
         digest: ref.digest,
       },
     };
@@ -103,10 +102,6 @@ function isPatchId(value: unknown): value is `patch-${string}` {
   return typeof value === "string" && /^patch-[0-9a-z-]+$/.test(value);
 }
 
-function isDigest(value: unknown): value is `sha256:${string}` {
-  return typeof value === "string" && value.startsWith("sha256:");
-}
-
 function combine(left: Fragment, right: Fragment, operation: "union" | "intersection" | "difference"): Fragment {
   const ids = <T>(leftIds: Set<T>, rightIds: Set<T>): Set<T> => {
     if (operation === "union") return new Set([...leftIds, ...rightIds]);
@@ -120,9 +115,17 @@ function combine(left: Fragment, right: Fragment, operation: "union" | "intersec
   };
 }
 
-function tagFragment(graph: ResolvedGraph, name: string): Fragment {
-  const tag = graph.tags.find((candidate) => candidate.name === name);
+function tagFragment(graph: ResolvedGraph, name: string, tags?: TagIndex): Fragment {
+  if (name.startsWith("is:") && tags === undefined)
+    throw new PatchCompileError("unknown-tag", `theory tag '${name}' requires a TagIndex`);
+  const tag =
+    name.startsWith("is:") && tags !== undefined
+      ? { nodes: [...tags(name.slice(3))], edges: [], metadataSets: [] }
+      : graph.tags.find((candidate) => candidate.name === name);
   if (tag === undefined) throw new PatchCompileError("unknown-tag", `unknown tag '${name}'`);
+  for (const id of tag.nodes)
+    if (!graph.nodes.some((node) => node.id === id))
+      throw new PatchCompileError("dangling-tag", `tag '${name}' targets missing node '${id}'`);
   const nodes = new Set(tag.nodes);
   const edges = new Set(tag.edges);
   const metadataSets = new Set(tag.metadataSets);
@@ -211,17 +214,24 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
   return { nodes, edges, metadataSets };
 }
 
-function evaluate(graph: ResolvedGraph, query: GraphQuery): Fragment {
-  if ("tag" in query) return tagFragment(graph, query.tag);
+function evaluate(graph: ResolvedGraph, query: GraphQuery, tags?: TagIndex): Fragment {
+  if ("tag" in query) return tagFragment(graph, query.tag, tags);
   if ("cone" in query) return coneFragment(graph, query.cone.targets);
   if ("dependents" in query) return coneFragment(graph, query.dependents.targets, true);
   if ("provenance" in query) return provenanceFragment(graph, query.provenance);
   if ("difference" in query)
-    return combine(evaluate(graph, query.difference[0]), evaluate(graph, query.difference[1]), "difference");
+    return combine(
+      evaluate(graph, query.difference[0], tags),
+      evaluate(graph, query.difference[1], tags),
+      "difference",
+    );
   const operation = "union" in query ? "union" : "intersection";
   const children = "union" in query ? query.union : query.intersection;
   const [first, ...rest] = children;
-  return rest.reduce((fragment, child) => combine(fragment, evaluate(graph, child), operation), evaluate(graph, first));
+  return rest.reduce(
+    (fragment, child) => combine(fragment, evaluate(graph, child, tags), operation),
+    evaluate(graph, first, tags),
+  );
 }
 
 function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph {
@@ -285,7 +295,7 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
 }
 
 /** Select a valid attributed subgraph through the restricted tag algebra. */
-export function selectGraph(graph: ResolvedGraph, query?: GraphQuery): SelectedGraph {
+export function selectGraph(graph: ResolvedGraph, query?: GraphQuery, tags?: TagIndex): SelectedGraph {
   if (query === undefined) return graph;
-  return selectedGraph(graph, evaluate(graph, parseGraphQuery(query)));
+  return selectedGraph(graph, evaluate(graph, parseGraphQuery(query), tags));
 }
