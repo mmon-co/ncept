@@ -532,10 +532,17 @@ function projectMemory(
   for (const observation of observations) {
     if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isSummary(observation.payload))
       continue;
+    const { sources: covered, dependencies } = observation.payload;
     if (
       observation.payload.sources.length === 0 ||
       observation.payload.sources.some((source) => !sources.has(source)) ||
-      observation.payload.dependencies.some((source) => !effectiveSource(source))
+      dependencies.some((source) => !effectiveSource(source)) ||
+      originals.some(
+        (entry) =>
+          covered.includes(entry.observation) &&
+          entry.source.kind === "observation" &&
+          !dependencies.includes(entry.source.observation),
+      )
     )
       continue;
     summary = { ...observation.payload, kind: "summary", observation: observation.id, at: observation.at };

@@ -571,6 +571,15 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
     { nodes: ["node-a"] },
   );
   expect(memory(stateDefault(graph(), [q, batch, summary, rebuilt], at)).entries[0]?.text).toBe("Q only");
+  const restored = memory(stateDefault(graph(), [p, q, batch, summary, rebuilt], at));
+  expect(restored.entries[0]?.text).toBe("P and Q");
+  const validSummary = restored.entries[0];
+  if (validSummary?.kind !== "summary") throw new Error("Expected the complete summary");
+  expect(expandNodeMemory(restored, validSummary).map(({ text }) => text)).toEqual([p.id, q.id]);
+  expect(memory(stateDefault(graph(), [p, q, batch, rebuilt], at)).entries.map(({ text }) => text)).toEqual([
+    p.id,
+    q.id,
+  ]);
   expect(stateDefault(graph(), [obs("unknown", { kind: "foreign-concept" })], at).records).toEqual([]);
 });
 
