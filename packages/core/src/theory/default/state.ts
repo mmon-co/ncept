@@ -282,7 +282,7 @@ export function projectGraphChange(
 ): readonly Homing[] {
   const nextIds = new Set(next.nodes.map(({ id }) => id));
   for (const [node, targets] of Object.entries(successors)) {
-    if (!graph.nodes.some(({ id }) => id === node) || nextIds.has(node as NodeId))
+    if (!graph.nodes.some(({ id }) => id === node) || next.nodes.some(({ id }) => id === node))
       throw new Error(`Successor declaration requires a removed Node: ${node}`);
     if (targets?.some((id) => !nextIds.has(id)))
       throw new Error(`Successor declaration for ${node} targets a missing Node`);

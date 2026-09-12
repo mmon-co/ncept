@@ -32,16 +32,17 @@ import {
 const at = "2026-09-01T00:00:00.000Z";
 const ref = { identity: "patch-evidence" as const, digest: contentDigest("evidence") };
 function graph(ids: readonly NodeId[] = ["node-a", "node-b", "node-c", "node-alone"]): ResolvedGraph {
+  const edges: ResolvedGraph["edges"] = [
+    { id: "edge-ab", from: "node-a", to: "node-b" },
+    { id: "edge-bc", from: "node-b", to: "node-c" },
+  ];
   return {
     terminal: ref,
     patchOrder: [ref],
     patchMetadata: {},
     materials: [],
     nodes: ids.map((id) => ({ id })),
-    edges: [
-      { id: "edge-ab", from: "node-a", to: "node-b" },
-      { id: "edge-bc", from: "node-b", to: "node-c" },
-    ].filter(({ from, to }) => ids.includes(from as NodeId) && ids.includes(to as NodeId)) as ResolvedGraph["edges"],
+    edges: edges.filter(({ from, to }) => ids.includes(from) && ids.includes(to)),
     metadataSets: [],
     tags: [],
     provenance: { nodes: {}, edges: {}, metadataSets: {}, metadataProperties: {} },
@@ -200,7 +201,7 @@ test("per-Node window metadata preserves precedence and rejects invalid merged w
   });
   const invalid = {
     ...metadata,
-    metadataSets: [{ ...metadata.metadataSets[0]!, properties: { "pedagogy:window-size": 1 } }],
+    metadataSets: [{ ...required(metadata.metadataSets[0]), properties: { "pedagogy:window-size": 1 } }],
   };
   expect(() => stateDefault(invalid, [], at)).toThrow("Invalid demonstration window");
 });
@@ -310,11 +311,11 @@ test("memory preserves separate original strings, transcript source spans and su
   expect(original.originals.map(({ text }) => text)).toEqual([
     record.payload.task,
     record.payload.response,
-    knows.payload.prompt!,
+    required(knows.payload.prompt),
     knows.payload.statement,
-    span.payload.entries[0]!.text,
+    required(span.payload.entries[0]).text,
   ]);
-  expect(original.originals.at(-1)?.source).toEqual(span.payload.entries[0]!.source);
+  expect(original.originals.at(-1)?.source).toEqual(required(span.payload.entries[0]).source);
   const summary = obs(
     "z-summary",
     { kind: "memory-summary", text: "A summary", sources: [record.id, knows.id, span.id] },
@@ -325,7 +326,7 @@ test("memory preserves separate original strings, transcript source spans and su
   const summarized = memory(folded);
   expect(summarized.entries).toHaveLength(1);
   expect(memoryDefault(summarized)).not.toHaveProperty("marker");
-  expect(expandNodeMemory(summarized, summarized.entries[0] as MemorySummary)).toEqual(original.originals);
+  expect(expandNodeMemory(summarized, firstSummary(summarized))).toEqual(original.originals);
   expect(folded.nodes["node-a"]?.records.map(({ id }) => id)).toEqual([record.id, knows.id]);
   const excluded = memory(stateDefault(graph(), [knows, home("attach", knows.id, ["node-a"]), span, summary], at));
   expect(excluded.entries.every(({ kind }) => kind === "entry")).toBe(true);
@@ -443,19 +444,24 @@ test("memory follows stable recording order for old-source first writes and late
 test("successive memory summaries expand original evidence and retain an unsummarized tail in attachment order", () => {
   const first = demonstration("first", -2);
   const second = demonstration("second", -1);
-  const firstSummary = obs("summary-1", { kind: "memory-summary", text: "earlier summary", sources: [first.id] }, 0, {
-    nodes: ["node-a"],
-  });
+  const previousSummary = obs(
+    "summary-1",
+    { kind: "memory-summary", text: "earlier summary", sources: [first.id] },
+    0,
+    {
+      nodes: ["node-a"],
+    },
+  );
   const secondSummary = obs(
     "summary-2",
     { kind: "memory-summary", text: "combined summary", sources: [first.id, second.id] },
     0,
-    { nodes: ["node-a"], cites: [first.id, second.id], supersedes: firstSummary.id },
+    { nodes: ["node-a"], cites: [first.id, second.id], supersedes: previousSummary.id },
   );
   const third = demonstration("late-first-write", -10);
-  const result = memory(stateDefault(graph(), [first, firstSummary, second, secondSummary, third], at));
+  const result = memory(stateDefault(graph(), [first, previousSummary, second, secondSummary, third], at));
   expect(result.entries.map(({ kind }) => kind)).toEqual(["summary", "entry", "entry"]);
-  expect(expandNodeMemory(result, result.entries[0] as MemorySummary).map(({ observation }) => observation)).toEqual([
+  expect(expandNodeMemory(result, firstSummary(result)).map(({ observation }) => observation)).toEqual([
     first.id,
     first.id,
     second.id,
@@ -531,3 +537,13 @@ test("homing supersession removes obsolete attributions; indicator facts retain 
     message: "Self-report and tutor/mechanical outcomes differ on this Node",
   });
 });
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing fixture value");
+  return value;
+}
+function firstSummary(memory: NodeMemory): MemorySummary {
+  const entry = memory.entries[0];
+  if (entry?.kind !== "summary") throw new Error("Expected fixture summary");
+  return entry;
+}

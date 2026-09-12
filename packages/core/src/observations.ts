@@ -84,18 +84,19 @@ export type Request =
   | { readonly kind: "judge"; readonly instruction: string; readonly input: unknown; readonly schema: JsonSchema }
   | { readonly kind: "write"; readonly observation: ObservationWrite };
 export type Program<T> = Generator<Request, T, unknown>;
-function* readValue<T>(select: Selector): Program<T> {
-  return (yield { kind: "read", select }) as T;
+function* readValue<T>(select: Selector): Generator<Request, T, T> {
+  return yield { kind: "read", select };
 }
 export const read = {
   patch: (ref?: ExactPatchRef): Program<Revision> =>
-    readValue({ kind: "patch", ...(ref === undefined ? {} : { ref }) }),
+    readValue<Revision>({ kind: "patch", ...(ref === undefined ? {} : { ref }) }),
   observations: (select: ObservationSelector = {}): Program<readonly Observation[]> =>
-    readValue({ kind: "observations", ...select }),
+    readValue<readonly Observation[]>({ kind: "observations", ...select }),
   transcript: (surface: SurfaceId, span?: TranscriptSpan): Program<Transcript> =>
-    readValue({ kind: "transcript", surface, ...(span === undefined ? {} : { span }) }),
-  object: (object: ObjectId): Program<ObjectContent> => readValue({ kind: "object", object }),
-  objects: (): Program<readonly (ObjectMeta & { readonly id: ObjectId })[]> => readValue({ kind: "objects" }),
+    readValue<Transcript>({ kind: "transcript", surface, ...(span === undefined ? {} : { span }) }),
+  object: (object: ObjectId): Program<ObjectContent> => readValue<ObjectContent>({ kind: "object", object }),
+  objects: (): Program<readonly (ObjectMeta & { readonly id: ObjectId })[]> =>
+    readValue<readonly (ObjectMeta & { readonly id: ObjectId })[]>({ kind: "objects" }),
 };
 export function* judge<T>(
   instruction: string,

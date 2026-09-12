@@ -237,7 +237,7 @@ export const defaultTags = [
 ] as const;
 export function tagIndexDefault(graph: ResolvedGraph, state: DefaultState): TagIndex {
   return (tag) => {
-    const selector = defaultQueryTokens[tag as keyof typeof defaultQueryTokens];
+    const selector = Object.entries(defaultQueryTokens).find(([name]) => name === tag)?.[1];
     if (selector !== undefined) return selector(state, graph);
     return new Set(
       indicatorsDefault(state, graph)
