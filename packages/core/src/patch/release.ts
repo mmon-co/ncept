@@ -251,14 +251,19 @@ const semver =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 function parseVersion(version: string) {
-  const match = semver.exec(version);
-  if (match === null || match[4]?.split(".").some((part) => /^0\d+$/.test(part)))
+  const [, major, minor, patch, prerelease] = semver.exec(version) ?? [];
+  if (
+    major === undefined ||
+    minor === undefined ||
+    patch === undefined ||
+    prerelease?.split(".").some((part) => /^0\d+$/.test(part))
+  )
     throw new PatchContentError(`invalid Patch release ${version}`);
   return {
-    major: BigInt(match[1]!),
-    minor: BigInt(match[2]!),
-    patch: BigInt(match[3]!),
-    prerelease: match[4]?.split(".") ?? [],
+    major: BigInt(major),
+    minor: BigInt(minor),
+    patch: BigInt(patch),
+    prerelease: prerelease?.split(".") ?? [],
   };
 }
 
