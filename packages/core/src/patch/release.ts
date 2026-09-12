@@ -1,6 +1,7 @@
 import { contentDigest, type ContentDigest } from "../digest";
 import { compileGraph } from "./compile";
 import { PatchCompileError } from "./errors";
+import { lastMetadataContribution } from "./metadata";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -256,11 +257,18 @@ export function selectReleaseUpdate(
 /** Recover editable lesson content from a supplied root Patch. */
 export function rootDefinition(identity: PatchId, content: PatchContent): RootPatchDefinition {
   if (content.bases.length !== 0) throw new PatchContentError(`${identity} is not a root Patch`);
-  const metadataBySubject = new Map<string, Record<string, unknown>>();
-  for (const operation of content.delta.operations)
-    if (operation.kind === "add-metadata-set")
-      for (const subject of operation.metadataSet.subjects)
-        metadataBySubject.set(`${subject.kind}:${subject.id}`, operation.metadataSet.properties);
+  const revision = candidateRevision(identity, content);
+  const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
+  const property = (kind: "node" | "edge", id: string, key: string) =>
+    lastMetadataContribution(
+      graph,
+      graph.metadataSets.flatMap((set) => {
+        if (!set.subjects.some((subject) => subject.kind === kind && subject.id === id)) return [];
+        const value = set.properties[key];
+        const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+        return value !== undefined && source !== undefined ? [{ value, source }] : [];
+      }),
+    )?.value;
   const title = content.metadata.properties["patch:title"];
   const author = content.metadata.properties["patch:author"];
   if (typeof title !== "string" || typeof author !== "string")
@@ -273,26 +281,17 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
         ? [key.slice("patch:".length)]
         : [],
     ),
-    nodes: content.delta.operations.flatMap((operation) => {
-      if (operation.kind !== "add-node") return [];
-      const properties = metadataBySubject.get(`node:${operation.node.id}`);
-      const label = properties?.[NODE_LABEL_PROPERTY];
-      const lesson = properties?.[NODE_LESSON_PROPERTY];
+    nodes: graph.nodes.map(({ id }) => {
+      const label = property("node", id, NODE_LABEL_PROPERTY);
+      const lesson = property("node", id, NODE_LESSON_PROPERTY);
       if (typeof label !== "string" || typeof lesson !== "string")
-        throw new PatchContentError(`Node ${operation.node.id} is missing authored content`);
-      return [{ id: operation.node.id, label, lesson }];
+        throw new PatchContentError(`Node ${id} is missing authored content`);
+      return { id, label, lesson };
     }),
-    edges: content.delta.operations.flatMap((operation) => {
-      if (operation.kind !== "add-edge") return [];
-      const properties = metadataBySubject.get(`edge:${operation.edge.id}`);
-      const role = properties?.["graph:role"];
-      if (role !== "dependency") throw new PatchContentError(`Edge ${operation.edge.id} is missing authored content`);
-      return [
-        {
-          ...operation.edge,
-          role,
-        },
-      ];
+    edges: graph.edges.map((edge) => {
+      const role = property("edge", edge.id, "graph:role");
+      if (role !== "dependency") throw new PatchContentError(`Edge ${edge.id} is missing authored content`);
+      return { ...edge, role };
     }),
   };
   validateRootPatchDefinition(identity, definition);

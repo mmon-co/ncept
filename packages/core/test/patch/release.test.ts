@@ -186,6 +186,23 @@ test("composed content validates exact masks and conflicts against supplied base
 test("root lesson construction and validation are value-only and round trip editable content", () => {
   validateRootPatchDefinition("patch-course", definition);
   expect(rootDefinition("patch-course", rootContent(definition))).toEqual(definition);
+  const relabeled = composePatch(rootContent(definition), [
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-a",
+        subjects: [{ kind: "node", id: "node-a" }],
+        properties: { "display:label": "Renamed" },
+      },
+    },
+  ]);
+  expect(rootDefinition("patch-course", relabeled).nodes).toEqual([
+    { id: "node-a", label: "Renamed", lesson: "Explain A." },
+  ]);
+  const revised = composePatch(relabeled, lessonOperations({ id: "node-a", label: "Revised", lesson: "New lesson" }));
+  expect(rootDefinition("patch-course", revised).nodes).toEqual([
+    { id: "node-a", label: "Revised", lesson: "New lesson" },
+  ]);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, title: "" })).toThrow(/title is required/);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, labels: ["course", "course"] })).toThrow(
     /labels must be unique/,
