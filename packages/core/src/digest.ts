@@ -6,9 +6,13 @@ export function sha256Hex(text: string): string {
   return bytesToHex(sha256(utf8ToBytes(text)));
 }
 
-/** Shared by Patch content, Pedagogy releases and observation identities; each hashes its own
- * serialization, so a digest is comparable only against the same kind of content. */
+/** Shared content identity for JSON values. Owners choose which data is content. */
 export type ContentDigest = `sha256:${string}`;
+
+/** SHA-256 of raw bytes, not JSON; text attachments supply their UTF-8 encoding. */
+export function attachmentDigest(bytes: Uint8Array): ContentDigest {
+  return `sha256:${bytesToHex(sha256(bytes))}`;
+}
 
 function canonicalValue(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
@@ -16,10 +20,13 @@ function canonicalValue(value: unknown): string {
     if (!Number.isFinite(value)) throw new TypeError("canonical content cannot contain non-finite numbers");
     return JSON.stringify(value);
   }
-  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;
+  if (Array.isArray(value)) return `[${Array.from(value, canonicalValue).join(",")}]`;
   if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null)
+      throw new TypeError("canonical content must contain plain JSON objects");
     return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalValue(entry)}`)
       .join(",")}}`;
   }

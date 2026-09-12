@@ -1,56 +1,27 @@
 import type { ContentDigest } from "../digest";
-import type { TheoryDisplay } from "../pedagogy/theory";
+import type { Tag, TagIndex } from "../theory/theory";
 
 export type PatchId = `patch-${string}`;
 export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
 export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
-export type MaterialId = `material-${string}`;
+/** Portable metadata references only; bytes, authority and running instances belong to the host. */
+export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };
 
-/** Return whether a value uses the canonical Material identity grammar. */
-export function isMaterialId(value: unknown): value is MaterialId {
-  return typeof value === "string" && /^material-[0-9a-z-]+$/.test(value);
-}
-
-export type MetadataValue = string | number | boolean | null | readonly string[];
+export type MetadataValue = string | number | boolean | null | readonly string[] | Attachment;
 
 export interface ExactPatchRef {
   readonly identity: PatchId;
-  readonly version?: string;
-  readonly commit: string;
-  readonly digest: `sha256:${string}`;
+  readonly digest: ContentDigest;
 }
-
-export interface BaseRequirement {
-  readonly identity: PatchId;
-  readonly release: string;
-}
-
-export interface LockedBase {
-  readonly requirement: BaseRequirement;
-  readonly exact: ExactPatchRef;
-  readonly acquisition: PatchAcquisition;
-}
-
-export type PatchAcquisition =
-  | { readonly kind: "authored"; readonly identity: PatchId }
-  | {
-      readonly kind: "hub";
-      readonly identity: PatchId;
-      readonly version: string;
-    };
 
 export function exactPatchRefKey(ref: ExactPatchRef): string {
-  return `${ref.identity}\0${ref.version ?? ""}\0${ref.commit}\0${ref.digest}`;
+  return `${ref.identity}\0${ref.digest}`;
 }
 
 export function sameExactPatchRef(left: ExactPatchRef, right: ExactPatchRef): boolean {
   return exactPatchRefKey(left) === exactPatchRefKey(right);
-}
-
-export interface PatchLock {
-  readonly entries: readonly LockedBase[];
 }
 
 export interface PatchMetadata {
@@ -150,32 +121,16 @@ export interface SemanticDelta {
   readonly operations: readonly SemanticOperation[];
 }
 
-/** A teaching document and its single-Node attachment, versioned by its owning Patch. */
-export interface DocumentMaterial {
-  readonly kind: "document";
-  readonly id: MaterialId;
-  readonly node: NodeId;
-  readonly title: string;
-  readonly body: string;
-  readonly digest: `sha256:${string}`;
-}
-
+/** Canonical authored content: no own instance identity, lifecycle fields or embedded bytes. */
 export interface PatchContent {
-  readonly identity: PatchId;
-  readonly bases: readonly BaseRequirement[];
-  readonly lock: PatchLock;
+  readonly bases: readonly ExactPatchRef[];
   readonly delta: SemanticDelta;
-  readonly materials: readonly DocumentMaterial[];
   readonly metadata: PatchMetadata;
 }
 
-export interface PatchRevision {
+/** The same content may resolve under several exact instance references. */
+export interface PatchRevision extends PatchContent {
   readonly ref: ExactPatchRef;
-  readonly bases: readonly BaseRequirement[];
-  readonly lock: PatchLock;
-  readonly delta: SemanticDelta;
-  readonly materials: readonly DocumentMaterial[];
-  readonly metadata: PatchMetadata;
 }
 
 export interface ClosedPatchBundle {
@@ -184,7 +139,6 @@ export interface ClosedPatchBundle {
 }
 
 export interface ReificationTarget {
-  readonly identity: PatchId;
   readonly metadata: PatchMetadata;
 }
 
@@ -193,16 +147,10 @@ export interface ContributionProvenance {
   readonly operationIndex: number;
 }
 
-export interface ResolvedMaterial extends DocumentMaterial {
-  /** Exact owning Patch revision; Material identities never imply a version. */
-  readonly source: ExactPatchRef;
-}
-
 export interface ResolvedGraph {
   readonly terminal: ExactPatchRef;
   readonly patchOrder: readonly ExactPatchRef[];
   readonly patchMetadata: Readonly<Record<PatchId, PatchMetadata>>;
-  readonly materials: readonly ResolvedMaterial[];
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];
@@ -251,33 +199,19 @@ export interface PatchViewDefinition {
 
 export interface SelectedGraph extends ResolvedGraph {}
 
-export type LearnerProjection =
-  | { readonly kind: "absent" }
-  | {
-      readonly kind: "projected";
-      readonly patchRevision: ExactPatchRef;
-      readonly theoryDigest: ContentDigest;
-      readonly nodes: Readonly<Partial<Record<NodeId, TheoryDisplay>>>;
-      readonly edges?: Readonly<Partial<Record<EdgeId, TheoryDisplay>>>;
-    };
-
-export type VisualNodeAppearance =
-  | { readonly kind: "content" }
-  | { readonly kind: "projected"; readonly display: TheoryDisplay };
-
 export interface VisualNode {
   readonly id: NodeId;
   readonly label: string;
   readonly groupId: PatchId;
   readonly rank: number;
-  readonly appearance: VisualNodeAppearance;
+  readonly tags: readonly Tag[];
   readonly annotations: readonly string[];
   readonly inspectorRef: string;
   readonly contentSource: ExactPatchRef;
 }
 
 export interface VisualEdge {
-  readonly display?: TheoryDisplay;
+  readonly tags: readonly Tag[];
   readonly id: EdgeId;
   readonly from: NodeId;
   readonly to: NodeId;
@@ -297,7 +231,10 @@ export interface VisualGraph {
 
 export interface VisualProjectionInput {
   readonly graph: SelectedGraph;
-  readonly learner: LearnerProjection;
+  readonly tags?: {
+    readonly nodes?: Readonly<Partial<Record<NodeId, readonly Tag[]>>>;
+    readonly edges?: Readonly<Partial<Record<EdgeId, readonly Tag[]>>>;
+  };
   readonly annotations: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 
@@ -305,6 +242,7 @@ export interface GraphCompilationInput {
   readonly bundle: ClosedPatchBundle;
   readonly attachedTags?: readonly GraphTag[];
   readonly query?: GraphQuery;
-  readonly learner: LearnerProjection;
+  readonly tags?: TagIndex;
+  readonly appearance?: VisualProjectionInput["tags"];
   readonly annotations: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }

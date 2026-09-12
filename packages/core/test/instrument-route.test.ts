@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { route } from "@concept/core/instrument-route";
 import {
+  route,
   resolvePatchBundle,
   type NodeId,
   type PatchRevision,
@@ -18,13 +18,9 @@ function resolvedGraph(operations: PatchRevision["delta"]["operations"]) {
   const revision: PatchRevision = {
     ref: {
       identity: "patch-route-test",
-      version: "1.0.0",
-      commit: "0123456789abcdef0123456789abcdef01234567",
       digest: `sha256:${"a".repeat(64)}`,
     },
     bases: [],
-    lock: { entries: [] },
-    materials: [],
     delta: { operations },
     metadata: { properties: {}, citations: [] },
   };

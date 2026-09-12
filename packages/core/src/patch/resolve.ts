@@ -1,13 +1,11 @@
-import { sha256Hex } from "../digest";
+import { validateMetadataProperties } from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
-  BaseRequirement,
   ClosedPatchBundle,
   ContributionProvenance,
   EdgeId,
   ExactContributionMask,
   ExactPatchRef,
-  LockedBase,
   MetadataSet,
   MetadataSetId,
   NodeId,
@@ -18,59 +16,16 @@ import type {
   StructureEdge,
   StructureNode,
   GraphTag,
-  ResolvedMaterial,
   TaggedSet,
 } from "./model";
-import { exactPatchRefKey, isMaterialId, sameExactPatchRef } from "./model";
+import { exactPatchRefKey, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function exactRelease(ref: ExactPatchRef): string {
-  return ref.version ?? `commit:${ref.commit}`;
-}
-
-function sameRequirement(left: BaseRequirement, right: BaseRequirement): boolean {
-  return left.identity === right.identity && left.release === right.release;
-}
-
-function lockedBases(revision: PatchRevision): LockedBase[] {
-  if (revision.lock.entries.length !== revision.bases.length)
-    throw new PatchCompileError(
-      "invalid-bundle",
-      `Patch ${revision.ref.identity} lock must contain exactly one entry for each ordered base`,
-    );
-  const used = new Set<number>();
-  return revision.bases.map((requirement) => {
-    const matches = revision.lock.entries.flatMap((entry, index) =>
-      sameRequirement(entry.requirement, requirement) ? [{ entry, index }] : [],
-    );
-    const match = matches[0];
-    if (matches.length !== 1 || match === undefined || used.has(match.index))
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `Patch ${revision.ref.identity} base ${requirement.identity}@${requirement.release} does not have one exact lock entry`,
-      );
-    const { entry, index } = match;
-    used.add(index);
-    if (entry.exact.identity !== requirement.identity || exactRelease(entry.exact) !== requirement.release)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `exact lock ${entry.exact.identity}@${exactRelease(entry.exact)} does not satisfy ${requirement.identity}@${requirement.release}`,
-      );
-    if (entry.acquisition.identity !== entry.exact.identity)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `acquisition for ${requirement.identity}@${requirement.release} names a different Patch`,
-      );
-    if (entry.acquisition.kind === "hub" && entry.acquisition.version !== entry.exact.version)
-      throw new PatchCompileError(
-        "invalid-bundle",
-        `Hub acquisition for ${requirement.identity}@${requirement.release} does not name its exact version`,
-      );
-    return entry;
-  });
+  return ref.digest;
 }
 
 function orderRevisions(bundle: ClosedPatchBundle): {
@@ -113,13 +68,13 @@ function orderRevisions(bundle: ClosedPatchBundle): {
     selectedByIdentity.set(revision.ref.identity, revision.ref);
     active.add(key);
     const dependencyClosure = new Set<string>();
-    for (const locked of lockedBases(revision)) {
-      const dependencyKey = exactPatchRefKey(locked.exact);
+    for (const base of revision.bases) {
+      const dependencyKey = exactPatchRefKey(base);
       const dependency = revisions.get(dependencyKey);
       if (dependency === undefined)
         throw new PatchCompileError(
           "unresolvable-dependency",
-          `locked Patch revision ${locked.exact.identity}@${exactRelease(locked.exact)} is missing`,
+          `Patch revision ${base.identity}@${base.digest} is missing`,
         );
       visit(dependency);
       for (const member of closure.get(dependencyKey) ?? []) dependencyClosure.add(member);
@@ -149,72 +104,6 @@ function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
     leftKeys.length === rightKeys.length &&
     leftKeys.every((key, index) => key === rightKeys[index])
   );
-}
-
-function isNodeId(value: unknown): value is NodeId {
-  return typeof value === "string" && /^node-[0-9a-z-]+$/.test(value);
-}
-
-function isContentDigest(value: unknown): value is `sha256:${string}` {
-  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
-}
-
-function parseMaterial(value: unknown, patch: PatchId): Omit<ResolvedMaterial, "source"> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new PatchCompileError("invalid-material-attachment", "malformed Material attachment");
-  const kind = Reflect.get(value, "kind");
-  const id = Reflect.get(value, "id");
-  const node = Reflect.get(value, "node");
-  const title = Reflect.get(value, "title");
-  const body = Reflect.get(value, "body");
-  const digest = Reflect.get(value, "digest");
-  if (
-    kind !== "document" ||
-    !isMaterialId(id) ||
-    !isNodeId(node) ||
-    typeof title !== "string" ||
-    title.trim() === "" ||
-    typeof body !== "string" ||
-    body.trim() === "" ||
-    !isContentDigest(digest)
-  )
-    throw new PatchCompileError("invalid-material-attachment", `Patch ${patch} has malformed Material attachment`);
-  return { kind, id, node, title, body, digest };
-}
-
-function validateMaterials(
-  revisions: readonly PatchRevision[],
-  nodes: ReadonlyMap<NodeId, StructureNode>,
-): ResolvedMaterial[] {
-  const seen = new Set<string>();
-  const materials: ResolvedMaterial[] = [];
-  for (const revision of revisions) {
-    const attachments: unknown = revision.materials;
-    if (!Array.isArray(attachments))
-      throw new PatchCompileError(
-        "invalid-material-attachment",
-        `Patch ${revision.ref.identity} has malformed Material attachments`,
-      );
-    for (const value of attachments) {
-      const material = parseMaterial(value, revision.ref.identity);
-      if (!nodes.has(material.node))
-        throw new PatchCompileError(
-          "invalid-material-attachment",
-          `Material ${material.id} targets unknown Node ${material.node}`,
-        );
-      const actual = `sha256:${sha256Hex(material.body)}`;
-      if (material.digest !== actual)
-        throw new PatchCompileError(
-          "invalid-material-attachment",
-          `Material ${material.id} content digest does not match`,
-        );
-      if (seen.has(material.id))
-        throw new PatchCompileError("invalid-material-attachment", `Material attachment ${material.id} is repeated`);
-      seen.add(material.id);
-      materials.push({ ...material, source: revision.ref });
-    }
-  }
-  return materials.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function contributionKey(source: ExactPatchRef, operationIndex: number): string {
@@ -354,6 +243,9 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   };
 
   for (const revision of orderedRevisions) {
+    validateMetadataProperties(revision.metadata.properties);
+    for (const operation of revision.delta.operations)
+      if (operation.kind === "add-metadata-set") validateMetadataProperties(operation.metadataSet.properties);
     revision.delta.operations.forEach((operation, index) =>
       collectOperation(revision.ref, operation, index, collection),
     );
@@ -472,7 +364,6 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     terminal: bundle.terminal,
     patchOrder: orderedRevisions.map((revision) => revision.ref),
     patchMetadata,
-    materials: validateMaterials(orderedRevisions, nodes),
     nodes: sorted(nodes.values()),
     edges: sorted(edges.values()),
     metadataSets: sorted(metadataSets.values()),

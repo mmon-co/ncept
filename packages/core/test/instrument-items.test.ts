@@ -1,25 +1,24 @@
 import { expect, test } from "bun:test";
-import { ITEM_BANK_METADATA_PROPERTY, items } from "@concept/core/instrument-items";
-import { resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "@concept/core/patch";
+import {
+  ITEM_BANK_METADATA_PROPERTY,
+  items,
+  resolvePatchBundle,
+  type ExactPatchRef,
+  type PatchRevision,
+} from "../src/patch";
 
 const baseRef: ExactPatchRef = {
   identity: "patch-items-base",
-  version: "1.0.0",
-  commit: "1111111111111111111111111111111111111111",
   digest: `sha256:${"1".repeat(64)}`,
 };
 const overlayRef: ExactPatchRef = {
   identity: "patch-items-overlay",
-  version: "1.0.0",
-  commit: "2222222222222222222222222222222222222222",
   digest: `sha256:${"2".repeat(64)}`,
 };
 
 const base: PatchRevision = {
   ref: baseRef,
   bases: [],
-  lock: { entries: [] },
-  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [
@@ -57,17 +56,7 @@ const base: PatchRevision = {
 
 const overlay: PatchRevision = {
   ref: overlayRef,
-  bases: [{ identity: baseRef.identity, release: baseRef.version ?? "" }],
-  lock: {
-    entries: [
-      {
-        requirement: { identity: baseRef.identity, release: baseRef.version ?? "" },
-        exact: baseRef,
-        acquisition: { kind: "hub", identity: baseRef.identity, version: baseRef.version ?? "" },
-      },
-    ],
-  },
-  materials: [],
+  bases: [baseRef],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [

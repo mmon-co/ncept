@@ -1,6 +1,9 @@
+import type { TagIndex } from "../../src/theory/theory";
 import { expect, test } from "bun:test";
 import {
   PatchCompileError,
+  evaluateView,
+  type View,
   parseGraphQuery,
   resolvePatchBundle,
   selectGraph,
@@ -11,13 +14,11 @@ import {
 const revision: PatchRevision = {
   ref: {
     identity: "patch-selection",
-    version: "1.0.0",
-    commit: "0123456789abcdef0123456789abcdef01234567",
+
     digest: `sha256:${"a".repeat(64)}`,
   },
   bases: [],
-  lock: { entries: [] },
-  materials: [],
+
   metadata: { properties: { "patch:title": "Selection" }, citations: [] },
   delta: {
     operations: [
@@ -164,5 +165,40 @@ test("dependent selectors reject malformed targets and dangling Nodes through pu
     expect(() => parseGraphQuery(query)).toThrow(PatchCompileError);
   expect(() => selectGraph(graph, { dependents: { targets: ["node-missing"] } })).toThrow(
     /dependents targets missing node/,
+  );
+});
+
+test("is: selection and saved Views use the supplied TagIndex, including nested query algebra", () => {
+  const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
+  const seen: string[] = [];
+  const tags: TagIndex = (tag) => {
+    seen.push(tag);
+    if (tag === "known") return new Set(["node-a", "node-b"]);
+    if (tag === "stale") return new Set(["node-b"]);
+    throw new Error(`unknown theory tag ${tag}`);
+  };
+  const query = parseGraphQuery({
+    difference: [{ intersection: [{ tag: "left" }, { tag: "is:known" }] }, { tag: "is:stale" }],
+  });
+  const view: View = { id: "view-known", name: "Known", query, createdAt: "2026-09-12T00:00:00Z", metadata: {} };
+  const selected = selectGraph(graph, query, tags);
+  expect(evaluateView(graph, view, tags)).toEqual(selected);
+  expect(selected.nodes).toEqual([{ id: "node-a" }]);
+  expect(selected.metadataSets.map(({ id }) => id)).toEqual(["metadata-a"]);
+  expect(selected.provenance.nodes["node-a"]).toEqual(graph.provenance.nodes["node-a"]);
+  expect(seen).toEqual(["known", "stale", "known", "stale"]);
+  expect(selectGraph(graph, { tag: "is:known" }, () => new Set()).nodes).toEqual([]);
+  expect(() => selectGraph(graph, { tag: "is:known" })).toThrow(/requires a TagIndex/);
+  expect(() => selectGraph(graph, { tag: "is:missing" }, tags)).toThrow(/unknown theory tag missing/);
+  expect(() => selectGraph(graph, { tag: "is:known" }, () => new Set(["node-missing"]))).toThrow(/missing node/);
+});
+
+test("provenance query parsing admits only identity and canonical digest", () => {
+  expect(parseGraphQuery({ provenance: revision.ref })).toEqual({ provenance: revision.ref });
+  expect(() => parseGraphQuery({ provenance: { ...revision.ref, commit: "old-host-coordinate" } })).toThrow(
+    /exact Patch reference/,
+  );
+  expect(() => parseGraphQuery({ provenance: { ...revision.ref, digest: "sha256:short" } })).toThrow(
+    /exact Patch reference/,
   );
 });

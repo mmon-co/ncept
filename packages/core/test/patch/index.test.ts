@@ -38,11 +38,5 @@ function nodeBuiltinsOf(entry: string): readonly string[] {
 
 test("pure Patch entry bundles without Node storage", () => {
   expect(nodeBuiltinsOf("@concept/core/patch")).toEqual([]);
-  expect(nodeBuiltinsOf("./src/patch/release.ts")).toEqual([
-    "node:child_process",
-    "node:crypto",
-    "node:fs",
-    "node:os",
-    "node:path",
-  ]);
+  expect(nodeBuiltinsOf("./src/patch/release.ts")).toEqual([]);
 });
