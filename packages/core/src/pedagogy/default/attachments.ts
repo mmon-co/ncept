@@ -20,12 +20,8 @@ export function attachDefaultClaim(
   const record = activeDefaultRecords(
     records.filter(({ envelope }) => Date.parse(envelope.at) <= Date.parse(context.at)),
   ).find(({ envelope }) => envelope.id === id);
-  if (record?.payload.kind !== "claim")
-    throw new Error("Attachment requires an active default claim");
-  if (
-    new Set(nodes).size !== nodes.length ||
-    nodes.some((node) => !graph.nodes.some(({ id }) => id === node))
-  )
+  if (record?.payload.kind !== "claim") throw new Error("Attachment requires an active default claim");
+  if (new Set(nodes).size !== nodes.length || nodes.some((node) => !graph.nodes.some(({ id }) => id === node)))
     throw new Error("Claim attachment requires distinct current Nodes");
   return updateDefault(state, graph, graph, records, {
     ...context,

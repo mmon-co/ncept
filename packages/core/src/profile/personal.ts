@@ -63,17 +63,10 @@ function personalContent(current?: PatchRevision): PatchContent {
 
 function currentPersonalRevision(dd: DataDir, scope: ProfileScope): PatchRevision | undefined {
   const repository = personalRepository(dd, scope);
-  return existsSync(join(repository, ".git"))
-    ? revisionAt(repository, PERSONAL_PATCH_ID)
-    : undefined;
+  return existsSync(join(repository, ".git")) ? revisionAt(repository, PERSONAL_PATCH_ID) : undefined;
 }
 
-function commitPersonal(
-  dd: DataDir,
-  scope: ProfileScope,
-  content: PatchContent,
-  message: string,
-): PatchRevision {
+function commitPersonal(dd: DataDir, scope: ProfileScope, content: PatchContent, message: string): PatchRevision {
   const repository = personalRepository(dd, scope);
   const current = currentPersonalRevision(dd, scope);
   const candidate = candidateCommit(repository, content, message, current?.ref.commit);
@@ -87,17 +80,10 @@ function commitPersonal(
 
 /** Create the Profile's empty Personal scope on first use. */
 export function ensurePersonalPatch(dd: DataDir, scope: ProfileScope): PatchRevision {
-  return (
-    currentPersonalRevision(dd, scope) ??
-    commitPersonal(dd, scope, personalContent(), "Create Personal scope")
-  );
+  return currentPersonalRevision(dd, scope) ?? commitPersonal(dd, scope, personalContent(), "Create Personal scope");
 }
 
-export function loadPersonalPatchBundle(
-  dd: DataDir,
-  scope: ProfileScope,
-  exact?: ExactPatchRef,
-): ClosedPatchBundle {
+export function loadPersonalPatchBundle(dd: DataDir, scope: ProfileScope, exact?: ExactPatchRef): ClosedPatchBundle {
   const terminal =
     exact === undefined
       ? currentPersonalRevision(dd, scope)
@@ -116,9 +102,7 @@ export function readPersonalPatch(
   exact?: ExactPatchRef,
 ) {
   const bundle = loadPersonalPatchBundle(dd, scope, exact);
-  const terminal = bundle.revisions.find((revision) =>
-    sameExactPatchRef(revision.ref, bundle.terminal),
-  );
+  const terminal = bundle.revisions.find((revision) => sameExactPatchRef(revision.ref, bundle.terminal));
   if (terminal === undefined) throw new PatchStoreError("Personal Patch revision is unavailable");
   return {
     ref: terminal.ref,
@@ -133,11 +117,7 @@ export function readPersonalPatch(
 }
 
 /** Adopt one exact Hub release as an independent base of this Profile's Personal scope. */
-export function adoptHubRelease(
-  dd: DataDir,
-  scope: ProfileScope,
-  exact: ExactPatchRef,
-): PatchRevision {
+export function adoptHubRelease(dd: DataDir, scope: ProfileScope, exact: ExactPatchRef): PatchRevision {
   if (exact.version === undefined) throw new PatchStoreError("Hub adoption needs an exact release");
   revisionForExact(dd, scope, exact);
   const current = currentPersonalRevision(dd, scope);
@@ -167,19 +147,13 @@ export function adoptHubRelease(
 }
 
 /** Replace an adopted base with another exact release; conflicting masks fail compilation. */
-export function updateHubRelease(
-  dd: DataDir,
-  scope: ProfileScope,
-  exact: ExactPatchRef,
-): PatchRevision {
+export function updateHubRelease(dd: DataDir, scope: ProfileScope, exact: ExactPatchRef): PatchRevision {
   if (exact.version === undefined) throw new PatchStoreError("Hub update needs an exact release");
   revisionForExact(dd, scope, exact);
   const current = currentPersonalRevision(dd, scope);
   if (current === undefined) throw new PatchStoreError("Personal Patch does not exist");
   const content = personalContent(current);
-  const index = content.lock.entries.findIndex(
-    ({ exact: base }) => base.identity === exact.identity,
-  );
+  const index = content.lock.entries.findIndex(({ exact: base }) => base.identity === exact.identity);
   if (index < 0) throw new PatchStoreError(`Patch ${exact.identity} is not adopted`);
   const requirement = { identity: exact.identity, release: exact.version };
   const entries = [...content.lock.entries];
@@ -202,8 +176,7 @@ export function updateHubRelease(
 
 /** Commit one accepted graph change to the Profile's Notebook. */
 export function revisePersonalPatch(dd: DataDir, scope: ProfileScope, change: PersonalPatchChange) {
-  if (change.summary.trim() === "")
-    throw new PatchStoreError("a Personal Patch change needs a summary");
+  if (change.summary.trim() === "") throw new PatchStoreError("a Personal Patch change needs a summary");
   const current = currentPersonalRevision(dd, scope);
   if (
     change.expectedBase !== undefined &&
@@ -268,23 +241,13 @@ export function revisePersonalDocumentMaterial(
   );
 }
 
-export function documentMaterials(
-  dd: DataDir,
-  scope: ProfileScope,
-  node: NodeId,
-  exact?: ExactPatchRef,
-) {
+export function documentMaterials(dd: DataDir, scope: ProfileScope, node: NodeId, exact?: ExactPatchRef) {
   const graph = resolvePatchBundle(loadPersonalPatchBundle(dd, scope, exact));
   if (!graph.nodes.some(({ id }) => id === node)) throw new PatchStoreError(`unknown Node ${node}`);
   return graph.materials.filter((material) => material.node === node);
 }
 
-export function openPersonalLesson(
-  dd: DataDir,
-  scope: ProfileScope,
-  node: NodeId,
-  exact?: ExactPatchRef,
-) {
+export function openPersonalLesson(dd: DataDir, scope: ProfileScope, node: NodeId, exact?: ExactPatchRef) {
   const personal = readPersonalPatch(dd, scope, { kind: "absent" }, undefined, exact);
   const visual = personal.graph.nodes.find((candidate) => candidate.id === node);
   if (visual === undefined) throw new PatchStoreError(`Personal Patch has no Node ${node}`);
@@ -292,9 +255,7 @@ export function openPersonalLesson(
   const lesson = content.delta.operations
     .flatMap((operation) =>
       operation.kind === "add-metadata-set" &&
-      operation.metadataSet.subjects.some(
-        (subject) => subject.kind === "node" && subject.id === node,
-      )
+      operation.metadataSet.subjects.some((subject) => subject.kind === "node" && subject.id === node)
         ? [operation.metadataSet.properties[NODE_LESSON_PROPERTY]]
         : [],
     )

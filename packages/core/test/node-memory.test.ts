@@ -63,11 +63,7 @@ test("Node memory attaches opaque Record strings and Session spans in attachment
   };
   const first = attachNodeMemory(initial, [attachment(0)]);
   const next = attachNodeMemory(first, [session, attachment(1)]);
-  expect(next.entries.map(({ text }) => text)).toEqual([
-    attachment(0).text,
-    session.text,
-    attachment(1).text,
-  ]);
+  expect(next.entries.map(({ text }) => text)).toEqual([attachment(0).text, session.text, attachment(1).text]);
   expect(next.originals.map(({ position }) => position)).toEqual([0, 1, 2]);
   expect(next.originals[1]?.source).toEqual(session.source);
   const compacted = await compactNodeMemory(next, {
@@ -83,12 +79,8 @@ test("Node memory attaches opaque Record strings and Session spans in attachment
   await store.saveNodeMemory(scope, next);
   expect(await store.readNodeMemory(scope, "node-a")).toEqual(next);
   expect(await store.readNodeMemory(scope, "node-other")).toBeUndefined();
-  expect(
-    await store.readNodeMemory({ ...scope, profile: "profile-other" }, "node-a"),
-  ).toBeUndefined();
-  expect(
-    await store.readNodeMemory({ ...scope, principal: "principal-other" }, "node-a"),
-  ).toBeUndefined();
+  expect(await store.readNodeMemory({ ...scope, profile: "profile-other" }, "node-a")).toBeUndefined();
+  expect(await store.readNodeMemory({ ...scope, principal: "principal-other" }, "node-a")).toBeUndefined();
 });
 
 test("Node memory compacts only beyond the threshold in one model call and replaces the span", async () => {
@@ -108,9 +100,7 @@ test("Node memory compacts only beyond the threshold in one model call and repla
   expect(calls).toBe(0);
   const compacted = await compactNodeMemory(long, options);
   expect(calls).toBe(1);
-  expect(compacted.entries).toEqual([
-    { kind: "summary", text: "Opaque context summary", covers: [0, 3], at },
-  ]);
+  expect(compacted.entries).toEqual([{ kind: "summary", text: "Opaque context summary", covers: [0, 3], at }]);
   expect(compacted.originals).toEqual(long.originals);
   expect(expandNodeMemory(compacted, summary(compacted))).toEqual(long.originals);
   expect(long.entries).toHaveLength(4);
@@ -193,10 +183,7 @@ test("Node memory failures do not mutate context or lose originals", async () =>
   );
   expect(current).toEqual(before);
   for (const threshold of [-1, 0.5, NaN, Infinity]) {
-    await rejects(
-      compactNodeMemory(current, { threshold, at, summarize: async () => "unused" }),
-      /threshold/,
-    );
+    await rejects(compactNodeMemory(current, { threshold, at, summarize: async () => "unused" }), /threshold/);
   }
   for (const covers of [
     [-1, 1],
@@ -204,9 +191,9 @@ test("Node memory failures do not mutate context or lose originals", async () =>
     [2, 1],
     [0.5, 1],
   ] as const) {
-    expect(() =>
-      expandNodeMemory(current, { kind: "summary", text: "invalid", covers, at }),
-    ).toThrow("invalid original entry range");
+    expect(() => expandNodeMemory(current, { kind: "summary", text: "invalid", covers, at })).toThrow(
+      "invalid original entry range",
+    );
   }
   expect(current).toEqual(before);
 });

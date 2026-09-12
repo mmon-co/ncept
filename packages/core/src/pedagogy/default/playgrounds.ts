@@ -14,12 +14,7 @@ export interface SpacedReviewAnnotation {
 }
 
 export function isSpacedReviewAnnotation(value: unknown): value is SpacedReviewAnnotation {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "unaided" in value &&
-    typeof value.unaided === "boolean"
-  );
+  return typeof value === "object" && value !== null && "unaided" in value && typeof value.unaided === "boolean";
 }
 
 function normalized(text: string): string {
@@ -34,8 +29,7 @@ export function authorSpacedReview(item: SpacedReviewItem): SpacedReviewAnnotati
   const front = normalized(item.front);
   const back = normalized(item.back);
   const leaksAnswer = back.length > 0 && front.includes(back);
-  const offersCandidates =
-    /(^|\n)\s*(?:[a-d][).]|[-*•])\s+/i.test(item.front) || /\bwhich of\b/i.test(item.front);
+  const offersCandidates = /(^|\n)\s*(?:[a-d][).]|[-*•])\s+/i.test(item.front) || /\bwhich of\b/i.test(item.front);
   return { unaided: !leaksAnswer && !offersCandidates };
 }
 
@@ -43,17 +37,13 @@ export function authorSpacedReview(item: SpacedReviewItem): SpacedReviewAnnotati
  * One demonstration per attached Node with the card's task and the learner's response
  * verbatim. The identity is the grade's, so a retried attempt yields the same Records.
  */
-export function attemptSpacedReview({
-  item,
-  grade,
-}: SpacedReviewAttempt): readonly LogRecord<Demonstration>[] {
+export function attemptSpacedReview({ item, grade }: SpacedReviewAttempt): readonly LogRecord<Demonstration>[] {
   if (!isSpacedReviewAnnotation(item.annotation))
     throw new Error("a spaced-review attempt needs this theory's annotation on its card");
   if (item.id !== grade.cardId) throw new Error("a grade belongs to the card it snapshots");
   if (grade.answer.trim() === "") throw new Error("attempt retrieval before revealing the answer");
   const exactMatch = grade.answer.trim() === item.back.trim();
-  if (exactMatch && grade.grade === "again")
-    throw new Error("an exact match cannot be graded as failure");
+  if (exactMatch && grade.grade === "again") throw new Error("an exact match cannot be graded as failure");
   const { unaided } = item.annotation;
   return item.nodes.map((node, index) => ({
     envelope: {

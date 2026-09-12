@@ -1,14 +1,6 @@
 import { PatchCompileError } from "./errors";
 import { sameExactPatchRef } from "./model";
-import type {
-  EdgeId,
-  ExactPatchRef,
-  GraphQuery,
-  MetadataSetId,
-  NodeId,
-  ResolvedGraph,
-  SelectedGraph,
-} from "./model";
+import type { EdgeId, ExactPatchRef, GraphQuery, MetadataSetId, NodeId, ResolvedGraph, SelectedGraph } from "./model";
 
 interface Fragment {
   readonly nodes: Set<NodeId>;
@@ -44,14 +36,12 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     if (!isArray(term.targets) || !term.targets.every(isNodeId))
       return malformed(`${label}.${operation}.targets must contain Node ids`);
     const [first, ...rest] = term.targets;
-    if (first === undefined)
-      return malformed(`${label}.${operation}.targets must contain at least one Node id`);
+    if (first === undefined) return malformed(`${label}.${operation}.targets must contain at least one Node id`);
     const targets: [NodeId, ...NodeId[]] = [first, ...rest];
     return operation === "cone" ? { cone: { targets } } : { dependents: { targets } };
   }
   if (keys[0] === "provenance") {
-    if (!isRecord(raw.provenance))
-      return malformed(`${label}.provenance must be an exact Patch reference`);
+    if (!isRecord(raw.provenance)) return malformed(`${label}.provenance must be an exact Patch reference`);
     const ref = raw.provenance;
     if (
       !isPatchId(ref.identity) ||
@@ -117,11 +107,7 @@ function isDigest(value: unknown): value is `sha256:${string}` {
   return typeof value === "string" && value.startsWith("sha256:");
 }
 
-function combine(
-  left: Fragment,
-  right: Fragment,
-  operation: "union" | "intersection" | "difference",
-): Fragment {
+function combine(left: Fragment, right: Fragment, operation: "union" | "intersection" | "difference"): Fragment {
   const ids = <T>(leftIds: Set<T>, rightIds: Set<T>): Set<T> => {
     if (operation === "union") return new Set([...leftIds, ...rightIds]);
     if (operation === "intersection") return new Set([...leftIds].filter((id) => rightIds.has(id)));
@@ -143,8 +129,7 @@ function tagFragment(graph: ResolvedGraph, name: string): Fragment {
 
   const includeEdge = (id: EdgeId): void => {
     const edge = graph.edges.find((candidate) => candidate.id === id);
-    if (edge === undefined)
-      throw new PatchCompileError("dangling-tag", `tag '${name}' targets missing edge '${id}'`);
+    if (edge === undefined) throw new PatchCompileError("dangling-tag", `tag '${name}' targets missing edge '${id}'`);
     edges.add(id);
     nodes.add(edge.from);
     nodes.add(edge.to);
@@ -153,29 +138,18 @@ function tagFragment(graph: ResolvedGraph, name: string): Fragment {
   for (const id of tag.metadataSets) {
     const metadata = graph.metadataSets.find((candidate) => candidate.id === id);
     if (metadata === undefined)
-      throw new PatchCompileError(
-        "dangling-tag",
-        `tag '${name}' targets missing metadata set '${id}'`,
-      );
+      throw new PatchCompileError("dangling-tag", `tag '${name}' targets missing metadata set '${id}'`);
     for (const subject of metadata.subjects)
       if (subject.kind === "node") nodes.add(subject.id);
       else includeEdge(subject.id);
   }
   for (const metadata of graph.metadataSets)
-    if (
-      metadata.subjects.some((subject) =>
-        subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
-      )
-    )
+    if (metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))))
       metadataSets.add(metadata.id);
   return { nodes, edges, metadataSets };
 }
 
-function coneFragment(
-  graph: ResolvedGraph,
-  targets: readonly NodeId[],
-  dependents = false,
-): Fragment {
+function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[], dependents = false): Fragment {
   const nodes = new Set<NodeId>();
   const edges = new Set<EdgeId>();
   const pending = [...targets];
@@ -197,9 +171,7 @@ function coneFragment(
   const metadataSets = new Set(
     graph.metadataSets
       .filter((metadata) =>
-        metadata.subjects.some((subject) =>
-          subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
-        ),
+        metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))),
       )
       .map(({ id }) => id),
   );
@@ -208,22 +180,13 @@ function coneFragment(
 
 function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment {
   if (!graph.patchOrder.some((candidate) => sameExactPatchRef(candidate, ref)))
-    throw new PatchCompileError(
-      "unknown-provenance",
-      "provenance selector names a Patch outside the graph",
-    );
+    throw new PatchCompileError("unknown-provenance", "provenance selector names a Patch outside the graph");
   const contributed = (items: readonly { readonly patch: typeof ref }[] | undefined): boolean =>
     items?.some((item) => sameExactPatchRef(item.patch, ref)) === true;
-  const nodes = new Set(
-    graph.nodes.filter(({ id }) => contributed(graph.provenance.nodes[id])).map(({ id }) => id),
-  );
-  const edges = new Set(
-    graph.edges.filter(({ id }) => contributed(graph.provenance.edges[id])).map(({ id }) => id),
-  );
+  const nodes = new Set(graph.nodes.filter(({ id }) => contributed(graph.provenance.nodes[id])).map(({ id }) => id));
+  const edges = new Set(graph.edges.filter(({ id }) => contributed(graph.provenance.edges[id])).map(({ id }) => id));
   const metadataSets = new Set(
-    graph.metadataSets
-      .filter(({ id }) => contributed(graph.provenance.metadataSets[id]))
-      .map(({ id }) => id),
+    graph.metadataSets.filter(({ id }) => contributed(graph.provenance.metadataSets[id])).map(({ id }) => id),
   );
   for (const edge of graph.edges)
     if (edges.has(edge.id)) {
@@ -243,11 +206,7 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
           }
         }
   for (const metadata of graph.metadataSets)
-    if (
-      metadata.subjects.some((subject) =>
-        subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
-      )
-    )
+    if (metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))))
       metadataSets.add(metadata.id);
   return { nodes, edges, metadataSets };
 }
@@ -258,18 +217,11 @@ function evaluate(graph: ResolvedGraph, query: GraphQuery): Fragment {
   if ("dependents" in query) return coneFragment(graph, query.dependents.targets, true);
   if ("provenance" in query) return provenanceFragment(graph, query.provenance);
   if ("difference" in query)
-    return combine(
-      evaluate(graph, query.difference[0]),
-      evaluate(graph, query.difference[1]),
-      "difference",
-    );
+    return combine(evaluate(graph, query.difference[0]), evaluate(graph, query.difference[1]), "difference");
   const operation = "union" in query ? "union" : "intersection";
   const children = "union" in query ? query.union : query.intersection;
   const [first, ...rest] = children;
-  return rest.reduce(
-    (fragment, child) => combine(fragment, evaluate(graph, child), operation),
-    evaluate(graph, first),
-  );
+  return rest.reduce((fragment, child) => combine(fragment, evaluate(graph, child), operation), evaluate(graph, first));
 }
 
 function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph {
@@ -290,10 +242,7 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
   const nodeProvenance: Record<NodeId, ResolvedGraph["provenance"]["nodes"][NodeId]> = {};
   const edgeProvenance: Record<EdgeId, ResolvedGraph["provenance"]["edges"][EdgeId]> = {};
-  const metadataSetProvenance: Record<
-    MetadataSetId,
-    ResolvedGraph["provenance"]["metadataSets"][MetadataSetId]
-  > = {};
+  const metadataSetProvenance: Record<MetadataSetId, ResolvedGraph["provenance"]["metadataSets"][MetadataSetId]> = {};
   const metadataPropertyProvenance: Record<
     MetadataSetId,
     ResolvedGraph["provenance"]["metadataProperties"][MetadataSetId]
@@ -311,8 +260,7 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       const provenance = graph.provenance.metadataSets[metadata.id];
       const propertyProvenance = graph.provenance.metadataProperties[metadata.id];
       if (provenance !== undefined) metadataSetProvenance[metadata.id] = provenance;
-      if (propertyProvenance !== undefined)
-        metadataPropertyProvenance[metadata.id] = propertyProvenance;
+      if (propertyProvenance !== undefined) metadataPropertyProvenance[metadata.id] = propertyProvenance;
     }
 
   return {

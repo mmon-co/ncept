@@ -49,9 +49,7 @@ function overlayOf(state: LearnerState<NodeState>): DefaultHomingOverlay | undef
 
 function freezeMapping(mapping: Readonly<Partial<Record<RecordId, readonly NodeId[]>>>) {
   return Object.freeze(
-    Object.fromEntries(
-      Object.entries(mapping).map(([id, nodes]) => [id, Object.freeze([...(nodes ?? [])])]),
-    ),
+    Object.fromEntries(Object.entries(mapping).map(([id, nodes]) => [id, Object.freeze([...(nodes ?? [])])])),
   );
 }
 
@@ -138,11 +136,7 @@ export function updateDefault(
     )
       continue;
     homes[id] = [
-      ...new Set(
-        previous.flatMap((node) =>
-          nextIds.has(node) ? [node] : (context.successors?.[node] ?? []),
-        ),
-      ),
+      ...new Set(previous.flatMap((node) => (nextIds.has(node) ? [node] : (context.successors?.[node] ?? [])))),
     ];
     pending.add(id);
   }
@@ -167,12 +161,10 @@ function candidates(graph: ResolvedGraph): DefaultRehomingRequest["candidates"] 
   return Object.freeze(
     graph.nodes.map(({ id }) => {
       const statements = graph.metadataSets.flatMap((set) => {
-        if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === id))
-          return [];
+        if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === id)) return [];
         const statement = set.properties[NODE_CRITERION_PROPERTY];
         if (statement === undefined) return [];
-        const source =
-          graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
+        const source = graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
         if (typeof statement !== "string" || source === undefined)
           throw new Error(`Invalid capability statement for ${id}`);
         return [{ value: statement, source }];

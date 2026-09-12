@@ -72,12 +72,7 @@ test("route returns exact Nodes in dependency order and types absent targets", (
   const branchResult = route(graph, "node-target");
   expect(branchResult.kind).toBe("found");
   if (branchResult.kind === "found") {
-    expect(branchResult.nodes.map(({ id }) => id)).toEqual([
-      "node-root",
-      "node-left",
-      "node-right",
-      "node-target",
-    ]);
+    expect(branchResult.nodes.map(({ id }) => id)).toEqual(["node-root", "node-left", "node-right", "node-target"]);
     for (const node of branchResult.nodes) expect(node).toBe(graphNode(graph, node.id));
   }
 

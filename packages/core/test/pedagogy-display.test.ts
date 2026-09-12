@@ -7,12 +7,7 @@ import { sampleTheory } from "./record-fixture";
 test("visual graph carries arbitrary theory Node and Edge displays without changing content topology or inventing scoped evidence", () => {
   const graph = fixtureGraph(
     ["node-base", "node-middle", "node-target", "node-isolated"].map((id): SemanticOperation => {
-      if (
-        id !== "node-base" &&
-        id !== "node-middle" &&
-        id !== "node-target" &&
-        id !== "node-isolated"
-      )
+      if (id !== "node-base" && id !== "node-middle" && id !== "node-target" && id !== "node-isolated")
         throw new Error("Invalid Node");
       return {
         kind: "add-metadata-set",
@@ -50,9 +45,7 @@ test("visual graph carries arbitrary theory Node and Edge displays without chang
     display,
   });
   expect(
-    projected.nodes
-      .filter(({ id }) => id !== node.id)
-      .every(({ appearance }) => appearance.kind === "content"),
+    projected.nodes.filter(({ id }) => id !== node.id).every(({ appearance }) => appearance.kind === "content"),
   ).toBe(true);
   expect(projected.edges.find(({ id }) => id === edge.id)?.display).toEqual(edgeDisplay);
   expect(projected.nodes.map(({ appearance: _appearance, ...node }) => node)).toEqual(

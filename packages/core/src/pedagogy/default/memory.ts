@@ -1,9 +1,4 @@
-import {
-  attachNodeMemory,
-  expandNodeMemory,
-  type NodeMemory,
-  type RecordId,
-} from "../../profile/observations";
+import { attachNodeMemory, expandNodeMemory, type NodeMemory, type RecordId } from "../../profile/observations";
 import type { NodeId } from "../../patch";
 import type { LearnerState } from "../../profile/state";
 import type { NodeState } from "./labels";
@@ -12,28 +7,20 @@ import type { HomedRecord } from "./records";
 /** One complete batch per Record and Node. Hosts serialize this transition with persistence.
  * Replay checks originals, not the compacted tail, so summaries cannot cause duplicate attachments.
  */
-export function attachDefaultRecordMemory(
-  current: NodeMemory,
-  records: readonly HomedRecord[],
-): NodeMemory {
+export function attachDefaultRecordMemory(current: NodeMemory, records: readonly HomedRecord[]): NodeMemory {
   let next = current;
   for (const record of records) {
     const strings =
       record.payload.kind === "demonstration"
         ? [record.payload.task, record.payload.response]
-        : [
-            ...(record.payload.prompt === undefined ? [] : [record.payload.prompt]),
-            record.payload.statement,
-          ];
+        : [...(record.payload.prompt === undefined ? [] : [record.payload.prompt]), record.payload.statement];
     const existing = next.originals.filter(
       ({ source }) => source.kind === "record" && source.recordId === record.envelope.id,
     );
     if (existing.length > 0) {
       if (
         existing.length !== strings.length ||
-        existing.some(
-          (entry, index) => entry.text !== strings[index] || entry.at !== record.envelope.at,
-        )
+        existing.some((entry, index) => entry.text !== strings[index] || entry.at !== record.envelope.at)
       )
         throw new Error(`Incomplete or conflicting memory batch for ${record.envelope.id}`);
       continue;
@@ -100,8 +87,7 @@ export function validateMistakeAssessments(
               record.payload.outcome === "failure",
           ),
       );
-      if (homes.length === 0)
-        throw new Error(`Mistake assessment cites inactive or unsupported Record ${id}`);
+      if (homes.length === 0) throw new Error(`Mistake assessment cites inactive or unsupported Record ${id}`);
       for (const home of homes) nodes.add(home.node);
     }
     if (nodes.size < 2) throw new Error("Mistake assessment must span Nodes");

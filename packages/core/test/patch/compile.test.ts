@@ -99,8 +99,7 @@ test("a native root Patch compiles from the empty graph into a content-only Visu
       rank: 0,
       appearance: { kind: "content" },
       annotations: [],
-      inspectorRef:
-        "patch-linear-algebra@0123456789abcdef0123456789abcdef01234567/node/node-vectors",
+      inspectorRef: "patch-linear-algebra@0123456789abcdef0123456789abcdef01234567/node/node-vectors",
       contentSource: revision.ref,
     },
   ]);
@@ -145,15 +144,7 @@ test("a proposed graph diff reports its target cone and suspicious fan-in", () =
     cycles: [],
     danglingEndpoints: [],
     missingDisplayLabels: [],
-    roots: [
-      "node-fan-0",
-      "node-fan-1",
-      "node-fan-2",
-      "node-fan-3",
-      "node-fan-4",
-      "node-fan-5",
-      "node-spans",
-    ],
+    roots: ["node-fan-0", "node-fan-1", "node-fan-2", "node-fan-3", "node-fan-4", "node-fan-5", "node-spans"],
     cone: {
       targets: ["node-vectors"],
       missingTargets: [],
@@ -167,24 +158,8 @@ test("a proposed graph diff reports its target cone and suspicious fan-in", () =
         "node-spans",
         "node-vectors",
       ],
-      edges: [
-        "edge-fan-0",
-        "edge-fan-1",
-        "edge-fan-2",
-        "edge-fan-3",
-        "edge-fan-4",
-        "edge-fan-5",
-        "edge-spans-vectors",
-      ],
-      coveredRoots: [
-        "node-fan-0",
-        "node-fan-1",
-        "node-fan-2",
-        "node-fan-3",
-        "node-fan-4",
-        "node-fan-5",
-        "node-spans",
-      ],
+      edges: ["edge-fan-0", "edge-fan-1", "edge-fan-2", "edge-fan-3", "edge-fan-4", "edge-fan-5", "edge-spans-vectors"],
+      coveredRoots: ["node-fan-0", "node-fan-1", "node-fan-2", "node-fan-3", "node-fan-4", "node-fan-5", "node-spans"],
     },
     highInDegreeThreshold: 5,
     highInDegreeNodes: [{ node: "node-vectors", inDegree: 7 }],
@@ -291,9 +266,7 @@ test("a Personal Notebook keeps effective content when optional theory displays 
     annotations: {},
   });
 
-  expect(
-    courseLabelled.nodes.map(({ id, label, contentSource }) => ({ id, label, contentSource })),
-  ).toEqual(
+  expect(courseLabelled.nodes.map(({ id, label, contentSource }) => ({ id, label, contentSource }))).toEqual(
     learnerAware.nodes.map(({ id, label, contentSource }) => ({ id, label, contentSource })),
   );
   expect(courseLabelled.nodes.find((node) => node.id === "node-vectors")).toMatchObject({

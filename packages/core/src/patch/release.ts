@@ -75,8 +75,7 @@ function authoredRepository(dd: DataDir, identity: PatchId): string {
 }
 
 function scopeComponent(value: string, label: string): string {
-  if (value.length === 0 || value === "." || value === "..")
-    throw new PatchStoreError(`${label} is invalid`);
+  if (value.length === 0 || value === "." || value === "..") throw new PatchStoreError(`${label} is invalid`);
   return encodeURIComponent(value);
 }
 
@@ -94,9 +93,7 @@ export function personalRepository(dd: DataDir, scope: ProfileScope): string {
 
 /** Execution-cache location; repository identities, not paths, cross storage boundaries. */
 export function patchRepositoryPath(dd: DataDir, scope: ProfileScope, identity: PatchId): string {
-  return identity === PERSONAL_PATCH_ID
-    ? personalRepository(dd, scope)
-    : authoredRepository(dd, identity);
+  return identity === PERSONAL_PATCH_ID ? personalRepository(dd, scope) : authoredRepository(dd, identity);
 }
 
 export function isPatchId(value: unknown): value is PatchId {
@@ -146,17 +143,8 @@ export function candidateCommit(
   return { ref: { identity: content.identity, commit, digest: digest(content) }, ...content };
 }
 
-export function publishCandidate(
-  repository: string,
-  candidate: PatchRevision,
-  previous?: string,
-): PatchRevision {
-  runGit(repository, [
-    "update-ref",
-    "HEAD",
-    candidate.ref.commit,
-    ...(previous === undefined ? [] : [previous]),
-  ]);
+export function publishCandidate(repository: string, candidate: PatchRevision, previous?: string): PatchRevision {
+  runGit(repository, ["update-ref", "HEAD", candidate.ref.commit, ...(previous === undefined ? [] : [previous])]);
   runGit(repository, ["reset", "--hard", "--quiet", "HEAD"]);
   return candidate;
 }
@@ -191,8 +179,7 @@ function parseContent(raw: string, description: string): PatchContent {
 }
 
 export function revisionAt(repository: string, identity: PatchId, commit = "HEAD"): PatchRevision {
-  if (!/^(HEAD|[0-9a-f]{40,64})$/.test(commit))
-    throw new PatchStoreError(`invalid Patch commit ${commit}`);
+  if (!/^(HEAD|[0-9a-f]{40,64})$/.test(commit)) throw new PatchStoreError(`invalid Patch commit ${commit}`);
   if (!existsSync(join(repository, ".git"))) throw new PatchStoreError(`unknown Patch ${identity}`);
   const resolvedCommit = runGit(repository, ["rev-parse", `${commit}^{commit}`]);
   const content = parseContent(
@@ -208,36 +195,22 @@ export function revisionAt(repository: string, identity: PatchId, commit = "HEAD
 }
 
 function releaseTag(version: string): string {
-  if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(version))
-    throw new PatchStoreError(`invalid Patch release ${version}`);
+  if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(version)) throw new PatchStoreError(`invalid Patch release ${version}`);
   return `refs/tags/releases/${version}`;
 }
 
-export function revisionForExact(
-  dd: DataDir,
-  scope: ProfileScope,
-  exact: ExactPatchRef,
-): PatchRevision {
+export function revisionForExact(dd: DataDir, scope: ProfileScope, exact: ExactPatchRef): PatchRevision {
   const repository =
-    exact.identity === PERSONAL_PATCH_ID
-      ? personalRepository(dd, scope)
-      : authoredRepository(dd, exact.identity);
+    exact.identity === PERSONAL_PATCH_ID ? personalRepository(dd, scope) : authoredRepository(dd, exact.identity);
   if (exact.version !== undefined) {
     const taggedCommit = runGit(repository, ["rev-parse", `${releaseTag(exact.version)}^{commit}`]);
     if (taggedCommit !== exact.commit)
-      throw new PatchStoreError(
-        `${exact.identity}@${exact.version}: release does not name the exact Patch commit`,
-      );
+      throw new PatchStoreError(`${exact.identity}@${exact.version}: release does not name the exact Patch commit`);
   }
   const stored = revisionAt(repository, exact.identity, exact.commit);
-  const revision =
-    exact.version === undefined
-      ? stored
-      : { ...stored, ref: { ...stored.ref, version: exact.version } };
+  const revision = exact.version === undefined ? stored : { ...stored, ref: { ...stored.ref, version: exact.version } };
   if (!sameExactPatchRef(revision.ref, exact))
-    throw new PatchStoreError(
-      `${exact.identity}@${exact.commit}: exact Patch digest or release does not match`,
-    );
+    throw new PatchStoreError(`${exact.identity}@${exact.commit}: exact Patch digest or release does not match`);
   return revision;
 }
 
@@ -268,11 +241,7 @@ function collectRevisionClosure(
   return revisions;
 }
 
-export function bundleForRevision(
-  dd: DataDir,
-  scope: ProfileScope,
-  terminal: PatchRevision,
-): ClosedPatchBundle {
+export function bundleForRevision(dd: DataDir, scope: ProfileScope, terminal: PatchRevision): ClosedPatchBundle {
   return {
     terminal: terminal.ref,
     revisions: [...collectRevisionClosure(dd, scope, terminal).values()],
@@ -351,18 +320,14 @@ function hasDependencyRole(value: unknown): boolean {
   return typeof value === "object" && value !== null && Reflect.get(value, "role") === "dependency";
 }
 
-export function validateRootPatchDefinition(
-  identity: PatchId,
-  definition: RootPatchDefinition,
-): void {
+export function validateRootPatchDefinition(identity: PatchId, definition: RootPatchDefinition): void {
   if (!isPatchId(identity)) invalidRoot("invalid Patch identity");
   if (definition.title.trim() === "") invalidRoot("title is required");
   if (definition.author.trim() === "") invalidRoot("author is required");
   if (definition.labels.length === 0) invalidRoot("at least one label is required");
   if (definition.labels.some((label) => !/^[a-z][a-z0-9-]*$/.test(label)))
     invalidRoot("labels must use lowercase identifiers");
-  if (new Set(definition.labels).size !== definition.labels.length)
-    invalidRoot("labels must be unique");
+  if (new Set(definition.labels).size !== definition.labels.length) invalidRoot("labels must be unique");
   if (definition.nodes.length === 0) invalidRoot("at least one Node is required");
   if (definition.nodes.some((node) => !isNodeId(node.id))) invalidRoot("invalid Node identity");
   if (new Set(definition.nodes.map(({ id }) => id)).size !== definition.nodes.length)
@@ -391,11 +356,7 @@ export function validateRootPatchDefinition(
     invalidRoot("Node and Edge identities must produce distinct metadata identities");
   const repository = mkdtempSync(join(tmpdir(), "concept-root-validation-"));
   try {
-    const revision = candidateCommit(
-      repository,
-      rootContent(identity, definition),
-      `Validate ${identity}`,
-    );
+    const revision = candidateCommit(repository, rootContent(identity, definition), `Validate ${identity}`);
     compileGraph({
       bundle: { terminal: revision.ref, revisions: [revision] },
       learner: { kind: "absent" },
@@ -412,17 +373,11 @@ export function readAuthoredPatchRevision(dd: DataDir, identity: PatchId): Patch
   return revisionAt(authoredRepository(dd, identity), identity);
 }
 
-export function readAuthoredRootPatchDefinition(
-  dd: DataDir,
-  exact: ExactPatchRef,
-): RootPatchDefinition {
+export function readAuthoredRootPatchDefinition(dd: DataDir, exact: ExactPatchRef): RootPatchDefinition {
   const revision = revisionAt(authoredRepository(dd, exact.identity), exact.identity, exact.commit);
   if (!sameExactPatchRef(revision.ref, exact))
-    throw new PatchStoreError(
-      `${exact.identity}@${exact.commit}: exact Patch digest or release does not match`,
-    );
-  if (revision.bases.length !== 0)
-    throw new PatchStoreError(`${exact.identity} is not a root Patch`);
+    throw new PatchStoreError(`${exact.identity}@${exact.commit}: exact Patch digest or release does not match`);
+  if (revision.bases.length !== 0) throw new PatchStoreError(`${exact.identity} is not a root Patch`);
   const metadataBySubject = new Map<string, Record<string, unknown>>();
   for (const operation of revision.delta.operations)
     if (operation.kind === "add-metadata-set")
@@ -453,8 +408,7 @@ export function readAuthoredRootPatchDefinition(
       if (operation.kind !== "add-edge") return [];
       const properties = metadataBySubject.get(`edge:${operation.edge.id}`);
       const role = properties?.["graph:role"];
-      if (role !== "dependency")
-        throw new PatchStoreError(`Edge ${operation.edge.id} is missing authored content`);
+      if (role !== "dependency") throw new PatchStoreError(`Edge ${operation.edge.id} is missing authored content`);
       return [
         {
           ...operation.edge,
@@ -488,11 +442,7 @@ export function reviseAuthoredRootPatch(
   return { identity };
 }
 
-function createAuthoredContent(
-  dd: DataDir,
-  scope: ProfileScope,
-  content: PatchContent,
-): AuthoredPatch {
+function createAuthoredContent(dd: DataDir, scope: ProfileScope, content: PatchContent): AuthoredPatch {
   const repository = authoredRepository(dd, content.identity);
   if (existsSync(repository)) throw new PatchStoreError(`Patch ${content.identity} already exists`);
   const candidate = candidateCommit(repository, content, `Create ${content.identity}`);
@@ -501,21 +451,13 @@ function createAuthoredContent(
   return { identity: content.identity };
 }
 
-export function createAuthoredRootPatch(
-  dd: DataDir,
-  scope: ProfileScope,
-  input: RootPatchDefinition,
-): AuthoredPatch {
+export function createAuthoredRootPatch(dd: DataDir, scope: ProfileScope, input: RootPatchDefinition): AuthoredPatch {
   const identity = `patch-${randomUUID()}` as const;
   validateRootPatchDefinition(identity, input);
   return createAuthoredContent(dd, scope, rootContent(identity, input));
 }
 
-export function createAuthoredBasedPatch(
-  dd: DataDir,
-  scope: ProfileScope,
-  input: BasedPatchDefinition,
-): AuthoredPatch {
+export function createAuthoredBasedPatch(dd: DataDir, scope: ProfileScope, input: BasedPatchDefinition): AuthoredPatch {
   if (input.bases.length === 0) throw new PatchStoreError("a based Patch needs at least one base");
   const identity = `patch-${randomUUID()}` as const;
   const locked = input.bases.map(authoredBase);
@@ -535,11 +477,7 @@ export function createAuthoredReifiedPatch(
   input: ReifiedPatchDefinition,
 ): AuthoredPatch {
   const identity = `patch-${randomUUID()}` as const;
-  return createAuthoredContent(
-    dd,
-    scope,
-    reifyView(input.view, { identity, metadata: input.metadata }),
-  );
+  return createAuthoredContent(dd, scope, reifyView(input.view, { identity, metadata: input.metadata }));
 }
 
 /** Reify a later immutable snapshot under an existing Hub package identity. */
@@ -575,11 +513,7 @@ export function reifyAuthoredPatchRelease(
   // Keep every private tip reachable even though publication switches to the reified lineage.
   if (existsSync(join(repository, ".git"))) {
     const current = revisionAt(repository, identity);
-    runGit(repository, [
-      "update-ref",
-      `refs/private-history/${current.ref.commit}`,
-      current.ref.commit,
-    ]);
+    runGit(repository, ["update-ref", `refs/private-history/${current.ref.commit}`, current.ref.commit]);
   }
   const candidate = candidateCommit(
     repository,
@@ -593,11 +527,7 @@ export function reifyAuthoredPatchRelease(
 }
 
 /** Pin the current authored commit to a permanent exact release. */
-export function publishAuthoredPatchRelease(
-  dd: DataDir,
-  identity: PatchId,
-  version: string,
-): ExactPatchRef {
+export function publishAuthoredPatchRelease(dd: DataDir, identity: PatchId, version: string): ExactPatchRef {
   const repository = authoredRepository(dd, identity);
   const revision = revisionAt(repository, identity);
   const tag = releaseTag(version);
@@ -605,17 +535,12 @@ export function publishAuthoredPatchRelease(
     cwd: repository,
     encoding: "utf8",
   });
-  if (existing.status === 0)
-    throw new PatchStoreError(`Patch ${identity}@${version} already exists`);
+  if (existing.status === 0) throw new PatchStoreError(`Patch ${identity}@${version} already exists`);
   runGit(repository, ["tag", `releases/${version}`, revision.ref.commit]);
   return { ...revision.ref, version };
 }
 
-export function readAuthoredPatchRelease(
-  dd: DataDir,
-  identity: PatchId,
-  version: string,
-): PatchRevision {
+export function readAuthoredPatchRelease(dd: DataDir, identity: PatchId, version: string): PatchRevision {
   const repository = authoredRepository(dd, identity);
   const commit = runGit(repository, ["rev-parse", `${releaseTag(version)}^{commit}`]);
   const stored = revisionAt(repository, identity, commit);
@@ -746,18 +671,7 @@ export function reviseAuthoredDocumentMaterial(
   materialId: DocumentMaterial["id"],
   body: string,
 ): PatchRevision {
-  const { repository, current, content } = prepareAuthoredDocumentMaterialRevision(
-    dd,
-    scope,
-    source,
-    materialId,
-    body,
-  );
-  const candidate = candidateCommit(
-    repository,
-    content,
-    `Revise document Material ${materialId}`,
-    current.ref.commit,
-  );
+  const { repository, current, content } = prepareAuthoredDocumentMaterialRevision(dd, scope, source, materialId, body);
+  const candidate = candidateCommit(repository, content, `Revise document Material ${materialId}`, current.ref.commit);
   return publishCandidate(repository, candidate, current.ref.commit);
 }

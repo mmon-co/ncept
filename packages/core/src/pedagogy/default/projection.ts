@@ -15,12 +15,7 @@ import {
   type DefaultParameters,
   type NodeState,
 } from "./labels";
-import {
-  activeDefaultRecords,
-  CLAIM_SCHEMA,
-  DEMONSTRATION_SCHEMA,
-  type HomedRecord,
-} from "./records";
+import { activeDefaultRecords, CLAIM_SCHEMA, DEMONSTRATION_SCHEMA, type HomedRecord } from "./records";
 
 export const WINDOW_SIZE_PROPERTY = "pedagogy:window-size";
 export const WINDOW_REQUIRED_PROPERTY = "pedagogy:window-required";
@@ -44,12 +39,9 @@ export function homeDefaultRecords(
   attachments: DefaultAttachments = {},
   at?: string,
 ): DefaultHoming {
-  if (at !== undefined && !isRecordTimestamp(at))
-    throw new Error("Homing requires an ISO timestamp");
+  if (at !== undefined && !isRecordTimestamp(at)) throw new Error("Homing requires an ISO timestamp");
   const active = activeDefaultRecords(
-    at === undefined
-      ? records
-      : records.filter(({ envelope }) => Date.parse(envelope.at) <= Date.parse(at)),
+    at === undefined ? records : records.filter(({ envelope }) => Date.parse(envelope.at) <= Date.parse(at)),
   );
   const nodeIds = new Set(graph.nodes.map(({ id }) => id));
   for (const [kind, mapping] of [
@@ -60,18 +52,13 @@ export function homeDefaultRecords(
       const record = records.find(({ envelope }) => envelope.id === id);
       if (
         record === undefined ||
-        !(kind === "claim"
-          ? recordUsesSchema(record, CLAIM_SCHEMA)
-          : recordUsesSchema(record, DEMONSTRATION_SCHEMA))
+        !(kind === "claim" ? recordUsesSchema(record, CLAIM_SCHEMA) : recordUsesSchema(record, DEMONSTRATION_SCHEMA))
       )
         throw new Error(`Attachment ${id} must target a ${kind} Record`);
-      if (homes?.some((node) => !nodeIds.has(node)))
-        throw new Error(`Attachment ${id} targets a missing Node`);
+      if (homes?.some((node) => !nodeIds.has(node))) throw new Error(`Attachment ${id} targets a missing Node`);
     }
   }
-  const nodes: Partial<Record<NodeId, HomedRecord[]>> = Object.fromEntries(
-    graph.nodes.map(({ id }) => [id, []]),
-  );
+  const nodes: Partial<Record<NodeId, HomedRecord[]>> = Object.fromEntries(graph.nodes.map(({ id }) => [id, []]));
   const homeless: HomedRecord[] = [];
   for (const record of active) {
     const homes =
@@ -95,10 +82,7 @@ export function defaultNodeParameters(
     return lastMetadataContribution(
       graph,
       graph.metadataSets.flatMap((set) => {
-        if (
-          !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
-          !(key in set.properties)
-        )
+        if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === node) || !(key in set.properties))
           return [];
         const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
         if (source === undefined) throw new Error(`Missing provenance for ${key} on ${node}`);
@@ -140,8 +124,7 @@ export function projectDefault(
   attachments: DefaultAttachments = {},
 ): LearnerState<NodeState> {
   if (!isRecordTimestamp(context.at)) throw new Error("Projection requires an ISO timestamp");
-  if (!acceptsDefaultParameters(context.parameters))
-    throw new Error("Invalid default theory parameters");
+  if (!acceptsDefaultParameters(context.parameters)) throw new Error("Invalid default theory parameters");
   const parameters = context.parameters;
   const homed = homeDefaultRecords(records, graph, attachments, context.at);
   const nodes: Partial<Record<NodeId, NodeState>> = {};

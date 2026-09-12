@@ -11,8 +11,7 @@ export function lastMetadataContribution<T>(
   let selected: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
     const patch = order.get(exactPatchRefKey(candidate.source.patch)) ?? -1;
-    const prior =
-      selected === undefined ? -1 : (order.get(exactPatchRefKey(selected.source.patch)) ?? -1);
+    const prior = selected === undefined ? -1 : (order.get(exactPatchRefKey(selected.source.patch)) ?? -1);
     if (
       selected === undefined ||
       patch > prior ||

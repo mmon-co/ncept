@@ -65,9 +65,7 @@ export function isRecordId(value: unknown): value is RecordId {
 
 export function isRecordTimestamp(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  const match = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.exec(
-    value,
-  );
+  const match = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.exec(value);
   if (match === null || !Number.isFinite(Date.parse(value))) return false;
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -144,8 +142,7 @@ export function serializeRecord(record: Record): string {
   function check(value: unknown): void {
     if (value === null || typeof value === "string" || typeof value === "boolean") return;
     if (typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0)) return;
-    if (typeof value !== "object" || seen.has(value))
-      throw new Error("Record must contain only lossless JSON values");
+    if (typeof value !== "object" || seen.has(value)) throw new Error("Record must contain only lossless JSON values");
     if (
       !Array.isArray(value) &&
       Object.getPrototypeOf(value) !== Object.prototype &&
@@ -156,12 +153,7 @@ export function serializeRecord(record: Record): string {
     for (const key of Reflect.ownKeys(value)) {
       if (Array.isArray(value) && key === "length") continue;
       const property = Object.getOwnPropertyDescriptor(value, key);
-      if (
-        typeof key !== "string" ||
-        property === undefined ||
-        !property.enumerable ||
-        !("value" in property)
-      )
+      if (typeof key !== "string" || property === undefined || !property.enumerable || !("value" in property))
         throw new Error("Record must contain only plain JSON properties");
       if (Array.isArray(value) && (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length))
         throw new Error("Record must contain only JSON array indices");
@@ -219,9 +211,7 @@ export const MISSION_SCHEMA: RecordSchema<MissionPayload> = {
       typeof payload.viewId === "string" &&
       /^view-.+/.test(payload.viewId) &&
       Array.isArray(payload.targetNodes) &&
-      payload.targetNodes.every(
-        (ref: unknown) => object(ref) && "node" in ref && "provenance" in ref,
-      ) &&
+      payload.targetNodes.every((ref: unknown) => object(ref) && "node" in ref && "provenance" in ref) &&
       typeof payload.priority === "number" &&
       Number.isFinite(payload.priority) &&
       (payload.retired === undefined || typeof payload.retired === "boolean")
@@ -291,8 +281,7 @@ export function recordUsesSchema<P>(record: Record, schema: RecordSchema<P>): re
 export function assertPlatformRetraction(record: Record, prior: readonly Record[]): void {
   if (!recordUsesSchema(record, PLATFORM_RETRACTION_SCHEMA)) return;
   const target = prior.find(({ envelope }) => envelope.id === record.payload.of);
-  if (target === undefined)
-    throw new Error(`Platform retraction targets missing Record ${record.payload.of}`);
+  if (target === undefined) throw new Error(`Platform retraction targets missing Record ${record.payload.of}`);
   if (!recordUsesSchema(target, MISSION_SCHEMA) && !recordUsesSchema(target, PREFERENCES_SCHEMA))
     throw new Error("Platform retractions must target a Mission or preferences Record");
 }
@@ -300,23 +289,19 @@ export function assertPlatformRetraction(record: Record, prior: readonly Record[
 function experienceKey(record: Record): string | undefined {
   if (recordUsesSchema(record, MISSION_SCHEMA))
     return JSON.stringify(["mission", record.payload.scope, record.payload.missionId]);
-  if (recordUsesSchema(record, PREFERENCES_SCHEMA))
-    return JSON.stringify(["preferences", record.payload.scope]);
+  if (recordUsesSchema(record, PREFERENCES_SCHEMA)) return JSON.stringify(["preferences", record.payload.scope]);
   return undefined;
 }
 
 /** Latest by instant, then identity on ties; log order and timestamp timezone spelling do not matter. */
 export function compareRecords(left: Record, right: Record): number {
   return (
-    Date.parse(left.envelope.at) - Date.parse(right.envelope.at) ||
-    left.envelope.id.localeCompare(right.envelope.id)
+    Date.parse(left.envelope.at) - Date.parse(right.envelope.at) || left.envelope.id.localeCompare(right.envelope.id)
   );
 }
 
 /** Latest non-retracted value per exact scope/key; a retired Mission hides the whole chain. */
-export function currentExperiences(
-  records: readonly Record[],
-): readonly Record<MissionPayload | PreferencesPayload>[] {
+export function currentExperiences(records: readonly Record[]): readonly Record<MissionPayload | PreferencesPayload>[] {
   const retracted = new Set<RecordId>();
   for (const record of records) {
     if (!recordUsesSchema(record, PLATFORM_RETRACTION_SCHEMA)) continue;
@@ -325,8 +310,7 @@ export function currentExperiences(
   }
   const latest = new Map<string, Record<MissionPayload | PreferencesPayload>>();
   for (const record of records) {
-    if (!recordUsesSchema(record, MISSION_SCHEMA) && !recordUsesSchema(record, PREFERENCES_SCHEMA))
-      continue;
+    if (!recordUsesSchema(record, MISSION_SCHEMA) && !recordUsesSchema(record, PREFERENCES_SCHEMA)) continue;
     const key = experienceKey(record);
     if (key === undefined || retracted.has(record.envelope.id)) continue;
     const current = latest.get(key);
@@ -372,8 +356,7 @@ export function validateRecordJson(serialized: string, context: RecordValidation
   const schema = schemas.get(record.envelope.schema.id);
   if (schema === undefined || schema.ref.digest !== record.envelope.schema.digest)
     throw new Error(`Unknown Record schema ${record.envelope.schema.id}`);
-  if (!schema.accepts(record.payload))
-    throw new Error(`Invalid payload for Record schema ${schema.ref.id}`);
+  if (!schema.accepts(record.payload)) throw new Error(`Invalid payload for Record schema ${schema.ref.id}`);
   for (const ref of schema.nodeRefs(record.payload)) {
     if (!isNodeRef(ref)) throw new Error("Invalid NodeRef");
     const graph = context.resolveGraph(ref.provenance);
@@ -388,17 +371,12 @@ export function validateRecordJson(serialized: string, context: RecordValidation
 }
 
 /** Generic lookup used to deliver old-revision records to a theory's update path. */
-export function recordNodeRefs(
-  record: Record,
-  schemas: readonly RecordSchema[],
-): readonly NodeRef[] {
+export function recordNodeRefs(record: Record, schemas: readonly RecordSchema[]): readonly NodeRef[] {
   const schema = [...PLATFORM_RECORD_SCHEMAS, ...schemas].find(
-    ({ ref }) =>
-      ref.id === record.envelope.schema.id && ref.digest === record.envelope.schema.digest,
+    ({ ref }) => ref.id === record.envelope.schema.id && ref.digest === record.envelope.schema.digest,
   );
   if (schema === undefined) throw new Error(`Unknown Record schema ${record.envelope.schema.id}`);
-  if (!schema.accepts(record.payload))
-    throw new Error(`Invalid payload for Record schema ${schema.ref.id}`);
+  if (!schema.accepts(record.payload)) throw new Error(`Invalid payload for Record schema ${schema.ref.id}`);
   return schema.nodeRefs(record.payload);
 }
 
@@ -471,10 +449,7 @@ export function emptyNodeMemory(node: NodeId): NodeMemory {
 /** Theory-selected Record strings and platform-selected Session spans use the same operation.
  * Order is attachment order, not source time: an older Record can be attached later.
  */
-export function attachNodeMemory(
-  current: NodeMemory,
-  attachments: readonly MemoryAttachment[],
-): NodeMemory {
+export function attachNodeMemory(current: NodeMemory, attachments: readonly MemoryAttachment[]): NodeMemory {
   if (attachments.length === 0) return current;
   const added: MemoryEntry[] = attachments.map((attachment, index) => ({
     kind: "entry",
@@ -496,10 +471,7 @@ export function attachNodeMemory(
 /** Pure snapshot transition with an injected summarizer; failed calls leave the input intact.
  * Recompaction includes the cached summary and the new tail, retaining its original range.
  */
-export async function compactNodeMemory(
-  current: NodeMemory,
-  options: MemoryCompaction,
-): Promise<NodeMemory> {
+export async function compactNodeMemory(current: NodeMemory, options: MemoryCompaction): Promise<NodeMemory> {
   if (!Number.isSafeInteger(options.threshold) || options.threshold < 0)
     throw new Error("Memory compaction threshold must be a non-negative integer");
   const tail = current.entries.filter((entry) => entry.kind === "entry");
@@ -517,10 +489,7 @@ export async function compactNodeMemory(
 }
 
 /** Expands directly to verbatim originals even when the summary summarizes older summaries. */
-export function expandNodeMemory(
-  current: NodeMemory,
-  summary: MemorySummary,
-): readonly MemoryEntry[] {
+export function expandNodeMemory(current: NodeMemory, summary: MemorySummary): readonly MemoryEntry[] {
   const [from, to] = summary.covers;
   if (
     !Number.isSafeInteger(from) ||

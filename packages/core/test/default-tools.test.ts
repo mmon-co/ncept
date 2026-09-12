@@ -50,8 +50,7 @@ function host() {
       nodeRef: (node) => ({ node, provenance: patchRef }),
       append: async (record) => {
         const existing = records.find(({ envelope }) => envelope.id === record.envelope.id);
-        if (existing && JSON.stringify(existing) !== JSON.stringify(record))
-          throw new Error("Conflicting retry");
+        if (existing && JSON.stringify(existing) !== JSON.stringify(record)) throw new Error("Conflicting retry");
         if (!existing) records.push(record);
       },
       scope: ["node-base"],
@@ -87,10 +86,7 @@ test("record tools validate exact NodeRefs and preserve demonstration/claim stri
   expect(await invoke(instruments, "trail", { node: "node-base" })).toMatchObject({ records: [] });
   await invoke(recording, "record_demonstration", { ...attempt, node: "node-base" });
   expect(fixture.records[0]?.payload).toEqual(first);
-  expect(fixture.memories.get("node-base")?.originals.map(({ text }) => text)).toEqual([
-    first.task,
-    first.response,
-  ]);
+  expect(fixture.memories.get("node-base")?.originals.map(({ text }) => text)).toEqual([first.task, first.response]);
   fixture.next("record-claim");
   await invoke(recording, "record_claim", {
     statement: "  I know it\n",
@@ -108,13 +104,13 @@ test("record tools validate exact NodeRefs and preserve demonstration/claim stri
     citations: ["record-tool"],
   });
   fixture.next("record-invalid");
-  expect(
-    invoke(recording, "record_demonstration", { ...attempt, node: "node-missing" }),
-  ).rejects.toThrow("Unresolvable NodeRef");
+  expect(invoke(recording, "record_demonstration", { ...attempt, node: "node-missing" })).rejects.toThrow(
+    "Unresolvable NodeRef",
+  );
   expect(fixture.records).toHaveLength(2);
-  expect(
-    invoke(recording, "record_claim", { statement: "bad", stance: "mastered" }),
-  ).rejects.toThrow("Invalid payload");
+  expect(invoke(recording, "record_claim", { statement: "bad", stance: "mastered" })).rejects.toThrow(
+    "Invalid payload",
+  );
 });
 
 test("interrupted memory save retries the full task+response batch, including after compaction", async () => {
@@ -150,9 +146,7 @@ test("interrupted memory save retries the full task+response batch, including af
     entries: [{ kind: "summary", text: "summary" }],
     citations: ["record-tool"],
   });
-  expect(invoke(tools, "record_demonstration", { ...input, response: "changed" })).rejects.toThrow(
-    "Conflicting retry",
-  );
+  expect(invoke(tools, "record_demonstration", { ...input, response: "changed" })).rejects.toThrow("Conflicting retry");
 });
 
 test("memory attaches claims only to explicit homes and detects partial/conflicting archived batches", () => {
@@ -167,9 +161,7 @@ test("memory attaches claims only to explicit homes and detects partial/conflict
   expect(() => attachDefaultRecordMemory(partial, [record])).toThrow("Incomplete or conflicting");
   const first = attachDefaultRecordMemory(emptyNodeMemory("node-base"), [record]);
   expect(attachDefaultRecordMemory(first, [record])).toBe(first);
-  expect(
-    attachDefaultRecordMemory(emptyNodeMemory("node-middle"), [record]).originals,
-  ).toHaveLength(2);
+  expect(attachDefaultRecordMemory(emptyNodeMemory("node-middle"), [record]).originals).toHaveLength(2);
   const known = claim("known", 0, "knows");
   expect(
     attachDefaultRecordMemory(first, [known])
@@ -195,12 +187,8 @@ test("out-of-scope demonstration appends but defers memory; retraction rejects m
   await invoke(tools, "record_retraction", { of: "record-tool" });
   expect((await fixture.ports.read()).state.nodes["node-middle"]?.records).toEqual([]);
   fixture.next("record-invalid");
-  expect(invoke(tools, "record_retraction", { of: "record-retract" })).rejects.toThrow(
-    "demonstration or claim",
-  );
-  expect(invoke(tools, "record_retraction", { of: "record-missing" })).rejects.toThrow(
-    "missing Record",
-  );
+  expect(invoke(tools, "record_retraction", { of: "record-retract" })).rejects.toThrow("demonstration or claim");
+  expect(invoke(tools, "record_retraction", { of: "record-missing" })).rejects.toThrow("missing Record");
   expect(fixture.records).toHaveLength(2);
 });
 
@@ -232,30 +220,21 @@ test("record retry reads refined homes instead of reverting to payload NodeRef",
   await invoke(tools, "record_demonstration", input);
   expect(fixture.memories.has("node-base")).toBe(false);
   expect(fixture.memories.get("node-middle")?.originals).toHaveLength(2);
-  expect(
-    await invoke(defaultInstrumentTools(ports), "trail", { node: "node-middle" }),
-  ).toMatchObject({ citations: ["record-tool"] });
+  expect(await invoke(defaultInstrumentTools(ports), "trail", { node: "node-middle" })).toMatchObject({
+    citations: ["record-tool"],
+  });
 });
 
 test("keyed components keep optional error strings verbatim and grade mechanically", () => {
-  const {
-    kind: _kind,
-    grader: _grader,
-    outcome: _outcome,
-    ...attempt
-  } = demonstration("keyed", 0).payload;
-  expect(
-    keyedDemonstration({ ...attempt, option: { correct: false, error: "  swapped the terms\n" } }),
-  ).toEqual({
+  const { kind: _kind, grader: _grader, outcome: _outcome, ...attempt } = demonstration("keyed", 0).payload;
+  expect(keyedDemonstration({ ...attempt, option: { correct: false, error: "  swapped the terms\n" } })).toEqual({
     ...attempt,
     kind: "demonstration",
     grader: "mechanical",
     outcome: "failure",
     response: `${attempt.response}\n  swapped the terms\n`,
   });
-  expect(keyedDemonstration({ ...attempt, option: { correct: true } }).response).toBe(
-    attempt.response,
-  );
+  expect(keyedDemonstration({ ...attempt, option: { correct: true } }).response).toBe(attempt.response);
 });
 
 test("concrete release binds revision update and refinement tools to the default implementation", async () => {
@@ -301,9 +280,9 @@ test("concrete release binds revision update and refinement tools to the default
   expect(resolved.theory.theory.update(input.state, input.graph, input.graph, [], context)).toEqual(
     updateDefault(input.state, input.graph, input.graph, [], context),
   );
-  expect(
-    await invoke(tools, "refine_records", { revision: exactPatchRefKey(input.graph.terminal) }),
-  ).toMatchObject({ pending: [] });
+  expect(await invoke(tools, "refine_records", { revision: exactPatchRefKey(input.graph.terminal) })).toMatchObject({
+    pending: [],
+  });
   expect(resolved.skillCatalog.bundles.length).toBeGreaterThan(0);
   expect(resolved.basePrompt.length).toBeGreaterThan(0);
 });

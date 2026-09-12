@@ -15,9 +15,7 @@ export interface DefaultIndicatorContext {
 }
 
 function demonstrations(records: readonly HomedRecord[]): readonly LogRecord<Demonstration>[] {
-  return records.filter(
-    (record): record is LogRecord<Demonstration> => record.payload.kind === "demonstration",
-  );
+  return records.filter((record): record is LogRecord<Demonstration> => record.payload.kind === "demonstration");
 }
 
 /** Facts only. Empty citations on absence indicators mean no evidence, not invented support. */
@@ -27,12 +25,7 @@ export function indicatorsDefault(
   context: DefaultIndicatorContext = {},
 ): readonly Indicator[] {
   const results: Indicator[] = [];
-  function add(
-    kind: string,
-    nodes: readonly NodeId[],
-    records: readonly HomedRecord[],
-    message: string,
-  ) {
+  function add(kind: string, nodes: readonly NodeId[], records: readonly HomedRecord[], message: string) {
     results.push({
       kind,
       nodes,
@@ -55,9 +48,7 @@ export function indicatorsDefault(
         .flatMap((other) => {
           const records = attempts.filter(({ payload }) => payload.task === other);
           return records.length === item.length &&
-            records.every(
-              (record, index) => record.payload.outcome === item[index]?.payload.outcome,
-            )
+            records.every((record, index) => record.payload.outcome === item[index]?.payload.outcome)
             ? records
             : [];
         });
@@ -74,17 +65,12 @@ export function indicatorsDefault(
       .slice(-node.window);
     if (
       window.length >= 3 &&
-      window.every(
-        (record, index) =>
-          index === 0 || record.payload.outcome !== window[index - 1]?.payload.outcome,
-      )
+      window.every((record, index) => index === 0 || record.payload.outcome !== window[index - 1]?.payload.outcome)
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
     if (
       node.records.length === 0 &&
-      defaultDependentCone(graph, id).every(
-        (dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0,
-      )
+      defaultDependentCone(graph, id).every((dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0)
     )
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
@@ -116,9 +102,7 @@ export function indicatorsDefault(
       ({ payload }) => payload.unaided && payload.outcome === "failure",
     );
     for (const failure of failures) {
-      const earlier = successes.filter(
-        (success) => Date.parse(success.envelope.at) < Date.parse(failure.envelope.at),
-      );
+      const earlier = successes.filter((success) => Date.parse(success.envelope.at) < Date.parse(failure.envelope.at));
       if (earlier.length > 0)
         add(
           "edge-contradiction",
@@ -128,13 +112,8 @@ export function indicatorsDefault(
         );
     }
   }
-  for (const record of context.homeless ?? [])
-    add("homeless", [], [record], "Record has no home after Patch revision");
-  for (const { assessment, nodes } of validateMistakeAssessments(
-    context.mistakes ?? [],
-    state,
-    context.memories ?? [],
-  ))
+  for (const record of context.homeless ?? []) add("homeless", [], [record], "Record has no home after Patch revision");
+  for (const { assessment, nodes } of validateMistakeAssessments(context.mistakes ?? [], state, context.memories ?? []))
     results.push({
       kind: "mistake-cluster",
       nodes,

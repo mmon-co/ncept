@@ -9,14 +9,7 @@ import {
   type MistakeAssessment,
 } from "../src/pedagogy/default";
 import { compactNodeMemory, emptyNodeMemory } from "../src/profile/observations";
-import {
-  claim,
-  context,
-  demonstration,
-  fixtureGraph,
-  patchRef,
-  retraction,
-} from "./default-theory-fixture";
+import { claim, context, demonstration, fixtureGraph, patchRef, retraction } from "./default-theory-fixture";
 
 async function fixture() {
   const graph = fixtureGraph();
@@ -40,32 +33,18 @@ async function fixture() {
     node: { node: "node-gone", provenance: patchRef },
   });
   const knows = claim("knows", 3, "knows");
-  const records = [
-    success1,
-    success2,
-    learner,
-    failure,
-    last,
-    dependent,
-    otherFailure,
-    homeless,
-    knows,
-  ];
+  const records = [success1, success2, learner, failure, last, dependent, otherFailure, homeless, knows];
   const state = projectDefault(records, graph, context, {
     claims: { "record-knows": ["node-base"] },
     homes: { "record-homeless": [] },
   });
   const memories = await Promise.all(
     [failure, otherFailure].map(async (record) =>
-      compactNodeMemory(
-        attachDefaultRecordMemory(emptyNodeMemory(record.payload.node.node), [record]),
-        {
-          threshold: 0,
-          at: context.at,
-          summarize: async () =>
-            "Reverses numerator and denominator; related failure on the other Node.",
-        },
-      ),
+      compactNodeMemory(attachDefaultRecordMemory(emptyNodeMemory(record.payload.node.node), [record]), {
+        threshold: 0,
+        at: context.at,
+        summarize: async () => "Reverses numerator and denominator; related failure on the other Node.",
+      }),
     ),
   );
   return {
@@ -105,9 +84,10 @@ test("all seven warnings have positive dogfood cases and cite original evidence"
     "record-failure",
     "record-last",
   ]);
-  expect(
-    warnings.filter(({ kind }) => kind === "self-report").map(({ citations }) => citations[0]),
-  ).toEqual(["record-knows", "record-learner"]);
+  expect(warnings.filter(({ kind }) => kind === "self-report").map(({ citations }) => citations[0])).toEqual([
+    "record-knows",
+    "record-learner",
+  ]);
   expect(warnings.find(({ kind }) => kind === "edge-contradiction")?.citations).toEqual([
     "record-dependent",
     "record-failure",
@@ -115,13 +95,12 @@ test("all seven warnings have positive dogfood cases and cite original evidence"
   for (const warning of warnings) {
     if (warning.kind === "unused") expect(warning.citations).toEqual([]);
     else expect(warning.citations.length).toBeGreaterThan(0);
-    expect(
-      warning.citations.every((id) => input.records.some(({ envelope }) => envelope.id === id)),
-    ).toBe(true);
+    expect(warning.citations.every((id) => input.records.some(({ envelope }) => envelope.id === id))).toBe(true);
   }
-  expect(
-    warningsDefault({ ...input, mistakes }, ["node-isolated"]).map(({ kind }) => kind),
-  ).toEqual(["unused", "homeless"]);
+  expect(warningsDefault({ ...input, mistakes }, ["node-isolated"]).map(({ kind }) => kind)).toEqual([
+    "unused",
+    "homeless",
+  ]);
   expect(JSON.stringify(warnings)).not.toMatch(/score|rank|weight/);
 });
 
@@ -134,9 +113,7 @@ test("mistake assessment rejects fabricated, retracted, non-summary and single-N
       input.memories,
     ),
   ).toThrow("unsupported Record");
-  expect(() => validateMistakeAssessments([assessment], input.state, [])).toThrow(
-    "unsupported Record",
-  );
+  expect(() => validateMistakeAssessments([assessment], input.state, [])).toThrow("unsupported Record");
   expect(() =>
     validateMistakeAssessments(
       [{ ...assessment, recordIds: ["record-failure", "record-failure"] }],
@@ -144,29 +121,25 @@ test("mistake assessment rejects fabricated, retracted, non-summary and single-N
       input.memories,
     ),
   ).toThrow("distinct citations");
-  const retracted = projectDefault(
-    [...input.records, retraction("undo", "record-failure")],
-    input.graph,
-    context,
-    { claims: { "record-knows": ["node-base"] }, homes: { "record-homeless": [] } },
-  );
+  const retracted = projectDefault([...input.records, retraction("undo", "record-failure")], input.graph, context, {
+    claims: { "record-knows": ["node-base"] },
+    homes: { "record-homeless": [] },
+  });
   expect(() => warningsDefault({ ...input, state: retracted, mistakes: [assessment] })).toThrow(
     "inactive or unsupported",
   );
   const remapped = projectDefault(input.records, input.graph, context, {
     homes: { "record-other-failure": ["node-base"], "record-homeless": [] },
   });
-  expect(() => validateMistakeAssessments([assessment], remapped, input.memories)).toThrow(
-    "unsupported Record",
-  );
+  expect(() => validateMistakeAssessments([assessment], remapped, input.memories)).toThrow("unsupported Record");
 });
 
 test("a summary-backed assessment spans its Nodes and never alters the projected state", async () => {
   const input = await fixture();
   const before = JSON.stringify(input.state);
-  expect(
-    validateMistakeAssessments([assessment], input.state, input.memories).map(({ nodes }) => nodes),
-  ).toEqual([["node-base", "node-middle"]]);
+  expect(validateMistakeAssessments([assessment], input.state, input.memories).map(({ nodes }) => nodes)).toEqual([
+    ["node-base", "node-middle"],
+  ]);
   expect(JSON.stringify(input.state)).toBe(before);
 });
 
@@ -178,9 +151,6 @@ test("indicators do not infer contradictions from aided prerequisites or single 
   ];
   const indicators = indicatorsDefault(projectDefault(records, graph, context), graph);
   expect(
-    indicators.some(
-      ({ kind }) =>
-        kind === "edge-contradiction" || kind === "item-outcomes" || kind === "instability",
-    ),
+    indicators.some(({ kind }) => kind === "edge-contradiction" || kind === "item-outcomes" || kind === "instability"),
   ).toBe(false);
 });

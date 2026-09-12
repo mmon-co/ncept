@@ -140,9 +140,7 @@ test("reification creates an independent root from exactly the View result", () 
   expect(resolvedSource.nodes.map(({ id }) => id)).toContain("node-outside-view");
   expect(selected.nodes.map(({ id }) => id)).not.toContain("node-outside-view");
   expect(resolvedTarget.nodes.map(({ id }) => id)).not.toContain("node-outside-view");
-  expect(resolvedTarget.tags.map((tag) => tag.name)).toContain(
-    "patch:patch-independent:curriculum",
-  );
+  expect(resolvedTarget.tags.map((tag) => tag.name)).toContain("patch:patch-independent:curriculum");
   expect(resolvedTarget.tags.map((tag) => tag.name)).not.toContain("patch:patch-source:curriculum");
   expect(() => reifyView(selected, { ...target, identity: foundation.ref.identity })).toThrow(
     "a reified Patch must have a new opaque identity",

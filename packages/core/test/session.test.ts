@@ -65,12 +65,8 @@ describe("Session scope and concurrency (pursue.lesson)", () => {
   test("empty scope does not overlap but cannot bypass graph exclusivity", () => {
     const empty = session({ view: { id: "view-empty", nodeIds: [] } });
     expect(canOpen([candidate], empty, now, idleHorizon)).toEqual({ kind: "ok" });
-    expect(canOpen([empty], { ...candidate, editsGraph: true }, now, idleHorizon).kind).toBe(
-      "refused",
-    );
-    expect(canOpen([{ ...empty, editsGraph: true }], candidate, now, idleHorizon).kind).toBe(
-      "refused",
-    );
+    expect(canOpen([empty], { ...candidate, editsGraph: true }, now, idleHorizon).kind).toBe("refused");
+    expect(canOpen([{ ...empty, editsGraph: true }], candidate, now, idleHorizon).kind).toBe("refused");
   });
 
   test("expired lessons and graph editors no longer block", () => {
@@ -146,12 +142,8 @@ describe("Session idle expiry", () => {
       session({ openedAt: "2026-09-07T12:00:01Z", lastActivityAt: "2026-09-07T12:00:01Z" }),
     ];
     for (const malformed of invalid) {
-      expect(() => isExpired(malformed, now, idleHorizon)).toThrow(
-        "openedAt <= lastActivityAt <= now",
-      );
-      expect(() => canOpen([], malformed, now, idleHorizon)).toThrow(
-        "openedAt <= lastActivityAt <= now",
-      );
+      expect(() => isExpired(malformed, now, idleHorizon)).toThrow("openedAt <= lastActivityAt <= now");
+      expect(() => canOpen([], malformed, now, idleHorizon)).toThrow("openedAt <= lastActivityAt <= now");
       expect(() => canOpen([candidate, malformed], candidate, now, idleHorizon)).toThrow(
         "openedAt <= lastActivityAt <= now",
       );

@@ -52,9 +52,7 @@ test("a non-default numeric stub fills the complete PedagogicalTheory slot with 
     citations: [],
     style: { color: "blue" },
   });
-  expect(theory.display({ id: "edge-test", from: node.id, to: node.id }, projected).label).toBe(
-    "sample",
-  );
+  expect(theory.display({ id: "edge-test", from: node.id, to: node.id }, projected).label).toBe("sample");
   expect(theory.queryTokens.sampled?.(projected, graph)).toEqual(new Set(["node-sample"]));
   expect(theory.tools).toHaveLength(1);
   expect(theory.skills.bundles[0]?.name).toBe("sample");
@@ -83,30 +81,22 @@ test("package resolution preserves invocable typed host ports and session metada
 test("theory digests cover artifact, schema identities and effective parameters, never Skill-only content", () => {
   const theory = sampleTheory();
   const digest = pedagogicalTheoryDigest(theory);
-  expect(
-    pedagogicalTheoryDigest({ ...theory, implementationDigest: contentDigest("artifact v2") }),
-  ).not.toBe(digest);
+  expect(pedagogicalTheoryDigest({ ...theory, implementationDigest: contentDigest("artifact v2") })).not.toBe(digest);
   expect(
     pedagogicalTheoryDigest({
       ...theory,
-      schemas: [
-        { ...sampleSchema, ref: { ...sampleSchema.ref, digest: contentDigest("schema v2") } },
-      ],
+      schemas: [{ ...sampleSchema, ref: { ...sampleSchema.ref, digest: contentDigest("schema v2") } }],
     }),
   ).not.toBe(digest);
   expect(pedagogicalTheoryDigest({ ...theory, parameters: { weight: 2 } })).not.toBe(digest);
   expect(pedagogicalTheoryDigest(theory, { weight: 2 })).toBe(
     pedagogicalTheoryDigest({ ...theory, parameters: { weight: 2 } }),
   );
-  expect(pedagogicalTheoryDigest({ ...theory, basePrompt: "new", skills: { bundles: [] } })).toBe(
-    digest,
+  expect(pedagogicalTheoryDigest({ ...theory, basePrompt: "new", skills: { bundles: [] } })).toBe(digest);
+  expect(() => pedagogicalTheoryDigest({ ...theory, parameters: { unknown: 2 } })).toThrow("Invalid theory parameters");
+  expect(() => pedagogicalTheoryDigest({ ...theory, schemas: [sampleSchema, sampleSchema] })).toThrow(
+    "Invalid theory schema",
   );
-  expect(() => pedagogicalTheoryDigest({ ...theory, parameters: { unknown: 2 } })).toThrow(
-    "Invalid theory parameters",
-  );
-  expect(() =>
-    pedagogicalTheoryDigest({ ...theory, schemas: [sampleSchema, sampleSchema] }),
-  ).toThrow("Invalid theory schema");
 });
 
 test("exact release references preserve the containing theory origin and root-only Skill overlays", () => {
@@ -137,10 +127,7 @@ test("exact release references preserve the containing theory origin and root-on
   expect(resolved.basePromptDigest).toBe(contentDigest("Complete new prompt"));
   expect(resolved.skillCatalogDigest).toBe(contentDigest([replacement]));
   const inherited = resolvePedagogy(
-    source([
-      root,
-      { ...overlay, theory: undefined, skillOverlay: undefined, basePrompt: undefined },
-    ]),
+    source([root, { ...overlay, theory: undefined, skillOverlay: undefined, basePrompt: undefined }]),
     overlay.ref,
   );
   expect(inherited.theory.origin).toEqual(root.ref);
@@ -171,9 +158,9 @@ test("package resolution rejects missing exact releases, cycles and invalid Skil
   };
   const cycle = { ...overlay, theory: { kind: "reference" as const, release: overlay.ref } };
   expect(() => resolvePedagogy(source([root, cycle]), cycle.ref)).toThrow("cycle");
-  expect(() =>
-    resolvePedagogy(source([root]), { ...root.ref, digest: contentDigest("wrong exact release") }),
-  ).toThrow("unavailable");
+  expect(() => resolvePedagogy(source([root]), { ...root.ref, digest: contentDigest("wrong exact release") })).toThrow(
+    "unavailable",
+  );
   expect(() =>
     resolvePedagogy(
       source([root, { ...overlay, skillOverlay: [{ kind: "disable", target: "missing" }] }]),
@@ -237,30 +224,21 @@ test("theory-scoped accepted parameters persist independently of the log and cha
   await store.setCurrentParameterOverride(scope, override.id);
   expect(await store.currentParameterOverride(scope)).toEqual(override);
   expect(await store.readParameterOverride(scope, override.id)).toEqual(override);
-  expect(
-    await store.currentParameterOverride({ ...scope, profile: "profile-other" }),
-  ).toBeUndefined();
+  expect(await store.currentParameterOverride({ ...scope, profile: "profile-other" })).toBeUndefined();
   expect(await store.readTrail(scope)).toEqual(trail);
   expect(store.saveParameterOverride(scope, override)).rejects.toThrow();
-  expect(store.setCurrentParameterOverride(scope, "parameter-override-missing")).rejects.toThrow(
-    "unavailable",
+  expect(store.setCurrentParameterOverride(scope, "parameter-override-missing")).rejects.toThrow("unavailable");
+  expect(() =>
+    resolveTheoryParameters({ ...theory, origin: { ...theory.origin, identity: "pedagogy-other" } }, override),
+  ).toThrow("different Pedagogical theory");
+  expect(() => resolveTheoryParameters({ ...theory, digest: contentDigest("changed theory") }, override)).toThrow(
+    "different Pedagogical theory",
   );
-  expect(() =>
-    resolveTheoryParameters(
-      { ...theory, origin: { ...theory.origin, identity: "pedagogy-other" } },
-      override,
-    ),
-  ).toThrow("different Pedagogical theory");
-  expect(() =>
-    resolveTheoryParameters({ ...theory, digest: contentDigest("changed theory") }, override),
-  ).toThrow("different Pedagogical theory");
   expect(() => resolveTheoryParameters(theory, { ...override, parameters: { weight: 3 } })).toThrow(
     "Invalid parameter override digest",
   );
-  expect(() =>
-    parameterOverride(theory, { ...override, parameters: { implementationDigest: "no" } }),
-  ).toThrow("Invalid theory parameters");
-  expect(() => parameterOverride(theory, { ...override, createdAt: "bad" })).toThrow(
-    "ISO timestamp",
+  expect(() => parameterOverride(theory, { ...override, parameters: { implementationDigest: "no" } })).toThrow(
+    "Invalid theory parameters",
   );
+  expect(() => parameterOverride(theory, { ...override, createdAt: "bad" })).toThrow("ISO timestamp");
 });

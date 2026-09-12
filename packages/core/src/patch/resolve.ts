@@ -54,10 +54,7 @@ function lockedBases(revision: PatchRevision): LockedBase[] {
       );
     const { entry, index } = match;
     used.add(index);
-    if (
-      entry.exact.identity !== requirement.identity ||
-      exactRelease(entry.exact) !== requirement.release
-    )
+    if (entry.exact.identity !== requirement.identity || exactRelease(entry.exact) !== requirement.release)
       throw new PatchCompileError(
         "invalid-bundle",
         `exact lock ${entry.exact.identity}@${exactRelease(entry.exact)} does not satisfy ${requirement.identity}@${requirement.release}`,
@@ -91,8 +88,7 @@ function orderRevisions(bundle: ClosedPatchBundle): {
     revisions.set(key, revision);
   }
   const terminal = revisions.get(exactPatchRefKey(bundle.terminal));
-  if (terminal === undefined)
-    throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+  if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
 
   const selectedByIdentity = new Map<PatchId, ExactPatchRef>();
   const active = new Set<string>();
@@ -182,10 +178,7 @@ function parseMaterial(value: unknown, patch: PatchId): Omit<ResolvedMaterial, "
     body.trim() === "" ||
     !isContentDigest(digest)
   )
-    throw new PatchCompileError(
-      "invalid-material-attachment",
-      `Patch ${patch} has malformed Material attachment`,
-    );
+    throw new PatchCompileError("invalid-material-attachment", `Patch ${patch} has malformed Material attachment`);
   return { kind, id, node, title, body, digest };
 }
 
@@ -216,10 +209,7 @@ function validateMaterials(
           `Material ${material.id} content digest does not match`,
         );
       if (seen.has(material.id))
-        throw new PatchCompileError(
-          "invalid-material-attachment",
-          `Material attachment ${material.id} is repeated`,
-        );
+        throw new PatchCompileError("invalid-material-attachment", `Material attachment ${material.id} is repeated`);
       seen.add(material.id);
       materials.push({ ...material, source: revision.ref });
     }
@@ -231,11 +221,7 @@ function contributionKey(source: ExactPatchRef, operationIndex: number): string 
   return `${exactPatchRefKey(source)}\0${operationIndex}`;
 }
 
-function maskedPropertyKey(
-  source: ExactPatchRef,
-  operationIndex: number,
-  property: string,
-): string {
+function maskedPropertyKey(source: ExactPatchRef, operationIndex: number, property: string): string {
   return `${contributionKey(source, operationIndex)}\0${property}`;
 }
 
@@ -257,29 +243,21 @@ function validateMaskTarget(
   appliedRevisions: ReadonlyMap<string, PatchRevision>,
 ): void {
   const source = appliedRevisions.get(exactPatchRefKey(mask.source));
-  if (source === undefined)
-    staleMask(owner, mask, "the exact source is not available earlier in scope");
+  if (source === undefined) staleMask(owner, mask, "the exact source is not available earlier in scope");
   if (!Number.isInteger(mask.operationIndex) || mask.operationIndex < 0)
     staleMask(owner, mask, "the operation index is invalid");
   const operation = source.delta.operations[mask.operationIndex];
   if (operation === undefined) staleMask(owner, mask, "the source operation does not exist");
 
   const matches =
-    (operation.kind === "add-node" &&
-      mask.entity.kind === "node" &&
-      operation.node.id === mask.entity.id) ||
-    (operation.kind === "add-edge" &&
-      mask.entity.kind === "edge" &&
-      operation.edge.id === mask.entity.id) ||
+    (operation.kind === "add-node" && mask.entity.kind === "node" && operation.node.id === mask.entity.id) ||
+    (operation.kind === "add-edge" && mask.entity.kind === "edge" && operation.edge.id === mask.entity.id) ||
     (operation.kind === "add-metadata-set" &&
       mask.entity.kind === "metadata-set" &&
       operation.metadataSet.id === mask.entity.id);
   if (!matches) staleMask(owner, mask, "the source operation contributes to a different entity");
   if (mask.property === undefined) return;
-  if (
-    operation.kind !== "add-metadata-set" ||
-    !Object.hasOwn(operation.metadataSet.properties, mask.property)
-  )
+  if (operation.kind !== "add-metadata-set" || !Object.hasOwn(operation.metadataSet.properties, mask.property))
     staleMask(owner, mask, "the source operation does not contribute that metadata property");
 }
 
@@ -335,13 +313,7 @@ function collectOperation(
   } else if (operation.kind === "define-tag") {
     collection.tags.push(operation.tag);
   } else {
-    registerMask(
-      owner,
-      operation.mask,
-      collection.appliedRevisions,
-      collection.masked,
-      collection.maskedProperties,
-    );
+    registerMask(owner, operation.mask, collection.appliedRevisions, collection.masked, collection.maskedProperties);
   }
 }
 
@@ -358,11 +330,7 @@ function mergeMetadataProperties(
     for (const [key, value] of Object.entries(contribution.value.properties)) {
       if (
         maskedProperties.has(
-          maskedPropertyKey(
-            contribution.provenance.patch,
-            contribution.provenance.operationIndex,
-            key,
-          ),
+          maskedPropertyKey(contribution.provenance.patch, contribution.provenance.operationIndex, key),
         )
       )
         continue;
@@ -408,10 +376,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
   const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
-  const metadataPropertyProvenance: Record<
-    MetadataSetId,
-    Record<string, ContributionProvenance[]>
-  > = {};
+  const metadataPropertyProvenance: Record<MetadataSetId, Record<string, ContributionProvenance[]>> = {};
 
   for (const [id, contributions] of nodeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
@@ -426,10 +391,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     const last = active.at(-1);
     if (first === undefined || last === undefined) continue;
     if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
-      throw new PatchCompileError(
-        "incompatible-contribution",
-        `edge '${id}' cannot change endpoints`,
-      );
+      throw new PatchCompileError("incompatible-contribution", `edge '${id}' cannot change endpoints`);
     edges.set(id, last.value);
     edgeProvenance[id] = active.map(({ provenance }) => provenance);
   }
@@ -471,21 +433,13 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
         name: `patch:${revision.ref.identity}:${label}`,
         authority: "patch",
         nodes: sorted(nodes.values())
-          .filter((node) =>
-            nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
-          )
+          .filter((node) => nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
           .map((node) => node.id),
         edges: sorted(edges.values())
-          .filter((edge) =>
-            edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))),
-          )
+          .filter((edge) => edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
           .map((edge) => edge.id),
         metadataSets: sorted(metadataSets.values())
-          .filter((set) =>
-            metadataProvenance[set.id]?.some((source) =>
-              closure.has(exactPatchRefKey(source.patch)),
-            ),
-          )
+          .filter((set) => metadataProvenance[set.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
           .map((set) => set.id),
       });
     }
@@ -509,10 +463,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       ...tag.metadataSets.filter((id) => !metadataSets.has(id)),
     ];
     if (dangling.length > 0)
-      throw new PatchCompileError(
-        "dangling-tag",
-        `tag '${tag.name}' targets missing entity '${dangling[0]}'`,
-      );
+      throw new PatchCompileError("dangling-tag", `tag '${tag.name}' targets missing entity '${dangling[0]}'`);
   }
 
   const patchMetadata: Record<PatchId, PatchMetadata> = {};

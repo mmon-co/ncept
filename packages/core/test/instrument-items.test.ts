@@ -31,9 +31,7 @@ const base: PatchRevision = {
           id: "metadata-primary-bank",
           subjects: [{ kind: "node", id: "node-items" }],
           properties: {
-            [ITEM_BANK_METADATA_PROPERTY]: [
-              JSON.stringify({ id: "item-retired", prompt: "Old wording" }),
-            ],
+            [ITEM_BANK_METADATA_PROPERTY]: [JSON.stringify({ id: "item-retired", prompt: "Old wording" })],
           },
         },
       },

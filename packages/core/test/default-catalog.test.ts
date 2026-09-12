@@ -25,18 +25,10 @@ import {
   type RecordId,
   type Session,
 } from "../src";
-import {
-  exactPatchRefKey,
-  type NodeId,
-  type ResolvedGraph,
-  type SemanticOperation,
-} from "../src/patch";
+import { exactPatchRefKey, type NodeId, type ResolvedGraph, type SemanticOperation } from "../src/patch";
 import { at, fixtureGraph, patchRef } from "./default-theory-fixture";
 
-const resolved = resolvePedagogy(
-  { get: () => PLATFORM_PEDAGOGY_RELEASE },
-  PLATFORM_PEDAGOGY_RELEASE.ref,
-);
+const resolved = resolvePedagogy({ get: () => PLATFORM_PEDAGOGY_RELEASE }, PLATFORM_PEDAGOGY_RELEASE.ref);
 const clock = {
   at,
   parameters: resolved.theory.theory.parameters,
@@ -46,8 +38,7 @@ const clock = {
 function host() {
   let graph = fixtureGraph([
     ...["node-base", "node-middle", "node-isolated"].map((id): SemanticOperation => {
-      if (id !== "node-base" && id !== "node-middle" && id !== "node-isolated")
-        throw new Error("Invalid Node");
+      if (id !== "node-base" && id !== "node-middle" && id !== "node-isolated") throw new Error("Invalid Node");
       return {
         kind: "add-metadata-set",
         metadataSet: {
@@ -89,8 +80,7 @@ function host() {
     recording: {
       validation: {
         schemas: defaultPedagogicalTheory.schemas,
-        resolveGraph: (ref) =>
-          exactPatchRefKey(ref) === exactPatchRefKey(patchRef) ? fixtureGraph() : graph,
+        resolveGraph: (ref) => (exactPatchRefKey(ref) === exactPatchRefKey(patchRef) ? fixtureGraph() : graph),
       },
       envelope: (schema) => ({
         id,
@@ -103,8 +93,7 @@ function host() {
         validateRecordJson(serializeRecord(record), ports.recording.validation);
         const existing = records.find(({ envelope }) => envelope.id === record.envelope.id);
         if (existing) {
-          if (serializeRecord(existing) !== serializeRecord(record))
-            throw new Error("Conflicting attempt retry");
+          if (serializeRecord(existing) !== serializeRecord(record)) throw new Error("Conflicting attempt retry");
         } else records.push(record);
       },
       get scope() {
@@ -135,16 +124,11 @@ function host() {
       },
       rehomingModel: async ({ task, candidates }) => {
         modelCalls++;
-        return task.includes("passage")
-          ? (candidates.find(({ node }) => node === "node-target")?.node ?? null)
-          : null;
+        return task.includes("passage") ? (candidates.find(({ node }) => node === "node-target")?.node ?? null) : null;
       },
     },
   };
-  const tools: ToolSet = Object.assign(
-    {},
-    ...resolved.theory.theory.tools.map((factory) => factory(ports)),
-  );
+  const tools: ToolSet = Object.assign({}, ...resolved.theory.theory.tools.map((factory) => factory(ports)));
   async function call(name: string, input: unknown) {
     const tool = tools[name];
     if (!tool?.execute) throw new Error(`Unimplemented transition ${name}`);
@@ -203,23 +187,16 @@ function session(nodes: readonly NodeId[]): Session {
 
 test("catalog tool vocabulary is exactly the assembled theory surface, with no unimplemented theory transitions", () => {
   const fixture = host();
-  const catalog = [tutorSystemPrompt(), ...listSkills().map(({ name }) => skillBody(name))].join(
-    "\n",
-  );
+  const catalog = [tutorSystemPrompt(), ...listSkills().map(({ name }) => skillBody(name))].join("\n");
   // Backticked call names are the catalog's executable theory transition notation.
   const named = new Set(
     [...catalog.matchAll(/`([a-z_]+)(?:\(|`)/g)]
       .map((match) => match[1])
       .filter(
-        (name) =>
-          !["knows", "forgotten", "unfamiliar", "unaided", "error", "grader", "skill"].includes(
-            name ?? "",
-          ),
+        (name) => !["knows", "forgotten", "unfamiliar", "unaided", "error", "grader", "skill"].includes(name ?? ""),
       ),
   );
-  expect([...named].sort((a, b) => (a ?? "").localeCompare(b ?? ""))).toEqual(
-    Object.keys(fixture.tools).sort(),
-  );
+  expect([...named].sort((a, b) => (a ?? "").localeCompare(b ?? ""))).toEqual(Object.keys(fixture.tools).sort());
   expect(listSkills().find(({ name }) => name === "realignment")?.entry).toEqual(["learner"]);
   expect(listSkills().find(({ name }) => name === "evaluator-sweep")?.entry).toEqual(["system"]);
 });
@@ -244,9 +221,7 @@ test("catalog story A: empty trail to claims, approved scope, probing and first 
     nodes: ["node-target"],
     revision: fixture.revision(),
   });
-  expect(await fixture.call("probes", {})).toMatchObject([
-    { node: "node-target", label: "probably-known" },
-  ]);
+  expect(await fixture.call("probes", {})).toMatchObject([{ node: "node-target", label: "probably-known" }]);
   expect(await fixture.call("trail", { node: "node-target" })).toMatchObject({
     rule: "knows-claim-newer-than-failure",
   });
@@ -267,9 +242,7 @@ test("catalog story A: empty trail to claims, approved scope, probing and first 
       priority: 1,
     },
   });
-  expect(await fixture.call("mission", {})).toMatchObject([
-    { record: { payload: { missionId: "classics" } } },
-  ]);
+  expect(await fixture.call("mission", {})).toMatchObject([{ record: { payload: { missionId: "classics" } } }]);
   const open = session([
     ...new Set([
       ...routeDefault(await fixture.ports.read(), "node-target").map(({ node }) => node),
@@ -307,10 +280,7 @@ test("catalog story A: empty trail to claims, approved scope, probing and first 
     node: "node-base",
     task: "Read a different character",
   });
-  expect(await fixture.call("frontier", {})).toMatchObject([
-    { node: "node-isolated" },
-    { node: "node-middle" },
-  ]);
+  expect(await fixture.call("frontier", {})).toMatchObject([{ node: "node-isolated" }, { node: "node-middle" }]);
   // Distinct checks on one Node both count; no segment/Node-level deduplication.
   expect((await fixture.state()).nodes["node-base"]?.label).toBe("demonstrated");
   expect(fixture.records).toHaveLength(5);
@@ -324,9 +294,7 @@ test("probably-known probe target stays in route-derived scope, overlap checks a
     nodes: ["node-isolated"],
     revision: fixture.revision(),
   });
-  expect(await fixture.call("probes", {})).toMatchObject([
-    { node: "node-isolated", label: "probably-known" },
-  ]);
+  expect(await fixture.call("probes", {})).toMatchObject([{ node: "node-isolated", label: "probably-known" }]);
   expect(await fixture.call("route", { target: "node-isolated" })).toEqual([]);
   const route = routeDefault(await fixture.ports.read(), "node-isolated");
   const scope = [...new Set([...route.map(({ node }) => node), "node-isolated" as const])];
@@ -381,9 +349,7 @@ test("claim warnings exclude pending decisions but retain explicit homelessness 
     nodes: prior.nodes.filter(({ id }) => id !== "node-isolated"),
   });
   expect(await fixture.call("warnings", {})).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ kind: "homeless", citations: ["record-1"] }),
-    ]),
+    expect.arrayContaining([expect.objectContaining({ kind: "homeless", citations: ["record-1"] })]),
   );
 });
 
@@ -490,19 +456,18 @@ test("catalog story C: disputed record retracts and replaces, realignment refine
     nodes: prior.nodes.filter(({ id }) => id !== "node-isolated"),
   };
   fixture.revise(next);
-  expect(
-    fixture.call("refine_records", { revision: exactPatchRefKey(prior.terminal) }),
-  ).rejects.toThrow("different graph revision");
+  expect(fixture.call("refine_records", { revision: exactPatchRefKey(prior.terminal) })).rejects.toThrow(
+    "different graph revision",
+  );
   expect(await fixture.call("warnings", {})).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ kind: "homeless", citations: ["record-removed-task"] }),
-    ]),
+    expect.arrayContaining([expect.objectContaining({ kind: "homeless", citations: ["record-removed-task"] })]),
   );
   await fixture.call("refine_records", { revision: fixture.revision() });
   expect(fixture.modelCalls()).toBe(1);
-  expect(
-    (await fixture.state()).nodes["node-target"]?.records.map(({ envelope }) => envelope.id),
-  ).toEqual(["record-corrected", "record-removed-task"]);
+  expect((await fixture.state()).nodes["node-target"]?.records.map(({ envelope }) => envelope.id)).toEqual([
+    "record-corrected",
+    "record-removed-task",
+  ]);
   expect((await fixture.state()).nodes["node-target"]?.label).toBe("demonstrated");
   await fixture.call("refine_records", { revision: fixture.revision() });
   expect(fixture.modelCalls()).toBe(1);
@@ -515,9 +480,10 @@ test("catalog story C: disputed record retracts and replaces, realignment refine
     nodes: ["node-base"],
     revision: fixture.revision(),
   });
-  expect(
-    (await fixture.state()).nodes["node-target"]?.records.map(({ envelope }) => envelope.id),
-  ).toEqual(["record-corrected", "record-removed-task"]);
+  expect((await fixture.state()).nodes["node-target"]?.records.map(({ envelope }) => envelope.id)).toEqual([
+    "record-corrected",
+    "record-removed-task",
+  ]);
   expect(fixture.memories.get("node-target")?.originals).toHaveLength(4);
 });
 
@@ -531,9 +497,7 @@ test("background tools reject missing, retracted, non-claim, foreign-schema and 
   fixture.next("record-claim");
   await fixture.call("record_claim", { statement: "I know it", stance: "knows" });
   expect(attach("record-claim", ["node-missing"])).rejects.toThrow("distinct current Nodes");
-  expect(attach("record-claim", ["node-base", "node-base"])).rejects.toThrow(
-    "distinct current Nodes",
-  );
+  expect(attach("record-claim", ["node-base", "node-base"])).rejects.toThrow("distinct current Nodes");
   await attach("record-claim", []);
   expect((await fixture.state()).nodes["node-base"]?.citations).toEqual(["record-1"]);
   fixture.next("record-retract-claim");

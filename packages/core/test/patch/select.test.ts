@@ -143,20 +143,14 @@ test("dependent cones include their targets and walk outgoing edges, composing w
   expect(dependents).toEqual({ dependents: { targets: ["node-b"] } });
   expect(selectedIds(dependents).nodes).toEqual(["node-b", "node-c"]);
   expect(selectedIds(dependents).edges).toEqual(["edge-bc"]);
-  expect(selectedIds({ dependents: { targets: ["node-c", "node-a"] } }).nodes).toEqual([
-    "node-a",
-    "node-b",
-    "node-c",
-  ]);
+  expect(selectedIds({ dependents: { targets: ["node-c", "node-a"] } }).nodes).toEqual(["node-a", "node-b", "node-c"]);
   expect(selectedIds({ intersection: [dependents, { tag: "left" }] }).nodes).toEqual(["node-b"]);
   expect(selectedIds({ union: [dependents, { cone: { targets: ["node-a"] } }] }).nodes).toEqual([
     "node-a",
     "node-b",
     "node-c",
   ]);
-  expect(
-    selectedIds({ difference: [{ cone: { targets: ["node-c"] } }, dependents] }).nodes,
-  ).toEqual(["node-a"]);
+  expect(selectedIds({ difference: [{ cone: { targets: ["node-c"] } }, dependents] }).nodes).toEqual(["node-a"]);
   expect(selectedIds({ difference: [dependents, { tag: "left" }] }).nodes).toEqual(["node-c"]);
 });
 

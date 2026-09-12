@@ -60,11 +60,9 @@ function setup(decorate: (store: LocalDirectoryCoreStore) => SpacedReviewStore =
     scope,
     store: decorate(store),
     instruments: {
-      learnerState: async () =>
-        projectDefault((await store.readTrail(scope)).records, fixtureGraph(), context),
+      learnerState: async () => projectDefault((await store.readTrail(scope)).records, fixtureGraph(), context),
       trail: async (node) =>
-        projectDefault((await store.readTrail(scope)).records, fixtureGraph(), context).nodes[node]
-          ?.records ?? [],
+        projectDefault((await store.readTrail(scope)).records, fixtureGraph(), context).nodes[node]?.records ?? [],
       content: async (node) => ({
         node,
         label: "Test",
@@ -103,8 +101,7 @@ function setup(decorate: (store: LocalDirectoryCoreStore) => SpacedReviewStore =
         validateRecordJson(serialized, validation);
         const previous = await store.readRecordJson(scope, record.envelope.id);
         if (previous === undefined) await store.appendRecord(scope, record, validation);
-        else if (previous !== serialized)
-          throw new Error("attempt already exists with different evidence");
+        else if (previous !== serialized) throw new Error("attempt already exists with different evidence");
       }
     await playground.appendGrade(attempted);
   }
@@ -139,9 +136,7 @@ test("an attempt reaches the log only through the theory's attempt hook: one dem
     outcome: "success",
     unaided: true,
   });
-  expect((await playground.instruments.learnerState()).nodes["node-base"]?.label).toBe(
-    "demonstrated",
-  );
+  expect((await playground.instruments.learnerState()).nodes["node-base"]?.label).toBe("demonstrated");
   await attempt({ ...grade, id: "srs-grade-third", answer: "I don't recall", grade: "again" });
   expect((await store.readTrail(scope)).records[2]?.payload).toMatchObject({
     grader: "learner",
@@ -186,9 +181,7 @@ test("the platform validates hook inputs and outputs against the Playground's de
     ),
   ).rejects.toThrow("Invalid spaced-review.attempt output");
   // A card another theory annotated cannot yield this theory's demonstrations.
-  expect(() => attemptSpacedReview({ item: { ...item, annotation: "aided" }, grade })).toThrow(
-    "annotation",
-  );
+  expect(() => attemptSpacedReview({ item: { ...item, annotation: "aided" }, grade })).toThrow("annotation");
 });
 
 test("author decides unaided from the card's form and follows every edit; two Nodes give two demonstrations", async () => {
@@ -234,12 +227,8 @@ test("author decides unaided from the card's form and follows every edit; two No
     ["record-srs-grade-pair-1", "node-dependent"],
     ["record-srs-grade-pair-2", "node-base"],
   ]);
-  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, answer: " " } })).toThrow(
-    "attempt retrieval",
-  );
-  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, grade: "again" } })).toThrow(
-    "exact match",
-  );
+  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, answer: " " } })).toThrow("attempt retrieval");
+  expect(() => attemptSpacedReview({ item: edited, grade: { ...grade, grade: "again" } })).toThrow("exact match");
   expect(decideReviewGrade({ answer: "42", expected: "42", latencyMs: 1000 })).toEqual({
     grade: "easy",
     exactMatch: true,
@@ -267,16 +256,12 @@ test("a failure between the log and the grade store is retryable without duplica
   expect(attempt(grade)).rejects.toThrow("injected grade-store failure");
   expect((await store.readTrail(scope)).records).toHaveLength(1);
   expect(await playground.grades()).toHaveLength(0);
-  expect(attempt({ ...grade, answer: "wrong", grade: "again" })).rejects.toThrow(
-    "different evidence",
-  );
+  expect(attempt({ ...grade, answer: "wrong", grade: "again" })).rejects.toThrow("different evidence");
   await attempt(grade);
   await attempt(grade);
   expect((await store.readTrail(scope)).records).toHaveLength(1);
   expect(await playground.grades()).toEqual([grade]);
-  expect(playground.appendGrade({ ...grade, latencyMs: 6000 })).rejects.toThrow(
-    "different contents",
-  );
+  expect(playground.appendGrade({ ...grade, latencyMs: 6000 })).rejects.toThrow("different contents");
 });
 
 test("cards are live items: create, edit, delete, due scheduling and cap are method-local", async () => {

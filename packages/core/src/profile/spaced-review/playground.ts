@@ -131,11 +131,7 @@ export interface ReviewGradeDecision {
  * theory's hooks around these calls and appends what they return. */
 export interface SpacedReviewPlayground {
   readonly author: (item: SpacedReviewItem, annotation: unknown) => Promise<SpacedReviewCard>;
-  readonly edit: (
-    id: SpacedReviewCardId,
-    edit: SpacedReviewCardEdit,
-    annotation: unknown,
-  ) => Promise<SpacedReviewCard>;
+  readonly edit: (id: SpacedReviewCardId, edit: SpacedReviewCardEdit, annotation: unknown) => Promise<SpacedReviewCard>;
   readonly delete: (id: SpacedReviewCardId) => Promise<void>;
   readonly card: (id: SpacedReviewCardId) => Promise<SpacedReviewCard | undefined>;
   readonly cards: () => Promise<readonly SpacedReviewCard[]>;
@@ -204,8 +200,7 @@ export function parseSpacedReviewCard(value: unknown): SpacedReviewCard {
   if (!isCardId(card.id)) throw new Error("invalid spaced-review card id");
   if (typeof card.createdAt !== "string") throw new Error("invalid spaced-review card createdAt");
   assertTimestamp(card.createdAt, "Card createdAt");
-  if (card.format !== "recall" && card.format !== "application")
-    throw new Error("invalid spaced-review card format");
+  if (card.format !== "recall" && card.format !== "application") throw new Error("invalid spaced-review card format");
   if (
     typeof card.category !== "string" ||
     typeof card.front !== "string" ||
@@ -245,18 +240,9 @@ export function parseSpacedReviewGrade(value: unknown): SpacedReviewGrade {
   if (typeof grade.gradedAt !== "string") throw new Error("invalid spaced-review grade gradedAt");
   assertTimestamp(grade.gradedAt, "Grade gradedAt");
   if (typeof grade.answer !== "string") throw new Error("invalid spaced-review grade answer");
-  if (
-    typeof grade.latencyMs !== "number" ||
-    !Number.isFinite(grade.latencyMs) ||
-    grade.latencyMs < 0
-  )
+  if (typeof grade.latencyMs !== "number" || !Number.isFinite(grade.latencyMs) || grade.latencyMs < 0)
     throw new Error("grade latency must be a non-negative finite number");
-  if (
-    grade.grade !== "again" &&
-    grade.grade !== "hard" &&
-    grade.grade !== "good" &&
-    grade.grade !== "easy"
-  )
+  if (grade.grade !== "again" && grade.grade !== "hard" && grade.grade !== "good" && grade.grade !== "easy")
     throw new Error("invalid spaced-review grade");
   return {
     id: grade.id,
@@ -285,8 +271,7 @@ export function decideReviewGrade(input: {
   let base: Grade;
   if (exactMatch) base = "good";
   else {
-    if (input.selfGrade === undefined)
-      throw new Error("a non-matching answer requires a self-grade");
+    if (input.selfGrade === undefined) throw new Error("a non-matching answer requires a self-grade");
     base = input.selfGrade;
   }
   if (base !== "good") return { grade: base, exactMatch };
@@ -303,8 +288,7 @@ export function spacedReviewDueQueue(input: {
   readonly cap: number;
 }): readonly DueCard[] {
   assertTimestamp(input.now, "Due queue time");
-  if (!Number.isInteger(input.cap) || input.cap < 0)
-    throw new Error("due queue cap must be a non-negative integer");
+  if (!Number.isInteger(input.cap) || input.cap < 0) throw new Error("due queue cap must be a non-negative integer");
   const gradesByCard = new Map<SpacedReviewCardId, SpacedReviewGrade[]>();
   for (const grade of input.grades) {
     parseSpacedReviewGrade(grade);
@@ -324,9 +308,7 @@ export function spacedReviewDueQueue(input: {
     );
     return isDue(scheduler, Date.parse(input.now)) ? [{ card, due: scheduler.due }] : [];
   });
-  due.sort(
-    (left, right) => left.due.localeCompare(right.due) || left.card.id.localeCompare(right.card.id),
-  );
+  due.sort((left, right) => left.due.localeCompare(right.due) || left.card.id.localeCompare(right.card.id));
 
   const categories = new Map<string, DueCard[]>();
   for (const entry of due) {
@@ -337,8 +319,7 @@ export function spacedReviewDueQueue(input: {
   const queues = [...categories.entries()]
     .sort(
       ([leftName, left], [rightName, right]) =>
-        (left[0]?.due ?? "").localeCompare(right[0]?.due ?? "") ||
-        leftName.localeCompare(rightName),
+        (left[0]?.due ?? "").localeCompare(right[0]?.due ?? "") || leftName.localeCompare(rightName),
     )
     .map(([, entries]) => entries);
   const result: DueCard[] = [];
@@ -394,16 +375,11 @@ export function spacedReviewPlayground(input: {
     async appendGrade(grade) {
       const parsed = parseSpacedReviewGrade(grade);
       await existing(parsed.cardId);
-      if (parsed.answer.trim() === "")
-        throw new Error("attempt retrieval before revealing the answer");
-      const previous = (await input.store.readSpacedReviewGrades(input.scope)).find(
-        ({ id }) => id === parsed.id,
-      );
+      if (parsed.answer.trim() === "") throw new Error("attempt retrieval before revealing the answer");
+      const previous = (await input.store.readSpacedReviewGrades(input.scope)).find(({ id }) => id === parsed.id);
       if (previous === undefined) await input.store.appendSpacedReviewGrade(input.scope, parsed);
       else if (JSON.stringify(parseSpacedReviewGrade(previous)) !== JSON.stringify(parsed))
-        throw new Error(
-          `spaced-review attempt ${parsed.id} already exists with different contents`,
-        );
+        throw new Error(`spaced-review attempt ${parsed.id} already exists with different contents`);
     },
     grades: () => input.store.readSpacedReviewGrades(input.scope),
     async dueQueue(now, cap) {

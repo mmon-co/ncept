@@ -31,12 +31,10 @@ export function fixtureGraph(metadata: readonly SemanticOperation[] = []) {
         metadata: { properties: {}, citations: [] },
         delta: {
           operations: [
-            ...["node-base", "node-middle", "node-target", "node-isolated"].map(
-              (id): SemanticOperation => {
-                if (!isNodeId(id)) throw new Error("invalid fixture node");
-                return { kind: "add-node", node: { id } };
-              },
-            ),
+            ...["node-base", "node-middle", "node-target", "node-isolated"].map((id): SemanticOperation => {
+              if (!isNodeId(id)) throw new Error("invalid fixture node");
+              return { kind: "add-node", node: { id } };
+            }),
             {
               kind: "add-edge",
               edge: { id: "edge-middle-base", from: "node-base", to: "node-middle" },
@@ -56,11 +54,7 @@ function isNodeId(value: string): value is NodeId {
   return value.startsWith("node-");
 }
 
-export function demonstration(
-  id: string,
-  day: number,
-  payload: Partial<Demonstration> = {},
-): Record<Demonstration> {
+export function demonstration(id: string, day: number, payload: Partial<Demonstration> = {}): Record<Demonstration> {
   return {
     envelope: {
       id: `record-${id}`,

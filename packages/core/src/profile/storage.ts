@@ -1,36 +1,21 @@
 import type { Record, RecordId, RecordValidationContext, TrailSnapshot } from "./observations";
 import type { ExactPedagogyRelease } from "../pedagogy/release";
 import type { ParameterOverride, ParameterOverrideId } from "../pedagogy/theory";
-import type {
-  SpacedReviewCard,
-  SpacedReviewCardId,
-  SpacedReviewGrade,
-} from "./spaced-review/playground";
+import type { SpacedReviewCard, SpacedReviewCardId, SpacedReviewGrade } from "./spaced-review/playground";
 import type { ProfileScope } from "./scope";
 import type { View, ViewId } from "../patch/view";
 
 export interface TrailStore {
-  appendRecord(
-    scope: ProfileScope,
-    record: Record,
-    context: RecordValidationContext,
-  ): Promise<void>;
+  appendRecord(scope: ProfileScope, record: Record, context: RecordValidationContext): Promise<void>;
   /** Raw JSON is retained exactly, including whitespace, escapes, and number spellings. */
-  appendRecordJson(
-    scope: ProfileScope,
-    serialized: string,
-    context: RecordValidationContext,
-  ): Promise<void>;
+  appendRecordJson(scope: ProfileScope, serialized: string, context: RecordValidationContext): Promise<void>;
   readRecordJson(scope: ProfileScope, id: RecordId): Promise<string | undefined>;
   readTrail(scope: ProfileScope): Promise<TrailSnapshot>;
 }
 
 export interface ParameterOverrideStore {
   saveParameterOverride(scope: ProfileScope, override: ParameterOverride): Promise<void>;
-  readParameterOverride(
-    scope: ProfileScope,
-    id: ParameterOverrideId,
-  ): Promise<ParameterOverride | undefined>;
+  readParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<ParameterOverride | undefined>;
   currentParameterOverride(scope: ProfileScope): Promise<ParameterOverride | undefined>;
   setCurrentParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<void>;
 }
@@ -48,10 +33,7 @@ export interface PedagogySelectionStore {
 
 export interface SpacedReviewStore {
   saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): Promise<void>;
-  readSpacedReviewCard(
-    scope: ProfileScope,
-    id: SpacedReviewCardId,
-  ): Promise<SpacedReviewCard | undefined>;
+  readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<SpacedReviewCard | undefined>;
   listSpacedReviewCards(scope: ProfileScope): Promise<readonly SpacedReviewCard[]>;
   /** Delete is the only removal; grades on the item remain in the log. */
   deleteSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<void>;
@@ -60,9 +42,4 @@ export interface SpacedReviewStore {
 }
 
 export interface CoreStores
-  extends
-    TrailStore,
-    ParameterOverrideStore,
-    ViewStore,
-    PedagogySelectionStore,
-    SpacedReviewStore {}
+  extends TrailStore, ParameterOverrideStore, ViewStore, PedagogySelectionStore, SpacedReviewStore {}

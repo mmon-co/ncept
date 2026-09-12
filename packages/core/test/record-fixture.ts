@@ -142,9 +142,7 @@ export function sampleTheory(): PedagogicalTheory<Sample, SampleState, SampleToo
     },
     queryTokens: {
       sampled: (state, graph) =>
-        new Set(
-          graph.nodes.filter(({ id }) => (state.nodes[id]?.total ?? 0) > 0).map(({ id }) => id),
-        ),
+        new Set(graph.nodes.filter(({ id }) => (state.nodes[id]?.total ?? 0) > 0).map(({ id }) => id)),
     },
     tools: [
       (ports) => {
@@ -175,16 +173,12 @@ export function rootRelease(): PedagogyRelease<Sample, SampleState, SampleToolCo
   };
 }
 
-export function source(
-  releases: readonly PedagogyRelease<Sample, SampleState, SampleToolContext>[],
-) {
+export function source(releases: readonly PedagogyRelease<Sample, SampleState, SampleToolContext>[]) {
   return {
     get(ref: ExactPedagogyRelease) {
       return releases.find(
         ({ ref: candidate }) =>
-          candidate.identity === ref.identity &&
-          candidate.version === ref.version &&
-          candidate.digest === ref.digest,
+          candidate.identity === ref.identity && candidate.version === ref.version && candidate.digest === ref.digest,
       );
     },
   };

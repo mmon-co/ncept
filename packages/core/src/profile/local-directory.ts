@@ -42,11 +42,7 @@ function component(value: string, label: string): string {
 }
 
 function profileRoot(dd: DataDir, scope: ProfileScope): string {
-  return join(
-    dd.profilesDir,
-    component(scope.principal, "principal"),
-    component(scope.profile, "Profile"),
-  );
+  return join(dd.profilesDir, component(scope.principal, "principal"), component(scope.profile, "Profile"));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,11 +93,7 @@ function isExactPedagogyRelease(value: unknown): value is ExactPedagogyRelease {
   );
 }
 
-function readJson<Value>(
-  path: string,
-  accepts: (value: unknown) => value is Value,
-  label: string,
-): Value {
+function readJson<Value>(path: string, accepts: (value: unknown) => value is Value, label: string): Value {
   const value: unknown = JSON.parse(readFileSync(path, "utf8"));
   if (!accepts(value)) throw new Error(`${path}: invalid ${label}`);
   return value;
@@ -156,19 +148,11 @@ export class LocalDirectoryCoreStore implements CoreStores {
       });
   }
 
-  async appendRecord(
-    scope: ProfileScope,
-    record: LogRecord,
-    context: RecordValidationContext,
-  ): Promise<void> {
+  async appendRecord(scope: ProfileScope, record: LogRecord, context: RecordValidationContext): Promise<void> {
     await this.appendRecordJson(scope, serializeRecord(record), context);
   }
 
-  async appendRecordJson(
-    scope: ProfileScope,
-    serialized: string,
-    context: RecordValidationContext,
-  ): Promise<void> {
+  async appendRecordJson(scope: ProfileScope, serialized: string, context: RecordValidationContext): Promise<void> {
     const record = validateRecordJson(serialized, context);
     const prior = this.recordJson(scope).map(parseRecord);
     if (prior.some(({ envelope }) => envelope.id === record.envelope.id))
@@ -201,10 +185,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     );
   }
 
-  async readParameterOverride(
-    scope: ProfileScope,
-    id: ParameterOverrideId,
-  ): Promise<ParameterOverride | undefined> {
+  async readParameterOverride(scope: ProfileScope, id: ParameterOverrideId): Promise<ParameterOverride | undefined> {
     const path = this.parameterOverridePath(scope, id);
     return existsSync(path) ? readJson(path, isParameterOverride, "parameter override") : undefined;
   }
@@ -214,8 +195,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     if (!existsSync(path)) return undefined;
     const id = readJson(
       path,
-      (value): value is ParameterOverrideId =>
-        typeof value === "string" && /^parameter-override-.+/.test(value),
+      (value): value is ParameterOverrideId => typeof value === "string" && /^parameter-override-.+/.test(value),
       "parameter override pointer",
     );
     const override = await this.readParameterOverride(scope, id);
@@ -256,9 +236,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
 
   async selectedPedagogy(scope: ProfileScope): Promise<ExactPedagogyRelease | undefined> {
     const path = join(profileRoot(this.dataDir, scope), "pedagogy.json");
-    return existsSync(path)
-      ? readJson(path, isExactPedagogyRelease, "Pedagogy selection")
-      : undefined;
+    return existsSync(path) ? readJson(path, isExactPedagogyRelease, "Pedagogy selection") : undefined;
   }
 
   async saveSpacedReviewCard(scope: ProfileScope, card: SpacedReviewCard): Promise<void> {
@@ -266,10 +244,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     atomicJson(spacedReviewCardPath(this.dataDir, scope, parsed.id), parsed);
   }
 
-  async readSpacedReviewCard(
-    scope: ProfileScope,
-    id: SpacedReviewCardId,
-  ): Promise<SpacedReviewCard | undefined> {
+  async readSpacedReviewCard(scope: ProfileScope, id: SpacedReviewCardId): Promise<SpacedReviewCard | undefined> {
     const path = spacedReviewCardPath(this.dataDir, scope, id);
     if (!existsSync(path)) return undefined;
     return parseSpacedReviewCard(JSON.parse(readFileSync(path, "utf8")));
@@ -285,10 +260,7 @@ export class LocalDirectoryCoreStore implements CoreStores {
     return readdirSync(root)
       .filter((name) => name.endsWith(".json"))
       .map((name) => parseSpacedReviewCard(JSON.parse(readFileSync(join(root, name), "utf8"))))
-      .sort(
-        (left, right) =>
-          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-      );
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
   }
 
   async appendSpacedReviewGrade(scope: ProfileScope, grade: SpacedReviewGrade): Promise<void> {

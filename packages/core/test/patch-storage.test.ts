@@ -48,9 +48,7 @@ test("authored Edges accept only the dependency role", () => {
   };
   expect(() => validateRootPatchDefinition("patch-geometry", definition)).not.toThrow();
   Reflect.set(definition.edges[0] ?? {}, "role", "relation");
-  expect(() => validateRootPatchDefinition("patch-geometry", definition)).toThrow(
-    "the dependency role",
-  );
+  expect(() => validateRootPatchDefinition("patch-geometry", definition)).toThrow("the dependency role");
 });
 
 function head(repository: string): string {
@@ -113,9 +111,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   expect(readAuthoredPatchRevision(dd, reified.identity).ref.commit).toBe(
     head(join(patches, "authored", reified.identity)),
   );
-  expect(readAuthoredPatchRevision(dd, reified.identity).materials[0]?.id).toBe(
-    "material-triangles",
-  );
+  expect(readAuthoredPatchRevision(dd, reified.identity).materials[0]?.id).toBe("material-triangles");
   expect(() => loadPersonalPatchBundle(dd, main)).toThrow("Personal Patch does not exist");
 
   reviseAuthoredRootPatch(dd, main, root.identity, {
@@ -146,9 +142,7 @@ test("Patch authoring and Notebook changes are exact Git commits without recover
   );
   expect(() => loadPersonalPatchBundle(dd, scratch)).toThrow("Personal Patch does not exist");
   expect(
-    loadPersonalPatchBundle(dd, main).revisions.some(
-      ({ ref }) => ref.identity === scratchPatch.identity,
-    ),
+    loadPersonalPatchBundle(dd, main).revisions.some(({ ref }) => ref.identity === scratchPatch.identity),
   ).toBeFalse();
   expect(readdirSync(patches).sort()).toEqual(["authored"]);
   expect(existsSync(join(dd.root, "patches", "personal"))).toBeFalse();
@@ -174,42 +168,22 @@ test("authored Material dry runs share acceptance validation without writing Git
   });
   const repository = join(dd.root, "patches", "authored", patch.identity);
   const files = readdirSync(repository, { recursive: true });
-  validateAuthoredDocumentMaterialRevision(
-    dd,
-    main,
-    revision.ref,
-    "material-lines",
-    "The revised line",
-  );
+  validateAuthoredDocumentMaterialRevision(dd, main, revision.ref, "material-lines", "The revised line");
   expect(readAuthoredPatchRevision(dd, patch.identity)).toEqual(revision);
   expect(readdirSync(repository, { recursive: true })).toEqual(files);
   for (const [material, body] of [
     ["material-missing", "Body"],
     ["material-lines", " "],
   ] as const) {
-    expect(() =>
-      validateAuthoredDocumentMaterialRevision(dd, main, revision.ref, material, body),
-    ).toThrow();
+    expect(() => validateAuthoredDocumentMaterialRevision(dd, main, revision.ref, material, body)).toThrow();
     expect(() => reviseAuthoredDocumentMaterial(dd, main, revision.ref, material, body)).toThrow();
     expect(readAuthoredPatchRevision(dd, patch.identity)).toEqual(revision);
     expect(readdirSync(repository, { recursive: true })).toEqual(files);
   }
-  const applied = reviseAuthoredDocumentMaterial(
-    dd,
-    main,
-    revision.ref,
-    "material-lines",
-    "The revised line",
-  );
+  const applied = reviseAuthoredDocumentMaterial(dd, main, revision.ref, "material-lines", "The revised line");
   expect(applied.materials[0]?.body).toBe("The revised line");
   expect(() =>
-    validateAuthoredDocumentMaterialRevision(
-      dd,
-      main,
-      revision.ref,
-      "material-lines",
-      "Another edit",
-    ),
+    validateAuthoredDocumentMaterialRevision(dd, main, revision.ref, "material-lines", "Another edit"),
   ).toThrow("changed before");
 });
 
@@ -234,10 +208,7 @@ test("an adopted release keeps its Profile's later edits out of the exact revisi
   const current = readPersonalPatch(dd, main, { kind: "absent" });
   expect(current.ref.commit).toBe(notebook.ref.commit);
   expect(current.bases).toEqual([release]);
-  expect(current.graph.nodes.map(({ id }) => id).toSorted()).toEqual([
-    "node-my-proof",
-    "node-triangles",
-  ]);
+  expect(current.graph.nodes.map(({ id }) => id).toSorted()).toEqual(["node-my-proof", "node-triangles"]);
 
   const atAdoption = readPersonalPatch(dd, main, { kind: "absent" }, undefined, adopted.ref);
   expect(atAdoption.graph.nodes.map(({ id }) => id)).toEqual(["node-triangles"]);

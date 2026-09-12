@@ -1,9 +1,4 @@
-export {
-  STORE_FORMAT_VERSION,
-  ensureDataDir,
-  resolveDataDir,
-  type DataDir,
-} from "./profile/datadir";
+export { STORE_FORMAT_VERSION, ensureDataDir, resolveDataDir, type DataDir } from "./profile/datadir";
 export { type PrincipalId, type ProfileId, type ProfileScope } from "./profile/scope";
 export { canonicalJson, contentDigest, isContentDigest, type ContentDigest } from "./digest";
 export * from "./pedagogy";

@@ -89,15 +89,11 @@ export function labelDefaultNode(input: {
   const attempts = demonstrations
     .filter(({ payload }) => payload.unaided || payload.outcome === "failure")
     .slice(-parameters.window.size);
-  const successes = demonstrations.filter(
-    ({ payload }) => payload.unaided && payload.outcome === "success",
-  );
+  const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
   const lastFailure = demonstrations.filter(({ payload }) => payload.outcome === "failure").at(-1);
   const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
-  const stale =
-    lastSuccess !== undefined &&
-    !isCurrentSuccess(lastSuccess, at, parameters.forgettingHorizonDays);
+  const stale = lastSuccess !== undefined && !isCurrentSuccess(lastSuccess, at, parameters.forgettingHorizonDays);
   const knows = records.some(
     ({ payload, envelope }) =>
       payload.kind === "claim" &&
@@ -113,8 +109,7 @@ export function labelDefaultNode(input: {
         Date.parse(envelope.at) > Date.parse(lastSuccess.envelope.at),
     );
   let label: NodeLabel = "unknown";
-  if (k >= parameters.window.required && lastSuccess !== undefined && !stale)
-    label = "demonstrated";
+  if (k >= parameters.window.required && lastSuccess !== undefined && !stale) label = "demonstrated";
   else if (covering.length > 0 || knows) label = "probably-known";
   else if (lastSuccess !== undefined && (stale || forgotten)) label = "suspect";
   return {
@@ -125,10 +120,7 @@ export function labelDefaultNode(input: {
     ...(lastSuccess === undefined ? {} : { lastSuccess: lastSuccess.envelope.at }),
     aidedPractice: demonstrations.filter(({ payload }) => !payload.unaided).length,
     citations: [
-      ...new Set([
-        ...records.map(({ envelope }) => envelope.id),
-        ...covering.map(({ record }) => record.envelope.id),
-      ]),
+      ...new Set([...records.map(({ envelope }) => envelope.id), ...covering.map(({ record }) => record.envelope.id)]),
     ],
     records,
     coveredBy: [...new Set(covering.map(({ node }) => node))],

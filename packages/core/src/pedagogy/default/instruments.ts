@@ -30,10 +30,7 @@ export interface DefaultInstrumentContext extends DefaultIndicatorContext {
   readonly openSessions?: readonly SessionViewRef[];
 }
 
-function nodesInScope(
-  context: DefaultInstrumentContext,
-  scope?: readonly NodeId[],
-): readonly NodeId[] {
+function nodesInScope(context: DefaultInstrumentContext, scope?: readonly NodeId[]): readonly NodeId[] {
   if (scope?.some((id) => !context.graph.nodes.some((node) => node.id === id)))
     throw new Error("Scope contains a missing Node");
   return context.graph.nodes
@@ -88,12 +85,8 @@ function candidate(context: DefaultInstrumentContext, node: NodeId) {
     label: state.label,
     ...(state.lastSuccess === undefined ? {} : { lastSuccess: state.lastSuccess }),
     missions: missions.map(({ record }) => record.payload.missionId),
-    openSessions: (context.openSessions ?? [])
-      .filter(({ nodeIds }) => nodeIds.includes(node))
-      .map(({ id }) => id),
-    citations: [
-      ...new Set([...state.citations, ...missions.flatMap(({ citations }) => citations)]),
-    ],
+    openSessions: (context.openSessions ?? []).filter(({ nodeIds }) => nodeIds.includes(node)).map(({ id }) => id),
+    citations: [...new Set([...state.citations, ...missions.flatMap(({ citations }) => citations)])],
   };
 }
 
@@ -174,16 +167,11 @@ export function itemsDefault(context: DefaultInstrumentContext, node: NodeId) {
 
 export function memoryDefault(context: DefaultInstrumentContext, node: NodeId) {
   nodesInScope(context, [node]);
-  const current: NodeMemory =
-    context.memories?.find((entry) => entry.node === node) ?? emptyNodeMemory(node);
+  const current: NodeMemory = context.memories?.find((entry) => entry.node === node) ?? emptyNodeMemory(node);
   return {
     ...memory(current),
     citations: [
-      ...new Set(
-        current.originals.flatMap(({ source }) =>
-          source.kind === "record" ? [source.recordId] : [],
-        ),
-      ),
+      ...new Set(current.originals.flatMap(({ source }) => (source.kind === "record" ? [source.recordId] : []))),
     ],
   };
 }

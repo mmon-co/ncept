@@ -20,8 +20,7 @@ export function route(graph: ResolvedGraph, target: NodeId): RouteResult {
   const active = new Set<NodeId>();
   const visit = (id: NodeId): void => {
     if (visited.has(id)) return;
-    if (active.has(id))
-      throw new PatchCompileError("dependency-cycle", "dependency edges contain a cycle");
+    if (active.has(id)) throw new PatchCompileError("dependency-cycle", "dependency edges contain a cycle");
 
     active.add(id);
     for (const prerequisite of prerequisites.get(id) ?? []) visit(prerequisite);

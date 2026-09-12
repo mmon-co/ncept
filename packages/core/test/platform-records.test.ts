@@ -28,11 +28,7 @@ function record<P>(id: RecordId, at: string, schema: RecordSchema<P>, payload: P
   };
 }
 
-function missionRecord(
-  id: RecordId,
-  at: string,
-  overrides: Partial<MissionPayload> = {},
-): Record<MissionPayload> {
+function missionRecord(id: RecordId, at: string, overrides: Partial<MissionPayload> = {}): Record<MissionPayload> {
   return record(id, at, MISSION_SCHEMA, {
     scope: "profile",
     missionId: "calculus",
@@ -105,21 +101,12 @@ test("retracting current values exposes the latest non-retracted value, and reta
   const correction = retract("record-retract-mission", latest.envelope.id);
   // Platform schemas are available even to a theory with no schemas.
   const platformContext = { ...validation, schemas: [] };
-  for (const entry of [first, latest, preference, correction])
-    await store.appendRecord(scope, entry, platformContext);
+  for (const entry of [first, latest, preference, correction]) await store.appendRecord(scope, entry, platformContext);
   const snapshot = await store.readTrail(scope);
   expect(currentExperiences(snapshot.records)).toEqual([first, preference]);
   expect(experienceHistory(first, snapshot.records)).toEqual([first, latest, correction]);
-  await store.appendRecord(
-    scope,
-    retract("record-retract-first", first.envelope.id),
-    platformContext,
-  );
-  await store.appendRecord(
-    scope,
-    retract("record-retract-preference", preference.envelope.id),
-    platformContext,
-  );
+  await store.appendRecord(scope, retract("record-retract-first", first.envelope.id), platformContext);
+  await store.appendRecord(scope, retract("record-retract-preference", preference.envelope.id), platformContext);
   expect(currentExperiences((await store.readTrail(scope)).records)).toEqual([]);
   expect((await store.readTrail(scope)).records).toHaveLength(6);
   expect(await store.readRecordJson(scope, first.envelope.id)).toBe(JSON.stringify(first));
@@ -129,19 +116,19 @@ test("platform retractions cannot cross into theory corrections or refer to abse
   const dataDir = tempDataDir();
   roots.push(dataDir.root);
   const store = new LocalDirectoryCoreStore(dataDir);
-  expect(
-    store.appendRecord(scope, retract("record-missing", "record-unavailable"), validation),
-  ).rejects.toThrow("missing Record");
+  expect(store.appendRecord(scope, retract("record-missing", "record-unavailable"), validation)).rejects.toThrow(
+    "missing Record",
+  );
   await store.appendRecord(scope, sampleRecord(), validation);
-  expect(
-    store.appendRecord(scope, retract("record-foreign-target", "record-sample"), validation),
-  ).rejects.toThrow("must target a Mission or preferences");
+  expect(store.appendRecord(scope, retract("record-foreign-target", "record-sample"), validation)).rejects.toThrow(
+    "must target a Mission or preferences",
+  );
   const first = missionRecord("record-mission", "2026-09-07T09:00:00.000Z");
   await store.appendRecord(scope, first, validation);
   await store.appendRecord(scope, retract("record-retract", first.envelope.id), validation);
-  expect(
-    store.appendRecord(scope, retract("record-retract-retraction", "record-retract"), validation),
-  ).rejects.toThrow("must target a Mission or preferences");
+  expect(store.appendRecord(scope, retract("record-retract-retraction", "record-retract"), validation)).rejects.toThrow(
+    "must target a Mission or preferences",
+  );
   expect((await store.readTrail(scope)).records).toHaveLength(3);
 });
 
@@ -153,9 +140,7 @@ test("current-value ordering compares instants and breaks ties by identity indep
     [earlier, later, tied],
     [tied, later, earlier],
   ])
-    expect(currentExperiences(records).map(({ envelope }) => envelope.id)).toEqual([
-      tied.envelope.id,
-    ]);
+    expect(currentExperiences(records).map(({ envelope }) => envelope.id)).toEqual([tied.envelope.id]);
 });
 
 test("platform schemas validate Mission NodeRefs and reject malformed preferences", async () => {

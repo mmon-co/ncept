@@ -27,11 +27,7 @@ test("default schemas store demonstration task/response, claims and retractions 
   roots.push(dataDir.root);
   const store = new LocalDirectoryCoreStore(dataDir);
   const demo = demonstration("demo", 0);
-  for (const record of [
-    demo,
-    claim("claim", 0, "knows"),
-    retraction("retract", demo.envelope.id),
-  ]) {
+  for (const record of [demo, claim("claim", 0, "knows"), retraction("retract", demo.envelope.id)]) {
     const json = JSON.stringify(record, null, 2).replace("疒", "\\u7592") + "\n";
     await store.appendRecordJson(scope, json, validation);
     expect(await store.readRecordJson(scope, record.envelope.id)).toBe(json);
@@ -51,25 +47,18 @@ test("default demonstration schema rejects malformed outcomes, aid/grader facts,
     { node: {} },
   ])
     expect(() =>
-      validateRecordJson(
-        JSON.stringify({ ...record, payload: { ...record.payload, ...change } }),
-        validation,
-      ),
+      validateRecordJson(JSON.stringify({ ...record, payload: { ...record.payload, ...change } }), validation),
     ).toThrow();
   const missing = {
     ...record,
     payload: { ...record.payload, node: { ...record.payload.node, node: "node-missing" } },
   };
-  expect(() => validateRecordJson(JSON.stringify(missing), validation)).toThrow(
-    "Unresolvable NodeRef",
-  );
+  expect(() => validateRecordJson(JSON.stringify(missing), validation)).toThrow("Unresolvable NodeRef");
   const unknown = {
     ...record,
     envelope: { ...record.envelope, schema: { ...record.envelope.schema, id: "default/missing" } },
   };
-  expect(() => validateRecordJson(JSON.stringify(unknown), validation)).toThrow(
-    "Unknown Record schema",
-  );
+  expect(() => validateRecordJson(JSON.stringify(unknown), validation)).toThrow("Unknown Record schema");
   const invalidRef = {
     ...record,
     payload: {
@@ -77,16 +66,11 @@ test("default demonstration schema rejects malformed outcomes, aid/grader facts,
       node: { ...record.payload.node, provenance: { ...patchRef, digest: "sha256:bad" } },
     },
   };
-  expect(() => validateRecordJson(JSON.stringify(invalidRef), validation)).toThrow(
-    "Invalid NodeRef",
-  );
+  expect(() => validateRecordJson(JSON.stringify(invalidRef), validation)).toThrow("Invalid NodeRef");
   const claimed = claim("claim", 0, "knows");
   for (const change of [{ statement: null }, { prompt: 3 }, { stance: "confident" }])
     expect(() =>
-      validateRecordJson(
-        JSON.stringify({ ...claimed, payload: { ...claimed.payload, ...change } }),
-        validation,
-      ),
+      validateRecordJson(JSON.stringify({ ...claimed, payload: { ...claimed.payload, ...change } }), validation),
     ).toThrow("Invalid payload");
   expect(validateRecordJson(serializeRecord(claimed), validation).payload).toEqual(claimed.payload);
 });

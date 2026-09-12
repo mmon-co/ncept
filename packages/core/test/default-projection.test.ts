@@ -13,21 +13,10 @@ import {
   type DefaultAttachments,
   type Record,
 } from "../src";
-import {
-  claim,
-  context,
-  demonstration,
-  fixtureGraph,
-  patchRef,
-  retraction,
-} from "./default-theory-fixture";
+import { claim, context, demonstration, fixtureGraph, patchRef, retraction } from "./default-theory-fixture";
 import { rootRelease, sampleTheory } from "./record-fixture";
 
-function state(
-  records: readonly Record[],
-  attachments: DefaultAttachments = {},
-  graph = fixtureGraph(),
-) {
+function state(records: readonly Record[], attachments: DefaultAttachments = {}, graph = fixtureGraph()) {
   return projectDefault(records, graph, context, attachments).nodes["node-base"];
 }
 
@@ -50,9 +39,10 @@ test("default projection meets 2-of-3, orders by instants, cites verbatim eviden
   expect(result?.records).toEqual([first, failure, last]);
   expect(result?.records[0]).toBe(first);
   expect(JSON.stringify(records)).toBe(before);
-  expect(
-    state([...records, demonstration("later-failure", 0, { outcome: "failure" })]),
-  ).toMatchObject({ label: "unknown", k: 1 });
+  expect(state([...records, demonstration("later-failure", 0, { outcome: "failure" })])).toMatchObject({
+    label: "unknown",
+    k: 1,
+  });
   expect(state([first, last])?.label).toBe("demonstrated");
   expect(state([last])?.label).toBe("unknown");
 });
@@ -71,14 +61,10 @@ test("stale success is suspect, but one fresh success anywhere in the dependent 
   });
   expect(result?.citations).toContain(covering.envelope.id);
   expect(defaultDependentCone(fixtureGraph(), "node-base")).toEqual(["node-middle", "node-target"]);
+  expect(state([...stale, { ...covering, payload: { ...covering.payload, unaided: false } }])?.label).toBe("suspect");
   expect(
-    state([...stale, { ...covering, payload: { ...covering.payload, unaided: false } }])?.label,
-  ).toBe("suspect");
-  expect(
-    state([
-      ...stale,
-      demonstration("old-dependent", 31, { node: { node: "node-target", provenance: patchRef } }),
-    ])?.label,
+    state([...stale, demonstration("old-dependent", 31, { node: { node: "node-target", provenance: patchRef } })])
+      ?.label,
   ).toBe("suspect");
 });
 
@@ -89,16 +75,10 @@ test("direct demonstrated evidence precedes claims; fresh dependent success prec
   } satisfies DefaultAttachments;
   const own = demonstration("own", 2);
   expect(state([own, forgotten], attachments)?.label).toBe("suspect");
-  expect(state([own, demonstration("own-2", 1), forgotten], attachments)?.label).toBe(
-    "demonstrated",
-  );
+  expect(state([own, demonstration("own-2", 1), forgotten], attachments)?.label).toBe("demonstrated");
   expect(
     state(
-      [
-        own,
-        forgotten,
-        demonstration("dependent", 1, { node: { node: "node-target", provenance: patchRef } }),
-      ],
+      [own, forgotten, demonstration("dependent", 1, { node: { node: "node-target", provenance: patchRef } })],
       attachments,
     )?.label,
   ).toBe("probably-known");
@@ -120,19 +100,12 @@ test("newer knows claim beats prior failure; later failure defeats that claim un
   expect(state([failure, knows, later], attachments)?.label).toBe("unknown");
   expect(
     state(
-      [
-        failure,
-        knows,
-        later,
-        demonstration("cover", 0, { node: { node: "node-middle", provenance: patchRef } }),
-      ],
+      [failure, knows, later, demonstration("cover", 0, { node: { node: "node-middle", provenance: patchRef } })],
       attachments,
     )?.label,
   ).toBe("probably-known");
   expect(state([knows], attachments)?.label).toBe("probably-known");
-  expect(state([knows, demonstration("tied", 2, { outcome: "failure" })], attachments)?.label).toBe(
-    "unknown",
-  );
+  expect(state([knows, demonstration("tied", 2, { outcome: "failure" })], attachments)?.label).toBe("unknown");
 });
 
 test("claims attach only by explicit content decisions, unfamiliar claims do not infer failure, and memory has no projection input", () => {
@@ -148,10 +121,9 @@ test("claims attach only by explicit content decisions, unfamiliar claims do not
       claims: { "record-unfamiliar": ["node-base"] },
     })?.label,
   ).toBe("unknown");
-  expect(
-    state([claim("forgotten", 0, "forgotten")], { claims: { "record-forgotten": ["node-base"] } })
-      ?.label,
-  ).toBe("unknown");
+  expect(state([claim("forgotten", 0, "forgotten")], { claims: { "record-forgotten": ["node-base"] } })?.label).toBe(
+    "unknown",
+  );
 });
 
 test("aided successes do not enter the window or last success; aided failures enter it and never propagate", () => {
@@ -167,9 +139,11 @@ test("aided successes do not enter the window or last success; aided failures en
     aidedPractice: 1,
     lastSuccess: records[1]?.envelope.at,
   });
-  expect(
-    state([...records, demonstration("aided-failure", 0, { unaided: false, outcome: "failure" })]),
-  ).toMatchObject({ label: "unknown", k: 1, aidedPractice: 2 });
+  expect(state([...records, demonstration("aided-failure", 0, { unaided: false, outcome: "failure" })])).toMatchObject({
+    label: "unknown",
+    k: 1,
+    aidedPractice: 2,
+  });
   expect(state([demonstration("aided-only", 0, { unaided: false })])).toMatchObject({
     label: "unknown",
     k: 0,
@@ -204,34 +178,22 @@ test("retraction removes successes and claims, restores a displaced window entry
     demonstration("failure-1", 1, { outcome: "failure" }),
     demonstration("failure-2", 0, { outcome: "failure" }),
   ];
-  expect(
-    state([first, second, ...failures, retraction("retract", "record-failure-2")])?.label,
-  ).toBe("demonstrated");
+  expect(state([first, second, ...failures, retraction("retract", "record-failure-2")])?.label).toBe("demonstrated");
   const knows = claim("knows", 1, "knows");
   expect(
     state([knows, retraction("retract", knows.envelope.id)], {
       claims: { [knows.envelope.id]: ["node-base"] },
     })?.label,
   ).toBe("unknown");
-  expect(() => assertDefaultRetraction(retraction("retract", "record-missing"), [])).toThrow(
-    "missing Record",
-  );
+  expect(() => assertDefaultRetraction(retraction("retract", "record-missing"), [])).toThrow("missing Record");
   const retract = retraction("retract", first.envelope.id);
-  expect(() => state([first, retract, retraction("undo", retract.envelope.id)])).toThrow(
-    "demonstration or claim",
-  );
+  expect(() => state([first, retract, retraction("undo", retract.envelope.id)])).toThrow("demonstration or claim");
 });
 
 test("horizon boundaries and timestamp offsets use instants; future records are not evidence yet", () => {
-  expect(state([demonstration("first", 30), demonstration("last", 30)])?.label).toBe(
-    "demonstrated",
-  );
-  expect(state([demonstration("first", 30.001), demonstration("last", 30.001)])?.label).toBe(
-    "suspect",
-  );
-  expect(state([demonstration("future-1", -1), demonstration("future-2", -2)])?.label).toBe(
-    "unknown",
-  );
+  expect(state([demonstration("first", 30), demonstration("last", 30)])?.label).toBe("demonstrated");
+  expect(state([demonstration("first", 30.001), demonstration("last", 30.001)])?.label).toBe("suspect");
+  expect(state([demonstration("future-1", -1), demonstration("future-2", -2)])?.label).toBe("unknown");
   const record = demonstration("offset", 0);
   expect(
     state([
@@ -251,12 +213,8 @@ test("horizon boundaries and timestamp offsets use instants; future records are 
       at: demonstration("future", -1).envelope.at,
     },
   };
-  expect(state([record, demonstration("yesterday", 1), futureRetraction])?.label).toBe(
-    "demonstrated",
-  );
-  expect(() => projectDefault([], fixtureGraph(), { ...context, at: "yesterday" })).toThrow(
-    "ISO timestamp",
-  );
+  expect(state([record, demonstration("yesterday", 1), futureRetraction])?.label).toBe("demonstrated");
+  expect(() => projectDefault([], fixtureGraph(), { ...context, at: "yesterday" })).toThrow("ISO timestamp");
 });
 
 test("scoped first-write output still queries the entire dependent cone; re-homing overlays preserve source references", () => {
@@ -266,9 +224,9 @@ test("scoped first-write output still queries the entire dependent cone; re-homi
   const projected = projectDefault([record], fixtureGraph(), { ...context, scope: ["node-base"] });
   expect(Object.keys(projected.nodes)).toEqual(["node-base"]);
   expect(projected.nodes["node-base"]?.label).toBe("probably-known");
-  expect(
-    homeDefaultRecords([record], fixtureGraph(), { homes: { [record.envelope.id]: [] } }).homeless,
-  ).toEqual([record]);
+  expect(homeDefaultRecords([record], fixtureGraph(), { homes: { [record.envelope.id]: [] } }).homeless).toEqual([
+    record,
+  ]);
   const homed = homeDefaultRecords([record], fixtureGraph(), {
     homes: { [record.envelope.id]: ["node-middle", "node-isolated"] },
   });
@@ -309,15 +267,11 @@ test("per-Node window overrides effective theory parameters and validates partia
     window: 1,
     required: 1,
   });
-  expect(state([demonstration("one", 0)], {}, windowGraph(undefined, 1))?.label).toBe(
-    "demonstrated",
-  );
+  expect(state([demonstration("one", 0)], {}, windowGraph(undefined, 1))?.label).toBe("demonstrated");
   for (const graph of [windowGraph(1), windowGraph(0, 1), windowGraph(3, 4), windowGraph(2.5, 2)])
     expect(() => state([], {}, graph)).toThrow("Invalid demonstration window");
   expect(acceptsDefaultParameters({ ...DEFAULT_PARAMETERS, forgettingHorizonDays: 0 })).toBe(false);
-  expect(
-    acceptsDefaultParameters({ ...DEFAULT_PARAMETERS, window: { size: 3, required: 0 } }),
-  ).toBe(false);
+  expect(acceptsDefaultParameters({ ...DEFAULT_PARAMETERS, window: { size: 3, required: 0 } })).toBe(false);
   expect(() =>
     projectDefault([], fixtureGraph(), {
       ...context,
@@ -366,19 +320,13 @@ test("ParameterOverride parameters feed projection before Node metadata", () => 
   });
   const parameters = resolveTheoryParameters(resolved, override);
   expect(
-    projectDefault([demonstration("old", 11)], fixtureGraph(), { ...context, parameters }).nodes[
-      "node-base"
-    ]?.label,
+    projectDefault([demonstration("old", 11)], fixtureGraph(), { ...context, parameters }).nodes["node-base"]?.label,
   ).toBe("suspect");
   expect(
-    projectDefault([demonstration("new", 1)], fixtureGraph(), { ...context, parameters }).nodes[
-      "node-base"
-    ]?.label,
+    projectDefault([demonstration("new", 1)], fixtureGraph(), { ...context, parameters }).nodes["node-base"]?.label,
   ).toBe("demonstrated");
   expect(
-    projectDefault([demonstration("new", 1)], windowGraph(3, 2), { ...context, parameters }).nodes[
-      "node-base"
-    ]?.label,
+    projectDefault([demonstration("new", 1)], windowGraph(3, 2), { ...context, parameters }).nodes["node-base"]?.label,
   ).toBe("unknown");
 });
 

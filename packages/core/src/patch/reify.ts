@@ -3,17 +3,12 @@ import type { PatchContent, ReificationTarget, SelectedGraph, SemanticOperation 
 
 export function reifyView(view: SelectedGraph, target: ReificationTarget): PatchContent {
   if (view.patchOrder.some((revision) => revision.identity === target.identity))
-    throw new PatchCompileError(
-      "invalid-bundle",
-      "a reified Patch must have a new opaque identity",
-    );
+    throw new PatchCompileError("invalid-bundle", "a reified Patch must have a new opaque identity");
 
   const generatedPatchTags = new Set(
     Object.entries(view.patchMetadata).flatMap(([identity, metadata]) =>
       Object.entries(metadata.properties).flatMap(([key, value]) =>
-        key.startsWith("patch:") && value === true
-          ? [`patch:${identity}:${key.slice("patch:".length)}`]
-          : [],
+        key.startsWith("patch:") && value === true ? [`patch:${identity}:${key.slice("patch:".length)}`] : [],
       ),
     ),
   );

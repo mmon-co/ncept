@@ -11,11 +11,9 @@ export function sha256Hex(text: string): string {
 export type ContentDigest = `sha256:${string}`;
 
 function canonicalValue(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "string")
-    return JSON.stringify(value);
+  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value))
-      throw new TypeError("canonical content cannot contain non-finite numbers");
+    if (!Number.isFinite(value)) throw new TypeError("canonical content cannot contain non-finite numbers");
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;

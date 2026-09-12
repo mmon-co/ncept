@@ -1,10 +1,4 @@
-import type {
-  ContributionProvenance,
-  MetadataSetId,
-  NodeId,
-  ResolvedGraph,
-  StructureNode,
-} from "./model";
+import type { ContributionProvenance, MetadataSetId, NodeId, ResolvedGraph, StructureNode } from "./model";
 
 /** A string-array Metadata property whose entries are JSON-encoded authored item fact objects. */
 export const ITEM_BANK_METADATA_PROPERTY = "pedagogy:items";
@@ -89,14 +83,12 @@ export function items(graph: ResolvedGraph, nodeId: NodeId): ItemsResult {
   const records: ItemInstrumentRecord[] = [];
   const ids = new Set<string>();
   for (const metadataSet of graph.metadataSets) {
-    if (!metadataSet.subjects.some((subject) => subject.kind === "node" && subject.id === nodeId))
-      continue;
+    if (!metadataSet.subjects.some((subject) => subject.kind === "node" && subject.id === nodeId)) continue;
     const encoded = metadataSet.properties[ITEM_BANK_METADATA_PROPERTY];
     if (encoded === undefined) continue;
     if (!Array.isArray(encoded) || !encoded.every((entry) => typeof entry === "string"))
       throw new Error(`${metadataSet.id}.${ITEM_BANK_METADATA_PROPERTY} must be a string array`);
-    const contribution =
-      graph.provenance.metadataProperties[metadataSet.id]?.[ITEM_BANK_METADATA_PROPERTY]?.at(-1);
+    const contribution = graph.provenance.metadataProperties[metadataSet.id]?.[ITEM_BANK_METADATA_PROPERTY]?.at(-1);
     if (contribution === undefined)
       throw new Error(`${metadataSet.id}.${ITEM_BANK_METADATA_PROPERTY} has no content provenance`);
     encoded.forEach((entry, entryIndex) => {

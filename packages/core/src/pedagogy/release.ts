@@ -74,33 +74,24 @@ export function pedagogicalTheoryDigest<S, N, Context>(
   theory: PedagogicalTheory<S, N, Context>,
   parameters: TheoryParameters = theory.parameters,
 ): ContentDigest {
-  if (!isContentDigest(theory.implementationDigest))
-    throw new Error("Invalid theory implementation digest");
+  if (!isContentDigest(theory.implementationDigest)) throw new Error("Invalid theory implementation digest");
   if (!theory.acceptsParameters(parameters)) throw new Error("Invalid theory parameters");
   const schemaIds = new Set<string>();
   for (const { ref } of theory.schemas) {
-    if (!ref.id.trim() || !isContentDigest(ref.digest))
-      throw new Error("Invalid theory schema identity");
-    if (ref.id.startsWith("platform/") || schemaIds.has(ref.id))
-      throw new Error(`Invalid theory schema ${ref.id}`);
+    if (!ref.id.trim() || !isContentDigest(ref.digest)) throw new Error("Invalid theory schema identity");
+    if (ref.id.startsWith("platform/") || schemaIds.has(ref.id)) throw new Error(`Invalid theory schema ${ref.id}`);
     schemaIds.add(ref.id);
   }
   return contentDigest({
     implementationDigest: theory.implementationDigest,
-    schemas: theory.schemas
-      .map(({ ref }) => ref)
-      .toSorted((left, right) => left.id.localeCompare(right.id)),
+    schemas: theory.schemas.map(({ ref }) => ref).toSorted((left, right) => left.id.localeCompare(right.id)),
     parameters,
   });
 }
 
 /** Also used by the parameter-override machinery, which compares an override's target release. */
 export function sameRelease(left: ExactPedagogyRelease, right: ExactPedagogyRelease): boolean {
-  return (
-    left.identity === right.identity &&
-    left.version === right.version &&
-    left.digest === right.digest
-  );
+  return left.identity === right.identity && left.version === right.version && left.digest === right.digest;
 }
 
 function readRelease<S, N, Context>(
@@ -131,9 +122,7 @@ function resolveContainedTheory<S, N, Context>(
   const release = readRelease(source, selection.release);
   const next = release.theory;
   if (next === undefined)
-    throw new Error(
-      `Pedagogy release ${release.ref.identity}@${release.ref.version} has no theory`,
-    );
+    throw new Error(`Pedagogy release ${release.ref.identity}@${release.ref.version} has no theory`);
   return resolveContainedTheory(source, next, release.ref, visited);
 }
 

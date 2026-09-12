@@ -11,12 +11,7 @@ import {
 import { exactPatchRefKey, type NodeId } from "../../patch";
 import type { ProjectionContext, SchemaRef } from "../theory";
 import { attachDefaultClaim } from "./attachments";
-import {
-  refineDefaultUpdate,
-  updateDefault,
-  type DefaultLearnerState,
-  type DefaultRehomingModel,
-} from "./update";
+import { refineDefaultUpdate, updateDefault, type DefaultLearnerState, type DefaultRehomingModel } from "./update";
 import {
   coverageDefault,
   frontierDefault,
@@ -157,14 +152,9 @@ async function appendHomed(context: DefaultToolContext, record: HomedRecord) {
   // Read current homes after append, rather than reverting a refined Record to its payload NodeRef.
   const current = await context.read();
   for (const { id: node } of current.graph.nodes) {
-    if (
-      !current.state.nodes[node]?.records.some(({ envelope }) => envelope.id === record.envelope.id)
-    )
-      continue;
+    if (!current.state.nodes[node]?.records.some(({ envelope }) => envelope.id === record.envelope.id)) continue;
     if (context.recording.scope === undefined || context.recording.scope.includes(node))
-      await context.recording.updateMemory(node, (memory) =>
-        attachDefaultRecordMemory(memory, [record]),
-      );
+      await context.recording.updateMemory(node, (memory) => attachDefaultRecordMemory(memory, [record]));
   }
   return { record, citations: [record.envelope.id] };
 }
@@ -305,14 +295,7 @@ export function defaultBackgroundTools(context: DefaultBackgroundContext): ToolS
         const record = current.records.find(({ envelope }) => envelope.id === id);
         if (!record) throw new Error("Claim attachment names a missing Record");
         validateRecordJson(serializeRecord(record), context.recording.validation);
-        const next = attachDefaultClaim(
-          current.state,
-          current.graph,
-          current.records,
-          clock,
-          id,
-          nodes,
-        );
+        const next = attachDefaultClaim(current.state, current.graph, current.records, clock, id, nodes);
         return { ...(await saveBackground(context, current, next)), citations: [id] };
       },
     }),
@@ -327,13 +310,7 @@ export function defaultBackgroundTools(context: DefaultBackgroundContext): ToolS
       }),
       execute: async ({ revision }) => {
         const { current, clock } = await backgroundSnapshot(context, revision);
-        const provisional = updateDefault(
-          current.state,
-          current.graph,
-          current.graph,
-          current.records,
-          clock,
-        );
+        const provisional = updateDefault(current.state, current.graph, current.graph, current.records, clock);
         const next = await refineDefaultUpdate(
           provisional,
           current.graph,

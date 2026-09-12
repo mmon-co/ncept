@@ -83,9 +83,7 @@ const records = [
     response: "x cubed / 3",
   }),
 ];
-const successors = { "node-base": ["node-single", "node-multi"] } satisfies Partial<
-  Record<NodeId, NodeId[]>
->;
+const successors = { "node-base": ["node-single", "node-multi"] } satisfies Partial<Record<NodeId, NodeId[]>>;
 function provisional() {
   return updateDefault(projectDefault(records, old, context), old, split, records, {
     ...context,
@@ -155,16 +153,10 @@ test("re-homing capability statements use contribution order rather than metadat
     },
   ]);
   const state = updateDefault(projectDefault(records, old, context), old, next, records, context);
-  const refined = await refineDefaultUpdate(
-    state,
-    next,
-    records,
-    context,
-    async ({ candidates }) => {
-      expect(candidates).toEqual([{ node: "node-next", statement: "Final capability statement" }]);
-      return "node-next";
-    },
-  );
+  const refined = await refineDefaultUpdate(state, next, records, context, async ({ candidates }) => {
+    expect(candidates).toEqual([{ node: "node-next", statement: "Final capability statement" }]);
+    return "node-next";
+  });
   expect(refined.nodes["node-next"]?.citations).toEqual(records.map(({ envelope }) => envelope.id));
 });
 
@@ -188,22 +180,10 @@ test("delete without successor is homeless before refinement; model can choose n
   const state = updateDefault(projectDefault(records, old, context), old, split, records, context);
   expect(homelessDefaultRecords(state, split, records)).toEqual(records);
   expect(state.nodes["node-other"]?.k).toBe(0);
-  const refined = await refineDefaultUpdate(
-    state,
-    split,
-    records,
-    context,
-    async () => "node-other",
-  );
+  const refined = await refineDefaultUpdate(state, split, records, context, async () => "node-other");
   expect(refined.nodes["node-other"]?.k).toBe(3);
   const empty = graph("empty", {});
-  const deleted = updateDefault(
-    projectDefault(records, old, context),
-    old,
-    empty,
-    records,
-    context,
-  );
+  const deleted = updateDefault(projectDefault(records, old, context), old, empty, records, context);
   expect(
     homelessDefaultRecords(
       await refineDefaultUpdate(deleted, empty, records, context, async (request) => {
@@ -217,13 +197,7 @@ test("delete without successor is homeless before refinement; model can choose n
 });
 
 test("overlays survive multiple revisions and follow the current home, not the original NodeRef", async () => {
-  const refined = await refineDefaultUpdate(
-    provisional(),
-    split,
-    records,
-    context,
-    async () => "node-single",
-  );
+  const refined = await refineDefaultUpdate(provisional(), split, records, context, async () => "node-single");
   const third = graph("third", {
     "node-next": "Add numbers again",
     "node-other": "Multiply numbers",
@@ -251,13 +225,7 @@ test("scoped output does not lose out-of-scope overlay homes on refinement or th
     ...scoped,
     successors,
   });
-  const refined = await refineDefaultUpdate(
-    state,
-    split,
-    records,
-    scoped,
-    async () => "node-multi",
-  );
+  const refined = await refineDefaultUpdate(state, split, records, scoped, async () => "node-multi");
   expect(Object.keys(refined.nodes)).toEqual(["node-single"]);
   expect(refined.nodes["node-single"]?.k).toBe(0);
   expect(refined.homing.homes["record-single"]).toEqual(["node-multi"]);
@@ -302,17 +270,13 @@ test("revision mismatch, invalid successors and out-of-candidate model choices f
       successors: { "node-base": ["node-missing"] },
     }),
   ).toThrow("missing Node");
-  expect(() => updateDefault(first, old, old, records, { ...context, successors })).toThrow(
-    "removed Node",
-  );
+  expect(() => updateDefault(first, old, old, records, { ...context, successors })).toThrow("removed Node");
   const state = provisional();
   const before = JSON.stringify(state);
-  expect(
-    refineDefaultUpdate(state, split, records, context, async () => "node-missing"),
-  ).rejects.toThrow("non-candidate");
-  expect(refineDefaultUpdate(state, old, records, context, async () => null)).rejects.toThrow(
-    "graph revision",
+  expect(refineDefaultUpdate(state, split, records, context, async () => "node-missing")).rejects.toThrow(
+    "non-candidate",
   );
+  expect(refineDefaultUpdate(state, old, records, context, async () => null)).rejects.toThrow("graph revision");
   expect(() => homelessDefaultRecords(state, old, records)).toThrow("graph revision");
   expect(
     refineDefaultUpdate(state, split, records, context, async () => {
@@ -337,19 +301,14 @@ test("explicit homeless overrides stay empty and caller-owned attachment lists c
 
 test("future retractions do not erase the as-of provisional or refined evidence", async () => {
   const future = retraction("future", "record-single");
-  const log = [
-    ...records,
-    { ...future, envelope: { ...future.envelope, at: "2026-09-08T12:00:00.000Z" } },
-  ];
+  const log = [...records, { ...future, envelope: { ...future.envelope, at: "2026-09-08T12:00:00.000Z" } }];
   const state = updateDefault(projectDefault(log, old, context), old, split, log, {
     ...context,
     successors,
   });
   expect(state.homing.pending).toContain("record-single");
   const refined = await refineDefaultUpdate(state, split, log, context, async () => "node-single");
-  expect(refined.nodes["node-single"]?.citations).toEqual(
-    records.map(({ envelope }) => envelope.id),
-  );
+  expect(refined.nodes["node-single"]?.citations).toEqual(records.map(({ envelope }) => envelope.id));
 });
 
 test("complete log preserves unaffected global evidence and claim attachments from a scoped previous state", () => {

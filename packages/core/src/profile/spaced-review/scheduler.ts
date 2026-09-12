@@ -39,11 +39,7 @@ const F = fsrs(generatorParameters({ enable_fuzz: false }));
  * Derives FSRS state purely from a card's review history. The stored grade
  * history is ground truth; this is recomputable under any future scheduler.
  */
-export function deriveSchedulerState(
-  cardId: string,
-  createdTs: string,
-  reviews: ReviewRecord[],
-): SchedulerState {
+export function deriveSchedulerState(cardId: string, createdTs: string, reviews: ReviewRecord[]): SchedulerState {
   let card: FsrsCard = createEmptyCard(new Date(createdTs));
   const sorted = [...reviews].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
   for (const r of sorted) {

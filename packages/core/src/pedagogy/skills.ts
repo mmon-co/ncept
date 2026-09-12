@@ -16,8 +16,7 @@ export type SkillOverlayOperation =
   | { readonly kind: "disable"; readonly target: string };
 
 function validateBundle(bundle: BuiltSkillBundle): void {
-  if (!/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(bundle.name))
-    throw new Error(`invalid Skill name ${bundle.name}`);
+  if (!/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(bundle.name)) throw new Error(`invalid Skill name ${bundle.name}`);
   if (bundle.content.trim() === "") throw new Error(`Skill ${bundle.name} has no bundle content`);
 }
 
@@ -40,8 +39,7 @@ export function resolveSkillCatalog(
     operated.add(target);
     if (operation.kind === "add") {
       validateBundle(operation.bundle);
-      if (rootNames.has(target))
-        throw new Error(`Skill overlay cannot add existing Skill ${target}`);
+      if (rootNames.has(target)) throw new Error(`Skill overlay cannot add existing Skill ${target}`);
       resolved.set(target, operation.bundle);
     } else {
       if (!rootNames.has(target))

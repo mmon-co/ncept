@@ -44,24 +44,19 @@ test("the Skill catalog loads and builds from its shipped location", () => {
       const match = /^---\n([\s\S]*?)\n---\n\n/.exec(built);
       if (match === null) throw new Error(`${name} is not an Agent Skills bundle`);
       const front: unknown = YAML.parse(match[1] ?? "");
-      if (typeof front !== "object" || front === null)
-        throw new Error(`${name} frontmatter is not a mapping`);
+      if (typeof front !== "object" || front === null) throw new Error(`${name} frontmatter is not a mapping`);
       const metadata: unknown = Reflect.get(front, "metadata");
-      if (typeof metadata !== "object" || metadata === null)
-        throw new Error(`${name} metadata is not a mapping`);
+      if (typeof metadata !== "object" || metadata === null) throw new Error(`${name} metadata is not a mapping`);
 
       expect(Reflect.get(front, "name")).toBe(name);
       expect(Reflect.get(front, "description")).toBe(description);
       expect(Reflect.get(metadata, "concept-facet")).toBe(facet);
       expect(Reflect.get(metadata, "concept-entry")).toBe(entry.join(","));
-      expect(Reflect.get(front, "disable-model-invocation")).toBe(
-        entry.includes("model") ? undefined : true,
-      );
+      expect(Reflect.get(front, "disable-model-invocation")).toBe(entry.includes("model") ? undefined : true);
       expect(built.slice(match[0].length).trim()).toBe(skillBody(name));
-      expect(
-        PLATFORM_PEDAGOGY_RELEASE.skillCatalog.bundles.find((bundle) => bundle.name === name)
-          ?.content,
-      ).toBe(built);
+      expect(PLATFORM_PEDAGOGY_RELEASE.skillCatalog.bundles.find((bundle) => bundle.name === name)?.content).toBe(
+        built,
+      );
     }
 
     buildSkillBundles(outputDir);

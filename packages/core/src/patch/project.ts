@@ -31,16 +31,10 @@ function property<T extends string | number>(
       return accepts(value) && source !== undefined ? [{ value, source }] : [];
     }),
   );
-  return selected === undefined
-    ? undefined
-    : { value: selected.value, source: selected.source.patch };
+  return selected === undefined ? undefined : { value: selected.value, source: selected.source.patch };
 }
 
-function stringProperty(
-  graph: SelectedGraph,
-  sets: readonly MetadataSet[],
-  key: string,
-): string | undefined {
+function stringProperty(graph: SelectedGraph, sets: readonly MetadataSet[], key: string): string | undefined {
   return property(graph, sets, key, (value): value is string => typeof value === "string")?.value;
 }
 
@@ -53,8 +47,7 @@ function rankNodes(graph: SelectedGraph): Map<NodeId, number> {
   const visit = (node: NodeId): number => {
     const known = ranks.get(node);
     if (known !== undefined) return known;
-    if (active.has(node))
-      throw new PatchCompileError("dependency-cycle", "dependency edges contain a cycle");
+    if (active.has(node)) throw new PatchCompileError("dependency-cycle", "dependency edges contain a cycle");
     active.add(node);
     const rank = Math.max(-1, ...(dependencies.get(node) ?? []).map(visit)) + 1;
     active.delete(node);

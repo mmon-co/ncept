@@ -57,9 +57,7 @@ test("frontier reports reachable not-known candidates, Mission and open-Session 
       missions: ["goal"],
       openSessions: ["view-session"],
       citations: ["record-mission"],
-      prerequisites: [
-        { node: "node-base", label: "demonstrated", citations: ["record-base1", "record-base2"] },
-      ],
+      prerequisites: [{ node: "node-base", label: "demonstrated", citations: ["record-base1", "record-base2"] }],
     },
   ]);
   expect(frontierDefault(input, [])).toEqual([]);
@@ -68,15 +66,10 @@ test("frontier reports reachable not-known candidates, Mission and open-Session 
 
 test("route returns not-known prerequisite cone in dependency order including target", () => {
   const input = fixture();
-  expect(routeDefault(input, "node-target").map(({ node }) => node)).toEqual([
-    "node-middle",
-    "node-target",
-  ]);
+  expect(routeDefault(input, "node-target").map(({ node }) => node)).toEqual(["node-middle", "node-target"]);
   expect(routeDefault(input, "node-base")).toEqual([]);
   expect(
-    routeDefault({ ...input, state: projectDefault([], input.graph, context) }, "node-target").map(
-      ({ node }) => node,
-    ),
+    routeDefault({ ...input, state: projectDefault([], input.graph, context) }, "node-target").map(({ node }) => node),
   ).toEqual(["node-base", "node-middle", "node-target"]);
   expect(() => routeDefault(input, "node-missing")).toThrow("Missing Node");
 });
@@ -120,12 +113,8 @@ test("trail returns newest original records and the actual precedence rule; prob
   ]);
   const own = [demonstration("old", 40)];
   expect(
-    probesDefault({ ...input, records: own, state: projectDefault(own, input.graph, context) }, [
-      "node-base",
-    ]),
-  ).toMatchObject([
-    { label: "suspect", coveredBy: [], rule: "past-horizon-or-newer-forgotten-claim" },
-  ]);
+    probesDefault({ ...input, records: own, state: projectDefault(own, input.graph, context) }, ["node-base"]),
+  ).toMatchObject([{ label: "suspect", coveredBy: [], rule: "past-horizon-or-newer-forgotten-claim" }]);
   const knows = claim("knows", 0, "knows");
   const claimed = {
     ...input,
@@ -139,15 +128,9 @@ test("trail returns newest original records and the actual precedence rule; prob
 
 test("coverage is absence of direct records, not absence of structural knowledge; unused checks dependents", () => {
   const input = fixture();
-  const records = [
-    demonstration("cover", 1, { node: { node: "node-target", provenance: patchRef } }),
-  ];
+  const records = [demonstration("cover", 1, { node: { node: "node-target", provenance: patchRef } })];
   const covered = { ...input, records, state: projectDefault(records, input.graph, context) };
-  expect(coverageDefault(covered).map(({ node }) => node)).toEqual([
-    "node-base",
-    "node-isolated",
-    "node-middle",
-  ]);
+  expect(coverageDefault(covered).map(({ node }) => node)).toEqual(["node-base", "node-isolated", "node-middle"]);
   expect(warningsDefault(covered).filter(({ kind }) => kind === "unused")).toEqual([
     {
       kind: "unused",
@@ -182,16 +165,10 @@ test("mission and preferences expose current platform records, full history and 
       citations: ["record-pref1", "record-pref2", "record-retract"],
     },
   ]);
-  expect(missionDefault(input, ["node-middle"])[0]?.nodes).toEqual([
-    "node-base",
-    "node-middle",
-    "node-target",
-  ]);
+  expect(missionDefault(input, ["node-middle"])[0]?.nodes).toEqual(["node-base", "node-middle", "node-target"]);
   expect(missionDefault(input, ["node-isolated"])).toEqual([]);
   expect(
-    missionDefault({ ...input, missionViews: { "view-goal": ["node-isolated"] } }, [
-      "node-isolated",
-    ]),
+    missionDefault({ ...input, missionViews: { "view-goal": ["node-isolated"] } }, ["node-isolated"]),
   ).toHaveLength(1);
 });
 
@@ -231,19 +208,16 @@ test("display alone captions Nodes and distinguishes gating/frontier/known Edges
     citations: ["record-base1", "record-base2"],
     style: { class: "demonstrated" },
   });
-  expect(
-    displayDefault({ id: "edge-one", from: "node-base", to: "node-middle" }, input.state),
-  ).toMatchObject({
+  expect(displayDefault({ id: "edge-one", from: "node-base", to: "node-middle" }, input.state)).toMatchObject({
     label: "not-gating",
     style: { class: "frontier", frontier: true, gating: false },
     citations: ["record-base1", "record-base2"],
   });
-  expect(
-    displayDefault({ id: "edge-two", from: "node-middle", to: "node-target" }, input.state),
-  ).toMatchObject({ label: "gating", style: { gating: true } });
-  expect(() => displayDefault({ id: "node-base" }, { ...input.state, nodes: {} })).toThrow(
-    "not been projected",
-  );
+  expect(displayDefault({ id: "edge-two", from: "node-middle", to: "node-target" }, input.state)).toMatchObject({
+    label: "gating",
+    style: { gating: true },
+  });
+  expect(() => displayDefault({ id: "node-base" }, { ...input.state, nodes: {} })).toThrow("not been projected");
 });
 
 test("all eight query tokens are graph-only selections over projected labels and facts", () => {

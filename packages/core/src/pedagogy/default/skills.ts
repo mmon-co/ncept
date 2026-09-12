@@ -58,10 +58,7 @@ interface SkillFile {
   readonly body: string;
 }
 
-function isOneOf<const Choices extends readonly string[]>(
-  choices: Choices,
-  value: unknown,
-): value is Choices[number] {
+function isOneOf<const Choices extends readonly string[]>(choices: Choices, value: unknown): value is Choices[number] {
   return typeof value === "string" && choices.some((choice) => choice === value);
 }
 
@@ -70,29 +67,16 @@ function parseSkillFile(dir: string, raw: string): SkillFile {
   const match = /^---\n([\s\S]*?)\n---\n/.exec(raw);
   if (match === null) throw new Error(`${description} has no frontmatter`);
   const front: unknown = YAML.parse(match[1] ?? "");
-  if (typeof front !== "object" || front === null)
-    throw new Error(`${description} frontmatter must be a mapping`);
+  if (typeof front !== "object" || front === null) throw new Error(`${description} frontmatter must be a mapping`);
   const name: unknown = Reflect.get(front, "name");
   const skillDescription: unknown = Reflect.get(front, "description");
   const facet: unknown = Reflect.get(front, "facet");
   const entry: unknown = Reflect.get(front, "entry");
-  if (
-    typeof name !== "string" ||
-    name !== dir ||
-    name.length > 64 ||
-    !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)
-  )
-    throw new Error(
-      `${description} name must equal its directory name and follow Agent Skills naming`,
-    );
-  if (
-    typeof skillDescription !== "string" ||
-    skillDescription.trim() === "" ||
-    skillDescription.length > 1024
-  )
+  if (typeof name !== "string" || name !== dir || name.length > 64 || !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name))
+    throw new Error(`${description} name must equal its directory name and follow Agent Skills naming`);
+  if (typeof skillDescription !== "string" || skillDescription.trim() === "" || skillDescription.length > 1024)
     throw new Error(`${description} needs an Agent Skills description of at most 1024 characters`);
-  if (!isOneOf(FACETS, facet))
-    throw new Error(`${description} facet must be one of ${FACETS.join(", ")}`);
+  if (!isOneOf(FACETS, facet)) throw new Error(`${description} facet must be one of ${FACETS.join(", ")}`);
   const who: Entry[] = [];
   if (Array.isArray(entry)) for (const item of entry) if (isOneOf(ENTRIES, item)) who.push(item);
   if (!Array.isArray(entry) || who.length === 0 || who.length !== entry.length)
@@ -183,9 +167,7 @@ export function tutorSystemPrompt(): string {
       .map(
         ({ meta }) =>
           `- **${meta.name}**: ${meta.description}${
-            meta.entry.includes("model")
-              ? ""
-              : " (Learner-started: propose it and say why; never start it yourself.)"
+            meta.entry.includes("model") ? "" : " (Learner-started: propose it and say why; never start it yourself.)"
           }`,
       );
     return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;

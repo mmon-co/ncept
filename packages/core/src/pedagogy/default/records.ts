@@ -1,11 +1,5 @@
 import { contentDigest } from "../../digest";
-import {
-  compareRecords,
-  isRecordId,
-  recordUsesSchema,
-  type NodeRef,
-  type Record,
-} from "../../profile/observations";
+import { compareRecords, isRecordId, recordUsesSchema, type NodeRef, type Record } from "../../profile/observations";
 import type { RecordSchema } from "../theory";
 
 export interface Demonstration {
@@ -60,9 +54,7 @@ export const DEMONSTRATION_SCHEMA: RecordSchema<Demonstration> = {
       "provenance" in payload.node &&
       (payload.outcome === "success" || payload.outcome === "failure") &&
       typeof payload.unaided === "boolean" &&
-      (payload.grader === "mechanical" ||
-        payload.grader === "tutor" ||
-        payload.grader === "learner") &&
+      (payload.grader === "mechanical" || payload.grader === "tutor" || payload.grader === "learner") &&
       typeof payload.task === "string" &&
       typeof payload.response === "string"
     );
@@ -88,9 +80,7 @@ export const CLAIM_SCHEMA: RecordSchema<Claim> = {
       payload.kind === "claim" &&
       typeof payload.statement === "string" &&
       (payload.prompt === undefined || typeof payload.prompt === "string") &&
-      (payload.stance === "knows" ||
-        payload.stance === "forgotten" ||
-        payload.stance === "unfamiliar")
+      (payload.stance === "knows" || payload.stance === "forgotten" || payload.stance === "unfamiliar")
     );
   },
   nodeRefs: () => [],
@@ -122,8 +112,7 @@ export const DEFAULT_RECORD_SCHEMAS: readonly RecordSchema<DefaultRecordPayload>
 export function assertDefaultRetraction(record: Record, prior: readonly Record[]): void {
   if (!recordUsesSchema(record, RETRACTION_SCHEMA)) return;
   const target = prior.find(({ envelope }) => envelope.id === record.payload.of);
-  if (target === undefined)
-    throw new Error(`Default retraction targets missing Record ${record.payload.of}`);
+  if (target === undefined) throw new Error(`Default retraction targets missing Record ${record.payload.of}`);
   if (!recordUsesSchema(target, DEMONSTRATION_SCHEMA) && !recordUsesSchema(target, CLAIM_SCHEMA))
     throw new Error("Default retractions must target a demonstration or claim Record");
 }
@@ -146,9 +135,7 @@ export function activeDefaultRecords(records: readonly Record[]): readonly Homed
 }
 
 /** No conversion is necessary within the default theory; foreign schemas require another converter. */
-export function convertDefault(
-  records: readonly Record[],
-): readonly Record<DefaultRecordPayload>[] {
+export function convertDefault(records: readonly Record[]): readonly Record<DefaultRecordPayload>[] {
   if (
     records.every(
       (record): record is Record<DefaultRecordPayload> =>

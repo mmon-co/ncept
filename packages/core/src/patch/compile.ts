@@ -52,16 +52,10 @@ export class GraphDiffCompileError extends Error {
   }
 }
 
-function prospectiveBundle(
-  bundle: ClosedPatchBundle,
-  operations: SemanticDelta["operations"],
-): ClosedPatchBundle {
+function prospectiveBundle(bundle: ClosedPatchBundle, operations: SemanticDelta["operations"]): ClosedPatchBundle {
   const terminalKey = exactPatchRefKey(bundle.terminal);
-  const terminalIndex = bundle.revisions.findIndex(
-    (revision) => exactPatchRefKey(revision.ref) === terminalKey,
-  );
-  if (terminalIndex < 0)
-    throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+  const terminalIndex = bundle.revisions.findIndex((revision) => exactPatchRefKey(revision.ref) === terminalKey);
+  if (terminalIndex < 0) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   return {
     terminal: bundle.terminal,
     revisions: bundle.revisions.map((revision, index) =>
@@ -112,10 +106,7 @@ function cycleComponents(
     const component: NodeId[] = [];
     collect(node, component);
     component.sort();
-    if (
-      component.length > 1 ||
-      edges.some((edge) => edge.from === component[0] && edge.to === component[0])
-    )
+    if (component.length > 1 || edges.some((edge) => edge.from === component[0] && edge.to === component[0]))
       components.push(component);
   }
   return components.sort((left, right) => (left[0] ?? "").localeCompare(right[0] ?? ""));
@@ -135,9 +126,7 @@ function reportFor(
       return missing.length === 0 ? [] : [{ edge: edge.id, missing: [...new Set(missing)].sort() }];
     })
     .sort((left, right) => left.edge.localeCompare(right.edge));
-  const validEdges = [...edges.values()].filter(
-    (edge) => nodes.has(edge.from) && nodes.has(edge.to),
-  );
+  const validEdges = [...edges.values()].filter((edge) => nodes.has(edge.from) && nodes.has(edge.to));
   const dependentNodes = new Set(validEdges.map(({ to }) => to));
   const roots = [...nodes].filter((node) => !dependentNodes.has(node)).sort();
   const missingTargets = orderedTargets.filter((target) => !nodes.has(target));
@@ -213,10 +202,7 @@ function approximateReport(
     if (operation.kind === "add-edge") edges.set(operation.edge.id, operation.edge);
     if (operation.kind === "add-metadata-set")
       for (const subject of operation.metadataSet.subjects)
-        if (
-          subject.kind === "node" &&
-          typeof operation.metadataSet.properties[NODE_LABEL_PROPERTY] === "string"
-        )
+        if (subject.kind === "node" && typeof operation.metadataSet.properties[NODE_LABEL_PROPERTY] === "string")
           labelled.add(subject.id);
   }
   return reportFor(bundle.terminal, nodes, edges, labelled, targets);
@@ -255,19 +241,12 @@ export function compileGraph(input: GraphCompilationInput): VisualGraph {
   const resolved = resolvePatchBundle(input.bundle);
   const attachedNames = new Set<string>();
   for (const tag of input.attachedTags ?? []) {
-    if (tag.authority === "patch")
-      throw new Error(`attached tag '${tag.name}' cannot claim Patch authority`);
-    if (
-      resolved.tags.some((candidate) => candidate.name === tag.name) ||
-      attachedNames.has(tag.name)
-    )
+    if (tag.authority === "patch") throw new Error(`attached tag '${tag.name}' cannot claim Patch authority`);
+    if (resolved.tags.some((candidate) => candidate.name === tag.name) || attachedNames.has(tag.name))
       throw new Error(`duplicate attached tag '${tag.name}'`);
     attachedNames.add(tag.name);
   }
-  const selected = selectGraph(
-    { ...resolved, tags: [...resolved.tags, ...(input.attachedTags ?? [])] },
-    input.query,
-  );
+  const selected = selectGraph({ ...resolved, tags: [...resolved.tags, ...(input.attachedTags ?? [])] }, input.query);
   return projectVisualGraph({
     graph: selected,
     learner: input.learner,

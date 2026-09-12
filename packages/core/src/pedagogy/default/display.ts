@@ -13,10 +13,7 @@ export function isDefaultKnown(node: NodeState): boolean {
   return node.label === "demonstrated" || node.label === "probably-known";
 }
 
-export function displayDefault(
-  subject: StructureNode | StructureEdge,
-  state: LearnerState<NodeState>,
-): TheoryDisplay {
+export function displayDefault(subject: StructureNode | StructureEdge, state: LearnerState<NodeState>): TheoryDisplay {
   if ("from" in subject) {
     const dependent = defaultNodeState(state, subject.to);
     const prerequisite = defaultNodeState(state, subject.from);
@@ -41,17 +38,13 @@ export function displayDefault(
 type QueryToken = (state: LearnerState<NodeState>, graph: ResolvedGraph) => ReadonlySet<NodeId>;
 function select(predicate: (node: NodeState) => boolean): QueryToken {
   return (state, graph) =>
-    new Set(
-      graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id),
-    );
+    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id));
 }
 const reachable: QueryToken = (state, graph) =>
   new Set(
     graph.nodes
       .filter(({ id }) =>
-        graph.edges
-          .filter(({ to }) => to === id)
-          .every(({ from }) => isDefaultKnown(defaultNodeState(state, from))),
+        graph.edges.filter(({ to }) => to === id).every(({ from }) => isDefaultKnown(defaultNodeState(state, from))),
       )
       .map(({ id }) => id),
   );
@@ -64,8 +57,6 @@ export const defaultQueryTokens = {
   unknown: select((node) => node.label === "unknown"),
   reachable,
   frontier: (state, graph) =>
-    new Set(
-      [...reachable(state, graph)].filter((id) => !isDefaultKnown(defaultNodeState(state, id))),
-    ),
+    new Set([...reachable(state, graph)].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   stale: select((node) => node.stale),
 } satisfies Record<string, QueryToken>;

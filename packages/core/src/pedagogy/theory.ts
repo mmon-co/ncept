@@ -2,18 +2,8 @@ import { canonicalJson, contentDigest, type ContentDigest } from "../digest";
 import type { ToolSet } from "ai";
 import type { NodeId, ResolvedGraph, StructureNode, StructureEdge } from "../patch";
 import type { LearnerState } from "../profile/state";
-import {
-  isRecordTimestamp,
-  type NodeRef,
-  type Record as LogRecord,
-  type RecordId,
-} from "../profile/observations";
-import {
-  pedagogicalTheoryDigest,
-  sameRelease,
-  type ExactPedagogyRelease,
-  type ResolvedTheory,
-} from "./release";
+import { isRecordTimestamp, type NodeRef, type Record as LogRecord, type RecordId } from "../profile/observations";
+import { pedagogicalTheoryDigest, sameRelease, type ExactPedagogyRelease, type ResolvedTheory } from "./release";
 import type { SkillCatalogRelease } from "./skills";
 
 export interface SchemaRef {
@@ -102,16 +92,13 @@ export function implementPlayground<Contract extends PlaygroundContract, Context
 ): PlaygroundHandlerMap<Context> {
   const erased: Record<string, (input: never, context: Context) => unknown> = {};
   for (const [hook, handler] of Object.entries(handlers)) {
-    if (contract.hooks[hook]?.name !== hook)
-      throw new Error(`${contract.id} declares no hook ${hook}`);
+    if (contract.hooks[hook]?.name !== hook) throw new Error(`${contract.id} declares no hook ${hook}`);
     if (handler) erased[hook] = handler;
   }
   return { [contract.id]: erased };
 }
 
-export type HookResult<Output> =
-  | { readonly kind: "handled"; readonly output: Output }
-  | { readonly kind: "unhandled" };
+export type HookResult<Output> = { readonly kind: "handled"; readonly output: Output } | { readonly kind: "unhandled" };
 
 /**
  * Runs one Playground hook through the theory: the input must satisfy the Playground's
@@ -125,8 +112,7 @@ export async function runPlaygroundHook<Input, Output, Context>(
   input: Input,
   context: Context,
 ): Promise<HookResult<Output>> {
-  if (contract.hooks[hook.name] !== hook)
-    throw new Error(`${contract.id} declares no hook ${hook.name}`);
+  if (contract.hooks[hook.name] !== hook) throw new Error(`${contract.id} declares no hook ${hook.name}`);
   if (!hook.accepts(input)) throw new Error(`Invalid ${contract.id}.${hook.name} input`);
   const handler = theory.playgrounds[contract.id]?.[hook.name];
   if (handler === undefined) return { kind: "unhandled" };
@@ -141,11 +127,7 @@ export interface PedagogicalTheory<S = unknown, N = unknown, Context = never> {
   readonly schemas: readonly RecordSchema<S>[];
   readonly parameters: TheoryParameters;
   acceptsParameters(parameters: unknown): parameters is TheoryParameters;
-  project(
-    records: readonly LogRecord[],
-    graph: ResolvedGraph,
-    context: ProjectionContext,
-  ): LearnerState<N>;
+  project(records: readonly LogRecord[], graph: ResolvedGraph, context: ProjectionContext): LearnerState<N>;
   update(
     state: LearnerState<N>,
     graph: ResolvedGraph,
@@ -154,9 +136,7 @@ export interface PedagogicalTheory<S = unknown, N = unknown, Context = never> {
     context: ProjectionContext,
   ): LearnerState<N>;
   display(subject: StructureNode | StructureEdge, state: LearnerState<N>): TheoryDisplay;
-  readonly queryTokens: Readonly<
-    Record<string, (state: LearnerState<N>, graph: ResolvedGraph) => ReadonlySet<NodeId>>
-  >;
+  readonly queryTokens: Readonly<Record<string, (state: LearnerState<N>, graph: ResolvedGraph) => ReadonlySet<NodeId>>>;
   readonly tools: readonly ToolFactory<Context>[];
   /** Handlers for the Playgrounds this theory knows, by Playground identity (ADR 0015). */
   readonly playgrounds: PlaygroundHandlerMap<Context>;
@@ -187,10 +167,8 @@ export function parameterOverride<S, N, Context>(
 ): ParameterOverride {
   if (!/^parameter-override-.+/.test(input.id) || !isRecordTimestamp(input.createdAt))
     throw new Error("Parameter override requires an identity and ISO timestamp");
-  if (pedagogicalTheoryDigest(theory.theory) !== theory.digest)
-    throw new Error("Invalid resolved theory digest");
-  if (!theory.theory.acceptsParameters(input.parameters))
-    throw new Error("Invalid theory parameters");
+  if (pedagogicalTheoryDigest(theory.theory) !== theory.digest) throw new Error("Invalid resolved theory digest");
+  if (!theory.theory.acceptsParameters(input.parameters)) throw new Error("Invalid theory parameters");
   const target = { origin: theory.origin, digest: theory.digest };
   // Clone JSON parameters so subsequent edits to a proposal cannot alter an accepted value.
   const parameters: TheoryParameters = JSON.parse(canonicalJson(input.parameters));
@@ -207,16 +185,10 @@ export function resolveTheoryParameters<S, N, Context>(
   override?: ParameterOverride,
 ): TheoryParameters {
   if (override === undefined) return theory.theory.parameters;
-  if (
-    !sameRelease(override.theory.origin, theory.origin) ||
-    override.theory.digest !== theory.digest
-  )
+  if (!sameRelease(override.theory.origin, theory.origin) || override.theory.digest !== theory.digest)
     throw new Error("Parameter override targets a different Pedagogical theory");
-  if (
-    override.digest !== contentDigest({ theory: override.theory, parameters: override.parameters })
-  )
+  if (override.digest !== contentDigest({ theory: override.theory, parameters: override.parameters }))
     throw new Error("Invalid parameter override digest");
-  if (!theory.theory.acceptsParameters(override.parameters))
-    throw new Error("Invalid theory parameters");
+  if (!theory.theory.acceptsParameters(override.parameters)) throw new Error("Invalid theory parameters");
   return override.parameters;
 }
