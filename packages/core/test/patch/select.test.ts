@@ -19,7 +19,6 @@ const revision: PatchRevision = {
   },
   bases: [],
 
-  materials: [],
   metadata: { properties: { "patch:title": "Selection" }, citations: [] },
   delta: {
     operations: [

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PatchCompileError, resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "../../src/patch";
-import { materialBodyDigest } from "../../src/patch/release";
+import { attachmentDigest } from "../../src/digest";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
@@ -11,47 +11,58 @@ function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
     },
     bases: [],
 
-    materials: [],
     metadata: { properties: { "patch:title": "Test" }, citations: [] },
     delta: { operations },
   };
 }
 
-test("Patch Material attachments are single-Node, known-Node and digest exact", () => {
-  const body = "A worked example.";
-  const valid: PatchRevision = {
-    ...root([{ kind: "add-node", node: { id: "node-a" } }]),
-    materials: [
-      {
-        kind: "document",
-        id: "material-example",
-        node: "node-a",
-        title: "Example",
-        body,
-        digest: materialBodyDigest(body),
+test("typed attachment metadata retains its subjects and rejects malformed refs or dangling subjects", () => {
+  const hash = attachmentDigest(new TextEncoder().encode("A worked example."));
+  const valid = root([
+    { kind: "add-node", node: { id: "node-a" } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-example",
+        subjects: [{ kind: "node", id: "node-a" }],
+        properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
       },
-    ],
-  };
-  expect(resolvePatchBundle({ terminal: valid.ref, revisions: [valid] }).materials[0]).toMatchObject({
-    id: "material-example",
-    node: "node-a",
-    source: valid.ref,
+    },
+  ]);
+  const graph = resolvePatchBundle({ terminal: valid.ref, revisions: [valid] });
+  expect(graph.metadataSets[0]).toEqual({
+    id: "metadata-example",
+    subjects: [{ kind: "node", id: "node-a" }],
+    properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
   });
-
-  function malformed(property: string, value: unknown): PatchRevision {
+  expect(graph.provenance.metadataProperties["metadata-example"]?.content).toEqual([
+    { patch: valid.ref, operationIndex: 1 },
+  ]);
+  for (const [property, value] of [
+    ["hash", "sha256:short"],
+    ["hash", `sha256:${"A".repeat(64)}`],
+    ["mediaType", ""],
+    ["body", "embedded"],
+  ] as const) {
     const revision = structuredClone(valid);
-    const material = revision.materials[0];
-    if (material === undefined) throw new Error("test Material missing");
-    Reflect.set(material, property, value);
-    return revision;
+    const operation = revision.delta.operations[1];
+    if (operation?.kind !== "add-metadata-set") throw new Error("missing test attachment");
+    const attachment = operation.metadataSet.properties.content;
+    if (typeof attachment !== "object" || attachment === null) throw new Error("missing test reference");
+    Reflect.set(attachment, property, value);
+    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow(/metadata property/);
   }
-  for (const revision of [
-    malformed("node", ["node-a", "node-b"]),
-    malformed("node", "node-unknown"),
-    malformed("digest", `sha256:${"0".repeat(64)}`),
-    malformed("title", ""),
-  ])
-    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow();
+  const dangling = root([
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-example",
+        subjects: [{ kind: "node", id: "node-missing" }],
+        properties: { content: { kind: "blob", hash, mediaType: "text/plain" } },
+      },
+    },
+  ]);
+  expect(() => resolvePatchBundle({ terminal: dangling.ref, revisions: [dangling] })).toThrow(/missing node/);
 });
 
 function ref(identity: `patch-${string}`, fill: string): ExactPatchRef {
@@ -71,7 +82,6 @@ function based(
     ref: exact,
     bases: bases,
 
-    materials: [],
     metadata: { properties: { "patch:title": exact.identity }, citations: [] },
     delta: { operations },
   };

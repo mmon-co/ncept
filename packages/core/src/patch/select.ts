@@ -278,7 +278,6 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
     nodes: graph.nodes.filter(({ id }) => nodes.has(id)),
     edges: graph.edges.filter(({ id }) => edges.has(id)),
     metadataSets: selectedMetadata,
-    materials: graph.materials.filter(({ node }) => nodes.has(node)),
     tags: graph.tags.map((tag) => ({
       ...tag,
       nodes: tag.nodes.filter((id) => nodes.has(id)),

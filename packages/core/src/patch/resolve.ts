@@ -1,4 +1,4 @@
-import { sha256Hex } from "../digest";
+import { validateMetadataProperties } from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
@@ -16,10 +16,9 @@ import type {
   StructureEdge,
   StructureNode,
   GraphTag,
-  ResolvedMaterial,
   TaggedSet,
 } from "./model";
-import { exactPatchRefKey, isMaterialId, sameExactPatchRef } from "./model";
+import { exactPatchRefKey, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
@@ -105,72 +104,6 @@ function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
     leftKeys.length === rightKeys.length &&
     leftKeys.every((key, index) => key === rightKeys[index])
   );
-}
-
-function isNodeId(value: unknown): value is NodeId {
-  return typeof value === "string" && /^node-[0-9a-z-]+$/.test(value);
-}
-
-function isContentDigest(value: unknown): value is `sha256:${string}` {
-  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
-}
-
-function parseMaterial(value: unknown, patch: PatchId): Omit<ResolvedMaterial, "source"> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new PatchCompileError("invalid-material-attachment", "malformed Material attachment");
-  const kind = Reflect.get(value, "kind");
-  const id = Reflect.get(value, "id");
-  const node = Reflect.get(value, "node");
-  const title = Reflect.get(value, "title");
-  const body = Reflect.get(value, "body");
-  const digest = Reflect.get(value, "digest");
-  if (
-    kind !== "document" ||
-    !isMaterialId(id) ||
-    !isNodeId(node) ||
-    typeof title !== "string" ||
-    title.trim() === "" ||
-    typeof body !== "string" ||
-    body.trim() === "" ||
-    !isContentDigest(digest)
-  )
-    throw new PatchCompileError("invalid-material-attachment", `Patch ${patch} has malformed Material attachment`);
-  return { kind, id, node, title, body, digest };
-}
-
-function validateMaterials(
-  revisions: readonly PatchRevision[],
-  nodes: ReadonlyMap<NodeId, StructureNode>,
-): ResolvedMaterial[] {
-  const seen = new Set<string>();
-  const materials: ResolvedMaterial[] = [];
-  for (const revision of revisions) {
-    const attachments: unknown = revision.materials;
-    if (!Array.isArray(attachments))
-      throw new PatchCompileError(
-        "invalid-material-attachment",
-        `Patch ${revision.ref.identity} has malformed Material attachments`,
-      );
-    for (const value of attachments) {
-      const material = parseMaterial(value, revision.ref.identity);
-      if (!nodes.has(material.node))
-        throw new PatchCompileError(
-          "invalid-material-attachment",
-          `Material ${material.id} targets unknown Node ${material.node}`,
-        );
-      const actual = `sha256:${sha256Hex(material.body)}`;
-      if (material.digest !== actual)
-        throw new PatchCompileError(
-          "invalid-material-attachment",
-          `Material ${material.id} content digest does not match`,
-        );
-      if (seen.has(material.id))
-        throw new PatchCompileError("invalid-material-attachment", `Material attachment ${material.id} is repeated`);
-      seen.add(material.id);
-      materials.push({ ...material, source: revision.ref });
-    }
-  }
-  return materials.sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function contributionKey(source: ExactPatchRef, operationIndex: number): string {
@@ -310,6 +243,9 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   };
 
   for (const revision of orderedRevisions) {
+    validateMetadataProperties(revision.metadata.properties);
+    for (const operation of revision.delta.operations)
+      if (operation.kind === "add-metadata-set") validateMetadataProperties(operation.metadataSet.properties);
     revision.delta.operations.forEach((operation, index) =>
       collectOperation(revision.ref, operation, index, collection),
     );
@@ -428,7 +364,6 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     terminal: bundle.terminal,
     patchOrder: orderedRevisions.map((revision) => revision.ref),
     patchMetadata,
-    materials: validateMaterials(orderedRevisions, nodes),
     nodes: sorted(nodes.values()),
     edges: sorted(edges.values()),
     metadataSets: sorted(metadataSets.values()),

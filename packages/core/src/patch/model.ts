@@ -6,14 +6,10 @@ export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
 export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
-export type MaterialId = `material-${string}`;
+/** Portable metadata references only; bytes, authority and running instances belong to the host. */
+export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };
 
-/** Return whether a value uses the canonical Material identity grammar. */
-export function isMaterialId(value: unknown): value is MaterialId {
-  return typeof value === "string" && /^material-[0-9a-z-]+$/.test(value);
-}
-
-export type MetadataValue = string | number | boolean | null | readonly string[];
+export type MetadataValue = string | number | boolean | null | readonly string[] | Attachment;
 
 export interface ExactPatchRef {
   readonly identity: PatchId;
@@ -125,30 +121,16 @@ export interface SemanticDelta {
   readonly operations: readonly SemanticOperation[];
 }
 
-/** A teaching document and its single-Node attachment, versioned by its owning Patch. */
-export interface DocumentMaterial {
-  readonly kind: "document";
-  readonly id: MaterialId;
-  readonly node: NodeId;
-  readonly title: string;
-  readonly body: string;
-  readonly digest: `sha256:${string}`;
-}
-
+/** Canonical authored content: no own instance identity, lifecycle fields or embedded bytes. */
 export interface PatchContent {
-  readonly identity: PatchId;
   readonly bases: readonly ExactPatchRef[];
   readonly delta: SemanticDelta;
-  readonly materials: readonly DocumentMaterial[];
   readonly metadata: PatchMetadata;
 }
 
-export interface PatchRevision {
+/** The same content may resolve under several exact instance references. */
+export interface PatchRevision extends PatchContent {
   readonly ref: ExactPatchRef;
-  readonly bases: readonly ExactPatchRef[];
-  readonly delta: SemanticDelta;
-  readonly materials: readonly DocumentMaterial[];
-  readonly metadata: PatchMetadata;
 }
 
 export interface ClosedPatchBundle {
@@ -157,7 +139,6 @@ export interface ClosedPatchBundle {
 }
 
 export interface ReificationTarget {
-  readonly identity: PatchId;
   readonly metadata: PatchMetadata;
 }
 
@@ -166,16 +147,10 @@ export interface ContributionProvenance {
   readonly operationIndex: number;
 }
 
-export interface ResolvedMaterial extends DocumentMaterial {
-  /** Exact owning Patch revision; Material identities never imply a version. */
-  readonly source: ExactPatchRef;
-}
-
 export interface ResolvedGraph {
   readonly terminal: ExactPatchRef;
   readonly patchOrder: readonly ExactPatchRef[];
   readonly patchMetadata: Readonly<Record<PatchId, PatchMetadata>>;
-  readonly materials: readonly ResolvedMaterial[];
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];

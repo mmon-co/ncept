@@ -1,13 +1,12 @@
-import { contentDigest, sha256Hex, type ContentDigest } from "../digest";
+import { contentDigest, type ContentDigest } from "../digest";
 import { compileGraph } from "./compile";
 import { PatchCompileError } from "./errors";
 import {
-  isMaterialId,
+  exactPatchRefKey,
   NODE_LABEL_PROPERTY,
   NODE_LESSON_PROPERTY,
-  sameExactPatchRef,
   type ClosedPatchBundle,
-  type DocumentMaterial,
+  type PatchMetadata,
   type ExactPatchRef,
   type NodeId,
   type PatchContent,
@@ -22,14 +21,8 @@ export const PERSONAL_PATCH_ID = "patch-personal" as const;
 export class PatchContentError extends Error {}
 
 /** An empty Notebook is an ordinary Patch value; opening/checkpointing it is host policy. */
-export function emptyPatch(identity: PatchId = PERSONAL_PATCH_ID): PatchContent {
-  return {
-    identity,
-    bases: [],
-    delta: { operations: [] },
-    materials: [],
-    metadata: { properties: { "patch:title": identity === PERSONAL_PATCH_ID ? "Personal" : identity }, citations: [] },
-  };
+export function emptyPatch(metadata: PatchMetadata = { properties: {}, citations: [] }): PatchContent {
+  return { bases: [], delta: { operations: [] }, metadata };
 }
 
 export function isPatchId(value: unknown): value is PatchId {
@@ -42,17 +35,20 @@ export function isNodeId(value: unknown): value is NodeId {
 
 /** Canonical content identity; release names and host lifecycle are not content. */
 export function revisionDigest(content: PatchContent): ContentDigest {
-  return contentDigest(content);
+  return contentDigest({ bases: content.bases, delta: content.delta, metadata: content.metadata });
 }
 
-export function candidateRevision(content: PatchContent): PatchRevision {
-  const { identity, ...value } = content;
-  return { ref: { identity, digest: revisionDigest(content) }, ...value };
+export function candidateRevision(identity: PatchId, content: PatchContent): PatchRevision {
+  return {
+    ref: { identity, digest: revisionDigest(content) },
+    bases: content.bases,
+    delta: content.delta,
+    metadata: content.metadata,
+  };
 }
 
 export function revisionContent(revision: PatchRevision): PatchContent {
-  const { ref, ...content } = revision;
-  return { identity: ref.identity, ...content };
+  return { bases: revision.bases, delta: revision.delta, metadata: revision.metadata };
 }
 
 /** Compute and verify the exact transitive closure from host-supplied content only. */
@@ -60,30 +56,31 @@ export function bundleForRevision(
   terminal: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
 ): ClosedPatchBundle {
-  const revisions = new Map<ContentDigest, PatchRevision>();
-  const active = new Set<ContentDigest>();
+  const revisions = new Map<string, PatchRevision>();
+  const active = new Set<string>();
+  const verified = new Set<ContentDigest>();
   const visit = (ref: ExactPatchRef): void => {
-    if (active.has(ref.digest)) throw new PatchCompileError("dependency-cycle", "Patch base cycle");
+    const key = exactPatchRefKey(ref);
+    if (active.has(key)) throw new PatchCompileError("dependency-cycle", "Patch base cycle");
     const content = contents.get(ref.digest);
     if (content === undefined)
       throw new PatchCompileError("unresolvable-dependency", `missing Patch ${ref.identity}@${ref.digest}`);
-    const revision = candidateRevision(content);
-    if (!sameExactPatchRef(ref, revision.ref))
-      throw new PatchCompileError("invalid-bundle", `Patch content does not match ${ref.identity}@${ref.digest}`);
-    if (revisions.has(ref.digest)) return;
-    active.add(ref.digest);
+    if (!verified.has(ref.digest)) {
+      if (revisionDigest(content) !== ref.digest)
+        throw new PatchCompileError("invalid-bundle", `Patch content does not match ${ref.identity}@${ref.digest}`);
+      verified.add(ref.digest);
+    }
+    if (revisions.has(key)) return;
+    const revision = { ref, bases: content.bases, delta: content.delta, metadata: content.metadata };
+    active.add(key);
     for (const base of content.bases) visit(base);
-    active.delete(ref.digest);
-    revisions.set(ref.digest, revision);
+    active.delete(key);
+    revisions.set(key, revision);
   };
   visit(terminal);
   const bundle = { terminal, revisions: [...revisions.values()] };
   resolvePatchBundle(bundle);
   return bundle;
-}
-
-export function materialBodyDigest(body: string): DocumentMaterial["digest"] {
-  return `sha256:${sha256Hex(body)}`;
 }
 
 function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
@@ -111,13 +108,8 @@ export function lessonOperations(input: {
   ];
 }
 
-export function rootContent(
-  identity: PatchId,
-  definition: RootPatchDefinition,
-  materials: readonly DocumentMaterial[] = [],
-): PatchContent {
+export function rootContent(definition: RootPatchDefinition): PatchContent {
   return {
-    identity,
     bases: [],
     delta: {
       operations: [
@@ -137,7 +129,6 @@ export function rootContent(
         ]),
       ],
     },
-    materials,
     metadata: {
       properties: {
         "patch:title": definition.title,
@@ -192,54 +183,11 @@ export function validateRootPatchDefinition(identity: PatchId, definition: RootP
   if (new Set(metadataIds).size !== metadataIds.length)
     invalidRoot("Node and Edge identities must produce distinct metadata identities");
   try {
-    const revision = candidateRevision(rootContent(identity, definition));
+    const revision = candidateRevision(identity, rootContent(definition));
     compileGraph({ bundle: { terminal: revision.ref, revisions: [revision] }, annotations: {} });
   } catch (error) {
     invalidRoot(error instanceof Error ? error.message : String(error));
   }
-}
-
-export interface DocumentMaterialInput {
-  readonly id: DocumentMaterial["id"];
-  readonly node: NodeId;
-  readonly title: string;
-  readonly body: string;
-}
-
-function documentMaterial(input: DocumentMaterialInput): DocumentMaterial {
-  if (!isNodeId(input.node) || !isMaterialId(input.id) || input.title.trim() === "" || input.body.trim() === "")
-    throw new PatchContentError("invalid document Material");
-  return {
-    kind: "document",
-    id: input.id,
-    node: input.node,
-    title: input.title.trim(),
-    body: input.body,
-    digest: materialBodyDigest(input.body),
-  };
-}
-
-export function withMaterial(content: PatchContent, input: DocumentMaterialInput): PatchContent {
-  const material = documentMaterial(input);
-  if (content.materials.some(({ id }) => id === material.id))
-    throw new PatchContentError(`Material ${material.id} already exists`);
-  return { ...content, materials: [...content.materials, material] };
-}
-
-export function withRevisedMaterial(
-  content: PatchContent,
-  materialId: DocumentMaterial["id"],
-  body: string,
-): PatchContent {
-  if (body.trim() === "") throw new PatchContentError("invalid document Material");
-  const index = content.materials.findIndex(({ id }) => id === materialId);
-  if (index === -1) throw new PatchContentError(`Material ${materialId} does not exist`);
-  return {
-    ...content,
-    materials: content.materials.map((material, candidate) =>
-      candidate === index ? { ...material, body, digest: materialBodyDigest(body) } : material,
-    ),
-  };
 }
 
 export interface PatchRelease {
@@ -306,8 +254,8 @@ export function selectReleaseUpdate(
 }
 
 /** Recover editable lesson content from a supplied root Patch. */
-export function rootDefinition(content: PatchContent): RootPatchDefinition {
-  if (content.bases.length !== 0) throw new PatchContentError(`${content.identity} is not a root Patch`);
+export function rootDefinition(identity: PatchId, content: PatchContent): RootPatchDefinition {
+  if (content.bases.length !== 0) throw new PatchContentError(`${identity} is not a root Patch`);
   const metadataBySubject = new Map<string, Record<string, unknown>>();
   for (const operation of content.delta.operations)
     if (operation.kind === "add-metadata-set")
@@ -316,7 +264,7 @@ export function rootDefinition(content: PatchContent): RootPatchDefinition {
   const title = content.metadata.properties["patch:title"];
   const author = content.metadata.properties["patch:author"];
   if (typeof title !== "string" || typeof author !== "string")
-    throw new PatchContentError(`${content.identity} is missing root Patch metadata`);
+    throw new PatchContentError(`${identity} is missing root Patch metadata`);
   const definition: RootPatchDefinition = {
     title,
     author,
@@ -347,6 +295,6 @@ export function rootDefinition(content: PatchContent): RootPatchDefinition {
       ];
     }),
   };
-  validateRootPatchDefinition(content.identity, definition);
+  validateRootPatchDefinition(identity, definition);
   return definition;
 }

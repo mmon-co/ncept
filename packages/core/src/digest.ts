@@ -9,6 +9,11 @@ export function sha256Hex(text: string): string {
 /** Shared content identity for JSON values. Owners choose which data is content. */
 export type ContentDigest = `sha256:${string}`;
 
+/** SHA-256 of raw bytes, not JSON; text attachments supply their UTF-8 encoding. */
+export function attachmentDigest(bytes: Uint8Array): ContentDigest {
+  return `sha256:${bytesToHex(sha256(bytes))}`;
+}
+
 function canonicalValue(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number") {

@@ -21,7 +21,6 @@ function resolvedGraph(operations: PatchRevision["delta"]["operations"]) {
       digest: `sha256:${"a".repeat(64)}`,
     },
     bases: [],
-    materials: [],
     delta: { operations },
     metadata: { properties: {}, citations: [] },
   };

@@ -15,7 +15,6 @@ test("reification creates an independent root from exactly the View result", () 
     ref: ref("patch-foundation", "1"),
     bases: [],
 
-    materials: [],
     delta: {
       operations: [
         { kind: "add-node", node: { id: "node-foundation" } },
@@ -35,7 +34,6 @@ test("reification creates an independent root from exactly the View result", () 
     ref: ref("patch-source", "2"),
     bases: [foundation.ref],
 
-    materials: [],
     delta: {
       operations: [
         { kind: "add-node", node: { id: "node-source" } },
@@ -83,7 +81,6 @@ test("reification creates an independent root from exactly the View result", () 
   });
 
   const target = {
-    identity: "patch-independent" as const,
     metadata: {
       properties: {
         "patch:title": "Independent",
@@ -95,11 +92,10 @@ test("reification creates an independent root from exactly the View result", () 
   };
   const reified = reifyView(selected, target);
   const targetRevision: PatchRevision = {
-    ref: ref(reified.identity, "3"),
+    ref: ref("patch-independent", "3"),
     bases: reified.bases,
 
     delta: reified.delta,
-    materials: reified.materials,
     metadata: reified.metadata,
   };
   const resolvedTarget = resolvePatchBundle({
@@ -124,9 +120,7 @@ test("reification creates an independent root from exactly the View result", () 
   expect(resolvedTarget.nodes.map(({ id }) => id)).not.toContain("node-outside-view");
   expect(resolvedTarget.tags.map((tag) => tag.name)).toContain("patch:patch-independent:curriculum");
   expect(resolvedTarget.tags.map((tag) => tag.name)).not.toContain("patch:patch-source:curriculum");
-  expect(() => reifyView(selected, { ...target, identity: foundation.ref.identity })).toThrow(
-    "a reified Patch must have a new opaque identity",
-  );
+  expect(Object.hasOwn(reified, "identity")).toBe(false);
   expect(reified.metadata.citations).toEqual([
     {
       kind: "reified_from",
@@ -149,7 +143,6 @@ test("non-reification Citations never become Patch dependencies", () => {
     ref: ref("patch-citing", "4"),
     bases: [],
 
-    materials: [],
     delta: { operations: [{ kind: "add-node", node: { id: "node-citing" } }] },
     metadata: {
       properties: { "patch:title": "Citing" },

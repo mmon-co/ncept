@@ -10,7 +10,6 @@ const revision: PatchRevision = {
   },
   bases: [],
 
-  materials: [],
   metadata: {
     properties: {
       "patch:title": "Linear algebra",
@@ -201,7 +200,6 @@ test("a Personal Notebook keeps effective content when optional theory displays 
     },
     bases: [course.ref],
 
-    materials: [],
     metadata: { properties: { "patch:title": "Personal" }, citations: [] },
     delta: {
       operations: [

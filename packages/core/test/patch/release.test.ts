@@ -10,7 +10,6 @@ import {
   emptyPatch,
   exactPatchRefKey,
   lessonOperations,
-  materialBodyDigest,
   resolvePatchBundle,
   revisionContent,
   revisionDigest,
@@ -19,9 +18,8 @@ import {
   sameExactPatchRef,
   selectReleaseUpdate,
   validateRootPatchDefinition,
-  withMaterial,
-  withRevisedMaterial,
   type PatchContent,
+  type PatchId,
   type PatchRelease,
   type RootPatchDefinition,
 } from "../../src/patch";
@@ -38,8 +36,8 @@ function contents(...patches: readonly PatchContent[]) {
   return new Map(patches.map((patch) => [revisionDigest(patch), patch]));
 }
 
-function release(version: string, identity: PatchContent["identity"] = "patch-course"): PatchRelease {
-  return { version, ref: candidateRevision(emptyPatch(identity)).ref };
+function release(version: string, identity: PatchId = "patch-course"): PatchRelease {
+  return { version, ref: candidateRevision(identity, emptyPatch()).ref };
 }
 
 test("canonical content identity sorts object keys, preserves ordered arrays, and rejects non-JSON values", () => {
@@ -53,17 +51,15 @@ test("canonical content identity sorts object keys, preserves ordered arrays, an
 });
 
 test("a candidate is a canonical content revision with no commit or release coordinate", () => {
-  const content = rootContent("patch-course", definition);
-  const revision = candidateRevision(content);
+  const content = rootContent(definition);
+  const revision = candidateRevision("patch-course", content);
   expect(revision.ref).toEqual({ identity: "patch-course", digest: contentDigest(content) });
   expect(revisionContent(revision)).toEqual(content);
   expect(
-    candidateRevision({
+    candidateRevision("patch-course", {
       metadata: content.metadata,
-      materials: [],
       delta: content.delta,
       bases: [],
-      identity: content.identity,
     }),
   ).toEqual(revision);
   expect(exactPatchRefKey(revision.ref)).toBe(`patch-course\0${revision.ref.digest}`);
@@ -78,13 +74,19 @@ test("a candidate is a canonical content revision with no commit or release coor
 });
 
 test("base closure uses supplied content, preserves manifest order, deduplicates diamonds and ignores unrelated rows", () => {
-  const shared = rootContent("patch-shared", definition);
-  const sharedRef = candidateRevision(shared).ref;
-  const left = { ...emptyPatch("patch-left"), bases: [sharedRef] };
-  const right = { ...emptyPatch("patch-right"), bases: [sharedRef] };
-  const terminal = { ...emptyPatch(), bases: [candidateRevision(left).ref, candidateRevision(right).ref] };
-  const unrelated = emptyPatch("patch-unrelated");
-  const bundle = bundleForRevision(candidateRevision(terminal).ref, contents(unrelated, right, terminal, shared, left));
+  const shared = rootContent(definition);
+  const sharedRef = candidateRevision("patch-shared", shared).ref;
+  const left = { ...emptyPatch(), bases: [sharedRef] };
+  const right = { ...emptyPatch(), bases: [sharedRef] };
+  const terminal = {
+    ...emptyPatch(),
+    bases: [candidateRevision("patch-left", left).ref, candidateRevision("patch-right", right).ref],
+  };
+  const unrelated = emptyPatch();
+  const bundle = bundleForRevision(
+    candidateRevision("patch-personal", terminal).ref,
+    contents(unrelated, right, terminal, shared, left),
+  );
   expect(bundle.revisions.map(({ ref }) => ref.identity)).toEqual([
     "patch-shared",
     "patch-left",
@@ -97,31 +99,34 @@ test("base closure uses supplied content, preserves manifest order, deduplicates
   expect(revisionDigest({ ...terminal, bases: [...terminal.bases].reverse() })).not.toBe(revisionDigest(terminal));
 });
 
-test("base closure rejects missing content, identity/digest mismatches and incompatible exact revisions", () => {
-  const base = rootContent("patch-course", definition);
-  const ref = candidateRevision(base).ref;
+test("base closure rejects missing content, digest mismatches and incompatible exact revisions", () => {
+  const base = rootContent(definition);
+  const ref = candidateRevision("patch-course", base).ref;
   const terminal = { ...emptyPatch(), bases: [ref] };
-  expect(() => bundleForRevision(candidateRevision(terminal).ref, contents(terminal))).toThrow(
+  expect(() => bundleForRevision(candidateRevision("patch-personal", terminal).ref, contents(terminal))).toThrow(
     /missing Patch patch-course/,
   );
-  expect(() => bundleForRevision({ ...ref, identity: "patch-wrong" }, contents(base))).toThrow(/does not match/);
-  expect(() => bundleForRevision(ref, new Map([[ref.digest, emptyPatch("patch-course")]]))).toThrow(/does not match/);
-  const newer = { ...base, metadata: { ...base.metadata, properties: { "patch:title": "New title" } } };
-  const conflicting = { ...terminal, bases: [ref, candidateRevision(newer).ref] };
-  expect(() => bundleForRevision(candidateRevision(conflicting).ref, contents(base, newer, conflicting))).toThrow(
-    /resolves to both/,
+  const clone = { ...ref, identity: "patch-clone" as const };
+  expect(resolvePatchBundle(bundleForRevision(clone, contents(base))).provenance.nodes["node-a"]?.[0]?.patch).toEqual(
+    clone,
   );
+  expect(() => bundleForRevision(ref, new Map([[ref.digest, emptyPatch()]]))).toThrow(/does not match/);
+  const newer = { ...base, metadata: { ...base.metadata, properties: { "patch:title": "New title" } } };
+  const conflicting = { ...terminal, bases: [ref, candidateRevision("patch-course", newer).ref] };
+  expect(() =>
+    bundleForRevision(candidateRevision("patch-personal", conflicting).ref, contents(base, newer, conflicting)),
+  ).toThrow(/resolves to both/);
 });
 
 test("Notebook diff compilation and application preserve citations and compute the resulting exact provenance", () => {
   const empty = emptyPatch();
-  const before = candidateRevision(empty);
+  const before = candidateRevision("patch-personal", empty);
   const bundle = bundleForRevision(before.ref, contents(empty));
   const operations = lessonOperations({ id: "node-a", label: "A", lesson: "Explain A." });
   const citations = [{ kind: "external_source" as const, source: "https://example.org/source" }];
   const compiled = compileGraphDiff(bundle, operations, ["node-a"], citations);
   const next = applyGraphDiff(empty, compiled);
-  const after = candidateRevision(next);
+  const after = candidateRevision("patch-personal", next);
   expect(compiled.report.compiledAgainst).toEqual(before.ref);
   expect(compiled.graph.terminal).toEqual(after.ref);
   expect(compiled.graph.provenance.nodes["node-a"]).toEqual([{ patch: after.ref, operationIndex: 0 }]);
@@ -136,10 +141,10 @@ test("Notebook diff compilation and application preserve citations and compute t
 });
 
 test("composed content validates exact masks and conflicts against supplied bases", () => {
-  const base = rootContent("patch-course", definition);
-  const ref = candidateRevision(base).ref;
+  const base = rootContent(definition);
+  const ref = candidateRevision("patch-course", base).ref;
   const notebook = { ...emptyPatch(), bases: [ref] };
-  const bundle = bundleForRevision(candidateRevision(notebook).ref, contents(base, notebook));
+  const bundle = bundleForRevision(candidateRevision("patch-personal", notebook).ref, contents(base, notebook));
   const mask = {
     source: ref,
     operationIndex: 1,
@@ -163,8 +168,8 @@ test("composed content validates exact masks and conflicts against supplied base
   );
   const next = applyGraphDiff(notebook, diff);
   expect(
-    resolvePatchBundle(bundleForRevision(candidateRevision(next).ref, contents(base, next))).metadataSets[0]
-      ?.properties,
+    resolvePatchBundle(bundleForRevision(candidateRevision("patch-personal", next).ref, contents(base, next)))
+      .metadataSets[0]?.properties,
   ).toEqual({ "display:label": "Renamed", "pedagogy:lesson": "Explain A." });
   expect(() =>
     compileGraphDiff(bundle, [{ kind: "mask-contribution", mask: { ...mask, operationIndex: 99 } }], []),
@@ -180,7 +185,7 @@ test("composed content validates exact masks and conflicts against supplied base
 
 test("root lesson construction and validation are value-only and round trip editable content", () => {
   validateRootPatchDefinition("patch-course", definition);
-  expect(rootDefinition(rootContent("patch-course", definition))).toEqual(definition);
+  expect(rootDefinition("patch-course", rootContent(definition))).toEqual(definition);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, title: "" })).toThrow(/title is required/);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, labels: ["course", "course"] })).toThrow(
     /labels must be unique/,
@@ -195,31 +200,6 @@ test("root lesson construction and validation are value-only and round trip edit
       ],
     }),
   ).toThrow(/cycle/);
-});
-
-test("Material content revision preserves supplied identity, attachment, original body and exact source", () => {
-  const original = rootContent("patch-course", definition);
-  const attached = withMaterial(original, { id: "material-a", node: "node-a", title: " Example ", body: "Original" });
-  const next = withRevisedMaterial(attached, "material-a", "Revised");
-  expect(next.materials[0]).toEqual({
-    kind: "document",
-    id: "material-a",
-    node: "node-a",
-    title: "Example",
-    body: "Revised",
-    digest: materialBodyDigest("Revised"),
-  });
-  expect(attached.materials[0]?.body).toBe("Original");
-  expect(original.materials).toEqual([]);
-  const revision = candidateRevision(next);
-  expect(resolvePatchBundle(bundleForRevision(revision.ref, contents(next))).materials[0]?.source).toEqual(
-    revision.ref,
-  );
-  expect(() => withMaterial(attached, { id: "material-a", node: "node-a", title: "A", body: "A" })).toThrow(
-    /already exists/,
-  );
-  expect(() => withRevisedMaterial(attached, "material-missing", "body")).toThrow(/does not exist/);
-  expect(() => withRevisedMaterial(attached, "material-a", " ")).toThrow(/invalid/);
 });
 
 test("release selection chooses the highest supplied stable semver, never a maintenance downgrade or prerelease", () => {
@@ -248,4 +228,134 @@ test("semver precedence ignores build metadata, orders numeric prereleases, and 
   expect(compareReleaseVersions("999999999999999999.0.0", "999999999999999998.0.0")).toBe(1);
   for (const version of ["", "1.0", "01.0.0", "1.0.0-01", "1.0.0+", "1.0.0-rc..1"])
     expect(() => compareReleaseVersions(version, "1.0.0")).toThrow(/invalid Patch release/);
+});
+
+test("cloned instances share canonical content without instance-derived metadata or local-id reminting", () => {
+  expect(emptyPatch()).toEqual({ bases: [], delta: { operations: [] }, metadata: { properties: {}, citations: [] } });
+  const content = rootContent(definition);
+  const first = candidateRevision("patch-first", content);
+  const clone = candidateRevision("patch-clone", content);
+  expect(first.ref.digest).toBe(clone.ref.digest);
+  expect(first.ref.identity).not.toBe(clone.ref.identity);
+  expect(sameExactPatchRef(first.ref, clone.ref)).toBe(false);
+  expect(revisionContent(first)).toEqual(revisionContent(clone));
+  expect(revisionDigest(first)).toBe(revisionDigest(clone));
+  expect(Object.hasOwn(content, "identity")).toBe(false);
+  const firstGraph = resolvePatchBundle(bundleForRevision(first.ref, contents(content)));
+  const cloneGraph = resolvePatchBundle(bundleForRevision(clone.ref, contents(content)));
+  expect(firstGraph.nodes).toEqual(cloneGraph.nodes);
+  expect(firstGraph.metadataSets).toEqual(cloneGraph.metadataSets);
+  expect(firstGraph.provenance.nodes["node-a"]?.[0]?.patch).toEqual(first.ref);
+  expect(cloneGraph.provenance.nodes["node-a"]?.[0]?.patch).toEqual(clone.ref);
+});
+
+test("shared digest closure preserves both instances and exact masks do not suppress the other clone", () => {
+  const content = rootContent(definition);
+  const first = candidateRevision("patch-first", content).ref;
+  const clone = candidateRevision("patch-clone", content).ref;
+  const plain = { ...emptyPatch(), bases: [first, clone] };
+  const terminal = candidateRevision("patch-personal", plain).ref;
+  const bundle = bundleForRevision(terminal, contents(plain, content));
+  expect(bundle.revisions.map(({ ref }) => ref)).toEqual([first, clone, terminal]);
+  expect(resolvePatchBundle(bundle).provenance.nodes["node-a"]).toEqual([
+    { patch: first, operationIndex: 0 },
+    { patch: clone, operationIndex: 0 },
+  ]);
+  const masked = composePatch(plain, [
+    {
+      kind: "mask-contribution",
+      mask: {
+        source: first,
+        operationIndex: 0,
+        entity: { kind: "node", id: "node-a" },
+      },
+    },
+  ]);
+  const maskedRef = candidateRevision("patch-personal", masked).ref;
+  const graph = resolvePatchBundle(bundleForRevision(maskedRef, contents(masked, content)));
+  expect(graph.nodes).toEqual([{ id: "node-a" }]);
+  expect(graph.provenance.nodes["node-a"]).toEqual([{ patch: clone, operationIndex: 0 }]);
+  expect(candidateRevision("patch-mask-clone", masked).delta).toEqual(masked.delta);
+});
+
+test("exact base and mask target identities plus authored citations stay hashed and unchanged on clone", () => {
+  const source = rootContent(definition);
+  const first = candidateRevision("patch-first", source).ref;
+  const clone = candidateRevision("patch-clone", source).ref;
+  const baseContent = { ...emptyPatch(), bases: [first] };
+  expect(revisionDigest(baseContent)).not.toBe(revisionDigest({ ...baseContent, bases: [clone] }));
+  const mask = {
+    source: first,
+    operationIndex: 1,
+    entity: { kind: "metadata-set" as const, id: "metadata-a" as const },
+    property: "display:label",
+  };
+  const authored = composePatch(
+    baseContent,
+    [
+      { kind: "mask-contribution", mask },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-attribution",
+          subjects: [{ kind: "node", id: "node-a" }],
+          properties: { citations: [JSON.stringify({ kind: "based_on", source: first })] },
+        },
+      },
+    ],
+    [{ kind: "based_on", source: first }],
+  );
+  const a = candidateRevision("patch-authored", authored);
+  const b = candidateRevision("patch-authored-clone", authored);
+  expect(a.ref.digest).toBe(b.ref.digest);
+  expect(revisionContent(b)).toEqual(authored);
+  expect(
+    revisionDigest({
+      ...authored,
+      metadata: { ...authored.metadata, citations: [{ kind: "based_on", source: clone }] },
+    }),
+  ).not.toBe(a.ref.digest);
+  const changedMask = {
+    ...authored,
+    delta: {
+      operations: [
+        { kind: "mask-contribution" as const, mask: { ...mask, source: clone } },
+        ...authored.delta.operations.slice(1),
+      ],
+    },
+  };
+  expect(revisionDigest(changedMask)).not.toBe(a.ref.digest);
+  const changedNestedCitation = composePatch(
+    baseContent,
+    [
+      { kind: "mask-contribution", mask },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-attribution",
+          subjects: [{ kind: "node", id: "node-a" }],
+          properties: { citations: [JSON.stringify({ kind: "based_on", source: clone })] },
+        },
+      },
+    ],
+    authored.metadata.citations,
+  );
+  expect(revisionDigest(changedNestedCitation)).not.toBe(a.ref.digest);
+});
+
+test("content identity is authored delta identity, not graph equivalence or release naming", () => {
+  const one = composePatch(emptyPatch(), [{ kind: "add-node", node: { id: "node-a" } }]);
+  const two = composePatch(one, [{ kind: "add-node", node: { id: "node-a" } }]);
+  const first = candidateRevision("patch-course", one);
+  const second = candidateRevision("patch-course", two);
+  expect(first.ref.digest).not.toBe(second.ref.digest);
+  expect(resolvePatchBundle({ terminal: first.ref, revisions: [first] }).nodes).toEqual(
+    resolvePatchBundle({ terminal: second.ref, revisions: [second] }).nodes,
+  );
+  const renamedNode = composePatch(emptyPatch(), [{ kind: "add-node", node: { id: "node-other" } }]);
+  expect(revisionDigest(renamedNode)).not.toBe(first.ref.digest);
+  const oldRelease = { ref: first.ref, version: "1.0.0" };
+  const newName = { ref: first.ref, version: "2.0.0" };
+  expect(selectReleaseUpdate(oldRelease, [newName])).toBe(newName);
+  expect(newName.ref).toEqual(oldRelease.ref);
 });

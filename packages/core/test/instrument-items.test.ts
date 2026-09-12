@@ -19,7 +19,6 @@ const overlayRef: ExactPatchRef = {
 const base: PatchRevision = {
   ref: baseRef,
   bases: [],
-  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [
@@ -58,7 +57,6 @@ const base: PatchRevision = {
 const overlay: PatchRevision = {
   ref: overlayRef,
   bases: [baseRef],
-  materials: [],
   metadata: { properties: {}, citations: [] },
   delta: {
     operations: [

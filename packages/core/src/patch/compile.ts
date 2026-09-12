@@ -64,7 +64,7 @@ export function composePatch(
   citations: PatchMetadata["citations"] = [],
 ): PatchContent {
   return {
-    ...content,
+    bases: content.bases,
     delta: { operations: [...content.delta.operations, ...operations] },
     metadata: { ...content.metadata, citations: [...content.metadata.citations, ...citations] },
   };
@@ -83,12 +83,11 @@ function prospectiveBundle(
   const terminal = bundle.revisions.find((revision) => exactPatchRefKey(revision.ref) === terminalKey);
   if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   const { ref, ...value } = terminal;
-  const content = composePatch({ identity: ref.identity, ...value }, operations, citations);
+  const content = composePatch(value, operations, citations);
   const next = { identity: ref.identity, digest: contentDigest(content) };
-  const { identity: _identity, ...revision } = content;
   return {
     terminal: next,
-    revisions: bundle.revisions.map((item) => (item === terminal ? { ref: next, ...revision } : item)),
+    revisions: bundle.revisions.map((item) => (item === terminal ? { ref: next, ...content } : item)),
   };
 }
 
