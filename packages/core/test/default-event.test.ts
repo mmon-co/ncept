@@ -251,22 +251,6 @@ function change(
     kind: "patch.changed",
     from: current.terminal,
     to: target.terminal,
-    diff: {
-      graph: target,
-      operations: [],
-      citations: [],
-      report: {
-        valid: true,
-        compiledAgainst: current.terminal,
-        cycles: [],
-        danglingEndpoints: [],
-        missingDisplayLabels: [],
-        roots: [],
-        cone: { targets: [], missingTargets: [], nodes: [], edges: [], coveredRoots: [] },
-        highInDegreeThreshold: 5,
-        highInDegreeNodes: [],
-      },
-    },
     ...(successors === undefined ? {} : { successors }),
     cites: ["obs-edit"],
   };

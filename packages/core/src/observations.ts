@@ -1,4 +1,4 @@
-import type { CompiledGraphDiff, ExactPatchRef, NodeId, ResolvedGraph } from "./patch";
+import type { ExactPatchRef, NodeId, ResolvedGraph } from "./patch";
 
 export type ObservationId = `obs-${string}`;
 export type SurfaceId = `surface-${string}`;
@@ -55,7 +55,6 @@ export type PlatformEvent =
       readonly kind: "patch.changed";
       readonly from: ExactPatchRef;
       readonly to: ExactPatchRef;
-      readonly diff: CompiledGraphDiff;
       readonly successors?: Readonly<Partial<Record<NodeId, readonly NodeId[]>>>;
       readonly cites?: readonly ObservationId[];
     }
