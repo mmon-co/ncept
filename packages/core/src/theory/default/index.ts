@@ -8,7 +8,7 @@ import { DEFAULT_THEORY_REF, stateDefault, type DefaultState } from "./state";
 import { defaultTags, edgeDefault, learnerDefault, nodeDefault } from "./tags";
 
 /** One implementation, assembled without a provider, store, scheduler or host reference. */
-export const defaultTheory: Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome }> = {
+export const defaultTheory = {
   id: DEFAULT_THEORY_REF.theory,
   version: DEFAULT_THEORY_REF.version,
   digest: DEFAULT_IMPLEMENTATION_DIGEST,
@@ -20,7 +20,7 @@ export const defaultTheory: Theory<DefaultState, { recall: RecallOutcome; quiz: 
   outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome },
   chat,
   event,
-};
+} satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
 export * from "./state";
 export * from "./tags";

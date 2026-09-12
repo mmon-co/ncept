@@ -156,6 +156,19 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
       },
     );
     const sources: ObservationId[] = [...new Set(memory.originals.map((entry) => entry.observation))];
-    yield* write({ at: ctx.now, nodes: [node], cites: sources, payload: { kind: "memory-summary", text, sources } });
+    const dependencies: ObservationId[] = [
+      ...new Set(
+        memory.originals.flatMap((entry) => [
+          entry.observation,
+          ...(entry.source.kind === "observation" ? [entry.source.observation] : []),
+        ]),
+      ),
+    ];
+    yield* write({
+      at: ctx.now,
+      nodes: [node],
+      cites: dependencies,
+      payload: { kind: "memory-summary", text, sources, dependencies },
+    });
   }
 }

@@ -347,7 +347,12 @@ test("chat prefetch preserves memory sources and the existing 16KiB cap", () => 
     by: DEFAULT_THEORY_REF,
     nodes: ["node-a"],
     cites: [attachment.id],
-    payload: { kind: "memory-summary", text: "Retained summary", sources: [attachment.id] },
+    payload: {
+      kind: "memory-summary",
+      text: "Retained summary",
+      sources: [attachment.id],
+      dependencies: [attachment.id],
+    },
   };
   expect(pure(chat.open(context([attachment, summary]))).prompt).toContain("[summary of obs-span] Retained summary");
   const long: Observation = {

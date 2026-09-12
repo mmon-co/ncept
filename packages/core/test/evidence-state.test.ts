@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { contentDigest } from "../src/digest";
+import { defaultTheory, type DefaultChatContext } from "../src/theory/default";
 import { selectGraph } from "../src/patch/select";
 import { evaluateView } from "../src/patch/view";
 import type { NodeId, ResolvedGraph } from "../src/patch/model";
@@ -317,7 +318,12 @@ test("memory preserves separate original strings, transcript source spans and su
   expect(original.originals.at(-1)?.source).toEqual(required(span.payload.entries[0]).source);
   const summary = obs(
     "z-summary",
-    { kind: "memory-summary", text: "A summary", sources: [record.id, knows.id, span.id] },
+    {
+      kind: "memory-summary",
+      text: "A summary",
+      sources: [record.id, knows.id, span.id],
+      dependencies: [record.id, knows.id, span.id],
+    },
     0,
     { nodes: ["node-a"], cites: [record.id, knows.id, span.id] },
   );
@@ -379,14 +385,38 @@ test("mistake assessments still require summarized active tutor failures across 
   const first = demonstration("a-failure", -2, { outcome: "failure" });
   const second = demonstration("b-failure", -1, { node: { node: "node-b", provenance: ref }, outcome: "failure" });
   const summaries = [
-    obs("summary-a", { kind: "memory-summary", text: "a", sources: [first.id] }, 0, { nodes: ["node-a"] }),
-    obs("summary-b", { kind: "memory-summary", text: "b", sources: [second.id] }, 0, { nodes: ["node-b"] }),
+    obs("summary-a", { kind: "memory-summary", text: "a", sources: [first.id], dependencies: [first.id] }, 0, {
+      nodes: ["node-a"],
+    }),
+    obs("summary-b", { kind: "memory-summary", text: "b", sources: [second.id], dependencies: [second.id] }, 0, {
+      nodes: ["node-b"],
+    }),
   ];
   const state = stateDefault(graph(), [first, second, ...summaries], at);
   const assessment = { misconception: "same mistake", recordIds: [first.id, second.id] };
   expect(validateMistakeAssessments([assessment], state, [memory(state), memory(state, "node-b")])).toEqual([
     { assessment, nodes: ["node-a", "node-b"] },
   ]);
+  const context: DefaultChatContext = {
+    now: at,
+    graph: graph(),
+    state,
+    surface: "surface-lesson",
+    about: ["node-a", "node-b"],
+    mistakes: [assessment],
+  };
+  const setup = defaultTheory.chat.open(context).next();
+  if (!setup.done) throw new Error("Expected a pure chat setup");
+  const warnings = setup.value.tools.find(({ name }) => name === "warnings");
+  if (!warnings) throw new Error("Missing mounted warnings tool");
+  const result = warnings.run({}, context).next();
+  expect(result.done).toBe(true);
+  expect(result.value).toContainEqual({
+    kind: "mistake-cluster",
+    nodes: ["node-a", "node-b"],
+    citations: [first.id, second.id],
+    message: assessment.misconception,
+  });
   const retracted = stateDefault(
     graph(),
     [first, second, ...summaries, obs("retraction", { kind: "retraction", of: first.id })],
@@ -445,7 +475,7 @@ test("successive memory summaries expand original evidence and retain an unsumma
   const second = demonstration("second", -1);
   const previousSummary = obs(
     "summary-1",
-    { kind: "memory-summary", text: "earlier summary", sources: [first.id] },
+    { kind: "memory-summary", text: "earlier summary", sources: [first.id], dependencies: [first.id] },
     0,
     {
       nodes: ["node-a"],
@@ -453,7 +483,12 @@ test("successive memory summaries expand original evidence and retain an unsumma
   );
   const secondSummary = obs(
     "summary-2",
-    { kind: "memory-summary", text: "combined summary", sources: [first.id, second.id] },
+    {
+      kind: "memory-summary",
+      text: "combined summary",
+      sources: [first.id, second.id],
+      dependencies: [first.id, second.id],
+    },
     0,
     { nodes: ["node-a"], cites: [first.id, second.id], supersedes: previousSummary.id },
   );
@@ -499,6 +534,43 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
   expect(memory(stateDefault(graph(), [orphan, home("orphan-home", "obs-missing", ["node-a"])], at)).originals).toEqual(
     [],
   );
+  const p = obs("p", {}, 0, { by: "platform" });
+  const q = obs("q", {}, 0, { by: "platform" });
+  const batch = obs<Memory>(
+    "batch",
+    {
+      kind: "memory",
+      entries: [p, q].map(({ id }) => ({ text: id, at, source: { kind: "observation", observation: id } })),
+    },
+    0,
+    { nodes: ["node-a"] },
+  );
+  const summary = obs(
+    "batch-summary",
+    {
+      kind: "memory-summary",
+      text: "P and Q",
+      sources: [batch.id],
+      dependencies: [batch.id, p.id, q.id],
+    },
+    0,
+    { nodes: ["node-a"] },
+  );
+  expect(memory(stateDefault(graph(), [p, q, batch, summary], at)).entries[0]?.kind).toBe("summary");
+  const remaining = memory(stateDefault(graph(), [q, batch, summary], at));
+  expect(remaining.entries.map(({ text }) => text)).toEqual([q.id]);
+  const rebuilt = obs(
+    "rebuilt",
+    {
+      kind: "memory-summary",
+      text: "Q only",
+      sources: [batch.id],
+      dependencies: [batch.id, q.id],
+    },
+    0,
+    { nodes: ["node-a"] },
+  );
+  expect(memory(stateDefault(graph(), [q, batch, summary, rebuilt], at)).entries[0]?.text).toBe("Q only");
   expect(stateDefault(graph(), [obs("unknown", { kind: "foreign-concept" })], at).records).toEqual([]);
 });
 

@@ -3,7 +3,12 @@ import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import { memoryDefault, type DefaultState } from "./state";
 import { listSkills, skillBody, tutorSystemPrompt } from "./skills";
-import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
+import {
+  defaultBackgroundTools,
+  defaultInstrumentTools,
+  defaultRecordingTools,
+  type DefaultChatContext,
+} from "./tools";
 
 /** Preserve the existing scoped-memory prompt bound; the memory tool reads the rest. */
 const MEMORY_PREFETCH_LIMIT = 16 * 1024;
@@ -27,7 +32,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
     : text;
 }
 
-function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>> {
+function* setup(ctx: DefaultChatContext): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = [

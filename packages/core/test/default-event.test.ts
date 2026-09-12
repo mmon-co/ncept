@@ -226,7 +226,12 @@ test("Fold effective evidence at a supplied time: memory summaries never count a
     by,
     nodes: ["node-one"],
     cites: [source.id],
-    payload: { kind: "memory-summary", text: "The learner knows everything", sources: [source.id] },
+    payload: {
+      kind: "memory-summary",
+      text: "The learner knows everything",
+      sources: [source.id],
+      dependencies: [source.id],
+    },
   };
   const before = ctx([source]).state;
   const after = ctx([source, summary]).state;
@@ -429,6 +434,7 @@ test("Compact a long memory tail: below and at eight entries yield no judge; nin
       kind: "memory-summary",
       text: "A concise memory",
       sources: entries.map(({ id }) => id),
+      dependencies: entries.map(({ id }) => id),
     });
     expect(program.next("obs-summary").done).toBe(true);
     const memory = ctx([...entries, observation("obs-summary", write)]).state.memories["node-one"];
@@ -448,7 +454,7 @@ test("Compact a long memory tail: prior summary leads chronology, source expansi
     by,
     nodes: ["node-one"],
     cites: [source.id],
-    payload: { kind: "memory-summary", text: "Earlier attempt", sources: [source.id] },
+    payload: { kind: "memory-summary", text: "Earlier attempt", sources: [source.id], dependencies: [source.id] },
   };
   const tail = memoryEntries(9).map((entry, index) => ({
     ...entry,

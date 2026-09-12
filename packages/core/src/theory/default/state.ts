@@ -64,6 +64,8 @@ export interface MemorySummaryPayload {
   readonly kind: "memory-summary";
   readonly text: string;
   readonly sources: readonly ObservationId[];
+  /** Every observation consumed, including sources inside attachment batches. */
+  readonly dependencies: readonly ObservationId[];
 }
 export interface MistakeAssessment {
   readonly misconception: string;
@@ -82,6 +84,7 @@ export interface MemorySummary {
   readonly text: string;
   readonly at: string;
   readonly sources: readonly ObservationId[];
+  readonly dependencies: readonly ObservationId[];
 }
 export interface NodeMemory {
   readonly node: NodeId;
@@ -176,12 +179,16 @@ function isMemory(value: unknown): value is Memory {
   );
 }
 function isSummary(value: unknown): value is MemorySummaryPayload {
+  if (!object(value)) return false;
+  const { sources, dependencies } = value;
   return (
-    object(value) &&
     value.kind === "memory-summary" &&
     typeof value.text === "string" &&
-    Array.isArray(value.sources) &&
-    value.sources.every(isObservationId)
+    Array.isArray(sources) &&
+    sources.every(isObservationId) &&
+    Array.isArray(dependencies) &&
+    dependencies.every(isObservationId) &&
+    sources.every((source) => dependencies.includes(source))
   );
 }
 export function isDefaultObservation(observation: Observation): boolean {
@@ -467,6 +474,15 @@ function projectMemory(
   records: readonly HomedRecord[],
   observations: readonly Observation[],
 ): NodeMemory {
+  const effectiveSource = (id: ObservationId): boolean => {
+    const target = observations.find((observation) => observation.id === id);
+    return (
+      target !== undefined &&
+      (!isDefaultObservation(target) ||
+        (!isDemonstration(target.payload) && !isClaim(target.payload)) ||
+        records.some((record) => record.id === id))
+    );
+  };
   const attachments: { observation: ObservationId; position: number; entries: readonly MemoryAttachment[] }[] = [];
   for (const record of records) {
     let present = false;
@@ -501,16 +517,9 @@ function projectMemory(
   observations.forEach((observation, position) => {
     if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isMemory(observation.payload))
       return;
-    const entries = observation.payload.entries.filter(({ source }) => {
-      if (source.kind !== "observation") return true;
-      const target = observations.find(({ id }) => id === source.observation);
-      if (target === undefined) return false;
-      return (
-        !isDefaultObservation(target) ||
-        (!isDemonstration(target.payload) && !isClaim(target.payload)) ||
-        records.some(({ id }) => id === target.id)
-      );
-    });
+    const entries = observation.payload.entries.filter(
+      ({ source }) => source.kind !== "observation" || effectiveSource(source.observation),
+    );
     attachments.push({ observation: observation.id, position, entries });
   });
   attachments.sort((left, right) => left.position - right.position);
@@ -523,7 +532,11 @@ function projectMemory(
   for (const observation of observations) {
     if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isSummary(observation.payload))
       continue;
-    if (observation.payload.sources.length === 0 || observation.payload.sources.some((source) => !sources.has(source)))
+    if (
+      observation.payload.sources.length === 0 ||
+      observation.payload.sources.some((source) => !sources.has(source)) ||
+      observation.payload.dependencies.some((source) => !effectiveSource(source))
+    )
       continue;
     summary = { ...observation.payload, kind: "summary", observation: observation.id, at: observation.at };
   }
