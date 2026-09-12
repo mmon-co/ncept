@@ -98,7 +98,7 @@ export function isQuizOutcome(value: unknown): value is QuizOutcome {
     return false;
   if (
     !value.questions.every(
-      (question: unknown) =>
+      (question: unknown): question is QuizOutcome["questions"][number] =>
         object(question) &&
         text(question.id) &&
         typeof question.prompt === "string" &&
@@ -118,7 +118,7 @@ export function isQuizOutcome(value: unknown): value is QuizOutcome {
     return false;
   if (
     !value.responses.every(
-      (response: unknown) =>
+      (response: unknown): response is QuizOutcome["responses"][number] =>
         object(response) &&
         text(response.questionId) &&
         typeof response.skipped === "boolean" &&
@@ -127,7 +127,7 @@ export function isQuizOutcome(value: unknown): value is QuizOutcome {
     )
   )
     return false;
-  const { questions, responses } = value as unknown as QuizOutcome;
+  const { questions, responses } = value;
   return (
     responses.length === questions.length &&
     new Set(questions.map(({ id }) => id)).size === questions.length &&

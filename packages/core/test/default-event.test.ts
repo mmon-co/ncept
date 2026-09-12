@@ -20,11 +20,11 @@ import {
   type RecallOutcome,
 } from "../src/theory/default/outcomes";
 import {
+  isHoming,
   expandNodeMemory,
   stateDefault,
   type DefaultState,
   type Demonstration,
-  type Homing,
 } from "../src/theory/default/state";
 
 const now = "2026-09-12T12:00:00.000Z";
@@ -255,6 +255,7 @@ function change(
     diff: {
       graph: target,
       operations: [],
+      citations: [],
       report: {
         valid: true,
         compiledAgainst: current.terminal,
@@ -304,11 +305,13 @@ test("Project a graph change: explicit successors are provisional, claims never 
   const first = written(program, [source, claim]);
   const second = written(program, "obs-projection-one");
   const writes = [first, second];
-  expect(writes.find(({ payload }) => (payload as Homing).of === source.id)?.payload).toMatchObject({
+  expect(writes.find(({ payload }) => isHoming(payload) && payload.of === source.id)?.payload).toMatchObject({
     homes: ["node-two"],
     pending: true,
   });
-  expect(writes.find(({ payload }) => (payload as Homing).of === claim.id)?.payload).toMatchObject({ homes: [] });
+  expect(writes.find(({ payload }) => isHoming(payload) && payload.of === claim.id)?.payload).toMatchObject({
+    homes: [],
+  });
   expect(request(program, "obs-projection-two").kind).toBe("read");
   const projected = [
     source,
@@ -492,4 +495,75 @@ test("Compact a long memory tail: prior summary leads chronology, source expansi
     expect(expandNodeMemory(memory, summary)[0]?.source).toEqual({ kind: "observation", observation: source.id });
     expect(expandNodeMemory(memory, summary)[2]?.source.kind).toBe("transcript");
   }
+});
+
+test("Record the original attempt: multi-Node Recall and multi-question Quiz snapshot all writes before yielding", () => {
+  const value = recall();
+  Object.assign(value.card, {
+    nodes: [
+      { node: "node-one", provenance: current.terminal },
+      { node: "node-two", provenance: current.terminal },
+    ],
+  });
+  const program = event(outcome(value), ctx());
+  written(program);
+  Object.assign(value.card, { front: "Edited task", back: "Edited answer" });
+  Object.assign(value.grade, { answer: "Edited response", grade: "again" });
+  expect(written(program, "obs-first").payload).toMatchObject({
+    node: { node: "node-two" },
+    task: "  2 + 2?\n",
+    response: " 4 ",
+    outcome: "success",
+    grader: "mechanical",
+  });
+  expect(program.next("obs-second").done).toBe(true);
+  const quizValue = quiz();
+  Object.assign(quizValue, {
+    responses: [quizValue.responses[0], { questionId: "q2", selectedOptionId: "a", skipped: false }],
+  });
+  const quizProgram = event(outcome(quizValue), ctx());
+  written(quizProgram);
+  const secondQuestion = quizValue.questions[1];
+  if (secondQuestion === undefined) throw new Error("Expected second question");
+  Object.assign(secondQuestion, {
+    prompt: "Edited question",
+    options: [{ id: "a", label: "Edited option", correct: false }],
+  });
+  expect(written(quizProgram, "obs-question-one").payload).toMatchObject({
+    task: "Skipped?\n- Yes",
+    response: "Yes",
+    outcome: "success",
+  });
+  expect(quizProgram.next("obs-question-two").done).toBe(true);
+});
+
+test("Compact a long memory tail: the closing span crosses eight and claim record strings remain original sources", () => {
+  const claim: Observation = {
+    id: "obs-claim-memory",
+    at,
+    by,
+    nodes: ["node-one"],
+    payload: { kind: "claim", prompt: "What do you know?", statement: "I forgot it", stance: "forgotten" },
+  };
+  const earlier = [...memoryEntries(6), claim];
+  expect(ctx(earlier).state.memories["node-one"]?.originals).toHaveLength(8);
+  const program = event(close(), ctx(earlier));
+  request(program);
+  const spanWrite = written(program, transcript);
+  expect(request(program, "obs-closing-span").kind).toBe("read");
+  const observations = [...earlier, observation("obs-closing-span", spanWrite)];
+  expect(request(program, observations).kind).toBe("judge");
+  const summaryWrite = written(program, "Remember the attempted work and claim");
+  expect(summaryWrite.cites).toEqual([...earlier.map(({ id }) => id), "obs-closing-span"]);
+  expect(program.next("obs-closing-summary").done).toBe(true);
+  const memory = ctx([...observations, observation("obs-closing-summary", summaryWrite)]).state.memories["node-one"];
+  const summary = memory?.entries[0];
+  if (memory === undefined || summary?.kind !== "summary") throw new Error("Expected summary");
+  const originals = expandNodeMemory(memory, summary);
+  expect(originals).toHaveLength(9);
+  expect(originals.filter(({ observation }) => observation === claim.id).map(({ text }) => text)).toEqual([
+    "What do you know?",
+    "I forgot it",
+  ]);
+  expect(originals.at(-1)?.source).toEqual({ kind: "transcript", surface, ...span });
 });

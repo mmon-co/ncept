@@ -31,7 +31,7 @@ export function* refinePendingHomes(ctx: Context<DefaultState>): Program<void> {
       },
       {
         type: "object",
-        properties: { node: { anyOf: [{ enum: choices.map(({ node }) => node) }, { type: "null" }] } },
+        properties: { node: { enum: [...choices.map(({ node }) => node), null] } },
         required: ["node"],
         additionalProperties: false,
       },
@@ -53,7 +53,7 @@ export function* refinePendingHomes(ctx: Context<DefaultState>): Program<void> {
   }
 }
 
-/** Hook input is not a journal: the host persists observations and owns execution failures. */
+/** The interpreter provides read-your-writes; persistence, atomicity and execution failures are the host's. */
 export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Program<void> {
   if (input.kind === "outcome") {
     if (!isRecallOutcome(input.payload) && !isQuizOutcome(input.payload)) {
