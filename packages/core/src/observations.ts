@@ -71,7 +71,7 @@ export type ObservationSelector = {
   readonly surface?: SurfaceId;
   readonly by?: "platform" | TheoryRef;
 };
-/** Reads return effective evidence in chronological (instant, identity) order, not journal cursors. */
+/** Reads return effective evidence in stable recording order (including late source evidence), not journal cursors. */
 export type Selector =
   | { readonly kind: "patch"; readonly ref?: ExactPatchRef }
   | ({ readonly kind: "observations" } & ObservationSelector)
@@ -142,5 +142,5 @@ export function effectiveObservations(observations: readonly Observation[], now:
     return Date.parse(observation.at) <= Date.parse(now);
   });
   const superseded = new Set(present.flatMap(({ supersedes }) => (supersedes === undefined ? [] : [supersedes])));
-  return present.filter(({ id }) => !superseded.has(id)).sort(compareObservations);
+  return present.filter(({ id }) => !superseded.has(id));
 }

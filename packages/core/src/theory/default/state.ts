@@ -10,6 +10,7 @@ import {
   compareObservations,
   effectiveObservations,
   isObservationId,
+  isObservationTimestamp,
   type Observation,
   type ObservationId,
   type SurfaceId,
@@ -68,10 +69,7 @@ export interface MistakeAssessment {
   readonly misconception: string;
   readonly recordIds: readonly ObservationId[];
 }
-export interface Mistake extends MistakeAssessment {
-  readonly kind: "mistake";
-}
-export type DefaultPayload = Demonstration | Claim | Retraction | Homing | Memory | MemorySummaryPayload | Mistake;
+export type DefaultPayload = Demonstration | Claim | Retraction | Homing | Memory | MemorySummaryPayload;
 export type HomedRecord = Observation<Demonstration | Claim>;
 export interface MemoryEntry extends MemoryAttachment {
   readonly kind: "entry";
@@ -107,14 +105,25 @@ export interface DefaultState {
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+function isNodeRef(value: unknown): value is NodeRef {
+  return (
+    object(value) && typeof value.node === "string" && /^node-.+/.test(value.node) && isExactReference(value.provenance)
+  );
+}
+function isExactReference(value: unknown): value is ExactPatchRef {
+  return (
+    object(value) &&
+    typeof value.identity === "string" &&
+    /^patch-.+/.test(value.identity) &&
+    typeof value.digest === "string" &&
+    /^sha256:[a-f0-9]{64}$/.test(value.digest)
+  );
+}
 export function isDemonstration(value: unknown): value is Demonstration {
   return (
     object(value) &&
     value.kind === "demonstration" &&
-    object(value.node) &&
-    typeof value.node.node === "string" &&
-    value.node.node.startsWith("node-") &&
-    object(value.node.provenance) &&
+    isNodeRef(value.node) &&
     (value.outcome === "success" || value.outcome === "failure") &&
     typeof value.unaided === "boolean" &&
     (value.grader === "mechanical" || value.grader === "tutor" || value.grader === "learner") &&
@@ -140,8 +149,9 @@ export function isHoming(value: unknown): value is Homing {
     value.kind === "homing" &&
     isObservationId(value.of) &&
     Array.isArray(value.homes) &&
-    value.homes.every((node) => typeof node === "string" && node.startsWith("node-")) &&
-    object(value.revision) &&
+    value.homes.every((node) => typeof node === "string" && /^node-.+/.test(node)) &&
+    new Set(value.homes).size === value.homes.length &&
+    isExactReference(value.revision) &&
     (value.pending === undefined || typeof value.pending === "boolean")
   );
 }
@@ -154,7 +164,7 @@ function isMemory(value: unknown): value is Memory {
       (entry) =>
         object(entry) &&
         typeof entry.text === "string" &&
-        typeof entry.at === "string" &&
+        isObservationTimestamp(entry.at) &&
         object(entry.source) &&
         (entry.source.kind === "observation"
           ? isObservationId(entry.source.observation)
@@ -177,9 +187,36 @@ function isSummary(value: unknown): value is MemorySummaryPayload {
 export function isDefaultObservation(observation: Observation): boolean {
   return observation.by !== "platform" && observation.by.theory === DEFAULT_THEORY_ID;
 }
+/** Closed default payload vocabulary, not a legacy schema registry or foreign conversion mechanism. */
+function assertDefaultPayload(payload: unknown): void {
+  if (!object(payload)) return;
+  let valid = true;
+  switch (payload.kind) {
+    case "demonstration":
+      valid = isDemonstration(payload);
+      break;
+    case "claim":
+      valid = isClaim(payload);
+      break;
+    case "retraction":
+      valid = isRetraction(payload);
+      break;
+    case "homing":
+      valid = isHoming(payload);
+      break;
+    case "memory":
+      valid = isMemory(payload);
+      break;
+    case "memory-summary":
+      valid = isSummary(payload);
+      break;
+  }
+  if (!valid) throw new Error(`Invalid default ${String(payload.kind)} payload`);
+}
 /** Retractions never retract retractions. Excluded sources do not make residual interpretations into evidence. */
 export function activeDefaultRecords(observations: readonly Observation[]): readonly HomedRecord[] {
   const own = observations.filter(isDefaultObservation);
+  for (const observation of own) assertDefaultPayload(observation.payload);
   const retracted = new Set<ObservationId>();
   for (const observation of own) {
     if (!isRetraction(observation.payload)) continue;
@@ -424,29 +461,59 @@ export function defaultDependentCone(graph: ResolvedGraph, node: NodeId): readon
   return result.sort();
 }
 
+/** Attachment order is recording order, not source time: old evidence can arrive or gain a home later. */
 function projectMemory(
   node: NodeId,
   records: readonly HomedRecord[],
   observations: readonly Observation[],
 ): NodeMemory {
-  const attachments: { observation: ObservationId; at: string; entries: readonly MemoryAttachment[] }[] = records.map(
-    (record) => ({
-      observation: record.id,
-      at: record.at,
-      entries: (record.payload.kind === "demonstration"
+  const attachments: { observation: ObservationId; position: number; entries: readonly MemoryAttachment[] }[] = [];
+  for (const record of records) {
+    let present = false;
+    let position = -1;
+    observations.forEach((observation, index) => {
+      if (observation.id === record.id) {
+        present = (
+          record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : [])
+        ).includes(node);
+        if (present) position = index;
+      }
+      if (isDefaultObservation(observation) && isHoming(observation.payload) && observation.payload.of === record.id) {
+        const next = observation.payload.homes.includes(node);
+        if (next && !present) position = index;
+        present = next;
+      }
+    });
+    const strings =
+      record.payload.kind === "demonstration"
         ? [record.payload.task, record.payload.response]
-        : [...(record.payload.prompt === undefined ? [] : [record.payload.prompt]), record.payload.statement]
-      ).map((text) => ({ text, at: record.at, source: { kind: "observation" as const, observation: record.id } })),
-    }),
-  );
-  for (const observation of observations) {
-    if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isMemory(observation.payload))
-      continue;
-    attachments.push({ observation: observation.id, at: observation.at, entries: observation.payload.entries });
+        : [...(record.payload.prompt === undefined ? [] : [record.payload.prompt]), record.payload.statement];
+    attachments.push({
+      observation: record.id,
+      position,
+      entries: strings.map((text) => ({
+        text,
+        at: record.at,
+        source: { kind: "observation", observation: record.id },
+      })),
+    });
   }
-  attachments.sort(
-    (left, right) => Date.parse(left.at) - Date.parse(right.at) || left.observation.localeCompare(right.observation),
-  );
+  observations.forEach((observation, position) => {
+    if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isMemory(observation.payload))
+      return;
+    const entries = observation.payload.entries.filter(({ source }) => {
+      if (source.kind !== "observation") return true;
+      const target = observations.find(({ id }) => id === source.observation);
+      if (target === undefined) return false;
+      return (
+        !isDefaultObservation(target) ||
+        (!isDemonstration(target.payload) && !isClaim(target.payload)) ||
+        records.some(({ id }) => id === target.id)
+      );
+    });
+    attachments.push({ observation: observation.id, position, entries });
+  });
+  attachments.sort((left, right) => left.position - right.position);
   const originals: MemoryEntry[] = [];
   for (const attachment of attachments)
     for (const entry of attachment.entries)
