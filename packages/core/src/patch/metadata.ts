@@ -1,4 +1,12 @@
-import { exactPatchRefKey, type ContributionProvenance, type ResolvedGraph } from "./model";
+import { isContentDigest } from "../digest";
+import { PatchCompileError } from "./errors";
+import {
+  exactPatchRefKey,
+  type Attachment,
+  type ContributionProvenance,
+  type MetadataValue,
+  type ResolvedGraph,
+} from "./model";
 
 /** Metadata scalars use the last contributing exact Patch, then its operation order.
  * Callers select eligible properties and own value/provenance validation.
@@ -20,4 +28,40 @@ export function lastMetadataContribution<T>(
       selected = candidate;
   }
   return selected;
+}
+
+/** Byte fetching and authorization belong to the host; Core validates the portable reference. */
+export function isAttachment(value: unknown): value is Attachment {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const kind = Reflect.get(value, "kind");
+  if (kind === "blob") {
+    const mediaType = Reflect.get(value, "mediaType");
+    return (
+      isContentDigest(Reflect.get(value, "hash")) &&
+      typeof mediaType === "string" &&
+      mediaType.trim() !== "" &&
+      Object.keys(value).every((key) => ["kind", "hash", "mediaType"].includes(key))
+    );
+  }
+  return false;
+}
+
+export function isMetadataValue(value: unknown): value is MetadataValue {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    (Array.isArray(value) && value.every((item) => typeof item === "string")) ||
+    isAttachment(value)
+  );
+}
+
+export function validateMetadataProperties(properties: Readonly<Record<string, MetadataValue>>): void {
+  for (const [key, value] of Object.entries(properties))
+    if (!isMetadataValue(value))
+      throw new PatchCompileError(
+        "invalid-metadata-value",
+        `metadata property '${key}' is not a scalar, string list or Attachment`,
+      );
 }

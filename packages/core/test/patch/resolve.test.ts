@@ -1,102 +1,87 @@
 import { expect, test } from "bun:test";
-import {
-  PatchCompileError,
-  resolvePatchBundle,
-  type ExactPatchRef,
-  type LockedBase,
-  type PatchRevision,
-} from "../../src/patch";
-import { materialBodyDigest } from "../../src/patch/release";
+import { PatchCompileError, resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "../../src/patch";
+import { attachmentDigest } from "../../src/digest";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
     ref: {
       identity: "patch-test",
-      version: "1.0.0",
-      commit: "0123456789abcdef0123456789abcdef01234567",
+
       digest: `sha256:${"b".repeat(64)}`,
     },
     bases: [],
-    lock: { entries: [] },
-    materials: [],
+
     metadata: { properties: { "patch:title": "Test" }, citations: [] },
     delta: { operations },
   };
 }
 
-test("Patch Material attachments are single-Node, known-Node and digest exact", () => {
-  const body = "A worked example.";
-  const valid: PatchRevision = {
-    ...root([{ kind: "add-node", node: { id: "node-a" } }]),
-    materials: [
-      {
-        kind: "document",
-        id: "material-example",
-        node: "node-a",
-        title: "Example",
-        body,
-        digest: materialBodyDigest(body),
+test("typed attachment metadata retains its subjects and rejects malformed refs or dangling subjects", () => {
+  const hash = attachmentDigest(new TextEncoder().encode("A worked example."));
+  const valid = root([
+    { kind: "add-node", node: { id: "node-a" } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-example",
+        subjects: [{ kind: "node", id: "node-a" }],
+        properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
       },
-    ],
-  };
-  expect(resolvePatchBundle({ terminal: valid.ref, revisions: [valid] }).materials[0]).toMatchObject({
-    id: "material-example",
-    node: "node-a",
-    source: valid.ref,
+    },
+  ]);
+  const graph = resolvePatchBundle({ terminal: valid.ref, revisions: [valid] });
+  expect(graph.metadataSets[0]).toEqual({
+    id: "metadata-example",
+    subjects: [{ kind: "node", id: "node-a" }],
+    properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
   });
-
-  function malformed(property: string, value: unknown): PatchRevision {
+  expect(graph.provenance.metadataProperties["metadata-example"]?.content).toEqual([
+    { patch: valid.ref, operationIndex: 1 },
+  ]);
+  for (const [property, value] of [
+    ["hash", "sha256:short"],
+    ["hash", `sha256:${"A".repeat(64)}`],
+    ["mediaType", ""],
+    ["body", "embedded"],
+  ] as const) {
     const revision = structuredClone(valid);
-    const material = revision.materials[0];
-    if (material === undefined) throw new Error("test Material missing");
-    Reflect.set(material, property, value);
-    return revision;
+    const operation = revision.delta.operations[1];
+    if (operation?.kind !== "add-metadata-set") throw new Error("missing test attachment");
+    const attachment = operation.metadataSet.properties.content;
+    if (typeof attachment !== "object" || attachment === null) throw new Error("missing test reference");
+    Reflect.set(attachment, property, value);
+    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow(/metadata property/);
   }
-  for (const revision of [
-    malformed("node", ["node-a", "node-b"]),
-    malformed("node", "node-unknown"),
-    malformed("digest", `sha256:${"0".repeat(64)}`),
-    malformed("title", ""),
-  ])
-    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow();
+  const dangling = root([
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: "metadata-example",
+        subjects: [{ kind: "node", id: "node-missing" }],
+        properties: { content: { kind: "blob", hash, mediaType: "text/plain" } },
+      },
+    },
+  ]);
+  expect(() => resolvePatchBundle({ terminal: dangling.ref, revisions: [dangling] })).toThrow(/missing node/);
 });
 
-function ref(identity: `patch-${string}`, version: string, fill: string): ExactPatchRef {
+function ref(identity: `patch-${string}`, fill: string): ExactPatchRef {
   return {
     identity,
-    version,
-    commit: fill.repeat(40),
+
     digest: `sha256:${fill.repeat(64)}`,
-  };
-}
-
-function hubBase(exact: ExactPatchRef): LockedBase {
-  if (exact.version === undefined) throw new Error("test Hub base needs a version");
-  return {
-    requirement: { identity: exact.identity, release: exact.version },
-    exact,
-    acquisition: { kind: "hub", identity: exact.identity, version: exact.version },
-  };
-}
-
-function authoredBase(exact: ExactPatchRef): LockedBase {
-  return {
-    requirement: { identity: exact.identity, release: `commit:${exact.commit}` },
-    exact,
-    acquisition: { kind: "authored", identity: exact.identity },
   };
 }
 
 function based(
   exact: ExactPatchRef,
-  bases: readonly LockedBase[],
+  bases: readonly ExactPatchRef[],
   operations: PatchRevision["delta"]["operations"] = [],
 ): PatchRevision {
   return {
     ref: exact,
-    bases: bases.map((base) => base.requirement),
-    lock: { entries: bases },
-    materials: [],
+    bases: bases,
+
     metadata: { properties: { "patch:title": exact.identity }, citations: [] },
     delta: { operations },
   };
@@ -163,24 +148,7 @@ test("a Personal Patch applies its exact root bases in manifest order and itself
       identity: "patch-personal" as const,
       digest: `sha256:${"d".repeat(64)}` as const,
     },
-    bases: [
-      { identity: first.ref.identity, release: "1.0.0" },
-      { identity: second.ref.identity, release: "1.0.0" },
-    ],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: first.ref.identity, release: "1.0.0" },
-          exact: first.ref,
-          acquisition: { kind: "hub", identity: first.ref.identity, version: "1.0.0" },
-        },
-        {
-          requirement: { identity: second.ref.identity, release: "1.0.0" },
-          exact: second.ref,
-          acquisition: { kind: "hub", identity: second.ref.identity, version: "1.0.0" },
-        },
-      ],
-    },
+    bases: [first.ref, second.ref],
   } satisfies PatchRevision;
 
   const resolved = resolvePatchBundle({
@@ -192,45 +160,24 @@ test("a Personal Patch applies its exact root bases in manifest order and itself
   expect(resolved.nodes).toEqual([{ id: "node-first" }, { id: "node-notebook" }, { id: "node-second" }]);
 });
 
-test("a Personal Patch rejects an exact lock that does not satisfy its manifest coordinate", () => {
+test("a Personal Patch rejects a base whose exact identity is not supplied", () => {
   const course = root([]);
   const personal = {
     ...root([]),
     ref: { ...root([]).ref, identity: "patch-personal" as const },
-    bases: [{ identity: "patch-expected" as const, release: "1.0.0" }],
-    lock: {
-      entries: [
-        {
-          requirement: { identity: "patch-expected" as const, release: "1.0.0" },
-          exact: course.ref,
-          acquisition: {
-            kind: "hub" as const,
-            identity: course.ref.identity,
-            version: hubBase(course.ref).requirement.release,
-          },
-        },
-      ],
-    },
+    bases: [{ ...course.ref, identity: "patch-expected" }],
   } satisfies PatchRevision;
 
   expect(() => resolvePatchBundle({ terminal: personal.ref, revisions: [course, personal] })).toThrow(
-    /does not satisfy/,
+    /patch-expected@.* is missing/,
   );
 });
 
 test("ordered resolution applies an exact diamond dependency once and the terminal Patch last", () => {
-  const shared = based(ref("patch-shared", "1.0.0", "1"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
-  const first = based(
-    ref("patch-first", "1.0.0", "2"),
-    [hubBase(shared.ref)],
-    [{ kind: "add-node", node: { id: "node-first" } }],
-  );
-  const second = based(
-    ref("patch-second", "1.0.0", "3"),
-    [hubBase(shared.ref)],
-    [{ kind: "add-node", node: { id: "node-second" } }],
-  );
-  const curriculum = based(ref("patch-curriculum", "1.0.0", "4"), [hubBase(first.ref), hubBase(second.ref)]);
+  const shared = based(ref("patch-shared", "1"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
+  const first = based(ref("patch-first", "2"), [shared.ref], [{ kind: "add-node", node: { id: "node-first" } }]);
+  const second = based(ref("patch-second", "3"), [shared.ref], [{ kind: "add-node", node: { id: "node-second" } }]);
+  const curriculum = based(ref("patch-curriculum", "4"), [first.ref, second.ref]);
 
   const resolved = resolvePatchBundle({
     terminal: curriculum.ref,
@@ -242,11 +189,11 @@ test("ordered resolution applies an exact diamond dependency once and the termin
 });
 
 test("resolution rejects incompatible exact revisions and dependency cycles with typed errors", () => {
-  const oldShared = based(ref("patch-shared", "1.0.0", "5"), []);
-  const newShared = based(ref("patch-shared", "2.0.0", "6"), []);
-  const first = based(ref("patch-first", "1.0.0", "7"), [hubBase(oldShared.ref)]);
-  const second = based(ref("patch-second", "1.0.0", "8"), [hubBase(newShared.ref)]);
-  const conflicting = based(ref("patch-conflicting", "1.0.0", "9"), [hubBase(first.ref), hubBase(second.ref)]);
+  const oldShared = based(ref("patch-shared", "5"), []);
+  const newShared = based(ref("patch-shared", "6"), []);
+  const first = based(ref("patch-first", "7"), [oldShared.ref]);
+  const second = based(ref("patch-second", "8"), [newShared.ref]);
+  const conflicting = based(ref("patch-conflicting", "9"), [first.ref, second.ref]);
 
   try {
     resolvePatchBundle({
@@ -259,10 +206,10 @@ test("resolution rejects incompatible exact revisions and dependency cycles with
     expect(error.code).toBe("incompatible-revision");
   }
 
-  const cycleARef = ref("patch-cycle-a", "1.0.0", "a");
-  const cycleBRef = ref("patch-cycle-b", "1.0.0", "b");
-  const cycleA = based(cycleARef, [hubBase(cycleBRef)]);
-  const cycleB = based(cycleBRef, [hubBase(cycleARef)]);
+  const cycleARef = ref("patch-cycle-a", "a");
+  const cycleBRef = ref("patch-cycle-b", "b");
+  const cycleA = based(cycleARef, [cycleBRef]);
+  const cycleB = based(cycleBRef, [cycleARef]);
   try {
     resolvePatchBundle({ terminal: cycleA.ref, revisions: [cycleB, cycleA] });
     throw new Error("expected a dependency cycle to fail");
@@ -274,7 +221,7 @@ test("resolution rejects incompatible exact revisions and dependency cycles with
 
 test("compatible property contributions merge in Patch order without dropping earlier properties", () => {
   const foundation = based(
-    ref("patch-foundation", "1.0.0", "c"),
+    ref("patch-foundation", "c"),
     [],
     [
       { kind: "add-node", node: { id: "node-shared" } },
@@ -292,8 +239,8 @@ test("compatible property contributions merge in Patch order without dropping ea
     ],
   );
   const contribution = based(
-    ref("patch-contribution", "1.0.0", "d"),
-    [hubBase(foundation.ref)],
+    ref("patch-contribution", "d"),
+    [foundation.ref],
     [
       { kind: "add-node", node: { id: "node-shared" } },
       {
@@ -330,7 +277,7 @@ test("compatible property contributions merge in Patch order without dropping ea
 
 test("metadata contributions cannot change an identified set's attachment subjects", () => {
   const foundation = based(
-    ref("patch-foundation", "1.0.0", "e"),
+    ref("patch-foundation", "e"),
     [],
     [
       { kind: "add-node", node: { id: "node-first" } },
@@ -346,8 +293,8 @@ test("metadata contributions cannot change an identified set's attachment subjec
     ],
   );
   const incompatible = based(
-    ref("patch-incompatible", "1.0.0", "f"),
-    [hubBase(foundation.ref)],
+    ref("patch-incompatible", "f"),
+    [foundation.ref],
     [
       {
         kind: "add-metadata-set",
@@ -370,20 +317,16 @@ test("metadata contributions cannot change an identified set's attachment subjec
 });
 
 test("a based Patch label selects its dependency closure without unrelated Personal bases", () => {
-  const course = based(ref("patch-course", "1.0.0", "1"), [], [{ kind: "add-node", node: { id: "node-course" } }]);
-  const unrelated = based(
-    ref("patch-unrelated", "1.0.0", "2"),
-    [],
-    [{ kind: "add-node", node: { id: "node-unrelated" } }],
-  );
+  const course = based(ref("patch-course", "1"), [], [{ kind: "add-node", node: { id: "node-course" } }]);
+  const unrelated = based(ref("patch-unrelated", "2"), [], [{ kind: "add-node", node: { id: "node-unrelated" } }]);
   const curriculum = {
-    ...based(ref("patch-curriculum", "1.0.0", "3"), [hubBase(course.ref)]),
+    ...based(ref("patch-curriculum", "3"), [course.ref]),
     metadata: {
       properties: { "patch:title": "Curriculum", "patch:curriculum": true },
       citations: [],
     },
   } satisfies PatchRevision;
-  const personal = based(ref("patch-personal", "1.0.0", "4"), [hubBase(unrelated.ref), hubBase(curriculum.ref)]);
+  const personal = based(ref("patch-personal", "4"), [unrelated.ref, curriculum.ref]);
 
   const resolved = resolvePatchBundle({
     terminal: personal.ref,
@@ -397,7 +340,7 @@ test("a based Patch label selects its dependency closure without unrelated Perso
 
 test("exact masks suppress only their targeted entity and metadata contributions", () => {
   const source = based(
-    ref("patch-source", "1.0.0", "5"),
+    ref("patch-source", "5"),
     [],
     [
       { kind: "add-node", node: { id: "node-removed" } },
@@ -433,7 +376,7 @@ test("exact masks suppress only their targeted entity and metadata contributions
     ],
   );
   const reconciliation = based(
-    { ...ref("patch-reconciliation", "1.0.0", "6"), version: undefined },
+    { ...ref("patch-reconciliation", "6") },
     [],
     [
       {
@@ -471,7 +414,7 @@ test("exact masks suppress only their targeted entity and metadata contributions
       },
     ],
   );
-  const personal = based(ref("patch-personal", "1.0.0", "7"), [hubBase(source.ref), authoredBase(reconciliation.ref)]);
+  const personal = based(ref("patch-personal", "7"), [source.ref, reconciliation.ref]);
 
   const resolved = resolvePatchBundle({
     terminal: personal.ref,
@@ -504,10 +447,10 @@ test("exact masks suppress only their targeted entity and metadata contributions
 });
 
 test("a stale exact mask reports the Patch whose delta must change", () => {
-  const oldSource = based(ref("patch-source", "1.0.0", "8"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
-  const newSource = based(ref("patch-source", "2.0.0", "9"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
+  const oldSource = based(ref("patch-source", "8"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
+  const newSource = based(ref("patch-source", "9"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
   const reconciliation = based(
-    { ...ref("patch-reconciliation", "1.0.0", "a"), version: undefined },
+    { ...ref("patch-reconciliation", "a") },
     [],
     [
       {
@@ -520,10 +463,7 @@ test("a stale exact mask reports the Patch whose delta must change", () => {
       },
     ],
   );
-  const personal = based(ref("patch-personal", "1.0.0", "b"), [
-    hubBase(newSource.ref),
-    authoredBase(reconciliation.ref),
-  ]);
+  const personal = based(ref("patch-personal", "b"), [newSource.ref, reconciliation.ref]);
 
   try {
     resolvePatchBundle({
@@ -535,6 +475,6 @@ test("a stale exact mask reports the Patch whose delta must change", () => {
     if (!(error instanceof PatchCompileError)) throw error;
     expect(error.code).toBe("stale-mask-target");
     expect(error.message).toContain(reconciliation.ref.identity);
-    expect(error.message).toContain("patch-source@1.0.0 operation 0 node 'node-shared'");
+    expect(error.message).toContain(`patch-source@${oldSource.ref.digest} operation 0 node 'node-shared'`);
   }
 });

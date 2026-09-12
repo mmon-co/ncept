@@ -1,0 +1,9 @@
+# Default theory Skill catalog
+
+Markdown is the authoring source for the eight Agent Skills-compatible entries and their shared procedures. `base.md` holds the always-loaded tutor instruction. Each `<name>/SKILL.md` declares its name, description, facet (`position`, `chart`, `advance`) and permitted entries (`learner`, `model`, `system`). `@procedures/<name>.md` includes are inlined into the delivered body.
+
+`bun run build:skills` embeds the Markdown deterministically in `sources.ts` and writes standalone bundles to `packages/core/dist/theory/skills/<name>/SKILL.md`. `bun scripts/build-skills.ts --check` rejects stale embedded sources. Core imports only the generated strings, not files or raw-loader plugins. Regenerate the executable identity afterward with `bun scripts/default-implementation-digest.ts`; its `--check` validates the pin.
+
+`../skills.ts` returns catalog values. Entries without model permission are suggest-only and carry `disable-model-invocation: true` in bundles. System-only entries are absent from the tutor index; the host must omit them from model-mounted directories. The `facet` and `entry` facts also accompany each Skill in `chat.open` and `chat.turn`.
+
+The default theory supplies instrument, recording and background tool descriptions whose `run` methods are Programs. `attach_claim` and `refine_records` are for system sweep/revision work; the host mounts them there, supplies effective evidence and owns persistence/execution. Recording tools write observations, never learner labels. Claims are homed by content, not Edges. Memory compaction belongs to the closing-span Program and never creates demonstration evidence. Host graph, Confirmation, Material, code and review actions remain host tools, conditional on what is actually mounted.

@@ -1,9 +1,12 @@
+import { contentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
   EdgeId,
   ExactPatchRef,
   GraphCompilationInput,
+  PatchContent,
+  PatchMetadata,
   NodeId,
   ResolvedGraph,
   SemanticDelta,
@@ -41,6 +44,8 @@ export interface GraphDiffCompileReport {
 }
 
 export interface CompiledGraphDiff {
+  readonly operations: SemanticDelta["operations"];
+  readonly citations: PatchMetadata["citations"];
   readonly graph: ResolvedGraph;
   readonly report: GraphDiffCompileReport;
 }
@@ -52,20 +57,37 @@ export class GraphDiffCompileError extends Error {
   }
 }
 
-function prospectiveBundle(bundle: ClosedPatchBundle, operations: SemanticDelta["operations"]): ClosedPatchBundle {
-  const terminalKey = exactPatchRefKey(bundle.terminal);
-  const terminalIndex = bundle.revisions.findIndex((revision) => exactPatchRefKey(revision.ref) === terminalKey);
-  if (terminalIndex < 0) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+/** Notebook composition is content algebra; accepting against a current pointer belongs to the host. */
+export function composePatch(
+  content: PatchContent,
+  operations: SemanticDelta["operations"],
+  citations: PatchMetadata["citations"] = [],
+): PatchContent {
   return {
-    terminal: bundle.terminal,
-    revisions: bundle.revisions.map((revision, index) =>
-      index === terminalIndex
-        ? {
-            ...revision,
-            delta: { operations: [...revision.delta.operations, ...operations] },
-          }
-        : revision,
-    ),
+    bases: content.bases,
+    delta: { operations: [...content.delta.operations, ...operations] },
+    metadata: { ...content.metadata, citations: [...content.metadata.citations, ...citations] },
+  };
+}
+
+export function applyGraphDiff(content: PatchContent, diff: CompiledGraphDiff): PatchContent {
+  return composePatch(content, diff.operations, diff.citations);
+}
+
+function prospectiveBundle(
+  bundle: ClosedPatchBundle,
+  operations: SemanticDelta["operations"],
+  citations: PatchMetadata["citations"],
+): ClosedPatchBundle {
+  const terminalKey = exactPatchRefKey(bundle.terminal);
+  const terminal = bundle.revisions.find((revision) => exactPatchRefKey(revision.ref) === terminalKey);
+  if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+  const { ref, ...value } = terminal;
+  const content = composePatch(value, operations, citations);
+  const next = { identity: ref.identity, digest: contentDigest(content) };
+  return {
+    terminal: next,
+    revisions: bundle.revisions.map((item) => (item === terminal ? { ref: next, ...content } : item)),
   };
 }
 
@@ -213,11 +235,12 @@ export function compileGraphDiff(
   bundle: ClosedPatchBundle,
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
+  citations: PatchMetadata["citations"] = [],
 ): CompiledGraphDiff {
   let graph: ResolvedGraph;
   try {
-    graph = resolvePatchBundle(prospectiveBundle(bundle, operations));
-    projectVisualGraph({ graph, learner: { kind: "absent" }, annotations: {} });
+    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations));
+    projectVisualGraph({ graph, annotations: {} });
   } catch (error) {
     if (
       error instanceof PatchCompileError &&
@@ -234,7 +257,7 @@ export function compileGraphDiff(
     targets,
   );
   if (!report.valid) throw new GraphDiffCompileError(report);
-  return { graph, report };
+  return { graph, report, operations, citations };
 }
 
 export function compileGraph(input: GraphCompilationInput): VisualGraph {
@@ -246,10 +269,14 @@ export function compileGraph(input: GraphCompilationInput): VisualGraph {
       throw new Error(`duplicate attached tag '${tag.name}'`);
     attachedNames.add(tag.name);
   }
-  const selected = selectGraph({ ...resolved, tags: [...resolved.tags, ...(input.attachedTags ?? [])] }, input.query);
+  const selected = selectGraph(
+    { ...resolved, tags: [...resolved.tags, ...(input.attachedTags ?? [])] },
+    input.query,
+    input.tags,
+  );
   return projectVisualGraph({
     graph: selected,
-    learner: input.learner,
+    ...(input.appearance === undefined ? {} : { tags: input.appearance }),
     annotations: input.annotations,
   });
 }

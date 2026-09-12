@@ -1,15 +1,7 @@
 import { PatchCompileError } from "./errors";
 import { lastMetadataContribution } from "./metadata";
-import type {
-  ExactPatchRef,
-  MetadataSet,
-  NodeId,
-  SelectedGraph,
-  VisualGraph,
-  VisualNodeAppearance,
-  VisualProjectionInput,
-} from "./model";
-import { exactPatchRefKey, NODE_LABEL_PROPERTY, NODE_LESSON_PROPERTY } from "./model";
+import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model";
+import { NODE_LABEL_PROPERTY, NODE_LESSON_PROPERTY } from "./model";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
   return graph.metadataSets.filter((set) =>
@@ -71,18 +63,7 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
   );
 }
 
-function appearance(input: VisualProjectionInput, node: NodeId): VisualNodeAppearance {
-  if (input.learner.kind === "absent") return { kind: "content" };
-  const display = input.learner.nodes[node];
-  return display === undefined ? { kind: "content" } : { kind: "projected", display };
-}
-
 export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
-  if (
-    input.learner.kind === "projected" &&
-    exactPatchRefKey(input.learner.patchRevision) !== exactPatchRefKey(input.graph.terminal)
-  )
-    throw new Error("Learner display does not match graph revision");
   const ranks = rankNodes(input.graph);
   const groups = input.graph.patchOrder.map((ref) => {
     const title = input.graph.patchMetadata[ref.identity]?.properties["patch:title"];
@@ -102,9 +83,9 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
       label,
       groupId: source.identity,
       rank: ranks.get(node.id) ?? 0,
-      appearance: appearance(input, node.id),
+      tags: input.tags?.nodes?.[node.id] ?? [],
       annotations: input.annotations[node.id] ?? [],
-      inspectorRef: `${source.identity}@${source.commit}/node/${node.id}`,
+      inspectorRef: `${source.identity}@${source.digest}/node/${node.id}`,
       contentSource: source,
     };
   });
@@ -115,9 +96,7 @@ export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
       from: edge.from,
       to: edge.to,
       role: "dependency" as const,
-      ...(input.learner.kind === "projected" && input.learner.edges?.[edge.id] !== undefined
-        ? { display: input.learner.edges[edge.id] }
-        : {}),
+      tags: input.tags?.edges?.[edge.id] ?? [],
     };
   });
   edges.sort((left, right) => left.id.localeCompare(right.id));
