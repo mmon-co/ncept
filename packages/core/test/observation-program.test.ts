@@ -8,9 +8,7 @@ const revision = {
   patch,
   graph: resolvePatchBundle({
     terminal: patch,
-    revisions: [
-      { ref: patch, bases: [], delta: { operations: [] }, materials: [], metadata: { properties: {}, citations: [] } },
-    ],
+    revisions: [{ ref: patch, bases: [], delta: { operations: [] }, metadata: { properties: {}, citations: [] } }],
   }),
 };
 

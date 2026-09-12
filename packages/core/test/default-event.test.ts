@@ -38,7 +38,6 @@ function graph(ids: readonly NodeId[] = ["node-one", "node-two"]): ResolvedGraph
     terminal,
     patchOrder: [terminal],
     patchMetadata: {},
-    materials: [],
     edges: [],
     tags: [],
     nodes: ids.map((id) => ({ id })),

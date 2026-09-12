@@ -40,7 +40,6 @@ function graph(ids: readonly NodeId[] = ["node-a", "node-b", "node-c", "node-alo
     terminal: ref,
     patchOrder: [ref],
     patchMetadata: {},
-    materials: [],
     nodes: ids.map((id) => ({ id })),
     edges: edges.filter(({ from, to }) => ids.includes(from) && ids.includes(to)),
     metadataSets: [],

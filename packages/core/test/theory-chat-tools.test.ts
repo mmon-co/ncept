@@ -29,7 +29,6 @@ const graph: ResolvedGraph = {
   terminal: ref,
   patchOrder: [ref],
   patchMetadata: {},
-  materials: [],
   nodes: [{ id: "node-a" }, { id: "node-b" }],
   edges: [{ id: "edge-ab", from: "node-a", to: "node-b" }],
   tags: [],
