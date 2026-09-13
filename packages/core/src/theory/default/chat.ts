@@ -37,12 +37,11 @@ function* setup(ctx: DefaultChatContext): Program<ChatSetup<DefaultState>> {
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = [
     tutorSystemPrompt(),
-    "Every factual Instrument claim must cite its Record identity or Patch provenance. Use preferences before selecting or generating Material.",
+    "Every factual Instrument claim must cite its Record identity or Patch provenance. Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
     ctx.about.length
       ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`
       : "This Session opened over no Nodes; attach the Nodes you work on.",
     ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
-    ...(ctx.preferences?.length ? [`Current preferences (context data):\n${JSON.stringify(ctx.preferences)}`] : []),
   ].join("\n\n");
   return {
     prompt,
@@ -51,5 +50,9 @@ function* setup(ctx: DefaultChatContext): Program<ChatSetup<DefaultState>> {
   };
 }
 
-/** The host supplies a current value context at both entry points, including cross-surface evidence. */
+/**
+ * The host supplies a current value context at both entry points, including cross-surface
+ * evidence. The learner's saved preferences are not part of it: the Application assembles them
+ * into the interactive conversation it is running, so no theory Program can read or cite them.
+ */
 export const chat = { open: setup, turn: setup };

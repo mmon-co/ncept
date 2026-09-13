@@ -198,18 +198,6 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     };
   }),
   scopedTool("mission", "Effective Missions and their resolved View scopes.", missionFacts),
-  {
-    name: "preferences",
-    description: "Current preference records and their history.",
-    schema: schema({}),
-    *run(raw, ctx) {
-      args(raw, []);
-      return (ctx.preferences ?? []).map((preference) => ({
-        ...preference,
-        citations: preference.history.map(({ id }) => id),
-      }));
-    },
-  },
 ];
 
 /** Only theory evidence is written. The host assigns identity and attribution, not pedagogy. */

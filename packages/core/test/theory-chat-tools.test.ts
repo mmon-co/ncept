@@ -93,17 +93,16 @@ test("chat open and turn preserve prompt, catalog, current context and all theor
   const ctx = {
     ...context(),
     missions: [{ id: "mission-a", statement: "Learn a", priority: 0, nodes: ["node-a" as const] }],
-    preferences: [{ text: "请用中文", history: [claim] }],
   };
   const setup = pure(chat.open(ctx));
   expect(pure(chat.turn(ctx))).toEqual(setup);
   expect(setup.prompt).toContain("Every factual Instrument claim must cite its Record identity or Patch provenance");
   expect(setup.prompt).toContain("This Session opened over node-a");
-  expect(setup.prompt).toContain("请用中文");
   expect(setup.prompt).toContain("Learn a");
-  expect(setup.prompt).toContain("obs-claim");
+  // The Mission context is effective fields and View scope; nothing in it cites an observation.
+  expect(setup.prompt).not.toContain("obs-claim");
   expect(setup.tools.map(({ name }) => name)).toEqual(tools.map(({ name }) => name));
-  expect(setup.tools).toHaveLength(15);
+  expect(setup.tools).toHaveLength(14);
   expect(setup.skills).toHaveLength(8);
   expect(setup.skills.find(({ name }) => name === "evaluator-sweep")?.entry).toEqual(["system"]);
   expect(setup.skills.find(({ name }) => name === "charting")?.entry).toEqual(["learner"]);
@@ -242,7 +241,7 @@ test("retractions read effective evidence and never retract platform, foreign, a
   }
 });
 
-test("instruments preserve factual ordering, labels, citations, memory, missions and preferences", () => {
+test("instruments preserve factual ordering, labels, citations, memory and missions", () => {
   const evidence = [
     demonstration("obs-first", "2026-09-10T10:00:00.000Z"),
     demonstration("obs-second", "2026-09-11T10:00:00.000Z"),
@@ -250,7 +249,6 @@ test("instruments preserve factual ordering, labels, citations, memory, missions
   const ctx: ChatContext<DefaultState> = {
     ...context(evidence),
     missions: [{ id: "mission-a", statement: "Learn a and b", nodes: ["node-a", "node-b"], priority: 1 }],
-    preferences: [{ text: "Briefly", history: [claim] }],
     openSurfaces: [{ surface: "surface-other", about: ["node-b"] }],
   };
   const run = (name: string, args: unknown = {}) => pure(tool(name).run(args, ctx));
@@ -275,7 +273,9 @@ test("instruments preserve factual ordering, labels, citations, memory, missions
     marker: "unsummarized activity exists",
   });
   expect(run("mission", { scope: ["node-b"] })).toEqual(ctx.missions);
-  expect(run("preferences")).toEqual([{ text: "Briefly", history: [claim], citations: [claim.id] }]);
+  // Saved preferences are the Application's own instructions for the conversation; the theory
+  // has no instrument that answers them and no context that carries them.
+  expect(tools.some(({ name }) => name === "preferences")).toBe(false);
   expect(run("probes")).toEqual([]);
   expect(run("warnings")).toMatchObject([
     { kind: "item-outcomes", citations: ["obs-first", "obs-second"] },

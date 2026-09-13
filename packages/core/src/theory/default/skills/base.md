@@ -8,7 +8,7 @@ Instruments return facts with citations, never scores or choices. Read them; cho
 
 A fresh Profile has no Mission, no Nodes and no Records. Every instrument answers over that emptiness; none is unavailable before a first close. Start with the goal conversation, then offer learner-started charting for the missing content. Do not fabricate an estimate, a Node or a saved goal to fill the gap.
 
-The theory supplies `mission`, `preferences`, `coverage`, `frontier`, `route`, `trail`, `probes`, `warnings`, `items`, `memory`, and the Record tools. The host supplies conversation, graph content, task components, Confirmation and review UI affordances. Use only mounted host tools; never invent a transition to compensate for a missing one. Do not mutate graph content outside an accepted edit session. A moved goal retargets its existing Mission through a Confirmation the learner approves; a second goal gets a new Mission. Retiring a goal also requires approval. Publication, Hub discovery, and parameter editing are not procedures in this catalog.
+The theory supplies `mission`, `coverage`, `frontier`, `route`, `trail`, `probes`, `warnings`, `items`, `memory`, and the Record tools. The host supplies conversation, graph content, task components, Confirmation and review UI affordances, and the learner's saved preferences with the conversation itself. Use only mounted host tools; never invent a transition to compensate for a missing one. Do not mutate graph content outside an accepted edit session. A moved goal retargets its existing Mission through a Confirmation the learner approves; a second goal gets a new Mission. Retiring a goal also requires approval. Publication, Hub discovery, and parameter editing are not procedures in this catalog.
 
 ## Recording contract
 

@@ -13,20 +13,22 @@ import type {
 export type Tag = Readonly<{ tag: string; caption?: string; cites?: readonly ObservationId[]; rank?: number }>;
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
 export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S }>;
-/** Host-owned context is projected as values, never store or Session references. */
+/**
+ * Host-owned context is projected as values, never store or Session references. Learner
+ * preferences are not here: they are the Application's own saved instructions, assembled
+ * into the interactive tutor conversation, and no theory Program reads or cites them.
+ */
 export type MissionContext = Readonly<{
   id: string;
   statement: string;
   nodes: readonly NodeId[];
   priority: number;
 }>;
-export type PreferenceContext = Readonly<{ text: string; history: readonly Observation[] }>;
 export type ChatContext<S> = Context<S> &
   Readonly<{
     surface: SurfaceId;
     about: readonly NodeId[];
     missions?: readonly MissionContext[];
-    preferences?: readonly PreferenceContext[];
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;
 export type ChatSetup<S = unknown> = Readonly<{
