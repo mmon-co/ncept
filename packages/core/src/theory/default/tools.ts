@@ -73,9 +73,7 @@ function nodesInScope(ctx: Ctx, scope?: readonly NodeId[]): readonly NodeId[] {
 }
 function missionFacts(ctx: Ctx, scope?: readonly NodeId[]) {
   const selected = new Set(nodesInScope(ctx, scope));
-  return (ctx.missions ?? [])
-    .filter(({ nodes }) => scope === undefined || nodes.some((id) => selected.has(id)))
-    .map((mission) => ({ ...mission, citations: mission.history.map(({ id }) => id) }));
+  return (ctx.missions ?? []).filter(({ nodes }) => scope === undefined || nodes.some((id) => selected.has(id)));
 }
 function candidate(ctx: Ctx, node: NodeId) {
   const state = defaultNodeState(ctx.state, node);
@@ -86,7 +84,7 @@ function candidate(ctx: Ctx, node: NodeId) {
     ...(state.lastSuccess === undefined ? {} : { lastSuccess: state.lastSuccess }),
     missions: missions.map(({ id }) => id),
     openSurfaces: (ctx.openSurfaces ?? []).filter(({ about }) => about.includes(node)).map(({ surface }) => surface),
-    citations: [...new Set([...state.citations, ...missions.flatMap(({ citations }) => citations)])],
+    citations: state.citations,
   };
 }
 function trail(ctx: Ctx, node: NodeId) {
@@ -199,7 +197,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       ],
     };
   }),
-  scopedTool("mission", "Current Mission records and their history.", missionFacts),
+  scopedTool("mission", "Effective Missions and their resolved View scopes.", missionFacts),
   {
     name: "preferences",
     description: "Current preference records and their history.",

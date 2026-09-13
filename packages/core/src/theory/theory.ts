@@ -19,7 +19,6 @@ export type MissionContext = Readonly<{
   statement: string;
   nodes: readonly NodeId[];
   priority: number;
-  history: readonly Observation[];
 }>;
 export type PreferenceContext = Readonly<{ text: string; history: readonly Observation[] }>;
 export type ChatContext<S> = Context<S> &

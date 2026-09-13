@@ -92,7 +92,7 @@ function demonstration(id: `obs-${string}`, at: string): Observation<Demonstrati
 test("chat open and turn preserve prompt, catalog, current context and all theory tools", () => {
   const ctx = {
     ...context(),
-    missions: [{ id: "mission-a", statement: "Learn a", priority: 0, nodes: ["node-a" as const], history: [claim] }],
+    missions: [{ id: "mission-a", statement: "Learn a", priority: 0, nodes: ["node-a" as const] }],
     preferences: [{ text: "请用中文", history: [claim] }],
   };
   const setup = pure(chat.open(ctx));
@@ -249,9 +249,7 @@ test("instruments preserve factual ordering, labels, citations, memory, missions
   ];
   const ctx: ChatContext<DefaultState> = {
     ...context(evidence),
-    missions: [
-      { id: "mission-a", statement: "Learn a and b", nodes: ["node-a", "node-b"], priority: 1, history: [claim] },
-    ],
+    missions: [{ id: "mission-a", statement: "Learn a and b", nodes: ["node-a", "node-b"], priority: 1 }],
     preferences: [{ text: "Briefly", history: [claim] }],
     openSurfaces: [{ surface: "surface-other", about: ["node-b"] }],
   };
@@ -262,7 +260,7 @@ test("instruments preserve factual ordering, labels, citations, memory, missions
       label: "unknown",
       missions: ["mission-a"],
       openSurfaces: ["surface-other"],
-      citations: [claim.id],
+      citations: [],
       prerequisites: [{ node: "node-a", label: "demonstrated" }],
     },
   ]);
@@ -276,7 +274,7 @@ test("instruments preserve factual ordering, labels, citations, memory, missions
     citations: ["obs-first", "obs-second"],
     marker: "unsummarized activity exists",
   });
-  expect(run("mission", { scope: ["node-b"] })).toMatchObject([{ id: "mission-a", citations: [claim.id] }]);
+  expect(run("mission", { scope: ["node-b"] })).toEqual(ctx.missions);
   expect(run("preferences")).toEqual([{ text: "Briefly", history: [claim], citations: [claim.id] }]);
   expect(run("probes")).toEqual([]);
   expect(run("warnings")).toMatchObject([
