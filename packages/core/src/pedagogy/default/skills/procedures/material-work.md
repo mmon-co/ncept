@@ -2,4 +2,4 @@ Read the capability statement, `items(node)`, `trail(node)` and `preferences()`.
 
 If refining, compare the actual learner confusion and posed tasks with the material. Fix the passage that obstructs the capability; avoid polishing text that no task requires. Material reading is not demonstration evidence.
 
-Use the host's available material presentation affordance for a temporary draft. Saving or revising graph content requires an accepted edit session and the mounted material/graph Confirmation tool. Without it, present a suggestion; never claim the Patch changed. Publication is outside this procedure.
+Open a draft through the Document Playground. Keeping or revising a Document is that Playground's **add** or **edit** through a Confirmation, not a graph edit. Without it, present a suggestion; never claim a Document was saved. Publication is outside this procedure.
