@@ -7,7 +7,7 @@ entry: [learner, model]
 
 # Planning
 
-1. Read `mission(scope?)` and the saved preferences supplied with this conversation. Match the learner's request to an existing goal. No fit → conduct the conversation below.
+1. Read `mission(scope?)` and the saved preferences supplied with this conversation. Match the learner's request to an existing goal. No fit → conduct the conversation below. A Mission whose targets are all known is done: say so, ask what comes next, and propose the next Mission over the same graph as you would a first; the trail carries over on its own.
 2. Read `coverage(scope?)`, `frontier(scope?)`, and `warnings(scope?)` even on an empty trail. They need no prior close event. Coverage lists Nodes with no Records; frontier lists reachable not-known Nodes, not an ordering.
 3. Choose by goal membership, last success, label, available time and open Session membership. Read `trail(node)` for the rationale. Known content may still merit a check; `probes(scope?)` lists suspect and probably-known Nodes. Offer learner-started probing when uncertainty about the learner matters.
 4. Read `route(target)` for the chosen target's not-known prerequisite cone in dependency order. Ask the host to open the selected target plus the route's Nodes, including a known target omitted by the route. If another open Session overlaps, continue it or choose a disjoint step, never silently steal Nodes.
