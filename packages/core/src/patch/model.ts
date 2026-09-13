@@ -24,6 +24,15 @@ export function sameExactPatchRef(left: ExactPatchRef, right: ExactPatchRef): bo
   return exactPatchRefKey(left) === exactPatchRefKey(right);
 }
 
+/** One exact operation of one exact revision: what a mask names and what provenance reports. */
+export function contributionKey(patch: ExactPatchRef, operationIndex: number): string {
+  return `${exactPatchRefKey(patch)}\0${operationIndex}`;
+}
+
+export function maskedPropertyKey(patch: ExactPatchRef, operationIndex: number, property: string): string {
+  return `${contributionKey(patch, operationIndex)}\0${property}`;
+}
+
 export interface PatchMetadata {
   readonly properties: Readonly<Record<string, MetadataValue>>;
   readonly citations: readonly Citation[];

@@ -1,4 +1,4 @@
-import { validateMetadataProperties } from "./metadata";
+import { sameMetadataSubjects, validateMetadataProperties } from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
@@ -18,7 +18,7 @@ import type {
   GraphTag,
   TaggedSet,
 } from "./model";
-import { exactPatchRefKey, sameExactPatchRef } from "./model";
+import { contributionKey, exactPatchRefKey, maskedPropertyKey, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
@@ -89,29 +89,6 @@ function orderRevisions(bundle: ClosedPatchBundle): {
   if (ordered.length !== revisions.size)
     throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
   return { revisions: ordered, closure };
-}
-
-function subjectKey(subject: MetadataSet["subjects"][number]): string {
-  return `${subject.kind}\0${subject.id}`;
-}
-
-function sameSubjects(left: MetadataSet, right: MetadataSet): boolean {
-  const leftKeys = [...new Set(left.subjects.map(subjectKey))].sort();
-  const rightKeys = [...new Set(right.subjects.map(subjectKey))].sort();
-  return (
-    leftKeys.length === left.subjects.length &&
-    rightKeys.length === right.subjects.length &&
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every((key, index) => key === rightKeys[index])
-  );
-}
-
-function contributionKey(source: ExactPatchRef, operationIndex: number): string {
-  return `${exactPatchRefKey(source)}\0${operationIndex}`;
-}
-
-function maskedPropertyKey(source: ExactPatchRef, operationIndex: number, property: string): string {
-  return `${contributionKey(source, operationIndex)}\0${property}`;
 }
 
 function describeMask(mask: ExactContributionMask): string {
@@ -292,7 +269,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     const first = active[0];
     const last = active.at(-1);
     if (first === undefined || last === undefined) continue;
-    if (active.some(({ value }) => !sameSubjects(first.value, value)))
+    if (active.some(({ value }) => !sameMetadataSubjects(first.value, value)))
       throw new PatchCompileError(
         "incompatible-contribution",
         `metadata set '${id}' cannot change attachment subjects`,

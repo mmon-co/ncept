@@ -4,6 +4,8 @@ import {
   exactPatchRefKey,
   type Attachment,
   type ContributionProvenance,
+  type MetadataSet,
+  type MetadataSubject,
   type MetadataValue,
   type ResolvedGraph,
 } from "./model";
@@ -28,6 +30,21 @@ export function lastMetadataContribution<T>(
       selected = candidate;
   }
   return selected;
+}
+
+/** A Metadata set identifies what it is attached to: contributions may not move it, and a
+ * repeated subject is not an attachment either. */
+export function sameMetadataSubjects(left: Pick<MetadataSet, "subjects">, right: Pick<MetadataSet, "subjects">) {
+  const key = (subject: MetadataSubject) => `${subject.kind}\0${subject.id}`;
+  const distinct = (set: Pick<MetadataSet, "subjects">) => [...new Set(set.subjects.map(key))].sort();
+  const leftKeys = distinct(left);
+  const rightKeys = distinct(right);
+  return (
+    leftKeys.length === left.subjects.length &&
+    rightKeys.length === right.subjects.length &&
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((value, index) => value === rightKeys[index])
+  );
 }
 
 /** Byte fetching and authorization belong to the host; Core validates the portable reference. */
