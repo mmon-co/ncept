@@ -5,7 +5,7 @@ import { event } from "./event";
 import { DEFAULT_IMPLEMENTATION_DIGEST } from "./implementation-digest";
 import { isQuizOutcome, isRecallOutcome, type QuizOutcome, type RecallOutcome } from "./outcomes";
 import { DEFAULT_THEORY_REF, stateDefault, type DefaultState } from "./state";
-import { defaultTags, edgeDefault, learnerDefault, nodeDefault } from "./tags";
+import { defaultTags, projectDefault } from "./tags";
 
 /** One implementation, assembled without a provider, store, scheduler or host reference. */
 export const defaultTheory = {
@@ -13,9 +13,7 @@ export const defaultTheory = {
   version: DEFAULT_THEORY_REF.version,
   digest: DEFAULT_IMPLEMENTATION_DIGEST,
   state: stateDefault,
-  node: nodeDefault,
-  edge: edgeDefault,
-  learner: learnerDefault,
+  project: projectDefault,
   tags: defaultTags,
   outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome },
   chat,

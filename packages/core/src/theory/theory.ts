@@ -1,5 +1,5 @@
 import type { ContentDigest } from "../digest";
-import type { EdgeId, NodeId, ResolvedGraph } from "../patch";
+import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type {
   JsonSchema,
   Observation,
@@ -12,6 +12,25 @@ import type {
 
 export type Tag = Readonly<{ tag: string; caption?: string; cites?: readonly ObservationId[]; rank?: number }>;
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
+/** One graph-wide computation: every Node and Edge of the graph has an entry, empty where nothing applies. */
+export type TheoryProjection = Readonly<{
+  nodes: Readonly<Record<NodeId, readonly Tag[]>>;
+  edges: Readonly<Record<EdgeId, readonly Tag[]>>;
+  learner: readonly Tag[];
+}>;
+/** Query membership is the Node tags a projection displays, so no theory can disagree with itself. */
+export function tagIndex(projection: TheoryProjection): TagIndex {
+  const members = new Map<string, Set<NodeId>>();
+  // Object.entries widens the Record's keys; only a Node's entry can contribute membership.
+  for (const [id, tags] of Object.entries(projection.nodes))
+    if (isNodeId(id))
+      for (const { tag } of tags) {
+        const nodes = members.get(tag) ?? new Set<NodeId>();
+        members.set(tag, nodes.add(id));
+      }
+  const none: ReadonlySet<NodeId> = new Set();
+  return (tag) => members.get(tag) ?? none;
+}
 export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S }>;
 /**
  * Host-owned context is projected as values, never store or Session references. Learner
@@ -54,9 +73,7 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly version: string;
   readonly digest: ContentDigest;
   state(graph: ResolvedGraph, observations: readonly Observation[], now: string): S;
-  node(graph: ResolvedGraph, state: S, id: NodeId): readonly Tag[];
-  edge(graph: ResolvedGraph, state: S, id: EdgeId): readonly Tag[];
-  learner(graph: ResolvedGraph, state: S): readonly Tag[];
+  project(graph: ResolvedGraph, state: S): TheoryProjection;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   readonly chat: {

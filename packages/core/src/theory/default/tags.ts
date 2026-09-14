@@ -1,6 +1,6 @@
 import type { EdgeId, NodeId, ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
-import type { Tag, TagIndex } from "../theory";
+import type { Tag, TheoryProjection } from "../theory";
 import {
   defaultDependentCone,
   expandNodeMemory,
@@ -235,58 +235,56 @@ export const defaultTags = [
   "homeless",
   "mistake-cluster",
 ] as const;
-export function tagIndexDefault(graph: ResolvedGraph, state: DefaultState): TagIndex {
-  return (tag) => {
-    const selector = Object.entries(defaultQueryTokens).find(([name]) => name === tag)?.[1];
-    if (selector !== undefined) return selector(state, graph);
-    return new Set(
-      indicatorsDefault(state, graph)
-        .filter(({ kind }) => kind === tag)
-        .flatMap(({ nodes }) => nodes),
-    );
-  };
-}
 function indicatorTag(indicator: Indicator): Tag {
   return { tag: indicator.kind, caption: indicator.message, cites: indicator.citations };
 }
-export function nodeDefault(graph: ResolvedGraph, state: DefaultState, id: NodeId): readonly Tag[] {
-  const node = defaultNodeState(state, id);
-  const tags: Tag[] = [
-    {
-      tag: node.label,
-      caption: `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`,
-      cites: node.citations,
-    },
-  ];
-  for (const [tag, select] of Object.entries(defaultQueryTokens))
-    if (tag !== node.label && select(state, graph).has(id)) tags.push({ tag, cites: node.citations });
-  return [
-    ...tags,
-    ...indicatorsDefault(state, graph)
-      .filter(({ nodes }) => nodes.includes(id))
-      .map(indicatorTag),
-  ];
-}
-export function edgeDefault(graph: ResolvedGraph, state: DefaultState, id: EdgeId): readonly Tag[] {
-  const edge = graph.edges.find((edge) => edge.id === id);
-  if (edge === undefined) throw new Error(`Missing Edge ${id}`);
-  const dependent = defaultNodeState(state, edge.to);
-  const prerequisite = defaultNodeState(state, edge.from);
-  const gating = !isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
-  const frontier = isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
-  const cites = [...new Set([...dependent.citations, ...prerequisite.citations])];
-  return [
-    {
-      tag: gating ? "gating" : "not-gating",
-      caption: gating ? "Prerequisite not known" : frontier ? "Frontier" : "Not gating",
-      cites,
-    },
-    ...(frontier ? [{ tag: "frontier", cites }] : []),
-    ...indicatorsDefault(state, graph)
-      .filter((indicator) => indicator.kind === "edge-contradiction" && indicator.message.endsWith(`on ${id}`))
-      .map(indicatorTag),
-  ];
-}
-export function learnerDefault(graph: ResolvedGraph, state: DefaultState): readonly Tag[] {
-  return indicatorsDefault(state, graph).map(indicatorTag);
+
+/**
+ * The graph-wide facts — query token membership and indicators — are computed once here and then
+ * distributed to their subjects, rather than rediscovered for each Node and Edge.
+ */
+export function projectDefault(graph: ResolvedGraph, state: DefaultState): TheoryProjection {
+  const indicators = indicatorsDefault(state, graph);
+  const selected = Object.entries(defaultQueryTokens).map(([tag, select]) => [tag, select(state, graph)] as const);
+  const perNode = new Map<NodeId, Tag[]>();
+  for (const indicator of indicators)
+    for (const node of indicator.nodes) perNode.set(node, [...(perNode.get(node) ?? []), indicatorTag(indicator)]);
+  const contradictions = indicators.filter(({ kind }) => kind === "edge-contradiction");
+
+  const nodes: Record<NodeId, readonly Tag[]> = {};
+  for (const { id } of graph.nodes) {
+    const node = defaultNodeState(state, id);
+    nodes[id] = [
+      {
+        tag: node.label,
+        caption: `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`,
+        cites: node.citations,
+      },
+      ...selected.flatMap(([tag, members]) =>
+        tag !== node.label && members.has(id) ? [{ tag, cites: node.citations }] : [],
+      ),
+      ...(perNode.get(id) ?? []),
+    ];
+  }
+
+  const edges: Record<EdgeId, readonly Tag[]> = {};
+  for (const edge of graph.edges) {
+    const dependent = defaultNodeState(state, edge.to);
+    const prerequisite = defaultNodeState(state, edge.from);
+    const gating = !isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
+    const frontier = isDefaultKnown(prerequisite) && !isDefaultKnown(dependent);
+    const cites = [...new Set([...dependent.citations, ...prerequisite.citations])];
+    edges[edge.id] = [
+      {
+        tag: gating ? "gating" : "not-gating",
+        caption: gating ? "Prerequisite not known" : frontier ? "Frontier" : "Not gating",
+        cites,
+      },
+      ...(frontier ? [{ tag: "frontier", cites }] : []),
+      // An indicator names the Nodes it is about; an Edge it is about is named only in its message.
+      ...contradictions.filter(({ message }) => message.endsWith(`on ${edge.id}`)).map(indicatorTag),
+    ];
+  }
+
+  return { nodes, edges, learner: indicators.map(indicatorTag) };
 }

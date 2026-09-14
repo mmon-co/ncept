@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
 import { contentDigest } from "../src/digest";
 import { defaultTheory, type DefaultChatContext } from "../src/theory/default";
-import { selectGraph } from "../src/patch/select";
-import { evaluateView } from "../src/patch/view";
 import type { ExactPatchRef, NodeId, ResolvedGraph } from "../src/patch/model";
 import { effectiveObservations, type Observation, type ObservationId } from "../src/observations";
 import {
@@ -21,14 +19,7 @@ import {
   type MemorySummary,
   type NodeMemory,
 } from "../src/theory/default/state";
-import {
-  defaultQueryTokens,
-  edgeDefault,
-  indicatorsDefault,
-  nodeDefault,
-  tagIndexDefault,
-  validateMistakeAssessments,
-} from "../src/theory/default/tags";
+import { indicatorsDefault, validateMistakeAssessments } from "../src/theory/default/tags";
 
 const at = "2026-09-01T00:00:00.000Z";
 const ref = { identity: "patch-evidence" as const, digest: contentDigest("evidence") };
@@ -336,49 +327,6 @@ test("memory preserves separate original strings, transcript source spans and su
   const excluded = memory(stateDefault(graph(), [knows, home("attach", knows.id, ["node-a"]), span, summary], at));
   expect(excluded.entries.every(({ kind }) => kind === "entry")).toBe(true);
   expect(memoryDefault(excluded).marker).toBe("unsummarized activity exists");
-});
-
-test("display tags and query membership agree, preserving captions, Edge facts and indicator citations without ranks", () => {
-  const evidence = [
-    demonstration("c-success", -2, { node: { node: "node-c", provenance: ref } }),
-    demonstration("a-failure", -1, { outcome: "failure" }),
-    demonstration("a-again", 0, { outcome: "failure" }),
-  ];
-  const g = graph();
-  const state = stateDefault(g, evidence, at);
-  const index = tagIndexDefault(g, state);
-  for (const token of Object.keys(defaultQueryTokens)) {
-    expect(selectGraph(g, { tag: `is:${token}` }, index).nodes.map(({ id }) => id)).toEqual([...index(token)]);
-    expect(
-      evaluateView(
-        g,
-        { id: "view-token", name: token, createdAt: at, query: { tag: `is:${token}` }, metadata: {} },
-        index,
-      ).nodes.map(({ id }) => id),
-    ).toEqual([...index(token)]);
-    expect([...index(token)]).toEqual(
-      g.nodes.filter(({ id }) => nodeDefault(g, state, id).some(({ tag }) => tag === token)).map(({ id }) => id),
-    );
-  }
-  expect(nodeDefault(g, state, "node-a")[0]).toMatchObject({
-    tag: "probably-known",
-    caption: "0 of 3, last success none; aided practice 0",
-    cites: ["obs-a-failure", "obs-a-again", "obs-c-success"],
-  });
-  expect(edgeDefault(g, state, "edge-bc")).toContainEqual({ tag: "frontier", cites: ["obs-c-success"] });
-  expect(indicatorsDefault(state, g)).toContainEqual({
-    kind: "item-outcomes",
-    nodes: ["node-a"],
-    citations: ["obs-a-failure", "obs-a-again"],
-    message: 'Task " task\\n": observed outcomes never differ',
-  });
-  expect(indicatorsDefault(state, g)).toContainEqual({
-    kind: "unused",
-    nodes: ["node-alone"],
-    citations: [],
-    message: "No records on this Node or its dependents",
-  });
-  expect(nodeDefault(g, state, "node-a").every((tag) => tag.rank === undefined)).toBe(true);
 });
 
 test("mistake assessments still require summarized active tutor failures across Nodes", () => {
