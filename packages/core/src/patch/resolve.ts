@@ -293,25 +293,34 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       throw new PatchCompileError("duplicate-entity", `conflicting tag '${tag.name}'`);
     tags.set(tag.name, tag);
   }
-  for (const revision of orderedRevisions)
-    for (const [key, value] of Object.entries(revision.metadata.properties)) {
-      if (!key.startsWith("patch:") || value !== true) continue;
-      const label = key.slice("patch:".length);
-      const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
+  const orderedNodes = sorted(nodes.values());
+  const orderedEdges = sorted(edges.values());
+  const orderedMetadataSets = sorted(metadataSets.values());
+  for (const revision of orderedRevisions) {
+    const labels = Object.entries(revision.metadata.properties)
+      .filter(([key, value]) => key.startsWith("patch:") && value === true)
+      .map(([key]) => key.slice("patch:".length));
+    if (labels.length === 0) continue;
+    const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
+    // Every label of this exact revision names the same immutable closure membership.
+    const members = {
+      nodes: orderedNodes
+        .filter((node) => nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .map((node) => node.id),
+      edges: orderedEdges
+        .filter((edge) => edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .map((edge) => edge.id),
+      metadataSets: orderedMetadataSets
+        .filter((set) => metadataProvenance[set.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .map((set) => set.id),
+    };
+    for (const label of labels)
       tags.set(`patch:${revision.ref.identity}:${label}`, {
         name: `patch:${revision.ref.identity}:${label}`,
         authority: "patch",
-        nodes: sorted(nodes.values())
-          .filter((node) => nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
-          .map((node) => node.id),
-        edges: sorted(edges.values())
-          .filter((edge) => edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
-          .map((edge) => edge.id),
-        metadataSets: sorted(metadataSets.values())
-          .filter((set) => metadataProvenance[set.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
-          .map((set) => set.id),
+        ...members,
       });
-    }
+  }
 
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))
@@ -341,9 +350,9 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     terminal: bundle.terminal,
     patchOrder: orderedRevisions.map((revision) => revision.ref),
     patchMetadata,
-    nodes: sorted(nodes.values()),
-    edges: sorted(edges.values()),
-    metadataSets: sorted(metadataSets.values()),
+    nodes: orderedNodes,
+    edges: orderedEdges,
+    metadataSets: orderedMetadataSets,
     tags: [...tags.values()].sort((left, right) => left.name.localeCompare(right.name)),
     provenance: {
       nodes: nodeProvenance,
