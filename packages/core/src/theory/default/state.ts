@@ -577,7 +577,11 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
       (entry): entry is Observation<Homing> =>
         isDefaultObservation(entry) && isHoming(entry.payload) && entry.payload.of === record.id,
     );
-    const decision = decisions.at(-1);
+    // A homing decision interprets the graph revision it names. One naming this exact revision governs
+    // it whatever order a delayed graph-change hook was recorded in; a decision for another revision
+    // only carries an earlier overlay forward while this revision has said nothing about the record.
+    const forRevision = decisions.filter(({ payload }) => sameExactPatchRef(payload.revision, graph.terminal));
+    const decision = forRevision.at(-1) ?? decisions.at(-1);
     const mapping = record.payload.kind === "claim" ? claims : homes;
     const initial = record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
     const chosen = decision?.payload.homes ?? initial;

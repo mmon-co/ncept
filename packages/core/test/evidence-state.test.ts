@@ -3,7 +3,7 @@ import { contentDigest } from "../src/digest";
 import { defaultTheory, type DefaultChatContext } from "../src/theory/default";
 import { selectGraph } from "../src/patch/select";
 import { evaluateView } from "../src/patch/view";
-import type { NodeId, ResolvedGraph } from "../src/patch/model";
+import type { ExactPatchRef, NodeId, ResolvedGraph } from "../src/patch/model";
 import { effectiveObservations, type Observation, type ObservationId } from "../src/observations";
 import {
   DEFAULT_THEORY_REF,
@@ -76,8 +76,8 @@ function demonstration(id: string, day = 0, changes: Partial<Demonstration> = {}
 function claim(id: string, stance: Claim["stance"], day = 0) {
   return obs<Claim>(id, { kind: "claim", statement: " verbatim claim\n", prompt: " prompt\t", stance }, day);
 }
-function home(id: string, of: ObservationId, homes: readonly NodeId[], pending = false) {
-  return obs<Homing>(id, { kind: "homing", of, homes, revision: ref, pending });
+function home(id: string, of: ObservationId, homes: readonly NodeId[], pending = false, revision: ExactPatchRef = ref) {
+  return obs<Homing>(id, { kind: "homing", of, homes, revision, pending });
 }
 function memory(state: ReturnType<typeof stateDefault>, node: NodeId = "node-a"): NodeMemory {
   const value = state.memories[node];
@@ -589,6 +589,22 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
   expect(stateDefault(graph(), [obs("unknown", { kind: "foreign-concept" })], at).records).toEqual([]);
 });
 
+test("a homing decision governs the revision it names, whatever order a late graph-change hook recorded it in", () => {
+  const edited = { ...graph(), terminal: { ...ref, digest: contentDigest("edited") } };
+  const record = demonstration("attempt", -2);
+  const attached = claim("attached", "knows", -2);
+  const retained = home("retain-claim", attached.id, ["node-b"]);
+  const current = home("current-home", record.id, ["node-b"], false, edited.terminal);
+  // A graph-change hook for the earlier revision, delivered and recorded after the edited graph decided.
+  const late = home("late-home", record.id, ["node-c"]);
+  const log = [record, attached, retained, current, late];
+  const edits = stateDefault(edited, log, at);
+  expect(edits.homing.homes[record.id]).toEqual(["node-b"]);
+  // Nothing under the edited revision revisited the claim, so its existing attachment still stands.
+  expect(edits.homing.claims[attached.id]).toEqual(["node-b"]);
+  expect(edits.nodes["node-c"]?.records).toEqual([]);
+  expect(stateDefault(graph(), log, at).homing.homes[record.id]).toEqual(["node-c"]);
+});
 test("homing supersession removes obsolete attributions; indicator facts retain the exact supporting evidence", () => {
   const record = demonstration("original", -3);
   const originalHome = home("original-home", record.id, ["node-b"]);
