@@ -1,3 +1,4 @@
+import { dependentCones } from "./dependent-cone";
 import {
   lastMetadataContribution,
   NODE_CRITERION_PROPERTY,
@@ -473,18 +474,7 @@ export function defaultNodeParameters(
 
 /** Graph edges point from prerequisite to dependent; the strict cone excludes the queried Node. */
 export function defaultDependentCone(graph: ResolvedGraph, node: NodeId): readonly NodeId[] {
-  const seen = new Set<NodeId>([node]);
-  const pending = [node];
-  const result: NodeId[] = [];
-  for (let current = pending.shift(); current !== undefined; current = pending.shift()) {
-    for (const edge of graph.edges) {
-      if (edge.from !== current || seen.has(edge.to)) continue;
-      seen.add(edge.to);
-      pending.push(edge.to);
-      result.push(edge.to);
-    }
-  }
-  return result.sort();
+  return dependentCones(graph)(node);
 }
 
 /** Attachment order is recording order, not source time: old evidence can arrive or gain a home later. */
@@ -622,11 +612,12 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
       homeless.push(record);
     for (const node of present) (homed[node] ??= []).push(record);
   }
+  const cone = dependentCones(graph);
   const nodes: Partial<Record<NodeId, NodeState>> = {};
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = defaultNodeParameters(graph, id, DEFAULT_PARAMETERS);
-    const covering = defaultDependentCone(graph, id).flatMap((node) =>
+    const covering = cone(id).flatMap((node) =>
       (homed[node] ?? [])
         .filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays))
         .map((record) => ({ node, record })),

@@ -1,8 +1,8 @@
+import { dependentCones } from "./dependent-cone";
 import type { EdgeId, NodeId, ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { Tag, TheoryProjection } from "../theory";
 import {
-  defaultDependentCone,
   expandNodeMemory,
   type DefaultState,
   type Demonstration,
@@ -122,6 +122,7 @@ export function indicatorsDefault(
   graph: ResolvedGraph,
   context: DefaultIndicatorContext = {},
 ): readonly Indicator[] {
+  const cone = dependentCones(graph);
   const results: Indicator[] = [];
   function add(kind: string, nodes: readonly NodeId[], records: readonly HomedRecord[], message: string) {
     results.push({
@@ -166,10 +167,7 @@ export function indicatorsDefault(
       window.every((record, index) => index === 0 || record.payload.outcome !== window[index - 1]?.payload.outcome)
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
-    if (
-      node.records.length === 0 &&
-      defaultDependentCone(graph, id).every((dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0)
-    )
+    if (node.records.length === 0 && cone(id).every((dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
     for (const report of node.records) {
