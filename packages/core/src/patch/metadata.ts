@@ -82,3 +82,12 @@ export function validateMetadataProperties(properties: Readonly<Record<string, M
         `metadata property '${key}' is not a scalar, string list or Attachment`,
       );
 }
+
+/** The discovery tags a revision's metadata declares: the open `patch:<tag>: true` convention
+ * authored alongside title, description and author. These are what a Hub collection browses by,
+ * and are unrelated to the graph tags a Patch compiles. */
+export function discoveryTags(properties: Readonly<Record<string, MetadataValue>>): readonly string[] {
+  return Object.entries(properties).flatMap(([key, value]) =>
+    key.startsWith("patch:") && value === true ? [key.slice("patch:".length)] : [],
+  );
+}

@@ -1,7 +1,7 @@
 import { contentDigest, type ContentDigest } from "../digest";
 import { compileGraph } from "./compile";
 import { PatchCompileError } from "./errors";
-import { lastMetadataContribution } from "./metadata";
+import { discoveryTags, lastMetadataContribution } from "./metadata";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -238,6 +238,12 @@ export function compareReleaseVersions(left: string, right: string): number {
   return 0;
 }
 
+/** Whether a version names a stable release: the class automatic update targets, and the one a
+ * collection shows as a Patch's current version. A prerelease is reachable only by exact name. */
+export function isStableRelease(version: string): boolean {
+  return parseVersion(version).prerelease.length === 0;
+}
+
 /** Highest supplied stable release strictly above the installed pin. Access is host policy. */
 export function selectReleaseUpdate(
   installed: PatchRelease,
@@ -276,11 +282,7 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
   const definition: RootPatchDefinition = {
     title,
     author,
-    labels: Object.entries(content.metadata.properties).flatMap(([key, value]) =>
-      key.startsWith("patch:") && !["patch:title", "patch:author"].includes(key) && value === true
-        ? [key.slice("patch:".length)]
-        : [],
-    ),
+    labels: discoveryTags(content.metadata.properties),
     nodes: graph.nodes.map(({ id }) => {
       const label = property("node", id, NODE_LABEL_PROPERTY);
       const lesson = property("node", id, NODE_LESSON_PROPERTY);
