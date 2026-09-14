@@ -277,6 +277,35 @@ test("Project a graph change: retained homes need no judge and invalid successor
   }
 });
 
+test("Project a graph change: an edit that touches nothing still restates the decisions in force", () => {
+  const target = graph(["node-one", "node-two", "node-three"]);
+  const source = demonstration();
+  const decided: Observation = {
+    id: "obs-rehome",
+    at,
+    by,
+    payload: { kind: "homing", of: source.id, homes: ["node-two"], revision: current.terminal },
+  };
+  const program = event(change(target), ctx([source, decided], target));
+  request(program);
+  request(program, { patch: current.terminal, graph: current });
+  const restated = written(program, [source, decided]);
+  expect(restated.payload).toEqual({
+    kind: "homing",
+    of: source.id,
+    homes: ["node-two"],
+    revision: target.terminal,
+  });
+  const settled = [source, decided, observation("obs-restated", restated)];
+  expect(request(program, "obs-restated")).toEqual({ kind: "read", select: { kind: "observations" } });
+  // The restatement is not new work: nothing is pending, so no judgment is asked for.
+  expect(program.next(settled).done).toBe(true);
+  expect(stateDefault(target, settled, now).homing.homes[source.id]).toEqual(["node-two"]);
+  // The earlier revision's decision, delivered after all of this, does not reach the new revision.
+  const late = [...settled, { ...decided, id: "obs-late" as ObservationId }];
+  expect(stateDefault(target, late, now).homing.homes[source.id]).toEqual(["node-two"]);
+});
+
 test("Project a graph change: explicit successors are provisional, claims never follow Edges, pending homes are judged", () => {
   const target = graph(["node-two"]);
   const source = demonstration();
