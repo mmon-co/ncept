@@ -20,19 +20,21 @@ export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
 export function isDefaultKnown(node: NodeState): boolean {
   return node.label === "demonstrated" || node.label === "probably-known";
 }
-type QueryToken = (state: DefaultState, graph: ResolvedGraph) => ReadonlySet<NodeId>;
+/** A shared reachability answer travels in, so a projection walks the graph for it once. */
+type QueryToken = (state: DefaultState, graph: ResolvedGraph, reached?: ReadonlySet<NodeId>) => ReadonlySet<NodeId>;
 function select(predicate: (node: NodeState) => boolean): QueryToken {
   return (state, graph) =>
     new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id));
 }
-const reachable: QueryToken = (state, graph) =>
-  new Set(
+function reachableNodes(state: DefaultState, graph: ResolvedGraph): ReadonlySet<NodeId> {
+  return new Set(
     graph.nodes
       .filter(({ id }) =>
         graph.edges.filter(({ to }) => to === id).every(({ from }) => isDefaultKnown(defaultNodeState(state, from))),
       )
       .map(({ id }) => id),
   );
+}
 
 export const defaultQueryTokens = {
   known: select(isDefaultKnown),
@@ -40,9 +42,9 @@ export const defaultQueryTokens = {
   "probably-known": select((node) => node.label === "probably-known"),
   suspect: select((node) => node.label === "suspect"),
   unknown: select((node) => node.label === "unknown"),
-  reachable,
-  frontier: (state, graph) =>
-    new Set([...reachable(state, graph)].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
+  reachable: (state, graph, reached = reachableNodes(state, graph)) => reached,
+  frontier: (state, graph, reached = reachableNodes(state, graph)) =>
+    new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   stale: select((node) => node.stale),
 } satisfies Record<string, QueryToken>;
 
@@ -245,10 +247,21 @@ function indicatorTag(indicator: Indicator): Tag {
  */
 export function projectDefault(graph: ResolvedGraph, state: DefaultState): TheoryProjection {
   const indicators = indicatorsDefault(state, graph);
-  const selected = Object.entries(defaultQueryTokens).map(([tag, select]) => [tag, select(state, graph)] as const);
+  const reached = reachableNodes(state, graph);
+  const selected = Object.entries(defaultQueryTokens).map(
+    ([tag, select]) => [tag, select(state, graph, reached)] as const,
+  );
+  // One bucket per Node, appended to; an indicator that names a Node twice — a self-edge does —
+  // is still one thing to show there.
   const perNode = new Map<NodeId, Tag[]>();
-  for (const indicator of indicators)
-    for (const node of indicator.nodes) perNode.set(node, [...(perNode.get(node) ?? []), indicatorTag(indicator)]);
+  for (const indicator of indicators) {
+    const tag = indicatorTag(indicator);
+    for (const node of new Set(indicator.nodes)) {
+      const bucket = perNode.get(node);
+      if (bucket === undefined) perNode.set(node, [tag]);
+      else bucket.push(tag);
+    }
+  }
   const contradictions = indicators.filter(({ kind }) => kind === "edge-contradiction");
 
   const nodes: Record<NodeId, readonly Tag[]> = {};

@@ -11,6 +11,7 @@ import type {
 } from "../observations";
 
 export type Tag = Readonly<{ tag: string; caption?: string; cites?: readonly ObservationId[]; rank?: number }>;
+/** Which Nodes carry a tag. Membership only: the set is not ordered and callers own no part of it. */
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
 /** One graph-wide computation: every Node and Edge of the graph has an entry, empty where nothing applies. */
 export type TheoryProjection = Readonly<{
@@ -18,7 +19,11 @@ export type TheoryProjection = Readonly<{
   edges: Readonly<Record<EdgeId, readonly Tag[]>>;
   learner: readonly Tag[];
 }>;
-/** Query membership is the Node tags a projection displays, so no theory can disagree with itself. */
+/**
+ * Query membership is the Node tags a projection displays, so no theory can disagree with itself.
+ * A tag nothing carries has no members; where order matters, it comes from the graph, as the
+ * algebra's own results do, never from the order a projection happened to be built in.
+ */
 export function tagIndex(projection: TheoryProjection): TagIndex {
   const members = new Map<string, Set<NodeId>>();
   // Object.entries widens the Record's keys; only a Node's entry can contribute membership.
