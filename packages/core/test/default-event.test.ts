@@ -302,7 +302,7 @@ test("Project a graph change: an edit that touches nothing still restates the de
   expect(program.next(settled).done).toBe(true);
   expect(stateDefault(target, settled, now).homing.homes[source.id]).toEqual(["node-two"]);
   // The earlier revision's decision, delivered after all of this, does not reach the new revision.
-  const late = [...settled, { ...decided, id: "obs-late" as ObservationId }];
+  const late: Observation[] = [...settled, { ...decided, id: "obs-late" }];
   expect(stateDefault(target, late, now).homing.homes[source.id]).toEqual(["node-two"]);
 });
 
