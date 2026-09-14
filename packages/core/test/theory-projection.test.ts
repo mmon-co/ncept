@@ -4,7 +4,7 @@ import type { NodeId, ResolvedGraph } from "../src/patch/model";
 import { selectGraph } from "../src/patch/select";
 import { evaluateView } from "../src/patch/view";
 import type { Observation } from "../src/observations";
-import { tagIndex, type TheoryProjection } from "../src/theory/theory";
+import { tagIndex, type Tag, type TheoryProjection } from "../src/theory/theory";
 import { defaultTheory } from "../src/theory/default";
 import { DEFAULT_THEORY_REF, stateDefault, type DefaultState, type Demonstration } from "../src/theory/default/state";
 
@@ -114,6 +114,21 @@ test("the frontier is where known prerequisites meet unknown dependents", () => 
   expect([...tagIndex(projection)("frontier")]).toEqual(["node-b"]);
   expect(projection.edges["edge-ab"]?.[0]).toMatchObject({ tag: "not-gating", caption: "Frontier" });
   expect(projection.edges["edge-bc"]?.[0]).toMatchObject({ tag: "gating", caption: "Prerequisite not known" });
+});
+
+test("a prerequisite failure after its dependent succeeded is shown on the Edge and on both its Nodes", () => {
+  const g = graph(["node-a", "node-b"]);
+  const projection = project(g, [on("node-b", "b-success", -1), on("node-a", "a-failure", 0, { outcome: "failure" })]);
+  const contradiction: Tag = {
+    tag: "edge-contradiction",
+    caption: "Unaided prerequisite failure after dependent success on edge-ab",
+    cites: ["obs-b-success", "obs-a-failure"],
+  };
+  expect(projection.edges["edge-ab"]).toContainEqual(contradiction);
+  expect(projection.nodes["node-a"]).toContainEqual(contradiction);
+  expect(projection.nodes["node-b"]).toContainEqual(contradiction);
+  expect(projection.learner).toContainEqual(contradiction);
+  expect([...tagIndex(projection)("edge-contradiction")]).toEqual(["node-a", "node-b"]);
 });
 
 test("a graph an edit emptied still reports the learner's homeless evidence", () => {
