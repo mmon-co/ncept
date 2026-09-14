@@ -119,6 +119,9 @@ export function* write<P>(observation: ObservationWrite<P>): Program<Observation
 export function isObservationId(value: unknown): value is ObservationId {
   return typeof value === "string" && /^obs-.+/.test(value);
 }
+/** Chronology of what observations record. It is not their acceptance order: identity carries no order,
+ * and the host supplies the logically ordered sequence a theory reads.
+ */
 export function compareObservations(left: Observation, right: Observation): number {
   return Date.parse(left.at) - Date.parse(right.at) || left.id.localeCompare(right.id);
 }

@@ -589,21 +589,79 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
   expect(stateDefault(graph(), [obs("unknown", { kind: "foreign-concept" })], at).records).toEqual([]);
 });
 
-test("a homing decision governs the revision it names, whatever order a late graph-change hook recorded it in", () => {
-  const edited = { ...graph(), terminal: { ...ref, digest: contentDigest("edited") } };
-  const record = demonstration("attempt", -2);
+test("only decisions naming this exact revision place a record, and no later revision revives an earlier one", () => {
+  const second = { ...graph(), terminal: { ...ref, digest: contentDigest("second") } };
+  const third = { ...graph(), terminal: { ...ref, digest: contentDigest("third") } };
+  const record = demonstration("attempt", -3);
+  const first = home("first-home", record.id, ["node-b"]);
+  const moved = home("second-home", record.id, ["node-c"], false, second.terminal);
+  // The third edit does not touch this record; its own change restates the decision still in force.
+  const restated = home("third-home", record.id, ["node-c"], false, third.terminal);
+  // The first revision's graph-change hook is delivered last of all, long after both later edits.
+  const log = [record, moved, restated, first];
+  expect(stateDefault(third, log, at).homing.homes[record.id]).toEqual(["node-c"]);
+  expect(stateDefault(second, log, at).homing.homes[record.id]).toEqual(["node-c"]);
+  // An undo back to the first revision states it again; both statements name it, and order separates them.
+  const undone = home("undo-home", record.id, ["node-c"]);
+  expect(stateDefault(graph(), [...log, undone], at).homing.homes[record.id]).toEqual(["node-c"]);
+  expect(stateDefault(graph(), log, at).homing.homes[record.id]).toEqual(["node-b"]);
+  // A revision nothing has stated places the record by its own recording alone.
+  const unstated = { ...graph(), terminal: { ...ref, digest: contentDigest("unstated") } };
+  const undecided = stateDefault(unstated, log, at);
+  expect(undecided.homing.homes[record.id]).toBeUndefined();
+  expect(undecided.nodes["node-a"]?.records.map(({ id }) => id)).toEqual([record.id]);
+});
+test("decisions naming one revision are read in the order they were supplied, not by their instants", () => {
+  const record = demonstration("attempt", -3);
+  // A hook emitted before the sweep ran, carrying its emission instant, delivered long after it.
+  const hook = home("hook-home", record.id, ["node-b"]);
+  const emitted = { ...hook, at: obs("clock", {}, -2).at };
+  // The sweep's own attachment: accepted later, and the last statement about this revision.
+  const swept = { ...home("swept-home", record.id, ["node-c"]), at: obs("clock", {}, -1).at };
+  expect(stateDefault(graph(), [record, emitted, swept], at).homing.homes[record.id]).toEqual(["node-c"]);
+  // The supplied sequence is the acceptance order; a decision's own instant never re-ranks it.
+  const backdated = { ...swept, at: obs("clock", {}, -4).at };
+  expect(stateDefault(graph(), [record, emitted, backdated], at).homing.homes[record.id]).toEqual(["node-c"]);
+  expect(stateDefault(graph(), [record, backdated, emitted], at).homing.homes[record.id]).toEqual(["node-b"]);
+});
+
+test("a graph change restates the decisions in force, keeps pending records pending, and states nothing else", () => {
+  const rehomed = demonstration("rehomed", -2);
   const attached = claim("attached", "knows", -2);
-  const retained = home("retain-claim", attached.id, ["node-b"]);
-  const current = home("current-home", record.id, ["node-b"], false, edited.terminal);
-  // A graph-change hook for the earlier revision, delivered and recorded after the edited graph decided.
-  const late = home("late-home", record.id, ["node-c"]);
-  const log = [record, attached, retained, current, late];
-  const edits = stateDefault(edited, log, at);
-  expect(edits.homing.homes[record.id]).toEqual(["node-b"]);
-  // Nothing under the edited revision revisited the claim, so its existing attachment still stands.
-  expect(edits.homing.claims[attached.id]).toEqual(["node-b"]);
-  expect(edits.nodes["node-c"]?.records).toEqual([]);
-  expect(stateDefault(graph(), log, at).homing.homes[record.id]).toEqual(["node-c"]);
+  const stuck = demonstration("stuck", -2);
+  const bare = demonstration("bare", -2);
+  const observations = [
+    rehomed,
+    home("rehome", rehomed.id, ["node-b"]),
+    attached,
+    home("attach", attached.id, ["node-b"]),
+    stuck,
+    // Pending work whose decided home is the record's own: the placement says nothing, the pending does.
+    home("stuck-home", stuck.id, ["node-a"], true),
+    bare,
+  ];
+  const old = graph();
+  const next = { ...graph(), terminal: { ...ref, digest: contentDigest("unrelated-edit") } };
+  const decisions = projectGraphChange(stateDefault(old, observations, at), old, next);
+  expect(decisions).toContainEqual({ kind: "homing", of: rehomed.id, homes: ["node-b"], revision: next.terminal });
+  expect(decisions).toContainEqual({ kind: "homing", of: attached.id, homes: ["node-b"], revision: next.terminal });
+  expect(decisions).toContainEqual({
+    kind: "homing",
+    of: stuck.id,
+    homes: ["node-a"],
+    revision: next.terminal,
+    pending: true,
+  });
+  expect(decisions.map(({ of }) => of)).not.toContain(bare.id);
+  const projected = stateDefault(
+    next,
+    [...observations, ...decisions.map((payload, index) => obs(`z-restated-${index}`, payload))],
+    at,
+  );
+  expect(projected.homing.homes[rehomed.id]).toEqual(["node-b"]);
+  expect(projected.homing.claims[attached.id]).toEqual(["node-b"]);
+  expect(projected.homing.pending).toEqual([stuck.id]);
+  expect(projected.nodes["node-a"]?.records.map(({ id }) => id)).toEqual([bare.id, stuck.id]);
 });
 test("homing supersession removes obsolete attributions; indicator facts retain the exact supporting evidence", () => {
   const record = demonstration("original", -3);

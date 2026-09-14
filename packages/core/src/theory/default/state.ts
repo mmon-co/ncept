@@ -91,6 +91,7 @@ export interface NodeMemory {
   readonly entries: readonly (MemoryEntry | MemorySummary)[];
   readonly originals: readonly MemoryEntry[];
 }
+/** The overlay of one exact graph revision: only placements decided for it, and unresolved records. */
 export interface DefaultHoming {
   readonly homes: Readonly<Partial<Record<ObservationId, readonly NodeId[]>>>;
   readonly claims: Readonly<Partial<Record<ObservationId, readonly NodeId[]>>>;
@@ -220,7 +221,10 @@ function assertDefaultPayload(payload: unknown): void {
   }
   if (!valid) throw new Error(`Invalid default ${String(payload.kind)} payload`);
 }
-/** Retractions never retract retractions. Excluded sources do not make residual interpretations into evidence. */
+/** Retractions never retract retractions. Excluded sources do not make residual interpretations into evidence.
+ * Records rank by the instant the learner produced them, deterministically, which is a different question
+ * from the order observations were accepted in: decisions and memory read the supplied sequence instead.
+ */
 export function activeDefaultRecords(observations: readonly Observation[]): readonly HomedRecord[] {
   const own = observations.filter(isDefaultObservation);
   for (const observation of own) assertDefaultPayload(observation.payload);
@@ -280,7 +284,7 @@ export function homingCandidates(graph: ResolvedGraph): readonly HomingCandidate
     return { node: id, statement };
   });
 }
-/** Provisional interpretations for a graph edit; event writes them, then judges pending demonstrations. */
+/** Provisional interpretations for a graph edit: the target revision restates every decision in force. */
 export function projectGraphChange(
   state: DefaultState,
   graph: ResolvedGraph,
@@ -294,21 +298,36 @@ export function projectGraphChange(
     if (targets?.some((id) => !nextIds.has(id)))
       throw new Error(`Successor declaration for ${node} targets a missing Node`);
   }
+  const sourceIds = new Set(graph.nodes.map(({ id }) => id));
+  const moved = !sameExactPatchRef(graph.terminal, next.terminal);
   return state.records.flatMap((record): Homing[] => {
     const claim = record.payload.kind === "claim";
-    const explicit = (claim ? state.homing.claims : state.homing.homes)[record.id];
-    const previous = explicit ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
+    const decided = (claim ? state.homing.claims : state.homing.homes)[record.id];
+    const intrinsic = record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
+    const previous = (decided ?? intrinsic).filter((node) => sourceIds.has(node));
     const removed = previous.some((node) => !nextIds.has(node));
     const retryHomeless =
       record.payload.kind === "demonstration" &&
       previous.length === 0 &&
       !nextIds.has(record.payload.node.node) &&
-      !sameExactPatchRef(graph.terminal, next.terminal);
-    if (!removed && !retryHomeless && !state.homing.pending.includes(record.id)) return [];
+      moved;
+    const unresolved = removed || retryHomeless || state.homing.pending.includes(record.id);
+    // A decision in force is restated for the new revision, which is the only thing that governs there.
+    // Pending survives the restatement even where the decided homes are the record's own; a carried
+    // decision does not become pending work.
+    if (!unresolved && !(decided !== undefined && moved)) return [];
     const homes = [
       ...new Set(previous.flatMap((node) => (nextIds.has(node) ? [node] : claim ? [] : (successors[node] ?? [])))),
     ];
-    return [{ kind: "homing", of: record.id, homes, revision: next.terminal, ...(!claim ? { pending: true } : {}) }];
+    return [
+      {
+        kind: "homing",
+        of: record.id,
+        homes,
+        revision: next.terminal,
+        ...(!claim && unresolved ? { pending: true } : {}),
+      },
+    ];
   });
 }
 
@@ -573,22 +592,24 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
   const homed: Partial<Record<NodeId, HomedRecord[]>> = {};
   const homeless: HomedRecord[] = [];
   for (const record of records) {
+    // A homing decision interprets the exact graph revision it names, and only that one: the graph
+    // change that produced this revision restates every decision still in force. Recording order
+    // decides between decisions naming this revision, so the supplied order must be logical
+    // acceptance order — a hook's writes belong where it was emitted, not where they landed.
     const decisions = observations.filter(
       (entry): entry is Observation<Homing> =>
-        isDefaultObservation(entry) && isHoming(entry.payload) && entry.payload.of === record.id,
+        isDefaultObservation(entry) &&
+        isHoming(entry.payload) &&
+        entry.payload.of === record.id &&
+        sameExactPatchRef(entry.payload.revision, graph.terminal),
     );
-    // A homing decision interprets the graph revision it names. One naming this exact revision governs
-    // it whatever order a delayed graph-change hook was recorded in; a decision for another revision
-    // only carries an earlier overlay forward while this revision has said nothing about the record.
-    const forRevision = decisions.filter(({ payload }) => sameExactPatchRef(payload.revision, graph.terminal));
-    const decision = forRevision.at(-1) ?? decisions.at(-1);
+    const decision = decisions.at(-1);
     const mapping = record.payload.kind === "claim" ? claims : homes;
     const initial = record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
     const chosen = decision?.payload.homes ?? initial;
     const present = [...new Set(chosen)].filter((node) => nodeIds.has(node));
-    // Undecided claims remain pending content work, not established homelessness.
-    if (decision !== undefined || record.nodes !== undefined || record.payload.kind === "demonstration")
-      mapping[record.id] = present;
+    // homes/claims are the decisions in force at this revision; intrinsic placement stays on the record.
+    if (decision !== undefined) mapping[record.id] = present;
     if (
       record.payload.kind === "demonstration" &&
       (decision?.payload.pending || chosen.some((node) => !nodeIds.has(node)))
