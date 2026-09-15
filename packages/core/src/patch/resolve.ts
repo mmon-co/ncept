@@ -1,4 +1,4 @@
-import { sameMetadataSubjects, validateMetadataProperties } from "./metadata";
+import { discoveryTags, sameMetadataSubjects, validateMetadataProperties } from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
@@ -297,9 +297,7 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const orderedEdges = sorted(edges.values());
   const orderedMetadataSets = sorted(metadataSets.values());
   for (const revision of orderedRevisions) {
-    const labels = Object.entries(revision.metadata.properties)
-      .filter(([key, value]) => key.startsWith("patch:") && value === true)
-      .map(([key]) => key.slice("patch:".length));
+    const labels = discoveryTags(revision.metadata.properties);
     if (labels.length === 0) continue;
     const closure = ordered.closure.get(exactPatchRefKey(revision.ref)) ?? new Set();
     // Every label of this exact revision names the same immutable closure membership.

@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./digest": "./src/digest.ts",
     "./patch": "./src/patch/index.ts",
     "./observations": "./src/observations.ts",
     "./theory": "./src/theory/index.ts",
