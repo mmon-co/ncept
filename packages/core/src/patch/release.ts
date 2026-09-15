@@ -238,6 +238,27 @@ export function compareReleaseVersions(left: string, right: string): number {
   return 0;
 }
 
+/**
+ * The same precedence as a string that sorts by it, so a store can order releases by an index
+ * instead of by reading and comparing them. `compareReleaseVersions` above remains the definition;
+ * this encodes the version it parses, and two names have equal precedence exactly when their keys
+ * are equal — build metadata is absent from both, as it is from precedence.
+ *
+ * The encoding is ASCII and is read byte by byte. A number carries one `:` per digit beyond the
+ * first, and `:` sorts above every digit, so a longer number outranks a shorter one at any length.
+ * `!` separates identifiers and sorts below every character one may contain, so a prerelease that
+ * another extends sorts below it. `#` opens a numeric identifier and `$` an alphanumeric one, so
+ * numeric identifiers sort below alphanumeric ones. A stable release ends at `~`, above the `-`
+ * that opens any prerelease of the same numbers.
+ */
+export function releasePrecedenceKey(version: string): string {
+  const { major, minor, patch, prerelease } = parseVersion(version);
+  const number = (digits: string) => ":".repeat(digits.length - 1) + digits;
+  const identifier = (value: string) => (/^\d+$/.test(value) ? `#${number(value)}` : `$${value}`);
+  const numbers = [major, minor, patch].map((value) => number(String(value))).join("!");
+  return prerelease.length === 0 ? `${numbers}~` : `${numbers}-${prerelease.map(identifier).join("!")}`;
+}
+
 /** Whether a version names a stable release: the class automatic update targets, and the one a
  * collection shows as a Patch's current version. A prerelease is reachable only by exact name. */
 export function isStableRelease(version: string): boolean {
