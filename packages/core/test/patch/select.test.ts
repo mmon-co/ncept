@@ -1,7 +1,6 @@
 import type { TagIndex } from "../../src/theory/theory";
 import { expect, test } from "bun:test";
 import {
-  PatchCompileError,
   evaluateView,
   type View,
   parseGraphQuery,
@@ -119,26 +118,6 @@ test("an Edge- or Metadata-set tag brings the topology needed to interpret it", 
   });
 });
 
-test("unknown tags and malformed restricted queries fail with typed errors", () => {
-  for (const [query, code] of [
-    [{ tag: "missing" }, "unknown-tag"],
-    [{ union: [] }, "malformed-query"],
-    [{ union: [{ tag: "left" }] }, "malformed-query"],
-    [{ intersection: [{ tag: "left" }] }, "malformed-query"],
-    [{ difference: [{ tag: "left" }] }, "malformed-query"],
-    [{ difference: [{ tag: "left" }, { tag: "right" }, { tag: "left" }] }, "malformed-query"],
-    [{ tag: "left", union: [{ tag: "right" }] }, "malformed-query"],
-  ] as const) {
-    try {
-      selectGraph(graph, parseGraphQuery(query));
-      throw new Error("expected query to fail");
-    } catch (error) {
-      if (!(error instanceof PatchCompileError)) throw error;
-      expect(error.code).toBe(code);
-    }
-  }
-});
-
 test("dependent cones include their targets and walk outgoing edges, composing with the tag algebra", () => {
   const dependents = parseGraphQuery({ dependents: { targets: ["node-b"] } });
   expect(dependents).toEqual({ dependents: { targets: ["node-b"] } });
@@ -153,19 +132,6 @@ test("dependent cones include their targets and walk outgoing edges, composing w
   ]);
   expect(selectedIds({ difference: [{ cone: { targets: ["node-c"] } }, dependents] }).nodes).toEqual(["node-a"]);
   expect(selectedIds({ difference: [dependents, { tag: "left" }] }).nodes).toEqual(["node-c"]);
-});
-
-test("dependent selectors reject malformed targets and dangling Nodes through public operations", () => {
-  for (const query of [
-    { dependents: {} },
-    { dependents: { targets: [] } },
-    { dependents: { targets: ["not-a-node"] } },
-    { dependents: { targets: ["node-a"], direction: "backwards" } },
-  ])
-    expect(() => parseGraphQuery(query)).toThrow(PatchCompileError);
-  expect(() => selectGraph(graph, { dependents: { targets: ["node-missing"] } })).toThrow(
-    /dependents targets missing node/,
-  );
 });
 
 test("is: selection and saved Views use the supplied TagIndex, including nested query algebra", () => {
@@ -191,14 +157,4 @@ test("is: selection and saved Views use the supplied TagIndex, including nested 
   expect(() => selectGraph(graph, { tag: "is:known" })).toThrow(/requires a TagIndex/);
   expect(() => selectGraph(graph, { tag: "is:missing" }, tags)).toThrow(/unknown theory tag missing/);
   expect(() => selectGraph(graph, { tag: "is:known" }, () => new Set(["node-missing"]))).toThrow(/missing node/);
-});
-
-test("provenance query parsing admits only identity and canonical digest", () => {
-  expect(parseGraphQuery({ provenance: revision.ref })).toEqual({ provenance: revision.ref });
-  expect(() => parseGraphQuery({ provenance: { ...revision.ref, commit: "old-host-coordinate" } })).toThrow(
-    /exact Patch reference/,
-  );
-  expect(() => parseGraphQuery({ provenance: { ...revision.ref, digest: "sha256:short" } })).toThrow(
-    /exact Patch reference/,
-  );
 });

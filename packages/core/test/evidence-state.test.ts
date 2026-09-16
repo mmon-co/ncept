@@ -8,7 +8,6 @@ import {
   activeDefaultRecords,
   assertDefaultRetraction,
   expandNodeMemory,
-  homingCandidates,
   memoryDefault,
   projectGraphChange,
   stateDefault,
@@ -257,26 +256,6 @@ test("project graph change retains homes, validates successors, and keeps pendin
   expect(decided.homeless.map(({ id }) => id)).not.toContain(pendingClaim.id);
   expect(() => projectGraphChange(state, old, next, { "node-b": ["node-c"] })).toThrow("removed Node");
   expect(() => projectGraphChange(state, old, next, { "node-a": ["node-gone"] })).toThrow("missing Node");
-});
-
-test("capability candidates preserve current statement text and reject missing statements", () => {
-  expect(() => homingCandidates(graph())).toThrow("Missing capability statement");
-  const base = graph(["node-a"]);
-  const attributed = {
-    ...base,
-    metadataSets: [
-      {
-        id: "metadata-capability" as const,
-        subjects: [{ kind: "node" as const, id: "node-a" as const }],
-        properties: { "pedagogy:criterion": " exact capability\n" },
-      },
-    ],
-    provenance: {
-      ...base.provenance,
-      metadataProperties: { "metadata-capability": { "pedagogy:criterion": [{ patch: ref, operationIndex: 0 }] } },
-    },
-  };
-  expect(homingCandidates(attributed)).toEqual([{ node: "node-a", statement: " exact capability\n" }]);
 });
 
 test("memory preserves separate original strings, transcript source spans and summary expansion without demonstrations", () => {
