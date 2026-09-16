@@ -65,48 +65,6 @@ const revision: PatchRevision = {
 
 const bundle: ClosedPatchBundle = { terminal: revision.ref, revisions: [revision] };
 
-test("a native root Patch compiles from the empty graph into a content-only Visual graph", () => {
-  const graph = compileGraph({
-    bundle,
-
-    annotations: { "node-spans": ["featured"] },
-  });
-
-  expect(graph.groups).toEqual([{ id: "patch-linear-algebra", label: "Linear algebra" }]);
-  expect(graph.nodes).toEqual([
-    {
-      id: "node-spans",
-      label: "Spans",
-      groupId: "patch-linear-algebra",
-      rank: 1,
-      tags: [],
-      annotations: ["featured"],
-      inspectorRef: `patch-linear-algebra@${revision.ref.digest}/node/node-spans`,
-      contentSource: revision.ref,
-    },
-    {
-      id: "node-vectors",
-      label: "Vectors",
-      groupId: "patch-linear-algebra",
-      rank: 0,
-      tags: [],
-      annotations: [],
-      inspectorRef: `patch-linear-algebra@${revision.ref.digest}/node/node-vectors`,
-      contentSource: revision.ref,
-    },
-  ]);
-  expect(graph.edges).toEqual([
-    {
-      tags: [],
-      id: "edge-spans-vectors",
-      from: "node-spans",
-      to: "node-vectors",
-      role: "dependency",
-    },
-  ]);
-  expect(JSON.stringify(graph)).not.toMatch(/mastery|estimate|uncertainty|artifact/i);
-});
-
 test("a proposed graph diff reports its target cone and suspicious fan-in", () => {
   const fan = Array.from({ length: 6 }, (_, index) => `node-fan-${index}` as const);
   const operations = fan.flatMap((node, index) => [

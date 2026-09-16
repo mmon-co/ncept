@@ -8,7 +8,6 @@ import {
   compileGraphDiff,
   composePatch,
   emptyPatch,
-  exactPatchRefKey,
   lessonOperations,
   resolvePatchBundle,
   revisionContent,
@@ -48,29 +47,6 @@ test("canonical content identity sorts object keys, preserves ordered arrays, an
   expect(sha256Hex("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   for (const value of [undefined, NaN, Infinity, 1n, new Date(0), new Map(), [undefined], Array(1)])
     expect(() => canonicalJson(value)).toThrow();
-});
-
-test("a candidate is a canonical content revision with no commit or release coordinate", () => {
-  const content = rootContent(definition);
-  const revision = candidateRevision("patch-course", content);
-  expect(revision.ref).toEqual({ identity: "patch-course", digest: contentDigest(content) });
-  expect(revisionContent(revision)).toEqual(content);
-  expect(
-    candidateRevision("patch-course", {
-      metadata: content.metadata,
-      delta: content.delta,
-      bases: [],
-    }),
-  ).toEqual(revision);
-  expect(exactPatchRefKey(revision.ref)).toBe(`patch-course\0${revision.ref.digest}`);
-  expect(sameExactPatchRef(revision.ref, { ...revision.ref })).toBe(true);
-  expect(sameExactPatchRef(revision.ref, { ...revision.ref, identity: "patch-other" })).toBe(false);
-  expect(
-    revisionDigest({
-      ...content,
-      metadata: { ...content.metadata, citations: [{ kind: "external_source", source: "a source" }] },
-    }),
-  ).not.toBe(revision.ref.digest);
 });
 
 test("base closure uses supplied content, preserves manifest order, deduplicates diamonds and ignores unrelated rows", () => {

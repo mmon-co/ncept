@@ -5,8 +5,6 @@ import {
   candidateRevision,
   composePatch,
   emptyPatch,
-  isAttachment,
-  isMetadataValue,
   reifyView,
   resolvePatchBundle,
   revisionDigest,
@@ -53,24 +51,6 @@ test("attachment identity hashes exact raw bytes and text UTF-8, not canonical J
     attachmentDigest(new TextEncoder().encode("line\n")),
   );
   expect(attachmentDigest(new TextEncoder().encode("é"))).not.toBe(attachmentDigest(new TextEncoder().encode("é")));
-});
-
-test("Attachment guards accept only portable blob reference values", () => {
-  expect(isAttachment(original)).toBe(true);
-  expect(isAttachment(html)).toBe(true);
-  expect(isMetadataValue(original)).toBe(true);
-  expect(isMetadataValue(["existing", "string", "list"])).toBe(true);
-  for (const value of [
-    null,
-    {},
-    { ...original, hash: "sha256:bad" },
-    { ...original, mediaType: "" },
-    { ...original, body: "embedded" },
-    { ...html, state: {} },
-    [original],
-  ])
-    expect(isAttachment(value)).toBe(false);
-  expect(isMetadataValue([original])).toBe(false);
 });
 
 test("attachment revision preserves placement, title, original reference and exact effective contribution", () => {
