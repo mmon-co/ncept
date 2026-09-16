@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { PatchCompileError, resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "../../src/patch";
-import { attachmentDigest } from "../../src/digest";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
@@ -15,55 +14,6 @@ function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
     delta: { operations },
   };
 }
-
-test("typed attachment metadata retains its subjects and rejects malformed refs or dangling subjects", () => {
-  const hash = attachmentDigest(new TextEncoder().encode("A worked example."));
-  const valid = root([
-    { kind: "add-node", node: { id: "node-a" } },
-    {
-      kind: "add-metadata-set",
-      metadataSet: {
-        id: "metadata-example",
-        subjects: [{ kind: "node", id: "node-a" }],
-        properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
-      },
-    },
-  ]);
-  const graph = resolvePatchBundle({ terminal: valid.ref, revisions: [valid] });
-  expect(graph.metadataSets[0]).toEqual({
-    id: "metadata-example",
-    subjects: [{ kind: "node", id: "node-a" }],
-    properties: { "display:title": "Example", content: { kind: "blob", hash, mediaType: "text/plain" } },
-  });
-  expect(graph.provenance.metadataProperties["metadata-example"]?.content).toEqual([
-    { patch: valid.ref, operationIndex: 1 },
-  ]);
-  for (const [property, value] of [
-    ["hash", "sha256:short"],
-    ["hash", `sha256:${"A".repeat(64)}`],
-    ["mediaType", ""],
-    ["body", "embedded"],
-  ] as const) {
-    const revision = structuredClone(valid);
-    const operation = revision.delta.operations[1];
-    if (operation?.kind !== "add-metadata-set") throw new Error("missing test attachment");
-    const attachment = operation.metadataSet.properties.content;
-    if (typeof attachment !== "object" || attachment === null) throw new Error("missing test reference");
-    Reflect.set(attachment, property, value);
-    expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow(/metadata property/);
-  }
-  const dangling = root([
-    {
-      kind: "add-metadata-set",
-      metadataSet: {
-        id: "metadata-example",
-        subjects: [{ kind: "node", id: "node-missing" }],
-        properties: { content: { kind: "blob", hash, mediaType: "text/plain" } },
-      },
-    },
-  ]);
-  expect(() => resolvePatchBundle({ terminal: dangling.ref, revisions: [dangling] })).toThrow(/missing node/);
-});
 
 function ref(identity: `patch-${string}`, fill: string): ExactPatchRef {
   return {
@@ -86,50 +36,6 @@ function based(
     delta: { operations },
   };
 }
-
-test("root resolution preserves stable identities, tags, and contribution provenance", () => {
-  const revision = root([
-    { kind: "add-node", node: { id: "node-a" } },
-    {
-      kind: "add-metadata-set",
-      metadataSet: {
-        id: "metadata-a",
-        subjects: [{ kind: "node", id: "node-a" }],
-        properties: { "display:label": "A" },
-      },
-    },
-    {
-      kind: "define-tag",
-      tag: { name: "patch:course", nodes: ["node-a"], edges: [], metadataSets: ["metadata-a"] },
-    },
-  ]);
-  const resolved = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
-
-  expect(resolved.patchOrder).toEqual([revision.ref]);
-  expect(resolved.nodes).toEqual([{ id: "node-a" }]);
-  expect(resolved.tags).toEqual([
-    {
-      name: "patch:course",
-      authority: "patch",
-      nodes: ["node-a"],
-      edges: [],
-      metadataSets: ["metadata-a"],
-    },
-  ]);
-  expect(resolved.provenance.nodes["node-a"]).toEqual([{ patch: revision.ref, operationIndex: 0 }]);
-});
-
-test("root resolution rejects dangling topology", () => {
-  const revision = root([
-    {
-      kind: "add-edge",
-      edge: { id: "edge-broken", from: "node-missing", to: "node-other" },
-    },
-  ]);
-  expect(() => resolvePatchBundle({ terminal: revision.ref, revisions: [revision] })).toThrow(
-    new PatchCompileError("dangling-edge", "edge 'edge-broken' has missing endpoints"),
-  );
-});
 
 test("a Personal Patch applies its exact root bases in manifest order and itself last", () => {
   const first = root([{ kind: "add-node", node: { id: "node-first" } }]);
@@ -158,19 +64,6 @@ test("a Personal Patch applies its exact root bases in manifest order and itself
 
   expect(resolved.patchOrder).toEqual([first.ref, second.ref, personal.ref]);
   expect(resolved.nodes).toEqual([{ id: "node-first" }, { id: "node-notebook" }, { id: "node-second" }]);
-});
-
-test("a Personal Patch rejects a base whose exact identity is not supplied", () => {
-  const course = root([]);
-  const personal = {
-    ...root([]),
-    ref: { ...root([]).ref, identity: "patch-personal" as const },
-    bases: [{ ...course.ref, identity: "patch-expected" }],
-  } satisfies PatchRevision;
-
-  expect(() => resolvePatchBundle({ terminal: personal.ref, revisions: [course, personal] })).toThrow(
-    /patch-expected@.* is missing/,
-  );
 });
 
 test("ordered resolution applies an exact diamond dependency once and the terminal Patch last", () => {

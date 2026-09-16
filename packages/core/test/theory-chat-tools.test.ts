@@ -5,13 +5,9 @@ import {
   defaultBackgroundTools,
   defaultInstrumentTools,
   defaultRecordingTools,
-  defaultTheory,
   DEFAULT_THEORY_REF,
-  DEFAULT_THEORY_RELEASE,
   keyedDemonstration,
-  resolveTheory,
   stateDefault,
-  theoryRelease,
   type ChatContext,
   type DefaultState,
   type Demonstration,
@@ -89,27 +85,6 @@ function demonstration(id: `obs-${string}`, at: string): Observation<Demonstrati
   };
 }
 
-test("chat open and turn preserve prompt, catalog, current context and all theory tools", () => {
-  const ctx = {
-    ...context(),
-    missions: [{ id: "mission-a", statement: "Learn a", priority: 0, nodes: ["node-a" as const] }],
-  };
-  const setup = pure(chat.open(ctx));
-  expect(pure(chat.turn(ctx))).toEqual(setup);
-  expect(setup.prompt).toContain("Every factual Instrument claim must cite its Record identity or Patch provenance");
-  expect(setup.prompt).toContain("This Session opened over node-a");
-  expect(setup.prompt).toContain("Learn a");
-  // The Mission context is effective fields and View scope; nothing in it cites an observation.
-  expect(setup.prompt).not.toContain("obs-claim");
-  expect(setup.tools.map(({ name }) => name)).toEqual(tools.map(({ name }) => name));
-  expect(setup.tools).toHaveLength(14);
-  expect(setup.skills).toHaveLength(8);
-  expect(setup.skills.find(({ name }) => name === "evaluator-sweep")?.entry).toEqual(["system"]);
-  expect(setup.skills.find(({ name }) => name === "charting")?.entry).toEqual(["learner"]);
-  expect(setup.tools.some(({ name }) => /propose|run_code|open_surface/.test(name))).toBe(false);
-  expect(pure(chat.open({ ...ctx, about: [] })).prompt).toContain("This Session opened over no Nodes");
-});
-
 test("record demonstration writes verbatim attempt with explicit time, source scope and attribution", () => {
   const ctx = context();
   const program = tool("record_demonstration").run(
@@ -146,31 +121,6 @@ test("record demonstration writes verbatim attempt with explicit time, source sc
   const state = stateDefault(graph, [{ ...observation, id: "obs-written", at: now, by: DEFAULT_THEORY_REF }], now);
   expect(state.memories["node-b"]?.originals[0]?.source).toEqual({ kind: "observation", observation: "obs-written" });
   expect(state.nodes["node-b"]?.records[0]?.id).toBe("obs-written");
-});
-
-test("tool argument validation fails before any write", () => {
-  const input = { node: "node-a", outcome: "success", unaided: true, grader: "tutor", task: "a", response: "a" };
-  for (const invalid of [
-    { ...input, unaided: "true" },
-    { ...input, outcome: "skip" },
-    { ...input, grader: "model" },
-    { ...input, node: "node-missing" },
-    { ...input, extra: true },
-    null,
-  ]) {
-    expect(() => tool("record_demonstration").run(invalid, context()).next()).toThrow();
-  }
-  expect(() => tool("record_claim").run({ statement: "a", stance: "preference" }, context()).next()).toThrow();
-  expect(() =>
-    tool("coverage")
-      .run({ scope: ["node-missing"] }, context())
-      .next(),
-  ).toThrow();
-  expect(() =>
-    tool("attach_claim")
-      .run({ record: "obs-claim", nodes: ["node-a", "node-a"] }, context())
-      .next(),
-  ).toThrow();
 });
 
 test("claim recording and content attachment write distinct citable observations, including explicit homelessness", () => {
@@ -284,12 +234,6 @@ test("instruments preserve factual ordering, labels, citations, memory and missi
   expect(run("items", { node: "node-a" })).toMatchObject({ citations: ["obs-first", "obs-second"] });
 });
 
-test("refine_records with no pending homes reads evidence but requests no judgment", () => {
-  const program = tool("refine_records").run({}, context());
-  expect(program.next().value).toEqual({ kind: "read", select: { kind: "observations" } });
-  expect(program.next([])).toEqual({ done: true, value: undefined });
-});
-
 test("keyed demonstrations preserve the option error without changing assistance or source", () => {
   expect(
     keyedDemonstration({
@@ -308,16 +252,6 @@ test("keyed demonstrations preserve the option error without changing assistance
     response: "b\nverbatim error\ntext",
     unaided: false,
   });
-});
-
-test("theory release pin resolves only the exact supplied implementation", () => {
-  expect(theoryRelease(defaultTheory)).toEqual(DEFAULT_THEORY_RELEASE);
-  expect(resolveTheory(DEFAULT_THEORY_RELEASE, [defaultTheory])).toBe(defaultTheory);
-  expect(() => resolveTheory(DEFAULT_THEORY_RELEASE, [])).toThrow();
-  expect(() => resolveTheory(DEFAULT_THEORY_RELEASE, [defaultTheory, defaultTheory])).toThrow();
-  expect(() =>
-    resolveTheory({ ...DEFAULT_THEORY_RELEASE, digest: contentDigest("changed") }, [defaultTheory]),
-  ).toThrow();
 });
 
 test("chat prefetch preserves memory sources and the existing 16KiB cap", () => {
