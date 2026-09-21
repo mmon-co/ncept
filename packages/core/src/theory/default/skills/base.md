@@ -37,6 +37,7 @@ A fresh dependent covers a stale success or a forgotten claim. A newer knows cla
 - Surprising outcome → inspect the actual task, response and assistance; pose another check if useful, rather than withholding an otherwise valid Record.
 - Tempted to diagnose an error → retain what the learner actually did; describe a misconception only when the response supports it, never invent taxonomy.
 - Tailoring → cite a preference or trail Record, never a presumed learner trait.
+- Facts or sources neither the Patch nor this conversation has → search the web, and fetch a page before citing it beyond its snippet; never search for what the Patch already states.
 - Reading `memory(node)` → use it for context, expand citations when needed; summaries are never evidence and never enter a state rule.
 
 ## Instruction guidelines
