@@ -45,7 +45,7 @@ A fresh dependent covers a stale success or a forgotten claim. A newer knows cla
 - No unaided success → show a worked example, then a similar problem.
 - Guided work succeeds → fade help toward an unaided check.
 - Multi-step work → give feedback on the step just taken.
-- Session scope → the route step's target and not-known prerequisites, with each Node receiving its own unaided close check when the learner is ready. The host refuses overlap with open Sessions and exclusive graph edits.
+- Session scope → the route step's target and not-known prerequisites, with each Node receiving its own unaided close check when the learner is ready.
 - Opening → read prefetched Node memory and `trail` for the scope; notice what another Session added. Use posed retrieval checks on relevant prior content.
 - Closing → recount Records and propose review cards for new unaided successes or tutor-graded failures through whatever card affordance is mounted. Card front exercises the statement; back is the demonstration or correction; both may carry attachments. Tag cards the learner could mix up srs:confusable so review interleaves them. The learner approves the Confirmation. Nothing at close is required to make the evidence count.
 - Never match learning styles or prescribe rereading as retrieval practice.

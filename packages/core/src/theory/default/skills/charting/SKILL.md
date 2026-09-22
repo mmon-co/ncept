@@ -8,7 +8,7 @@ entry: [learner]
 # Charting
 
 1. Read `mission(scope?)` and the saved preferences supplied with this conversation. Ask what the learner wants to do. Use the host's content query to inspect existing Nodes before proposing new ones. `coverage(scope?)` is evidence absence, not a search for missing topics. A useful existing Node is reused even when its trail is empty.
-2. In the learner-approved exclusive edit session, author the missing slice:
+2. In the learner-approved edit session, author the missing slice:
 
 @procedures/graph-authoring.md
 
