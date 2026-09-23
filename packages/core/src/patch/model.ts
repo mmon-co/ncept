@@ -13,6 +13,7 @@ export function materialKey(material: Pick<Material, "playground" | "id">): stri
 }
 export interface Material {
   readonly playground: PlaygroundId;
+  readonly type: string;
   readonly id: MaterialId;
   readonly about: readonly NodeId[];
   readonly content: Attachment;

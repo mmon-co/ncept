@@ -22,6 +22,7 @@ test("a Document lesson follows its content reference through edit, View capture
   const node = { id: "node-fractions" } as const;
   const original = {
     playground: "document",
+    type: "markdown",
     id: "lesson-fractions",
     about: [node.id],
     content: store("Fractions are equal parts of a whole."),

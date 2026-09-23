@@ -112,6 +112,7 @@ export function lessonOperations(
       kind: materialOperation,
       material: {
         playground: "document",
+        type: "markdown",
         id: `material-${input.id.slice(5)}`,
         about: [input.id],
         content: input.lesson,
