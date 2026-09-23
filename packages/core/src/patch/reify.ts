@@ -245,7 +245,10 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
             nodes: view.nodes.map(({ id }) => ({ source: id, target: id })),
             edges: view.edges.map(({ id }) => ({ source: id, target: id })),
             metadataSets: view.metadataSets.map(({ id }) => ({ source: id, target: id })),
-            materials: view.materials.map(({ id }) => ({ source: id, target: id })),
+            materials: view.materials.map((material) => ({
+              source: materialKey(material),
+              target: materialKey(material),
+            })),
           },
         },
       ],
