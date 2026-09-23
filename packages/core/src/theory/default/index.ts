@@ -3,7 +3,14 @@ import { theoryRelease } from "../release";
 import { chat } from "./chat";
 import { event } from "./event";
 import { DEFAULT_IMPLEMENTATION_DIGEST } from "./implementation-digest";
-import { isQuizOutcome, isRecallOutcome, type QuizOutcome, type RecallOutcome } from "./outcomes";
+import {
+  isAttemptOutcome,
+  isQuizOutcome,
+  isRecallOutcome,
+  type AttemptOutcome,
+  type QuizOutcome,
+  type RecallOutcome,
+} from "./outcomes";
 import { DEFAULT_THEORY_REF, stateDefault, type DefaultState } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 
@@ -15,10 +22,10 @@ export const defaultTheory = {
   state: stateDefault,
   project: projectDefault,
   tags: defaultTags,
-  outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome },
+  outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome, attempt: isAttemptOutcome },
   chat,
   event,
-} satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome }>;
+} satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome; attempt: AttemptOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
 export * from "./state";
 export * from "./tags";

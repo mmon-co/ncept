@@ -1,6 +1,7 @@
 import { isContentDigest } from "../../digest";
 import { isObservationTimestamp } from "../../observations";
 import type { Demonstration, NodeRef } from "./state";
+import type { ExactPatchRef, NodeId } from "../../patch";
 
 /** Content captured when retrieval happened, not a pointer to an editable card. */
 export interface RecallOutcome {
@@ -51,18 +52,101 @@ function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function nodeRef(value: unknown): value is NodeRef {
-  return (
-    object(value) &&
-    typeof value.node === "string" &&
-    /^node-.+/.test(value.node) &&
-    object(value.provenance) &&
-    typeof value.provenance.identity === "string" &&
-    /^patch-.+/.test(value.provenance.identity) &&
-    isContentDigest(value.provenance.digest)
+const nodeId = (value: unknown): value is NodeId => typeof value === "string" && /^node-.+/.test(value);
+const exactRef = (value: unknown): value is ExactPatchRef =>
+  object(value) &&
+  typeof value.identity === "string" &&
+  /^patch-.+/.test(value.identity) &&
+  isContentDigest(value.digest);
+const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(value.node) && exactRef(value.provenance);
+
+/**
+ * One assessed Quizzes Playground response, with the Problem captured at open and the revision pinned there.
+ * Grader follows format: choice and short are mechanical, open is its declared assessor.
+ */
+export interface AttemptOutcome {
+  readonly kind: "attempt";
+  readonly problem: {
+    readonly id: string;
+    readonly digest: string;
+    readonly about: readonly NodeId[];
+    readonly prompt: string;
+    readonly presentation?: string;
+  } & (
+    | {
+        readonly format: "choice";
+        readonly options: readonly { id: string; label: string; correct: boolean; error?: string }[];
+      }
+    | { readonly format: "short"; readonly accepted: readonly string[] }
+    | { readonly format: "open"; readonly by: "tutor" | "learner"; readonly rubric?: string; readonly model?: string }
   );
+  /** A choice option id, or the literal short/open text. */
+  readonly response: string;
+  readonly assessment: {
+    readonly correct: boolean;
+    readonly grader: "mechanical" | "tutor" | "learner";
+    readonly feedback?: string;
+  };
+  readonly revision: ExactPatchRef;
 }
 
+export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
+  if (!object(value) || value.kind !== "attempt" || !object(value.problem) || !object(value.assessment)) return false;
+  const { problem, assessment, response } = value;
+  const optional = (field: unknown) => field === undefined || text(field);
+  if (
+    !text(problem.id) ||
+    !isContentDigest(problem.digest) ||
+    !Array.isArray(problem.about) ||
+    problem.about.length === 0 ||
+    !problem.about.every(nodeId) ||
+    new Set(problem.about).size !== problem.about.length ||
+    !text(problem.prompt) ||
+    !optional(problem.presentation) ||
+    typeof response !== "string" ||
+    typeof assessment.correct !== "boolean" ||
+    !optional(assessment.feedback) ||
+    !exactRef(value.revision)
+  )
+    return false;
+  switch (problem.format) {
+    case "choice": {
+      const options: unknown = problem.options;
+      if (
+        !Array.isArray(options) ||
+        !options.every(
+          (option: unknown) =>
+            object(option) &&
+            text(option.id) &&
+            text(option.label) &&
+            typeof option.correct === "boolean" &&
+            optional(option.error),
+        ) ||
+        new Set(options.map(({ id }) => id)).size !== options.length
+      )
+        return false;
+      const chosen = options.find(({ id }) => id === response);
+      return assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct;
+    }
+    case "short":
+      return (
+        Array.isArray(problem.accepted) &&
+        problem.accepted.length > 0 &&
+        problem.accepted.every(text) &&
+        assessment.grader === "mechanical"
+      );
+    case "open":
+      return (
+        (problem.by === "tutor" || problem.by === "learner") &&
+        optional(problem.rubric) &&
+        optional(problem.model) &&
+        (problem.rubric !== undefined || problem.model !== undefined) &&
+        assessment.grader === problem.by
+      );
+    default:
+      return false;
+  }
+}
 /** Guards validate the supported payload, including the captured grading invariants. */
 export function isRecallOutcome(value: unknown): value is RecallOutcome {
   if (!object(value) || value.kind !== "recall" || !object(value.card) || !object(value.grade)) return false;
@@ -157,6 +241,25 @@ export function recallUnaided(card: Pick<RecallOutcome["card"], "front" | "back"
 export interface OriginalAttempt {
   readonly at: string;
   readonly payload: Demonstration;
+}
+
+/** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
+export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
+  const { problem, response, assessment } = outcome;
+  const choice = problem.format === "choice" ? problem.options : undefined;
+  const answer = choice?.find(({ id }) => id === response)?.label ?? response;
+  return problem.about.map((node) => ({
+    at,
+    payload: {
+      kind: "demonstration",
+      node: { node, provenance: { ...outcome.revision } },
+      outcome: assessment.correct ? "success" : "failure",
+      unaided: true,
+      grader: assessment.grader,
+      task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
+      response: assessment.feedback === undefined ? answer : `${answer}\n${assessment.feedback}`,
+    },
+  }));
 }
 
 /** Pure scoring over captured values; no current Material or graph read can rewrite an attempt. */

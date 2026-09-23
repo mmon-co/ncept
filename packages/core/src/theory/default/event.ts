@@ -1,7 +1,7 @@
 import { judge, read, write, type ObservationId, type PlatformEvent, type Program } from "../../observations";
 import { sameExactPatchRef, type NodeId } from "../../patch";
 import type { Context } from "../theory";
-import { isQuizOutcome, isRecallOutcome, practiceAttempts } from "./outcomes";
+import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
 import { stateDefault, projectGraphChange, homingCandidates, expandNodeMemory, type DefaultState } from "./state";
 
 /** Entries after a Node's last summary; exactly eight remain verbatim. */
@@ -56,19 +56,28 @@ export function* refinePendingHomes(ctx: Context<DefaultState>): Program<void> {
 /** The interpreter provides read-your-writes; persistence, atomicity and execution failures are the host's. */
 export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Program<void> {
   if (input.kind === "outcome") {
-    if (!isRecallOutcome(input.payload) && !isQuizOutcome(input.payload)) {
+    const { payload } = input;
+    if (!isRecallOutcome(payload) && !isQuizOutcome(payload) && !isAttemptOutcome(payload)) {
       if (
         typeof input.payload === "object" &&
         input.payload !== null &&
         "kind" in input.payload &&
-        (input.payload.kind === "recall" || input.payload.kind === "quiz")
+        ["recall", "quiz", "attempt"].includes(String(input.payload.kind))
       )
         throw new Error("Invalid practice outcome");
       return;
     }
+    // A per-Problem attempt is about exactly its Problem's Nodes, never a Set-wide scope.
+    if (
+      isAttemptOutcome(payload) &&
+      input.about !== undefined &&
+      (new Set(input.about).size !== payload.problem.about.length ||
+        !input.about.every((node) => payload.problem.about.includes(node)))
+    )
+      throw new Error("Invalid practice outcome");
     // Capture every attempt before the first yield: the host must not be able to edit later cards
     // or questions between writes and silently change the evidence in this outcome.
-    const attempts = practiceAttempts(input.payload);
+    const attempts = isAttemptOutcome(payload) ? problemAttempts(payload, input.at) : practiceAttempts(payload);
     for (const attempt of attempts) {
       yield* write({
         at: attempt.at,
