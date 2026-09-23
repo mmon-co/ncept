@@ -1,3 +1,4 @@
+import { canonicalJson } from "../digest";
 import { PatchCompileError } from "./errors";
 import { sameMetadataSubjects } from "./metadata";
 import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
@@ -118,8 +119,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
         const selected = view.materials.find((candidate) => materialKey(candidate) === materialKey(material));
         if (
           selected === undefined ||
-          (operation.kind !== "remove-material" &&
-            JSON.stringify(selected.about) !== JSON.stringify(operation.material.about)) ||
+          (operation.kind !== "remove-material" && canonicalJson(selected) !== canonicalJson(operation.material)) ||
           !contributed(view.provenance.materials[materialKey(material)], source, operationIndex)
         )
           masks.push({

@@ -1,4 +1,11 @@
-import { discoveryTags, isAttachment, sameMetadataSubjects, validateMetadataProperties } from "./metadata";
+import { canonicalJson } from "../digest";
+import {
+  discoveryTags,
+  isAttachment,
+  isMaterialMeta,
+  sameMetadataSubjects,
+  validateMetadataProperties,
+} from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
@@ -312,7 +319,7 @@ export function resolvePatchBundle(
     let chain: ContributionProvenance[] = [];
     for (const { value, provenance } of contributions.filter(({ provenance }) => enabled(provenance))) {
       if (value.kind === "add-material") {
-        if (current && JSON.stringify(current) !== JSON.stringify(value.material))
+        if (current && canonicalJson(current) !== canonicalJson(value.material))
           throw new PatchCompileError("incompatible-contribution", `material ${key} has conflicting additions`);
         current = value.material;
         chain.push(provenance);
@@ -375,7 +382,13 @@ export function resolvePatchBundle(
   }
 
   for (const material of materials) {
-    if (!material.playground.trim() || !material.id.trim() || !isAttachment(material.content))
+    if (
+      !material.playground.trim() ||
+      !material.type.trim() ||
+      !material.id.trim() ||
+      !isAttachment(material.content) ||
+      !isMaterialMeta(material.meta)
+    )
       throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}`);
     if (new Set(material.about).size !== material.about.length || material.about.some((id) => !nodes.has(id)))
       throw new PatchCompileError(

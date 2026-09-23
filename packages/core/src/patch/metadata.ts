@@ -1,8 +1,9 @@
-import { isContentDigest } from "../digest";
+import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
 import {
   exactPatchRefKey,
   type Attachment,
+  type MaterialMeta,
   type ContributionProvenance,
   type MetadataSet,
   type MetadataSubject,
@@ -45,6 +46,39 @@ export function sameMetadataSubjects(left: Pick<MetadataSet, "subjects">, right:
     leftKeys.length === rightKeys.length &&
     leftKeys.every((value, index) => value === rightKeys[index])
   );
+}
+
+/** Portable, bounded JSON object: no host or Playground semantics live in Core. */
+export function isMaterialMeta(value: unknown): value is MaterialMeta {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const seen = new Set<object>();
+  let members = 0;
+  function json(entry: unknown, depth: number): boolean {
+    if (entry === null || typeof entry === "string" || typeof entry === "boolean") return true;
+    if (typeof entry === "number") return Number.isFinite(entry);
+    if (typeof entry !== "object" || depth > 8 || seen.has(entry)) return false;
+    const prototype = Object.getPrototypeOf(entry);
+    if (!Array.isArray(entry) && prototype !== Object.prototype && prototype !== null) return false;
+    seen.add(entry);
+    const values = Object.getOwnPropertyDescriptors(entry);
+    const keys = Object.keys(values);
+    members += keys.length;
+    if (members > 1024 || keys.length > 256 || Object.getOwnPropertySymbols(entry).length) return false;
+    if (Array.isArray(entry) && (entry.length !== keys.length || keys.some((key, index) => key !== String(index))))
+      return false;
+    for (const key of keys) {
+      const property = values[key];
+      if (!property || !("value" in property) || !json(property.value, depth + 1)) return false;
+    }
+    seen.delete(entry);
+    return true;
+  }
+  if (!json(value, 0)) return false;
+  try {
+    return new TextEncoder().encode(canonicalJson(value)).byteLength <= 16_384;
+  } catch {
+    return false;
+  }
 }
 
 /** Byte fetching and authorization belong to the host; Core validates the portable reference. */

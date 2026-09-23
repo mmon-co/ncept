@@ -11,12 +11,22 @@ export type PlaygroundId = string;
 export function materialKey(material: Pick<Material, "playground" | "id">): string {
   return JSON.stringify([material.playground, material.id]);
 }
+export type MaterialMetaValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly MaterialMetaValue[]
+  | Readonly<{ [key: string]: MaterialMetaValue }>;
+export type MaterialMeta = Readonly<Record<string, MaterialMetaValue>>;
+
 export interface Material {
   readonly playground: PlaygroundId;
   readonly type: string;
   readonly id: MaterialId;
   readonly about: readonly NodeId[];
   readonly content: Attachment;
+  readonly meta: MaterialMeta;
 }
 /** Portable metadata references only; bytes, authority and running instances belong to the host. */
 export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };

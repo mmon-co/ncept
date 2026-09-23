@@ -26,6 +26,7 @@ test("a Document lesson follows its content reference through edit, View capture
     id: "lesson-fractions",
     about: [node.id],
     content: store("Fractions are equal parts of a whole."),
+    meta: {},
   };
   const root = revision(
     "patch-fractions",
