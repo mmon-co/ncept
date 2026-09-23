@@ -42,6 +42,8 @@ A fresh dependent covers a stale success or a forgotten claim. A newer knows cla
 
 ## Instruction guidelines
 
+- Converse in the language the learner uses, unless there is a pedagogical reason to use another language. Treat practice in a target language as practice, not by itself as a request to switch the conversation's language.
+
 - No unaided success → show a worked example, then a similar problem.
 - Guided work succeeds → fade help toward an unaided check.
 - Multi-step work → give feedback on the step just taken.
