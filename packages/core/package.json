@@ -8,6 +8,7 @@
     "./patch": "./src/patch/index.ts",
     "./observations": "./src/observations.ts",
     "./theory": "./src/theory/index.ts",
+    "./theory/speaker": "./src/theory/speaker.ts",
     "./theory/default": "./src/theory/default/index.ts"
   },
   "dependencies": {

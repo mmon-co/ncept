@@ -266,6 +266,7 @@ test("chat prefetch preserves memory sources and the existing 16KiB cap", () => 
       kind: "memory",
       entries: [
         {
+          speaker: { kind: "learner" },
           text: "Learner's words",
           at: now,
           source: { kind: "transcript", surface: "surface-earlier", from: "message-first", to: "message-last" },
@@ -284,18 +285,20 @@ test("chat prefetch preserves memory sources and the existing 16KiB cap", () => 
     cites: [attachment.id],
     payload: {
       kind: "memory-summary",
+      materialSources: [],
       text: "Retained summary",
       sources: [attachment.id],
       dependencies: [attachment.id],
     },
   };
-  expect(pure(chat.open(context([attachment, summary]))).prompt).toContain("[summary of obs-span] Retained summary");
+  expect(pure(chat.open(context([attachment, summary]))).prompt).toContain('quoted derivative: "Retained summary"');
   const long: Observation = {
     ...attachment,
     payload: {
       kind: "memory",
       entries: [
         {
+          speaker: { kind: "learner" },
           text: "x".repeat(20_000),
           at: now,
           source: { kind: "transcript", surface: "surface-earlier", from: "first", to: "last" },

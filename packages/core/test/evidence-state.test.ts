@@ -270,6 +270,7 @@ test("memory preserves separate original strings, transcript source spans and su
       kind: "memory",
       entries: [
         {
+          speaker: { kind: "tutor" },
           text: "Tutor: hello\nLearner: yes",
           at,
           source: { kind: "transcript", surface: "surface-lesson", from: "message-1", to: "message-2" },
@@ -293,6 +294,7 @@ test("memory preserves separate original strings, transcript source spans and su
     "z-summary",
     {
       kind: "memory-summary",
+      materialSources: [],
       text: "A summary",
       sources: [record.id, knows.id, span.id],
       dependencies: [record.id, knows.id, span.id],
@@ -315,12 +317,22 @@ test("mistake assessments still require summarized active tutor failures across 
   const first = demonstration("a-failure", -2, { outcome: "failure" });
   const second = demonstration("b-failure", -1, { node: { node: "node-b", provenance: ref }, outcome: "failure" });
   const summaries = [
-    obs("summary-a", { kind: "memory-summary", text: "a", sources: [first.id], dependencies: [first.id] }, 0, {
-      nodes: ["node-a"],
-    }),
-    obs("summary-b", { kind: "memory-summary", text: "b", sources: [second.id], dependencies: [second.id] }, 0, {
-      nodes: ["node-b"],
-    }),
+    obs(
+      "summary-a",
+      { kind: "memory-summary", materialSources: [], text: "a", sources: [first.id], dependencies: [first.id] },
+      0,
+      {
+        nodes: ["node-a"],
+      },
+    ),
+    obs(
+      "summary-b",
+      { kind: "memory-summary", materialSources: [], text: "b", sources: [second.id], dependencies: [second.id] },
+      0,
+      {
+        nodes: ["node-b"],
+      },
+    ),
   ];
   const state = stateDefault(graph(), [first, second, ...summaries], at);
   const assessment = { misconception: "same mistake", recordIds: [first.id, second.id] };
@@ -364,6 +376,7 @@ test("memory follows stable recording order for old-source first writes and late
       kind: "memory",
       entries: [
         {
+          speaker: { kind: "tutor" },
           text: "earlier attached conversation",
           at,
           source: { kind: "transcript", surface: "surface-lesson", from: "m-1", to: "m-2" },
@@ -405,7 +418,13 @@ test("successive memory summaries expand original evidence and retain an unsumma
   const second = demonstration("second", -1);
   const previousSummary = obs(
     "summary-1",
-    { kind: "memory-summary", text: "earlier summary", sources: [first.id], dependencies: [first.id] },
+    {
+      kind: "memory-summary",
+      materialSources: [],
+      text: "earlier summary",
+      sources: [first.id],
+      dependencies: [first.id],
+    },
     0,
     {
       nodes: ["node-a"],
@@ -415,6 +434,7 @@ test("successive memory summaries expand original evidence and retain an unsumma
     "summary-2",
     {
       kind: "memory-summary",
+      materialSources: [],
       text: "combined summary",
       sources: [first.id, second.id],
       dependencies: [first.id, second.id],
@@ -456,7 +476,14 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
     "orphan",
     {
       kind: "memory",
-      entries: [{ text: "excluded", at, source: { kind: "observation", observation: "obs-missing" } }],
+      entries: [
+        {
+          speaker: { kind: "material", source: "record", ref: "obs-missing" },
+          text: "excluded",
+          at,
+          source: { kind: "observation", observation: "obs-missing" },
+        },
+      ],
     },
     0,
     { nodes: ["node-a"], cites: ["obs-missing"] },
@@ -470,7 +497,12 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
     "batch",
     {
       kind: "memory",
-      entries: [p, q].map(({ id }) => ({ text: id, at, source: { kind: "observation", observation: id } })),
+      entries: [p, q].map(({ id }) => ({
+        speaker: { kind: "material" as const, source: "record", ref: id },
+        text: id,
+        at,
+        source: { kind: "observation", observation: id },
+      })),
     },
     0,
     { nodes: ["node-a"] },
@@ -479,6 +511,7 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
     "batch-summary",
     {
       kind: "memory-summary",
+      materialSources: [],
       text: "P and Q",
       sources: [batch.id],
       dependencies: [batch.id, p.id, q.id],
@@ -499,6 +532,7 @@ test("malformed recognized default payloads fail, foreign unknown payloads stay 
     "rebuilt",
     {
       kind: "memory-summary",
+      materialSources: [],
       text: "Q only",
       sources: [batch.id],
       dependencies: [batch.id, q.id],

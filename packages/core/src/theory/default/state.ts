@@ -1,3 +1,4 @@
+import type { Speaker } from "../speaker";
 import { dependentCones } from "./dependent-cone";
 import {
   lastMetadataContribution,
@@ -53,6 +54,7 @@ export type MemorySource =
   | { readonly kind: "observation"; readonly observation: ObservationId }
   | { readonly kind: "transcript"; readonly surface: SurfaceId; readonly from: string; readonly to: string };
 export interface MemoryAttachment {
+  readonly speaker: Speaker;
   readonly text: string;
   readonly at: string;
   readonly source: MemorySource;
@@ -63,6 +65,7 @@ export interface Memory {
 }
 export interface MemorySummaryPayload {
   readonly kind: "memory-summary";
+  readonly materialSources: readonly Extract<Speaker, { kind: "material" }>[];
   readonly text: string;
   readonly sources: readonly ObservationId[];
   /** Every observation consumed, including sources inside attachment batches. */
@@ -81,6 +84,7 @@ export interface MemoryEntry extends MemoryAttachment {
 }
 export interface MemorySummary {
   readonly kind: "summary";
+  readonly materialSources: readonly Extract<Speaker, { kind: "material" }>[];
   readonly observation: ObservationId;
   readonly text: string;
   readonly at: string;
@@ -160,6 +164,15 @@ export function isHoming(value: unknown): value is Homing {
     (value.pending === undefined || typeof value.pending === "boolean")
   );
 }
+function isSpeaker(value: unknown): value is Speaker {
+  return (
+    object(value) &&
+    (value.kind === "learner" ||
+      value.kind === "tutor" ||
+      (value.kind === "material" && typeof value.source === "string" && typeof value.ref === "string"))
+  );
+}
+
 function isMemory(value: unknown): value is Memory {
   return (
     object(value) &&
@@ -169,6 +182,7 @@ function isMemory(value: unknown): value is Memory {
       (entry) =>
         object(entry) &&
         typeof entry.text === "string" &&
+        isSpeaker(entry.speaker) &&
         isObservationTimestamp(entry.at) &&
         object(entry.source) &&
         (entry.source.kind === "observation"
@@ -186,6 +200,8 @@ function isSummary(value: unknown): value is MemorySummaryPayload {
   return (
     value.kind === "memory-summary" &&
     typeof value.text === "string" &&
+    Array.isArray(value.materialSources) &&
+    value.materialSources.every((speaker) => isSpeaker(speaker) && speaker.kind === "material") &&
     Array.isArray(sources) &&
     sources.every(isObservationId) &&
     Array.isArray(dependencies) &&
@@ -516,7 +532,8 @@ function projectMemory(
     attachments.push({
       observation: record.id,
       position,
-      entries: strings.map((text) => ({
+      entries: strings.map((text, index) => ({
+        speaker: { kind: index === strings.length - 1 ? ("learner" as const) : ("tutor" as const) },
         text,
         at: record.at,
         source: { kind: "observation", observation: record.id },

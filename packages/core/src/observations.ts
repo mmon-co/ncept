@@ -1,3 +1,5 @@
+import type { Speaker } from "./theory/speaker";
+
 import type { ExactPatchRef, NodeId, ResolvedGraph } from "./patch";
 
 export type ObservationId = `obs-${string}`;
@@ -28,7 +30,7 @@ export interface Transcript {
   readonly span: TranscriptSpan;
   readonly turns: readonly {
     readonly id: string;
-    readonly role: "learner" | "tutor";
+    readonly speaker: Speaker;
     readonly at: string;
     readonly text: string;
     readonly toolNames?: readonly string[];

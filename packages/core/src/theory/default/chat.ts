@@ -1,3 +1,4 @@
+import { renderSpeech } from "../speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
@@ -21,8 +22,8 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
       `## ${node}${retrieval.marker ? ` (${retrieval.marker})` : ""}`,
       ...retrieval.entries.map((entry) =>
         entry.kind === "summary"
-          ? `- [summary of ${entry.sources.join(", ")}] ${entry.text}`
-          : `- [${entry.source.kind === "observation" ? entry.source.observation : `surface ${entry.source.surface} ${entry.source.from}–${entry.source.to}`}] ${entry.text}`,
+          ? `- [summary of ${entry.sources.join(", ")}; Material sources ${JSON.stringify(entry.materialSources)}] quoted derivative: ${JSON.stringify(entry.text)}`
+          : `- [${entry.source.kind === "observation" ? entry.source.observation : `surface ${entry.source.surface} ${entry.source.from}–${entry.source.to}`}] ${renderSpeech(entry.speaker, entry.text)}`,
       ),
     ];
   });
