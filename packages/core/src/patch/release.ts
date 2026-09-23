@@ -172,7 +172,11 @@ export function validateRootPatchDefinition(identity: PatchId, definition: RootP
   if (definition.nodes.some((node) => !isNodeId(node.id))) invalidRoot("invalid Node identity");
   if (new Set(definition.nodes.map(({ id }) => id)).size !== definition.nodes.length)
     invalidRoot("Node identities must be unique");
-  if (definition.nodes.some((node) => node.label.trim() === "" || !isAttachment(node.lesson)))
+  if (
+    definition.nodes.some(
+      (node) => node.label.trim() === "" || !isAttachment(node.lesson) || node.lesson.mediaType !== "text/markdown",
+    )
+  )
     invalidRoot("every Node needs a label and lesson");
   const nodeIds = new Set(definition.nodes.map(({ id }) => id));
   if (new Set(definition.edges.map(({ id }) => id)).size !== definition.edges.length)
