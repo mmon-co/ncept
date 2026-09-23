@@ -1,7 +1,7 @@
 import { contentDigest, type ContentDigest } from "../digest";
 import { compileGraph } from "./compile";
 import { PatchCompileError } from "./errors";
-import { discoveryTags, lastMetadataContribution } from "./metadata";
+import { discoveryTags, isAttachment, lastMetadataContribution } from "./metadata";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -172,7 +172,7 @@ export function validateRootPatchDefinition(identity: PatchId, definition: RootP
   if (definition.nodes.some((node) => !isNodeId(node.id))) invalidRoot("invalid Node identity");
   if (new Set(definition.nodes.map(({ id }) => id)).size !== definition.nodes.length)
     invalidRoot("Node identities must be unique");
-  if (definition.nodes.some((node) => node.label.trim() === "" || node.lesson.kind !== "blob"))
+  if (definition.nodes.some((node) => node.label.trim() === "" || !isAttachment(node.lesson)))
     invalidRoot("every Node needs a label and lesson");
   const nodeIds = new Set(definition.nodes.map(({ id }) => id));
   if (new Set(definition.edges.map(({ id }) => id)).size !== definition.edges.length)

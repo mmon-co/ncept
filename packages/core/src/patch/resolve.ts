@@ -1,4 +1,4 @@
-import { discoveryTags, sameMetadataSubjects, validateMetadataProperties } from "./metadata";
+import { discoveryTags, isAttachment, sameMetadataSubjects, validateMetadataProperties } from "./metadata";
 import { PatchCompileError } from "./errors";
 import type {
   ClosedPatchBundle,
@@ -375,13 +375,7 @@ export function resolvePatchBundle(
   }
 
   for (const material of materials) {
-    if (
-      !material.playground.trim() ||
-      !material.id.trim() ||
-      material.content.kind !== "blob" ||
-      !/^sha256:[a-f0-9]{64}$/.test(material.content.hash) ||
-      !material.content.mediaType.trim()
-    )
+    if (!material.playground.trim() || !material.id.trim() || !isAttachment(material.content))
       throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}`);
     if (new Set(material.about).size !== material.about.length || material.about.some((id) => !nodes.has(id)))
       throw new PatchCompileError(
