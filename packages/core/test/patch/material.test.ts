@@ -40,7 +40,7 @@ test("a Document lesson follows its content reference through edit, View capture
 
   const graph = resolvePatchBundle(bundle, new Set(["document"]));
   expect(graph.materials).toEqual([editedMaterial]);
-  expect(new TextDecoder().decode(rows.get(graph.materials[0]!.content.hash))).toBe(
+  expect(new TextDecoder().decode(rows.get(editedMaterial.content.hash))).toBe(
     "Fractions are equal-sized parts of a whole.",
   );
   expect(graph.provenance.materials['["document","lesson-fractions"]']).toEqual([
