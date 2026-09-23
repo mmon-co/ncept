@@ -6,6 +6,17 @@ export type NodeId = `node-${string}`;
 export type EdgeId = `edge-${string}`;
 export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
+export type MaterialId = string;
+export type PlaygroundId = string;
+export function materialKey(material: Pick<Material, "playground" | "id">): string {
+  return JSON.stringify([material.playground, material.id]);
+}
+export interface Material {
+  readonly playground: PlaygroundId;
+  readonly id: MaterialId;
+  readonly about: readonly NodeId[];
+  readonly content: Attachment;
+}
 /** Portable metadata references only; bytes, authority and running instances belong to the host. */
 export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };
 
@@ -47,6 +58,7 @@ export interface ReifiedEntityMapping {
   readonly nodes: readonly EntityMapping<NodeId>[];
   readonly edges: readonly EntityMapping<EdgeId>[];
   readonly metadataSets: readonly EntityMapping<MetadataSetId>[];
+  readonly materials: readonly EntityMapping<MaterialId>[];
 }
 
 export type Citation =
@@ -74,7 +86,6 @@ export const NODE_LABEL_PROPERTY = "display:label";
 export const NODE_CRITERION_PROPERTY = "pedagogy:criterion";
 export const NODE_KNOWLEDGE_TYPE_PROPERTY = "pedagogy:knowledge-type";
 export const NODE_THRESHOLD_PROPERTY = "pedagogy:threshold";
-export const NODE_LESSON_PROPERTY = "pedagogy:lesson";
 export const NODE_KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
 
 export interface StructureEdge {
@@ -103,7 +114,8 @@ export interface TaggedSet {
 export type PatchEntity =
   | { readonly kind: "node"; readonly id: NodeId }
   | { readonly kind: "edge"; readonly id: EdgeId }
-  | { readonly kind: "metadata-set"; readonly id: MetadataSetId };
+  | { readonly kind: "metadata-set"; readonly id: MetadataSetId }
+  | { readonly kind: "material"; readonly id: MaterialId; readonly playground: PlaygroundId };
 
 export interface ExactContributionMask {
   readonly source: ExactPatchRef;
@@ -123,6 +135,9 @@ export type SemanticOperation =
   | { readonly kind: "add-node"; readonly node: StructureNode }
   | { readonly kind: "add-edge"; readonly edge: StructureEdge }
   | { readonly kind: "add-metadata-set"; readonly metadataSet: MetadataSet }
+  | { readonly kind: "add-material"; readonly material: Material }
+  | { readonly kind: "edit-material"; readonly material: Material }
+  | { readonly kind: "remove-material"; readonly playground: PlaygroundId; readonly id: MaterialId }
   | { readonly kind: "define-tag"; readonly tag: TaggedSet }
   | { readonly kind: "mask-contribution"; readonly mask: ExactContributionMask };
 
@@ -163,11 +178,15 @@ export interface ResolvedGraph {
   readonly nodes: readonly StructureNode[];
   readonly edges: readonly StructureEdge[];
   readonly metadataSets: readonly MetadataSet[];
+  readonly materials: readonly Material[];
+  /** Required Playgrounds not installed by the resolving host. Empty when availability is not supplied. */
+  readonly unavailablePlaygrounds: readonly PlaygroundId[];
   readonly tags: readonly GraphTag[];
   readonly provenance: {
     readonly nodes: Readonly<Record<NodeId, readonly ContributionProvenance[]>>;
     readonly edges: Readonly<Record<EdgeId, readonly ContributionProvenance[]>>;
     readonly metadataSets: Readonly<Record<MetadataSetId, readonly ContributionProvenance[]>>;
+    readonly materials: Readonly<Record<string, readonly ContributionProvenance[]>>;
     readonly metadataProperties: Readonly<
       Record<MetadataSetId, Readonly<Record<string, readonly ContributionProvenance[]>>>
     >;
@@ -190,7 +209,7 @@ export interface RootPatchDefinition {
   readonly nodes: readonly {
     readonly id: NodeId;
     readonly label: string;
-    readonly lesson: string;
+    readonly lesson: Attachment;
   }[];
   readonly edges: readonly {
     readonly id: EdgeId;

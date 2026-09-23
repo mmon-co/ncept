@@ -5,6 +5,7 @@ export type PatchCompileErrorCode =
   | "incompatible-revision"
   | "incompatible-contribution"
   | "duplicate-entity"
+  | "dangling-material"
   | "dangling-edge"
   | "dangling-metadata"
   | "dangling-tag"

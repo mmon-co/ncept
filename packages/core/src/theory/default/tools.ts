@@ -8,7 +8,7 @@ import {
   type ObservationId,
   type Program,
 } from "../../observations";
-import { items, route, type NodeId } from "../../patch";
+import { route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
 import { refinePendingHomes } from "./event";
 import {
@@ -182,10 +182,6 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       ({ nodes }) => nodes.length === 0 || nodes.some((id) => selected.has(id)),
     );
   }),
-  nodeTool("items", "Authored format-free item facts with content provenance.", (ctx, node) => ({
-    ...items(ctx.graph, node),
-    citations: defaultNodeState(ctx.state, node).citations,
-  })),
   nodeTool("memory", "Opaque Node memory tail or summary with original Record citations.", (ctx, node) => {
     const memory = ctx.state.memories[node] ?? emptyNodeMemory(node);
     return {

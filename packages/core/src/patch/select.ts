@@ -1,7 +1,7 @@
 import type { TagIndex } from "../theory/theory";
 import { isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
-import { sameExactPatchRef } from "./model";
+import { materialKey, sameExactPatchRef } from "./model";
 import type { EdgeId, ExactPatchRef, GraphQuery, MetadataSetId, NodeId, ResolvedGraph, SelectedGraph } from "./model";
 
 interface Fragment {
@@ -273,8 +273,15 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       if (propertyProvenance !== undefined) metadataPropertyProvenance[metadata.id] = propertyProvenance;
     }
 
+  const materials = graph.materials
+    .filter((material) => material.about.some((id) => nodes.has(id)))
+    .map((material) => ({ ...material, about: material.about.filter((id) => nodes.has(id)) }));
   return {
     ...graph,
+    materials,
+    unavailablePlaygrounds: graph.unavailablePlaygrounds.filter((id) =>
+      materials.some((material) => material.playground === id),
+    ),
     nodes: graph.nodes.filter(({ id }) => nodes.has(id)),
     edges: graph.edges.filter(({ id }) => edges.has(id)),
     metadataSets: selectedMetadata,
@@ -288,6 +295,12 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       nodes: nodeProvenance,
       edges: edgeProvenance,
       metadataSets: metadataSetProvenance,
+      materials: Object.fromEntries(
+        materials.map((material) => {
+          const key = materialKey(material);
+          return [key, graph.provenance.materials[key] ?? []];
+        }),
+      ),
       metadataProperties: metadataPropertyProvenance,
     },
   };

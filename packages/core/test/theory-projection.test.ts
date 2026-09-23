@@ -26,7 +26,9 @@ function graph(
     edges: edges.filter(({ from, to }) => ids.includes(from) && ids.includes(to)),
     metadataSets: [],
     tags: [],
-    provenance: { nodes: {}, edges: {}, metadataSets: {}, metadataProperties: {} },
+    materials: [],
+    unavailablePlaygrounds: [],
+    provenance: { materials: {}, nodes: {}, edges: {}, metadataSets: {}, metadataProperties: {} },
   };
 }
 function demonstration(id: string, day = 0, changes: Partial<Demonstration> = {}): Observation<Demonstration> {

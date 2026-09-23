@@ -23,11 +23,13 @@ import {
   type RootPatchDefinition,
 } from "../../src/patch";
 
+const document = (text: string) => ({ kind: "blob" as const, hash: contentDigest(text), mediaType: "text/markdown" });
+
 const definition: RootPatchDefinition = {
   title: "A course",
   author: "Ada",
   labels: ["course"],
-  nodes: [{ id: "node-a", label: "A", lesson: "Explain A." }],
+  nodes: [{ id: "node-a", label: "A", lesson: document("Explain A.") }],
   edges: [],
 };
 
@@ -98,7 +100,7 @@ test("Notebook diff compilation and application preserve citations and compute t
   const empty = emptyPatch();
   const before = candidateRevision("patch-personal", empty);
   const bundle = bundleForRevision(before.ref, contents(empty));
-  const operations = lessonOperations({ id: "node-a", label: "A", lesson: "Explain A." });
+  const operations = lessonOperations({ id: "node-a", label: "A", lesson: document("Explain A.") });
   const citations = [{ kind: "external_source" as const, source: "https://example.org/source" }];
   const compiled = compileGraphDiff(bundle, operations, ["node-a"], citations);
   const next = applyGraphDiff(empty, compiled);
@@ -146,7 +148,7 @@ test("composed content validates exact masks and conflicts against supplied base
   expect(
     resolvePatchBundle(bundleForRevision(candidateRevision("patch-personal", next).ref, contents(base, next)))
       .metadataSets[0]?.properties,
-  ).toEqual({ "display:label": "Renamed", "pedagogy:lesson": "Explain A." });
+  ).toEqual({ "display:label": "Renamed" });
   expect(() =>
     compileGraphDiff(bundle, [{ kind: "mask-contribution", mask: { ...mask, operationIndex: 99 } }], []),
   ).toThrow(/source operation does not exist/);
@@ -173,11 +175,14 @@ test("root lesson construction and validation are value-only and round trip edit
     },
   ]);
   expect(rootDefinition("patch-course", relabeled).nodes).toEqual([
-    { id: "node-a", label: "Renamed", lesson: "Explain A." },
+    { id: "node-a", label: "Renamed", lesson: document("Explain A.") },
   ]);
-  const revised = composePatch(relabeled, lessonOperations({ id: "node-a", label: "Revised", lesson: "New lesson" }));
+  const revised = composePatch(
+    relabeled,
+    lessonOperations({ id: "node-a", label: "Revised", lesson: document("New lesson") }, "edit-material"),
+  );
   expect(rootDefinition("patch-course", revised).nodes).toEqual([
-    { id: "node-a", label: "Revised", lesson: "New lesson" },
+    { id: "node-a", label: "Revised", lesson: document("New lesson") },
   ]);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, title: "" })).toThrow(/title is required/);
   expect(() => validateRootPatchDefinition("patch-course", { ...definition, labels: ["course", "course"] })).toThrow(
@@ -186,7 +191,7 @@ test("root lesson construction and validation are value-only and round trip edit
   expect(() =>
     validateRootPatchDefinition("patch-course", {
       ...definition,
-      nodes: [...definition.nodes, { id: "node-b", label: "B", lesson: "B" }],
+      nodes: [...definition.nodes, { id: "node-b", label: "B", lesson: document("B") }],
       edges: [
         { id: "edge-ab", from: "node-a", to: "node-b", role: "dependency" },
         { id: "edge-ba", from: "node-b", to: "node-a", role: "dependency" },

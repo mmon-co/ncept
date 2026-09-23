@@ -28,11 +28,14 @@ const graph: ResolvedGraph = {
   nodes: [{ id: "node-a" }, { id: "node-b" }],
   edges: [{ id: "edge-ab", from: "node-a", to: "node-b" }],
   tags: [],
+  materials: [],
+  unavailablePlaygrounds: [],
   metadataSets: [
     { id: "metadata-a", subjects: [{ kind: "node", id: "node-a" }], properties: { "pedagogy:criterion": "Recall a" } },
     { id: "metadata-b", subjects: [{ kind: "node", id: "node-b" }], properties: { "pedagogy:criterion": "Recall b" } },
   ],
   provenance: {
+    materials: {},
     nodes: { "node-a": [source], "node-b": [source] },
     edges: { "edge-ab": [source] },
     metadataSets: { "metadata-a": [source], "metadata-b": [source] },
@@ -231,7 +234,6 @@ test("instruments preserve factual ordering, labels, citations, memory and missi
     { kind: "item-outcomes", citations: ["obs-first", "obs-second"] },
     { kind: "unused", nodes: ["node-b"], citations: [] },
   ]);
-  expect(run("items", { node: "node-a" })).toMatchObject({ citations: ["obs-first", "obs-second"] });
 });
 
 test("keyed demonstrations preserve the option error without changing assistance or source", () => {

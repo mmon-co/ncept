@@ -260,7 +260,7 @@ test("metadata precedence uses the whole exact Patch ref", () => {
   expect(graph.nodes[0]?.label).toBe("Second");
 });
 
-test("property provenance keeps a merged lesson at the Patch that last changed that property", () => {
+test("content source follows the effective display label after metadata edits", () => {
   const foundation = revision;
   const contribution: PatchRevision = {
     ...revision,
@@ -289,6 +289,6 @@ test("property provenance keeps a merged lesson at the Patch that last changed t
 
   expect(graph.nodes.find((node) => node.id === "node-vectors")).toMatchObject({
     label: "Vectors, revised",
-    contentSource: foundation.ref,
+    contentSource: contribution.ref,
   });
 });

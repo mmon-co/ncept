@@ -133,6 +133,7 @@ test("reification creates an independent root from exactly the View result", () 
         ],
         edges: [{ source: "edge-source-foundation", target: "edge-source-foundation" }],
         metadataSets: [{ source: "metadata-foundation", target: "metadata-foundation" }],
+        materials: [],
       },
     },
   ]);

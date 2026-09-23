@@ -1,6 +1,6 @@
 import { PatchCompileError } from "./errors";
 import { sameMetadataSubjects } from "./metadata";
-import { contributionKey, exactPatchRefKey, maskedPropertyKey, sameExactPatchRef } from "./model";
+import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -109,6 +109,26 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
           masks.push({ source, operationIndex, entity: { kind: "edge", id: operation.edge.id } });
         return;
       }
+      if (
+        operation.kind === "add-material" ||
+        operation.kind === "edit-material" ||
+        operation.kind === "remove-material"
+      ) {
+        const material = operation.kind === "remove-material" ? operation : operation.material;
+        const selected = view.materials.find((candidate) => materialKey(candidate) === materialKey(material));
+        if (
+          selected === undefined ||
+          (operation.kind !== "remove-material" &&
+            JSON.stringify(selected.about) !== JSON.stringify(operation.material.about)) ||
+          !contributed(view.provenance.materials[materialKey(material)], source, operationIndex)
+        )
+          masks.push({
+            source,
+            operationIndex,
+            entity: { kind: "material", playground: material.playground, id: material.id },
+          });
+        return;
+      }
       const set = operation.metadataSet;
       const entity = { kind: "metadata-set", id: set.id } as const;
       const selected = selectedSets.get(set.id);
@@ -182,6 +202,12 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
     ...view.edges
       .filter((edge) => !inheritsEntity(view.provenance.edges[edge.id]))
       .map((edge) => ({ kind: "add-edge" as const, edge })),
+    ...view.materials.flatMap((material) => {
+      const chain = view.provenance.materials[materialKey(material)];
+      const last = chain?.at(-1);
+      if (last !== undefined && supplied(last)) return [];
+      return [{ kind: inheritsEntity(chain) ? ("edit-material" as const) : ("add-material" as const), material }];
+    }),
     ...view.metadataSets.flatMap((metadataSet) => {
       if (!inheritsEntity(view.provenance.metadataSets[metadataSet.id]))
         return [{ kind: "add-metadata-set" as const, metadataSet }];
@@ -219,6 +245,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
             nodes: view.nodes.map(({ id }) => ({ source: id, target: id })),
             edges: view.edges.map(({ id }) => ({ source: id, target: id })),
             metadataSets: view.metadataSets.map(({ id }) => ({ source: id, target: id })),
+            materials: view.materials.map(({ id }) => ({ source: id, target: id })),
           },
         },
       ],

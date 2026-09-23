@@ -5,7 +5,7 @@ import { discoveryTags, lastMetadataContribution } from "./metadata";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
-  NODE_LESSON_PROPERTY,
+  type Attachment,
   type ClosedPatchBundle,
   type PatchMetadata,
   type ExactPatchRef,
@@ -88,11 +88,14 @@ function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
   return `metadata-${id.replace(/^(node|edge)-/, "")}`;
 }
 
-export function lessonOperations(input: {
-  readonly id: NodeId;
-  readonly label: string;
-  readonly lesson: string;
-}): SemanticDelta["operations"] {
+export function lessonOperations(
+  input: {
+    readonly id: NodeId;
+    readonly label: string;
+    readonly lesson: Attachment;
+  },
+  materialOperation: "add-material" | "edit-material" = "add-material",
+): SemanticDelta["operations"] {
   return [
     { kind: "add-node", node: { id: input.id } },
     {
@@ -102,8 +105,16 @@ export function lessonOperations(input: {
         subjects: [{ kind: "node", id: input.id }],
         properties: {
           [NODE_LABEL_PROPERTY]: input.label,
-          [NODE_LESSON_PROPERTY]: input.lesson,
         },
+      },
+    },
+    {
+      kind: materialOperation,
+      material: {
+        playground: "document",
+        id: `material-${input.id.slice(5)}`,
+        about: [input.id],
+        content: input.lesson,
       },
     },
   ];
@@ -114,7 +125,7 @@ export function rootContent(definition: RootPatchDefinition): PatchContent {
     bases: [],
     delta: {
       operations: [
-        ...definition.nodes.flatMap(lessonOperations),
+        ...definition.nodes.flatMap((node) => lessonOperations(node)),
         ...definition.edges.flatMap((edge) => [
           { kind: "add-edge" as const, edge: { id: edge.id, from: edge.from, to: edge.to } },
           {
@@ -161,7 +172,7 @@ export function validateRootPatchDefinition(identity: PatchId, definition: RootP
   if (definition.nodes.some((node) => !isNodeId(node.id))) invalidRoot("invalid Node identity");
   if (new Set(definition.nodes.map(({ id }) => id)).size !== definition.nodes.length)
     invalidRoot("Node identities must be unique");
-  if (definition.nodes.some((node) => node.label.trim() === "" || node.lesson.trim() === ""))
+  if (definition.nodes.some((node) => node.label.trim() === "" || node.lesson.kind !== "blob"))
     invalidRoot("every Node needs a label and lesson");
   const nodeIds = new Set(definition.nodes.map(({ id }) => id));
   if (new Set(definition.edges.map(({ id }) => id)).size !== definition.edges.length)
@@ -306,8 +317,10 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
     labels: discoveryTags(content.metadata.properties),
     nodes: graph.nodes.map(({ id }) => {
       const label = property("node", id, NODE_LABEL_PROPERTY);
-      const lesson = property("node", id, NODE_LESSON_PROPERTY);
-      if (typeof label !== "string" || typeof lesson !== "string")
+      const lesson = graph.materials.find(
+        (material) => material.playground === "document" && material.id === `material-${id.slice(5)}`,
+      )?.content;
+      if (typeof label !== "string" || lesson === undefined)
         throw new PatchContentError(`Node ${id} is missing authored content`);
       return { id, label, lesson };
     }),

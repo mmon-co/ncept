@@ -46,10 +46,13 @@ function graph(ids: readonly NodeId[] = ["node-one", "node-two"]): ResolvedGraph
       subjects: [{ kind: "node", id }],
       properties: { "pedagogy:criterion": `Capability ${id}` },
     })),
+    materials: [],
+    unavailablePlaygrounds: [],
     provenance: {
       nodes: Object.fromEntries(ids.map((id) => [id, [{ patch: terminal, operationIndex: 0 }]])),
       edges: {},
       metadataSets: {},
+      materials: {},
       metadataProperties: Object.fromEntries(
         ids.map((id) => [`metadata-${id}`, { "pedagogy:criterion": [{ patch: terminal, operationIndex: 1 }] }]),
       ),

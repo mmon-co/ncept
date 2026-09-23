@@ -35,7 +35,9 @@ function graph(ids: readonly NodeId[] = ["node-a", "node-b", "node-c", "node-alo
     edges: edges.filter(({ from, to }) => ids.includes(from) && ids.includes(to)),
     metadataSets: [],
     tags: [],
-    provenance: { nodes: {}, edges: {}, metadataSets: {}, metadataProperties: {} },
+    materials: [],
+    unavailablePlaygrounds: [],
+    provenance: { materials: {}, nodes: {}, edges: {}, metadataSets: {}, metadataProperties: {} },
   };
 }
 function obs<P>(id: string, payload: P, day = 0, extra: Partial<Observation<P>> = {}): Observation<P> {
@@ -176,6 +178,7 @@ test("per-Node window metadata preserves precedence and rejects invalid merged w
     ],
     provenance: {
       ...base.provenance,
+      materials: {},
       metadataProperties: {
         "metadata-window": {
           "pedagogy:window-size": [{ patch: ref, operationIndex: 0 }],

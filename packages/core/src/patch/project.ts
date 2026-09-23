@@ -1,7 +1,7 @@
 import { PatchCompileError } from "./errors";
 import { lastMetadataContribution } from "./metadata";
 import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model";
-import { NODE_LABEL_PROPERTY, NODE_LESSON_PROPERTY } from "./model";
+import { NODE_LABEL_PROPERTY } from "./model";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
   return graph.metadataSets.filter((set) =>
@@ -55,7 +55,7 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
     property(
       graph,
       metadataForNode(graph, node),
-      NODE_LESSON_PROPERTY,
+      NODE_LABEL_PROPERTY,
       (value): value is string => typeof value === "string",
     )?.source ??
     graph.provenance.nodes[node]?.at(-1)?.patch ??

@@ -8,6 +8,7 @@ import type {
   ExactPatchRef,
   MetadataSet,
   MetadataSetId,
+  Material,
   NodeId,
   PatchId,
   PatchMetadata,
@@ -17,8 +18,9 @@ import type {
   StructureNode,
   GraphTag,
   TaggedSet,
+  SemanticOperation,
 } from "./model";
-import { contributionKey, exactPatchRefKey, maskedPropertyKey, sameExactPatchRef } from "./model";
+import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));
@@ -120,7 +122,13 @@ function validateMaskTarget(
     (operation.kind === "add-edge" && mask.entity.kind === "edge" && operation.edge.id === mask.entity.id) ||
     (operation.kind === "add-metadata-set" &&
       mask.entity.kind === "metadata-set" &&
-      operation.metadataSet.id === mask.entity.id);
+      operation.metadataSet.id === mask.entity.id) ||
+    ((operation.kind === "add-material" || operation.kind === "edit-material") &&
+      mask.entity.kind === "material" &&
+      materialKey(operation.material) === materialKey(mask.entity)) ||
+    (operation.kind === "remove-material" &&
+      mask.entity.kind === "material" &&
+      materialKey(operation) === materialKey(mask.entity));
   if (!matches) staleMask(owner, mask, "the source operation contributes to a different entity");
   if (mask.property === undefined) return;
   if (operation.kind !== "add-metadata-set" || !Object.hasOwn(operation.metadataSet.properties, mask.property))
@@ -151,6 +159,10 @@ interface ContributionCollection {
   readonly nodes: Map<NodeId, Contribution<StructureNode>[]>;
   readonly edges: Map<EdgeId, Contribution<StructureEdge>[]>;
   readonly metadataSets: Map<MetadataSetId, Contribution<MetadataSet>[]>;
+  readonly materials: Map<
+    string,
+    Contribution<Extract<SemanticOperation, { kind: "add-material" | "edit-material" | "remove-material" }>>[]
+  >;
   readonly tags: TaggedSet[];
   readonly masked: Set<string>;
   readonly maskedProperties: Set<string>;
@@ -176,6 +188,15 @@ function collectOperation(
     const contributions = collection.metadataSets.get(operation.metadataSet.id) ?? [];
     contributions.push({ value: operation.metadataSet, provenance });
     collection.metadataSets.set(operation.metadataSet.id, contributions);
+  } else if (
+    operation.kind === "add-material" ||
+    operation.kind === "edit-material" ||
+    operation.kind === "remove-material"
+  ) {
+    const key = materialKey(operation.kind === "remove-material" ? operation : operation.material);
+    const contributions = collection.materials.get(key) ?? [];
+    contributions.push({ value: operation, provenance });
+    collection.materials.set(key, contributions);
   } else if (operation.kind === "define-tag") {
     collection.tags.push(operation.tag);
   } else {
@@ -206,13 +227,17 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
-export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
+export function resolvePatchBundle(
+  bundle: ClosedPatchBundle,
+  availablePlaygrounds?: ReadonlySet<string>,
+): ResolvedGraph {
   const ordered = orderRevisions(bundle);
   const orderedRevisions = ordered.revisions;
   const collection: ContributionCollection = {
     nodes: new Map(),
     edges: new Map(),
     metadataSets: new Map(),
+    materials: new Map(),
     tags: [],
     masked: new Set(),
     maskedProperties: new Set(),
@@ -241,6 +266,8 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
+  const materials: Material[] = [];
+  const materialProvenance: Record<string, ContributionProvenance[]> = {};
   const tags = new Map<string, GraphTag>();
   const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
   const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
@@ -280,6 +307,33 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     metadataPropertyProvenance[id] = merged.provenance;
   }
 
+  for (const [key, contributions] of collection.materials) {
+    let current: Material | undefined;
+    let chain: ContributionProvenance[] = [];
+    for (const { value, provenance } of contributions.filter(({ provenance }) => enabled(provenance))) {
+      if (value.kind === "add-material") {
+        if (current && JSON.stringify(current) !== JSON.stringify(value.material))
+          throw new PatchCompileError("incompatible-contribution", `material ${key} has conflicting additions`);
+        current = value.material;
+        chain.push(provenance);
+      } else if (value.kind === "edit-material") {
+        if (!current)
+          throw new PatchCompileError("incompatible-contribution", `material ${key} does not exist to edit`);
+        current = value.material;
+        chain.push(provenance);
+      } else {
+        if (!current)
+          throw new PatchCompileError("incompatible-contribution", `material ${key} does not exist to remove`);
+        current = undefined;
+        chain = [];
+      }
+    }
+    if (current) {
+      materials.push(current);
+      materialProvenance[key] = chain;
+    }
+  }
+  materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
   for (const contribution of tagContributions) {
     const tag: GraphTag = {
       ...contribution,
@@ -320,6 +374,21 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
       });
   }
 
+  for (const material of materials) {
+    if (
+      !material.playground.trim() ||
+      !material.id.trim() ||
+      material.content.kind !== "blob" ||
+      !/^sha256:[a-f0-9]{64}$/.test(material.content.hash) ||
+      !material.content.mediaType.trim()
+    )
+      throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}`);
+    if (new Set(material.about).size !== material.about.length || material.about.some((id) => !nodes.has(id)))
+      throw new PatchCompileError(
+        "dangling-material",
+        `material ${materialKey(material)} targets missing or repeated Nodes`,
+      );
+  }
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))
       throw new PatchCompileError("dangling-edge", `edge '${edge.id}' has missing endpoints`);
@@ -351,11 +420,17 @@ export function resolvePatchBundle(bundle: ClosedPatchBundle): ResolvedGraph {
     nodes: orderedNodes,
     edges: orderedEdges,
     metadataSets: orderedMetadataSets,
+    materials,
+    unavailablePlaygrounds:
+      availablePlaygrounds === undefined
+        ? []
+        : [...new Set(materials.map((m) => m.playground).filter((id) => !availablePlaygrounds.has(id)))].sort(),
     tags: [...tags.values()].sort((left, right) => left.name.localeCompare(right.name)),
     provenance: {
       nodes: nodeProvenance,
       edges: edgeProvenance,
       metadataSets: metadataProvenance,
+      materials: materialProvenance,
       metadataProperties: metadataPropertyProvenance,
     },
   };
