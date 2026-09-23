@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { attachmentDigest, contentDigest } from "../../src/digest";
-import { reifyView, resolvePatchBundle, selectGraph, type PatchContent, type PatchRevision } from "../../src/patch";
+import {
+  isMaterialMeta,
+  reifyView,
+  resolvePatchBundle,
+  selectGraph,
+  type PatchContent,
+  type PatchRevision,
+} from "../../src/patch";
 
 function revision(
   identity: PatchRevision["ref"]["identity"],
@@ -66,4 +73,19 @@ test("a Document lesson follows its content reference through edit, View capture
     new Set(["document"]),
   );
   expect(removed.materials).toEqual([]);
+});
+
+test("applet metadata accepts dense nested JSON arrays, not holes or accessors", () => {
+  const manifest = {
+    abi: "applet:1",
+    libraries: { "@concept/applet": "1" },
+    connect: [],
+    configuration: { origins: [{ url: "https://example.test", methods: ["GET", "POST"] }] },
+  };
+  expect(isMaterialMeta(manifest)).toBe(true);
+  expect(isMaterialMeta({ ...manifest, connect: ["https://example.test"] })).toBe(true);
+  expect(isMaterialMeta({ ...manifest, connect: new Array(1) })).toBe(false);
+  const accessor: string[] = [];
+  Object.defineProperty(accessor, "0", { enumerable: true, get: () => "https://example.test" });
+  expect(isMaterialMeta({ ...manifest, connect: accessor })).toBe(false);
 });

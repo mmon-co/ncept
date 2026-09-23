@@ -61,11 +61,13 @@ export function isMaterialMeta(value: unknown): value is MaterialMeta {
     if (!Array.isArray(entry) && prototype !== Object.prototype && prototype !== null) return false;
     seen.add(entry);
     const values = Object.getOwnPropertyDescriptors(entry);
-    const keys = Object.keys(values);
+    const keys = Object.keys(entry);
+    const array = Array.isArray(entry);
+    // Arrays have one non-enumerable own property, length; all other properties must be dense indices.
+    if (Object.keys(values).length !== keys.length + (array ? 1 : 0)) return false;
     members += keys.length;
     if (members > 1024 || keys.length > 256 || Object.getOwnPropertySymbols(entry).length) return false;
-    if (Array.isArray(entry) && (entry.length !== keys.length || keys.some((key, index) => key !== String(index))))
-      return false;
+    if (array && (entry.length !== keys.length || keys.some((key, index) => key !== String(index)))) return false;
     for (const key of keys) {
       const property = values[key];
       if (!property || !("value" in property) || !json(property.value, depth + 1)) return false;
