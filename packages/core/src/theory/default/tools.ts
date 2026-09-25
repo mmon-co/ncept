@@ -324,7 +324,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
   },
 ];
 
-/** System Skill tools: no revision fences, cache saves, journals or retry contracts in Core. */
+/** Claim-homing and system-revision tools: no revision fences, cache saves, journals or retry contracts in Core. */
 export const defaultBackgroundTools: readonly DefaultTool[] = [
   {
     name: "attach_claim",
