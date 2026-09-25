@@ -26,3 +26,5 @@ A lesson is short and ends with one tangible win: the learner doing something th
 ## Material work
 
 @procedures/material-work.md
+
+When the learner chooses work in a different scope, offer its Skill with `propose_skill`, `scope` set to `target`, `view` or `nodes`, and `destination: { kind: new-session, mode: handoff, focus: ... }`. Use `side` when this Session should remain open for a parallel question.

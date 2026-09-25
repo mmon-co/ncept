@@ -15,4 +15,4 @@ entry: [learner, model]
 
 ## Mission conversation
 
-@procedures/mission-conversation.md
+When the selected work belongs to a different scope, offer the next Skill through `propose_skill` with `scope` set to `target`, `view` or `nodes` and `destination: { kind: new-session, mode: handoff, focus: ... }`. Use `side` when the learner should keep this planning Session open. @procedures/mission-conversation.md

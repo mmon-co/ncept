@@ -17,4 +17,4 @@ Name the decision the checks will inform. Read the Mission and any claims from c
 
 ## Evaluate
 
-@procedures/evaluate.md
+When the checks settle what should happen next, offer a different-scope Skill with `propose_skill` and `destination: { kind: new-session, mode: handoff, focus: ... }`; set `scope` to the target, View or Nodes for that work. Use `side` for a parallel question that should leave this Session open. @procedures/evaluate.md
