@@ -302,7 +302,18 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       );
     },
   },
-  nodeTool("trail", "Original records and the rule producing this Node's label.", trail),
+  nodeTool(
+    "trail",
+    [
+      "Original records and the rule producing this Node's label. The first qualifying rule applies:",
+      "1. demonstrated: the window holds (default two successes in the last three unaided attempts, with aided failures included), and the last unaided success is current. Aided successes count only as practice.",
+      "2. probably-known: a dependent has a current unaided success, or an attached knows claim is newer than any failure on this Node.",
+      "3. suspect: a past unaided success is beyond the forgetting horizon or a forgotten claim is newer, and nothing above qualifies.",
+      "4. unknown: otherwise. A first failure changes no prerequisite's label.",
+      "A fresh dependent covers a stale success or a forgotten claim. A newer knows claim can follow failure; a later failure defeats that claim unless other qualifying evidence remains. The horizon starts at 30 days as configurable policy, not an empirical constant. Node window overrides are content metadata. Only demonstrated and probably-known count as known for routing.",
+    ].join("\n"),
+    trail,
+  ),
   scopedTool("coverage", "Nodes with no records.", (ctx, scope) =>
     nodesInScope(ctx, scope)
       .filter((id) => defaultNodeState(ctx.state, id).records.length === 0)
@@ -361,8 +372,13 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
 export const defaultRecordingTools: readonly DefaultTool[] = [
   {
     name: "record_demonstration",
-    description:
-      "Record one attempted posed check, not dialogue or a skip. unaided is decided when posed; help before outcome makes it false. Preserve task and response verbatim.",
+    description: [
+      "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue or a skip is not one.",
+      "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor.",
+      "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
+      "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
+      "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
+    ].join(" "),
     schema: schema(
       {
         node: nodeProperty,
@@ -392,7 +408,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
   {
     name: "record_claim",
     description:
-      "Record the learner's verbatim competence claim and optional eliciting prompt. The background sweep attaches claims by content, not Edges.",
+      "Record a competence self-report: the learner's verbatim statement, optional eliciting prompt, and knows, forgotten, or unfamiliar. It names no Node at write; claims are attached by content, not Edges. Preferences are not claims.",
     schema: schema(
       {
         statement: { type: "string" },
@@ -413,7 +429,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
   {
     name: "record_retraction",
     description:
-      "Correct evidence by retracting an existing demonstration or claim. Never retract a retraction or platform record.",
+      "Correct evidence by retracting an existing demonstration or claim; never rewrite a Record. Never retract a retraction or platform record.",
     schema: schema({ of: { type: "string", pattern: "^obs-.+" } }, ["of"]),
     *run(raw, ctx) {
       const of = observationId(args(raw, ["of"], ["of"]).of);
@@ -499,8 +515,11 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
 export const defaultBackgroundTools: readonly DefaultTool[] = [
   {
     name: "attach_claim",
-    description:
-      "Attach an active claim to current Nodes by their capability statements, never Edges. An empty nodes list explicitly leaves it homeless.",
+    description: [
+      "Attach an active claim to current Nodes by their capability statements, never by topic or Edges. An empty nodes list explicitly leaves it homeless.",
+      "After a charting Confirmation that adds Nodes, and at close before close_recount: call warnings and inspect its homeless citations; re-home each current-Session claim you can identify from its citation and conversation to the Node(s) whose capability statements match, and leave unmatched existing claims as they are.",
+      "Attach a newly recorded claim directly; it is not reported as homeless until explicitly attached. Use nodes: [] only when no current Node fits.",
+    ].join(" "),
     schema: schema(
       {
         record: { type: "string", pattern: "^obs-.+" },
