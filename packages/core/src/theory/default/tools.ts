@@ -11,7 +11,7 @@ import {
   type Program,
   type SurfaceId,
 } from "../../observations";
-import { projectVisualGraph, route, type NodeId } from "../../patch";
+import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
 import { refinePendingHomes } from "./event";
 import {
@@ -322,6 +322,17 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       ({ nodes }) => nodes.length === 0 || nodes.some((id) => selected.has(id)),
     );
   }),
+  nodeTool(
+    "items",
+    "Patch Materials and their content references and contribution provenance for this Node.",
+    (ctx, node) =>
+      ctx.graph.materials
+        .filter((material) => material.about.includes(node))
+        .map((material) => ({
+          material,
+          provenance: ctx.graph.provenance.materials[materialKey(material)] ?? [],
+        })),
+  ),
   nodeTool("memory", "Opaque Node memory tail or summary with original Record citations.", (ctx, node) => {
     const memory = ctx.state.memories[node] ?? emptyNodeMemory(node);
     return {
