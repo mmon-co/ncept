@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { contentDigest } from "../src/digest";
-import { defaultTheory, type DefaultChatContext } from "../src/theory/default";
 import type { ExactPatchRef, NodeId, ResolvedGraph } from "../src/patch/model";
 import { effectiveObservations, type Observation, type ObservationId } from "../src/observations";
 import {
@@ -18,7 +17,7 @@ import {
   type MemorySummary,
   type NodeMemory,
 } from "../src/theory/default/state";
-import { indicatorsDefault, validateMistakeAssessments } from "../src/theory/default/tags";
+import { indicatorsDefault } from "../src/theory/default/tags";
 
 const at = "2026-09-01T00:00:00.000Z";
 const ref = { identity: "patch-evidence" as const, digest: contentDigest("evidence") };
@@ -311,62 +310,6 @@ test("memory preserves separate original strings, transcript source spans and su
   const excluded = memory(stateDefault(graph(), [knows, home("attach", knows.id, ["node-a"]), span, summary], at));
   expect(excluded.entries.every(({ kind }) => kind === "entry")).toBe(true);
   expect(memoryDefault(excluded).marker).toBe("unsummarized activity exists");
-});
-
-test("mistake assessments still require summarized active tutor failures across Nodes", () => {
-  const first = demonstration("a-failure", -2, { outcome: "failure" });
-  const second = demonstration("b-failure", -1, { node: { node: "node-b", provenance: ref }, outcome: "failure" });
-  const summaries = [
-    obs(
-      "summary-a",
-      { kind: "memory-summary", materialSources: [], text: "a", sources: [first.id], dependencies: [first.id] },
-      0,
-      {
-        nodes: ["node-a"],
-      },
-    ),
-    obs(
-      "summary-b",
-      { kind: "memory-summary", materialSources: [], text: "b", sources: [second.id], dependencies: [second.id] },
-      0,
-      {
-        nodes: ["node-b"],
-      },
-    ),
-  ];
-  const state = stateDefault(graph(), [first, second, ...summaries], at);
-  const assessment = { misconception: "same mistake", recordIds: [first.id, second.id] };
-  expect(validateMistakeAssessments([assessment], state, [memory(state), memory(state, "node-b")])).toEqual([
-    { assessment, nodes: ["node-a", "node-b"] },
-  ]);
-  const context: DefaultChatContext = {
-    now: at,
-    graph: graph(),
-    state,
-    surface: "surface-lesson",
-    about: ["node-a", "node-b"],
-    mistakes: [assessment],
-  };
-  const setup = defaultTheory.chat.open(context).next();
-  if (!setup.done) throw new Error("Expected a pure chat setup");
-  const warnings = setup.value.tools.find(({ name }) => name === "warnings");
-  if (!warnings) throw new Error("Missing mounted warnings tool");
-  const result = warnings.run({}, context).next();
-  expect(result.done).toBe(true);
-  expect(result.value).toContainEqual({
-    kind: "mistake-cluster",
-    nodes: ["node-a", "node-b"],
-    citations: [first.id, second.id],
-    message: assessment.misconception,
-  });
-  const retracted = stateDefault(
-    graph(),
-    [first, second, ...summaries, obs("retraction", { kind: "retraction", of: first.id })],
-    at,
-  );
-  expect(() =>
-    validateMistakeAssessments([assessment], retracted, [memory(retracted), memory(retracted, "node-b")]),
-  ).toThrow("inactive or unsupported");
 });
 
 test("memory follows stable recording order for old-source first writes and late homing, not source chronology", () => {

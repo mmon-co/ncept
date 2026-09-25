@@ -71,11 +71,22 @@ export interface MemorySummaryPayload {
   /** Every observation consumed, including sources inside attachment batches. */
   readonly dependencies: readonly ObservationId[];
 }
-export interface MistakeAssessment {
-  readonly misconception: string;
-  readonly recordIds: readonly ObservationId[];
+/** Retrieval prose about prior work. Tags classify retrieval, not truth or learner labels. Scope is the
+ * observation's `nodes`, support its `cites`; neither the interpretation nor a summary is learner-state evidence.
+ */
+export interface Interpretation {
+  readonly kind: "interpretation";
+  readonly text: string;
+  readonly tags: readonly string[];
 }
-export type DefaultPayload = Demonstration | Claim | Retraction | Homing | Memory | MemorySummaryPayload;
+export type DefaultPayload =
+  | Demonstration
+  | Claim
+  | Retraction
+  | Homing
+  | Memory
+  | MemorySummaryPayload
+  | Interpretation;
 export type HomedRecord = Observation<Demonstration | Claim>;
 export interface MemoryEntry extends MemoryAttachment {
   readonly kind: "entry";
@@ -109,6 +120,8 @@ export interface DefaultState {
   readonly homing: DefaultHoming;
   readonly homeless: readonly HomedRecord[];
   readonly memories: Readonly<Partial<Record<NodeId, NodeMemory>>>;
+  /** Supported, uncorrected interpretations in acceptance order. */
+  readonly interpretations: readonly Observation<Interpretation>[];
 }
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -194,6 +207,18 @@ function isMemory(value: unknown): value is Memory {
     )
   );
 }
+/** Canonical tags are trimmed, lowercase, nonempty and unique. */
+function isInterpretation(value: unknown): value is Interpretation {
+  return (
+    object(value) &&
+    value.kind === "interpretation" &&
+    typeof value.text === "string" &&
+    value.text.trim() !== "" &&
+    Array.isArray(value.tags) &&
+    value.tags.every((tag) => typeof tag === "string" && tag !== "" && tag === tag.trim().toLowerCase()) &&
+    new Set(value.tags).size === value.tags.length
+  );
+}
 function isSummary(value: unknown): value is MemorySummaryPayload {
   if (!object(value)) return false;
   const { sources, dependencies } = value;
@@ -234,6 +259,9 @@ function assertDefaultPayload(payload: unknown): void {
       break;
     case "memory-summary":
       valid = isSummary(payload);
+      break;
+    case "interpretation":
+      valid = isInterpretation(payload);
       break;
   }
   if (!valid) throw new Error(`Invalid default ${String(payload.kind)} payload`);
@@ -583,6 +611,56 @@ function projectMemory(
   };
 }
 
+/**
+ * A correction supersedes an earlier accepted interpretation, so chains cannot cycle. An interpretation is
+ * current while every cite is an active Record or a transcript-backed memory batch sharing a Node with its
+ * scope; summaries, other interpretations and missing, retracted or abandoned sources support nothing.
+ */
+function projectInterpretations(
+  supplied: readonly Observation[],
+  observations: readonly Observation[],
+  records: ReadonlyMap<ObservationId, readonly NodeId[]>,
+): readonly Observation<Interpretation>[] {
+  supplied.forEach((observation, index) => {
+    if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return;
+    const target = supplied.findIndex(({ id }) => id === observation.supersedes);
+    const found = supplied[target];
+    if (found !== undefined && (target >= index || !isDefaultObservation(found) || !isInterpretation(found.payload)))
+      throw new Error("A correction must supersede an earlier interpretation");
+  });
+  const byId = new Map(observations.map((observation) => [observation.id, observation]));
+  return observations.filter((observation): observation is Observation<Interpretation> => {
+    if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return false;
+    const { nodes = [], cites = [] } = observation;
+    if (nodes.length === 0 || cites.length === 0 || new Set(cites).size !== cites.length)
+      throw new Error("Interpretations require a Node scope and unique support");
+    return cites.every((id) => {
+      const source = byId.get(id);
+      const batch =
+        source !== undefined &&
+        isDefaultObservation(source) &&
+        isMemory(source.payload) &&
+        source.payload.entries.some((entry) => entry.source.kind === "transcript");
+      const related = records.get(id) ?? (batch ? source.nodes : undefined) ?? [];
+      return related.some((node) => nodes.includes(node));
+    });
+  });
+}
+
+export type InterpretationQuery = Readonly<{ nodes?: readonly NodeId[]; tag?: string; surface?: SurfaceId }>;
+/** Deterministic lookup: supplied filters intersect; results keep acceptance order. */
+export function interpretationsDefault(
+  state: DefaultState,
+  query: InterpretationQuery = {},
+): readonly Observation<Interpretation>[] {
+  const tag = query.tag?.trim().toLowerCase();
+  return state.interpretations.filter(
+    ({ nodes = [], surface, payload }) =>
+      (query.nodes === undefined || query.nodes.some((node) => nodes.includes(node))) &&
+      (tag === undefined || payload.tags.includes(tag)) &&
+      (query.surface === undefined || surface === query.surface),
+  );
+}
 /** Default policy: retain history in the host, but ignore abandoned evidence here. */
 export function electedObservations(observations: readonly Observation[]): readonly Observation[] {
   return observations.filter(({ standing }) => standing !== "abandoned");
@@ -598,6 +676,7 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
   const pending = new Set<ObservationId>();
   const homed: Partial<Record<NodeId, HomedRecord[]>> = {};
   const homeless: HomedRecord[] = [];
+  const placed = new Map<ObservationId, readonly NodeId[]>();
   for (const record of records) {
     // A homing decision interprets the exact graph revision it names, and only that one: the graph
     // change that produced this revision restates every decision still in force. Recording order
@@ -628,6 +707,7 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     )
       homeless.push(record);
     for (const node of present) (homed[node] ??= []).push(record);
+    placed.set(record.id, [...initial, ...present]);
   }
   const cone = dependentCones(graph);
   const nodes: Partial<Record<NodeId, NodeState>> = {};
@@ -642,5 +722,13 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     nodes[id] = labelDefaultNode({ records: homed[id] ?? [], covering, at: now, parameters });
     memories[id] = projectMemory(id, homed[id] ?? [], observations);
   }
-  return { nodes, observations, records, homing: { homes, claims, pending: [...pending] }, homeless, memories };
+  return {
+    nodes,
+    observations,
+    records,
+    homing: { homes, claims, pending: [...pending] },
+    homeless,
+    memories,
+    interpretations: projectInterpretations(supplied, observations, placed),
+  };
 }

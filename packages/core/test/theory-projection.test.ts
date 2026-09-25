@@ -82,9 +82,6 @@ test("what a Node displays is what a query for that tag selects, for the whole d
       ).nodes.map(({ id }) => id),
     ).toEqual(displayed);
   }
-  // A supported tag nothing satisfies: still declared, selects nothing, and is shown by nobody.
-  expect(defaultTheory.tags).toContain("mistake-cluster");
-  expect([...index("mistake-cluster")]).toEqual([]);
 
   expect(projection.nodes["node-a"]?.[0]).toMatchObject({
     tag: "probably-known",

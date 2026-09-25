@@ -2,15 +2,7 @@ import { dependentCones } from "./dependent-cone";
 import type { EdgeId, NodeId, ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { Tag, TheoryProjection } from "../theory";
-import {
-  expandNodeMemory,
-  type DefaultState,
-  type Demonstration,
-  type HomedRecord,
-  type MistakeAssessment,
-  type NodeMemory,
-  type NodeState,
-} from "./state";
+import { type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
   const value = state.nodes[node];
@@ -54,74 +46,13 @@ export interface Indicator {
   readonly citations: readonly ObservationId[];
   readonly message: string;
 }
-export interface DefaultIndicatorContext {
-  readonly homeless?: readonly HomedRecord[];
-  readonly memories?: readonly NodeMemory[];
-  readonly mistakes?: readonly MistakeAssessment[];
-}
-function summarySources(memories: readonly NodeMemory[]) {
-  return memories.flatMap((memory) =>
-    memory.entries.flatMap((entry) =>
-      entry.kind === "summary"
-        ? [
-            {
-              node: memory.node,
-              text: entry.text,
-              recordIds: [
-                ...new Set(
-                  expandNodeMemory(memory, entry).flatMap(({ source }) =>
-                    source.kind === "observation" ? [source.observation] : [],
-                  ),
-                ),
-              ],
-            },
-          ]
-        : [],
-    ),
-  );
-}
-
-/** Revalidate prepared judgments at read time: retracted, re-homed, or non-summary evidence cannot survive. */
-export function validateMistakeAssessments(
-  assessments: readonly MistakeAssessment[],
-  state: DefaultState,
-  memories: readonly NodeMemory[],
-): readonly { readonly assessment: MistakeAssessment; readonly nodes: readonly NodeId[] }[] {
-  const sources = summarySources(memories);
-  return assessments.map((assessment) => {
-    if (!assessment.misconception.trim() || new Set(assessment.recordIds).size < 2)
-      throw new Error("Mistake assessment requires a misconception and distinct citations");
-    const nodes = new Set<NodeId>();
-    for (const id of assessment.recordIds) {
-      const homes = sources.filter(
-        (source) =>
-          source.recordIds.includes(id) &&
-          state.nodes[source.node]?.records.some(
-            (record) =>
-              record.id === id &&
-              record.payload.kind === "demonstration" &&
-              record.payload.grader === "tutor" &&
-              record.payload.outcome === "failure",
-          ),
-      );
-      if (homes.length === 0) throw new Error(`Mistake assessment cites inactive or unsupported Record ${id}`);
-      for (const home of homes) nodes.add(home.node);
-    }
-    if (nodes.size < 2) throw new Error("Mistake assessment must span Nodes");
-    return { assessment, nodes: [...nodes].sort() };
-  });
-}
 
 function demonstrations(records: readonly HomedRecord[]): readonly Observation<Demonstration>[] {
   return records.filter((record): record is Observation<Demonstration> => record.payload.kind === "demonstration");
 }
 
 /** Facts only. Empty citations on absence indicators mean no evidence, not invented support. */
-export function indicatorsDefault(
-  state: DefaultState,
-  graph: ResolvedGraph,
-  context: DefaultIndicatorContext = {},
-): readonly Indicator[] {
+export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): readonly Indicator[] {
   const cone = dependentCones(graph);
   const results: Indicator[] = [];
   function add(kind: string, nodes: readonly NodeId[], records: readonly HomedRecord[], message: string) {
@@ -208,19 +139,7 @@ export function indicatorsDefault(
         );
     }
   }
-  for (const record of context.homeless ?? state.homeless)
-    add("homeless", [], [record], "Record has no home after Patch revision");
-  for (const { assessment, nodes } of validateMistakeAssessments(
-    context.mistakes ?? [],
-    state,
-    context.memories ?? Object.values(state.memories).filter((memory): memory is NodeMemory => memory !== undefined),
-  ))
-    results.push({
-      kind: "mistake-cluster",
-      nodes,
-      citations: assessment.recordIds,
-      message: assessment.misconception,
-    });
+  for (const record of state.homeless) add("homeless", [], [record], "Record has no home after Patch revision");
   return results;
 }
 
@@ -233,7 +152,6 @@ export const defaultTags = [
   "self-report",
   "edge-contradiction",
   "homeless",
-  "mistake-cluster",
 ] as const;
 function indicatorTag(indicator: Indicator): Tag {
   return { tag: indicator.kind, caption: indicator.message, cites: indicator.citations };

@@ -22,13 +22,10 @@ import {
   stateDefault,
   type DefaultState,
   type Demonstration,
-  type MistakeAssessment,
 } from "./state";
 import { defaultNodeState, defaultQueryTokens, indicatorsDefault, isDefaultKnown } from "./tags";
 
-/** Supplied default-theory interpretations; producing them remains outside this tool. */
-export type DefaultChatContext = ChatContext<DefaultState> & { readonly mistakes?: readonly MistakeAssessment[] };
-type Ctx = DefaultChatContext;
+type Ctx = ChatContext<DefaultState>;
 type DefaultTool = Tool<unknown, unknown, DefaultState>;
 const nodeProperty = { type: "string", pattern: "^node-.+" };
 const scopeProperties = { scope: { type: "array", items: nodeProperty } };
@@ -221,7 +218,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   ),
   scopedTool("warnings", "Read all theory indicators and their evidence; nothing fires.", (ctx, scope) => {
     const selected = new Set(nodesInScope(ctx, scope));
-    return indicatorsDefault(ctx.state, ctx.graph, { mistakes: ctx.mistakes }).filter(
+    return indicatorsDefault(ctx.state, ctx.graph).filter(
       ({ nodes }) => nodes.length === 0 || nodes.some((id) => selected.has(id)),
     );
   }),
