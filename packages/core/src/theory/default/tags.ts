@@ -1,5 +1,11 @@
 import { dependentCones } from "./dependent-cone";
-import type { EdgeId, NodeId, ResolvedGraph } from "../../patch";
+import {
+  lastMetadataContribution,
+  NODE_ELABORATE_PROPERTY,
+  type EdgeId,
+  type NodeId,
+  type ResolvedGraph,
+} from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { Tag, TheoryProjection } from "../theory";
 import { type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
@@ -51,6 +57,23 @@ function demonstrations(records: readonly HomedRecord[]): readonly Observation<D
   return records.filter((record): record is Observation<Demonstration> => record.payload.kind === "demonstration");
 }
 
+/** Nodes whose latest `pedagogy:elaborate` contribution is `true`: left coarse at charting. */
+function coarseNodes(graph: ResolvedGraph): ReadonlySet<NodeId> {
+  return new Set(
+    graph.nodes
+      .filter(({ id }) => {
+        const contributions = graph.metadataSets.flatMap((set) => {
+          if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === id)) return [];
+          const value = set.properties[NODE_ELABORATE_PROPERTY];
+          const source = graph.provenance.metadataProperties[set.id]?.[NODE_ELABORATE_PROPERTY]?.at(-1);
+          return value === undefined || source === undefined ? [] : [{ value, source }];
+        });
+        return lastMetadataContribution(graph, contributions)?.value === true;
+      })
+      .map(({ id }) => id),
+  );
+}
+
 /** Facts only. Empty citations on absence indicators mean no evidence, not invented support. */
 export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): readonly Indicator[] {
   const cone = dependentCones(graph);
@@ -63,6 +86,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       message,
     });
   }
+  const coarse = coarseNodes(graph);
   for (const { id } of graph.nodes) {
     const node = state.nodes[id];
     if (node === undefined) throw new Error(`Node ${id} has not been projected`);
@@ -98,6 +122,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       window.every((record, index) => index === 0 || record.payload.outcome !== window[index - 1]?.payload.outcome)
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
+    if (coarse.has(id)) add("coarse", [id], [], "Left coarse at charting: its prerequisites are not charted yet");
     if (node.records.length === 0 && cone(id).every((dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
@@ -149,6 +174,7 @@ export const defaultTags = [
   "item-outcomes",
   "instability",
   "unused",
+  "coarse",
   "self-report",
   "edge-contradiction",
   "homeless",

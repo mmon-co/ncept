@@ -97,6 +97,8 @@ export const NODE_LABEL_PROPERTY = "display:label";
 export const NODE_CRITERION_PROPERTY = "pedagogy:criterion";
 export const NODE_KNOWLEDGE_TYPE_PROPERTY = "pedagogy:knowledge-type";
 export const NODE_THRESHOLD_PROPERTY = "pedagogy:threshold";
+/** `true` while a Node is left coarse: its prerequisites are not charted yet. Elaboration writes `false`. */
+export const NODE_ELABORATE_PROPERTY = "pedagogy:elaborate";
 export const NODE_KNOWLEDGE_TYPES = ["factual", "conceptual", "procedural"] as const;
 
 export interface StructureEdge {
