@@ -125,24 +125,31 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
   return [skillBody(name), ...facts].join("\n\n");
 }
 
+function skillEntry(entry: readonly Entry[]): string {
+  const descriptions: string[] = [];
+  if (entry.includes("model")) descriptions.push("the tutor may start it");
+  if (entry.includes("learner")) {
+    descriptions.push(
+      entry.includes("model")
+        ? "the learner may also start it"
+        : "the learner starts it after you propose it and say why (do not start it yourself)",
+    );
+  }
+  if (entry.includes("system")) descriptions.push("the host starts it");
+  return descriptions.join("; ");
+}
+
 /**
- * The always-loaded tier: the base unit and the index of every Skill the
- * learner or the model may start, grouped by facet. System-only Skills are
- * the host's to read and stay out of the index.
+ * The always-loaded tier: the base unit and the index of every Skill, grouped
+ * by facet, with its entry stated explicitly.
  */
 export function tutorSystemPrompt(): string {
   const base = sources["base.md"].trim();
-  const visible = skillFiles().filter(({ meta }) => meta.entry.some((who) => who !== "system"));
   const index = FACETS.map((facet) => {
-    const rows = visible
+    const rows = skillFiles()
       .filter(({ meta }) => meta.facet === facet)
-      .map(
-        ({ meta }) =>
-          `- **${meta.name}**: ${meta.description}${
-            meta.entry.includes("model") ? "" : " (Learner-started: propose it and say why; never start it yourself.)"
-          }`,
-      );
+      .map(({ meta }) => `- **${meta.name}**: ${meta.description} (Entry: ${skillEntry(meta.entry)}.)`);
     return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;
   });
-  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: after its entry requirement is met, load its body with the \`skill\` tool.\n\n${index.join("\n\n")}`;
+  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: after a tutor- or learner-started Skill's entry requirement is met, load its body with the \`skill\` tool. The host starts host-started Skills.\n\n${index.join("\n\n")}`;
 }
