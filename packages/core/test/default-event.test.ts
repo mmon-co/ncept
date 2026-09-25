@@ -428,8 +428,10 @@ test("Attach a closing transcript span: every scoped Node gets verbatim text, to
       ],
     },
   });
-  expect(request(program, "obs-span").kind).toBe("read");
   const source = observation("obs-span", write);
+  expect(request(program, "obs-span").kind).toBe("read");
+  expect(request(program, [source]).kind).toBe("judge");
+  expect(request(program, { interpretations: [] }).kind).toBe("read");
   expect(program.next([source]).done).toBe(true);
   for (const node of ["node-one", "node-two"] as const)
     expect(ctx([source]).state.memories[node]?.originals[0]?.source).toEqual({
@@ -577,6 +579,8 @@ test("Compact a long memory tail: the closing span crosses eight and claim recor
   expect(request(program, "obs-closing-span").kind).toBe("read");
   const observations = [...earlier, observation("obs-closing-span", spanWrite)];
   expect(request(program, observations).kind).toBe("judge");
+  expect(request(program, { interpretations: [] }).kind).toBe("read");
+  expect(request(program, observations).kind).toBe("judge");
   const summaryWrite = written(program, "Remember the attempted work and claim");
   expect(summaryWrite.cites).toEqual([...earlier.map(({ id }) => id), "obs-closing-span"]);
   expect(program.next("obs-closing-summary").done).toBe(true);
@@ -623,6 +627,8 @@ test("Applet mastery claims remain Material-sourced through close, memory judgme
   );
   const stored = observation("obs-applet-span", write);
   request(program, "obs-applet-span");
+  expect(request(program, [stored]).kind).toBe("judge");
+  expect(request(program, { interpretations: [] }).kind).toBe("read");
   expect(program.next([stored]).done).toBe(true);
   const state = ctx([stored]).state;
   expect(state.nodes["node-one"]?.label).toBe("unknown");
