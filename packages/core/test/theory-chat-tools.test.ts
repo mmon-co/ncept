@@ -87,6 +87,21 @@ function demonstration(id: `obs-${string}`, at: string): Observation<Demonstrati
     },
   };
 }
+test("every tool named by the default Skills is mounted", () => {
+  const setup = pure(chat.open(context()));
+  const text = [setup.prompt, ...setup.skills.map(({ body }) => body)].join("\n");
+  const called = [...text.matchAll(/`([a-z][a-z_]*)\(/g)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+  const supplied = /The theory supplies (.+?) and the Record tools\./.exec(setup.prompt)?.[1];
+  if (supplied === undefined) throw new Error("Default prompt omits its Core tool catalog");
+  const listed = [...supplied.matchAll(/`([a-z][a-z_]*)`/g)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+  const mounted = new Set(setup.tools.map(({ name }) => name));
+  const missing = [...new Set([...called, ...listed])].filter((name) => !mounted.has(name)).sort();
+  expect(missing).toEqual([]);
+});
 
 test("record demonstration writes verbatim attempt with explicit time, source scope and attribution", () => {
   const ctx = context();

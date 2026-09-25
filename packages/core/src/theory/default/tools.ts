@@ -324,7 +324,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   }),
   nodeTool(
     "items",
-    "Patch Materials and their content references and contribution provenance for this Node.",
+    "Patch Materials whose about includes this Node, with content references, inline text bodies when available, and contribution provenance.",
     (ctx, node) =>
       ctx.graph.materials
         .filter((material) => material.about.includes(node))
