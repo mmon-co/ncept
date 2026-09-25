@@ -8,7 +8,7 @@ import {
   type ObservationId,
   type Program,
 } from "../../observations";
-import { route, type NodeId } from "../../patch";
+import { projectVisualGraph, route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
 import { refinePendingHomes } from "./event";
 import {
@@ -102,6 +102,49 @@ function trail(ctx: Ctx, node: NodeId) {
           : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
+function closeRecount(ctx: Ctx) {
+  const labelByNode = new Map(
+    projectVisualGraph({ graph: ctx.graph, annotations: {} }).nodes.map(({ id, label }) => [id, label] as const),
+  );
+  const labelOf = (node: NodeId): string => {
+    const label = labelByNode.get(node);
+    if (label === undefined) throw new Error(`Missing display label for ${node}`);
+    return label;
+  };
+  const homes = (record: (typeof ctx.state.records)[number]): readonly NodeId[] =>
+    (record.payload.kind === "claim" ? ctx.state.homing.claims : ctx.state.homing.homes)[record.id] ?? [];
+  const records = ctx.state.records
+    .filter((record) => record.surface === ctx.surface)
+    .map((record) => ({ record, about: homes(record).map(labelOf) }));
+  const nodes = new Set<NodeId>(ctx.about);
+  for (const { record } of records) for (const node of homes(record)) nodes.add(node);
+
+  return {
+    capabilities: [...nodes]
+      .map((node) => ({ label: labelOf(node), standing: defaultNodeState(ctx.state, node).label }))
+      .sort((left, right) => left.label.localeCompare(right.label)),
+    records: records.map(({ record, about }) => {
+      const association = about.length === 0 ? {} : { about };
+      const payload = record.payload;
+      return payload.kind === "claim"
+        ? {
+            ...association,
+            kind: payload.kind,
+            stance: payload.stance,
+            statement: payload.statement,
+            ...(payload.prompt === undefined ? {} : { prompt: payload.prompt }),
+          }
+        : {
+            ...association,
+            kind: payload.kind,
+            outcome: payload.outcome,
+            unaided: payload.unaided,
+            task: payload.task,
+            response: payload.response,
+          };
+    }),
+  };
+}
 function nodeTool(name: string, description: string, run: (ctx: Ctx, node: NodeId) => unknown): DefaultTool {
   return {
     name,
@@ -194,6 +237,16 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     };
   }),
   scopedTool("mission", "Effective Missions and their resolved View scopes.", missionFacts),
+  {
+    name: "close_recount",
+    description:
+      "Learner-facing close material for this Session: display labels, current standing, and active Records from this Session. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount.",
+    schema: schema({}),
+    *run(raw, ctx) {
+      args(raw, []);
+      return closeRecount(ctx);
+    },
+  },
 ];
 
 /** Only theory evidence is written. The host assigns identity and attribution, not pedagogy. */
