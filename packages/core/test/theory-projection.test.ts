@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { contentDigest } from "../src/digest";
-import type { NodeId, ResolvedGraph } from "../src/patch/model";
+import type { ExactPatchRef, MetadataSet, MetadataSetId, NodeId, ResolvedGraph } from "../src/patch/model";
 import { selectGraph } from "../src/patch/select";
 import { evaluateView } from "../src/patch/view";
 import type { Observation } from "../src/observations";
@@ -280,4 +280,33 @@ test("projecting a graph costs what the graph costs, not what its Nodes cost eac
     return reads;
   }
   expect(stateReads(40)).toBeLessThan(stateReads(20) * 3);
+});
+
+test("a Node marked coarse is tagged until a later contribution clears the mark", () => {
+  const later = { identity: "patch-elaborated" as const, digest: contentDigest("elaborated") };
+  const marked = (value: boolean, patch: ExactPatchRef = ref, set: MetadataSetId = "metadata-coarse") => ({
+    set: {
+      id: set,
+      subjects: [{ kind: "node", id: "node-c" }],
+      properties: { "pedagogy:elaborate": value },
+    } satisfies MetadataSet,
+    source: { [set]: { "pedagogy:elaborate": [{ patch, operationIndex: 0 }] } },
+  });
+  const withSets = (
+    g: ResolvedGraph,
+    sets: readonly ReturnType<typeof marked>[],
+    order = g.patchOrder,
+  ): ResolvedGraph => ({
+    ...g,
+    patchOrder: order,
+    metadataSets: sets.map(({ set }) => set),
+    provenance: { ...g.provenance, metadataProperties: Object.assign({}, ...sets.map(({ source }) => source)) },
+  });
+  const coarse = withSets(graph(), [marked(true)]);
+  const shown = project(coarse, []);
+  expect(tagsOf(shown, "node-c")).toContain("coarse");
+  expect([...tagIndex(shown)("coarse")]).toEqual(["node-c"]);
+  expect(selectGraph(coarse, { tag: "is:coarse" }, tagIndex(shown)).nodes.map(({ id }) => id)).toEqual(["node-c"]);
+  const elaborated = withSets(graph(), [marked(true), marked(false, later, "metadata-elaborated")], [ref, later]);
+  expect([...tagIndex(project(elaborated, []))("coarse")]).toEqual([]);
 });
