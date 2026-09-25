@@ -15,11 +15,8 @@ import {
   rootContent,
   rootDefinition,
   sameExactPatchRef,
-  selectReleaseUpdate,
   validateRootPatchDefinition,
   type PatchContent,
-  type PatchId,
-  type PatchRelease,
   type RootPatchDefinition,
 } from "../../src/patch";
 
@@ -35,10 +32,6 @@ const definition: RootPatchDefinition = {
 
 function contents(...patches: readonly PatchContent[]) {
   return new Map(patches.map((patch) => [revisionDigest(patch), patch]));
-}
-
-function release(version: string, identity: PatchId = "patch-course"): PatchRelease {
-  return { version, ref: candidateRevision(identity, emptyPatch()).ref };
 }
 
 test("canonical content identity sorts object keys, preserves ordered arrays, and rejects non-JSON values", () => {
@@ -200,23 +193,6 @@ test("root lesson construction and validation are value-only and round trip edit
   ).toThrow(/cycle/);
 });
 
-test("release selection chooses the highest supplied stable semver, never a maintenance downgrade or prerelease", () => {
-  const installed = release("1.9.0");
-  const highest = release("2.0.0");
-  expect(
-    selectReleaseUpdate(installed, [
-      release("1.10.0"),
-      highest,
-      release("1.2.1"),
-      release("3.0.0-rc.1"),
-      release("9.0.0", "patch-other"),
-    ]),
-  ).toBe(highest);
-  expect(selectReleaseUpdate(highest, [release("1.2.1"), release("2.0.0+new"), release("2.1.0-beta")])).toBeUndefined();
-  expect(selectReleaseUpdate(release("2.0.0-rc.1"), [highest])).toBe(highest);
-  expect(selectReleaseUpdate(installed, [])).toBeUndefined();
-});
-
 test("semver precedence ignores build metadata, orders numeric prereleases, and rejects malformed versions", () => {
   expect(compareReleaseVersions("1.10.0", "1.9.0")).toBe(1);
   expect(compareReleaseVersions("2.0.0+a", "2.0.0+b")).toBe(0);
@@ -341,7 +317,7 @@ test("exact base and mask target identities plus authored citations stay hashed 
   expect(revisionDigest(changedNestedCitation)).not.toBe(a.ref.digest);
 });
 
-test("content identity is authored delta identity, not graph equivalence or release naming", () => {
+test("content identity is authored delta identity, not graph equivalence", () => {
   const one = composePatch(emptyPatch(), [{ kind: "add-node", node: { id: "node-a" } }]);
   const two = composePatch(one, [{ kind: "add-node", node: { id: "node-a" } }]);
   const first = candidateRevision("patch-course", one);
@@ -352,8 +328,4 @@ test("content identity is authored delta identity, not graph equivalence or rele
   );
   const renamedNode = composePatch(emptyPatch(), [{ kind: "add-node", node: { id: "node-other" } }]);
   expect(revisionDigest(renamedNode)).not.toBe(first.ref.digest);
-  const oldRelease = { ref: first.ref, version: "1.0.0" };
-  const newName = { ref: first.ref, version: "2.0.0" };
-  expect(selectReleaseUpdate(oldRelease, [newName])).toBe(newName);
-  expect(newName.ref).toEqual(oldRelease.ref);
 });

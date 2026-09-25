@@ -233,33 +233,11 @@ function parseVersion(version: string) {
   };
 }
 
-/** Semver precedence, deliberately ignoring build metadata. */
-export function compareReleaseVersions(left: string, right: string): number {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  for (const key of ["major", "minor", "patch"] as const) if (a[key] !== b[key]) return a[key] < b[key] ? -1 : 1;
-  if (a.prerelease.length === 0 || b.prerelease.length === 0)
-    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
-  for (let i = 0; i < Math.max(a.prerelease.length, b.prerelease.length); i++) {
-    const x = a.prerelease[i];
-    const y = b.prerelease[i];
-    if (x === y) continue;
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    const numericX = /^\d+$/.test(x);
-    const numericY = /^\d+$/.test(y);
-    if (numericX && numericY) return BigInt(x) < BigInt(y) ? -1 : 1;
-    if (numericX !== numericY) return numericX ? -1 : 1;
-    return x < y ? -1 : 1;
-  }
-  return 0;
-}
-
 /**
- * The same precedence as a string that sorts by it, so a store can order releases by an index
- * instead of by reading and comparing them. `compareReleaseVersions` above remains the definition;
- * this encodes the version it parses, and two names have equal precedence exactly when their keys
- * are equal — build metadata is absent from both, as it is from precedence.
+ * Semver precedence as a string that sorts by it, deliberately ignoring build metadata. This is
+ * the definition of precedence: `compareReleaseVersions` compares these keys, and a store orders
+ * releases by an index over them instead of by reading and comparing them. Two names have equal
+ * precedence exactly when their keys are equal.
  *
  * The encoding is ASCII and is read byte by byte. A number carries one `:` per digit beyond the
  * first, and `:` sorts above every digit, so a longer number outranks a shorter one at any length.
@@ -276,26 +254,17 @@ export function releasePrecedenceKey(version: string): string {
   return prerelease.length === 0 ? `${numbers}~` : `${numbers}-${prerelease.map(identifier).join("!")}`;
 }
 
+/** Precedence of two release names, by their `releasePrecedenceKey`. */
+export function compareReleaseVersions(left: string, right: string): number {
+  const a = releasePrecedenceKey(left);
+  const b = releasePrecedenceKey(right);
+  return a === b ? 0 : a < b ? -1 : 1;
+}
+
 /** Whether a version names a stable release: the class automatic update targets, and the one a
  * collection shows as a Patch's current version. A prerelease is reachable only by exact name. */
 export function isStableRelease(version: string): boolean {
   return parseVersion(version).prerelease.length === 0;
-}
-
-/** Highest supplied stable release strictly above the installed pin. Access is host policy. */
-export function selectReleaseUpdate(
-  installed: PatchRelease,
-  accessible: readonly PatchRelease[],
-): PatchRelease | undefined {
-  parseVersion(installed.version);
-  let selected: PatchRelease | undefined;
-  for (const release of accessible) {
-    if (release.ref.identity !== installed.ref.identity) continue;
-    if (parseVersion(release.version).prerelease.length > 0) continue;
-    if (compareReleaseVersions(release.version, installed.version) <= 0) continue;
-    if (selected === undefined || compareReleaseVersions(release.version, selected.version) > 0) selected = release;
-  }
-  return selected;
 }
 
 /** Recover editable lesson content from a supplied root Patch. */
