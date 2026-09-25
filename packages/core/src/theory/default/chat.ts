@@ -33,6 +33,7 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = [
     tutorSystemPrompt(),
+    "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Retrieve the current interpretation before correcting it with `correct_interpretation` and current support. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
     "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations. Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
     ctx.about.length
       ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`

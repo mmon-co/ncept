@@ -5,8 +5,11 @@ import {
   read,
   write,
   type JsonSchema,
+  type Observation,
   type ObservationId,
+  type ObservationWrite,
   type Program,
+  type SurfaceId,
 } from "../../observations";
 import { projectVisualGraph, route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
@@ -16,12 +19,15 @@ import {
   electedObservations,
   assertDefaultRetraction,
   emptyNodeMemory,
+  interpretationsDefault,
   isClaim,
   isDemonstration,
   memoryDefault,
   stateDefault,
+  DEFAULT_THEORY_REF,
   type DefaultState,
   type Demonstration,
+  type Interpretation,
 } from "./state";
 import { defaultNodeState, defaultQueryTokens, indicatorsDefault, isDefaultKnown } from "./tags";
 
@@ -29,6 +35,7 @@ type Ctx = ChatContext<DefaultState>;
 type DefaultTool = Tool<unknown, unknown, DefaultState>;
 const nodeProperty = { type: "string", pattern: "^node-.+" };
 const scopeProperties = { scope: { type: "array", items: nodeProperty } };
+const surfaceProperty = { type: "string", pattern: "^surface-.+" };
 const schema = (properties: Record<string, unknown>, required: readonly string[] = []): JsonSchema => ({
   type: "object",
   properties,
@@ -58,6 +65,67 @@ function nodes(value: unknown): readonly NodeId[] {
 }
 function observationId(value: unknown): ObservationId {
   if (!isObservationId(value)) throw new Error("Expected an observation identity");
+  return value;
+}
+function observationIds(value: unknown): readonly ObservationId[] {
+  if (!Array.isArray(value)) throw new Error("Expected observation identities");
+  return value.map(observationId);
+}
+function surfaceIdentity(value: unknown): value is SurfaceId {
+  return typeof value === "string" && /^surface-.+/.test(value);
+}
+function surfaceId(value: unknown): SurfaceId {
+  if (!surfaceIdentity(value)) throw new Error("Expected a surface identity");
+  return value;
+}
+type InterpretationSourceHandle =
+  | { readonly support: ObservationId; readonly kind: "observation"; readonly observation: ObservationId }
+  | {
+      readonly support: ObservationId;
+      readonly kind: "transcript";
+      readonly surface: SurfaceId;
+      readonly from: string;
+      readonly to: string;
+    };
+function sourceHandle(source: unknown, support: ObservationId): readonly InterpretationSourceHandle[] {
+  if (!object(source)) return [];
+  if (source.kind === "observation" && isObservationId(source.observation))
+    return [{ support, kind: "observation", observation: source.observation }];
+  if (
+    source.kind === "transcript" &&
+    surfaceIdentity(source.surface) &&
+    typeof source.from === "string" &&
+    typeof source.to === "string"
+  )
+    return [{ support, kind: "transcript", surface: source.surface, from: source.from, to: source.to }];
+  return [];
+}
+function interpretationSourceHandles(ctx: Ctx, supportIds: readonly ObservationId[]) {
+  return supportIds.flatMap((support) => {
+    const source = ctx.state.observations.find(({ id }) => id === support);
+    if (
+      source !== undefined &&
+      object(source.payload) &&
+      source.payload.kind === "memory" &&
+      Array.isArray(source.payload.entries)
+    )
+      return source.payload.entries.flatMap((entry) => (object(entry) ? sourceHandle(entry.source, support) : []));
+    return [{ support, kind: "observation" as const, observation: support }];
+  });
+}
+function validationIdentity(observations: readonly Observation[]): ObservationId {
+  const used = new Set(observations.map(({ id }) => id));
+  for (let attempt = 0; ; attempt++) {
+    const id = `obs-interpretation-validation-${attempt}`;
+    if (isObservationId(id) && !used.has(id)) return id;
+  }
+}
+function string(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Expected a string");
+  return value;
+}
+function strings(value: unknown): readonly string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) throw new Error("Expected strings");
   return value;
 }
 function nodesInScope(ctx: Ctx, scope?: readonly NodeId[]): readonly NodeId[] {
@@ -172,7 +240,7 @@ function scopedTool(
   };
 }
 
-/** Facts only, computed from the host-supplied current graph, evidence projection and context. */
+/** Read-only evidence and retrieval context from the host's current graph and observations. */
 export const defaultInstrumentTools: readonly DefaultTool[] = [
   scopedTool("frontier", "Reachable not-known Nodes, facts and citations; no ranking.", (ctx, scope) => {
     const frontier = defaultQueryTokens.frontier(ctx.state, ctx.graph);
@@ -200,6 +268,38 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       return result.nodes
         .filter(({ id }) => !isDefaultKnown(defaultNodeState(ctx.state, id)))
         .map(({ id }) => candidate(ctx, id));
+    },
+  },
+  {
+    name: "interpretations",
+    description:
+      "Retrieve current supported interpretations by optional tag, Node scope and originating surface. Defaults to this Session's attached Nodes; returns identity and source handles, never transcript text. Retrieve before reusing or correcting one.",
+    schema: schema({
+      tag: { type: "string" },
+      scope: { type: "array", items: nodeProperty },
+      surface: surfaceProperty,
+    }),
+    *run(raw, ctx) {
+      const input = args(raw, ["tag", "scope", "surface"]);
+      const scope = input.scope === undefined ? ctx.about : nodes(input.scope);
+      const selected = nodesInScope(ctx, scope);
+      const tag = input.tag === undefined ? undefined : string(input.tag);
+      const query = {
+        nodes: selected,
+        ...(tag === undefined ? {} : { tag }),
+        ...(input.surface === undefined ? {} : { surface: surfaceId(input.surface) }),
+      };
+      return interpretationsDefault(ctx.state, query).map(
+        ({ id, nodes: related = [], cites = [], surface, payload }) => ({
+          id,
+          text: payload.text,
+          tags: payload.tags,
+          nodes: related,
+          supportIds: cites,
+          sourceHandles: interpretationSourceHandles(ctx, cites),
+          ...(surface === undefined ? {} : { surface }),
+        }),
+      );
     },
   },
   nodeTool("trail", "Original records and the rule producing this Node's label.", trail),
@@ -317,6 +417,69 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
       };
       const id = yield* write(observation);
       return { observation: { ...observation, id }, citations: [id, of] };
+    },
+  },
+  {
+    name: "correct_interpretation",
+    description:
+      "Correct one current interpretation in the Session's attached Nodes (or explicit scope) by writing a replacement with fresh current support. Its predecessor remains in history; this does not change learner labels or Records.",
+    schema: schema(
+      {
+        of: { type: "string", pattern: "^obs-.+" },
+        text: { type: "string" },
+        tags: { type: "array", items: { type: "string" } },
+        support: { type: "array", items: { type: "string", pattern: "^obs-.+" } },
+        scope: { type: "array", items: nodeProperty },
+      },
+      ["of", "text", "tags", "support"],
+    ),
+    *run(raw, ctx) {
+      const input = args(raw, ["of", "text", "tags", "support", "scope"], ["of", "text", "tags", "support"]);
+      const of = observationId(input.of);
+      const text = string(input.text);
+      const tags = strings(input.tags);
+      const support = observationIds(input.support);
+      if (text.trim() === "") throw new Error("An interpretation needs text");
+      if (tags.some((tag) => tag === "" || tag !== tag.trim().toLowerCase()) || new Set(tags).size !== tags.length)
+        throw new Error("Interpretation tags must be canonical and unique");
+      if (support.length === 0 || new Set(support).size !== support.length)
+        throw new Error("Correction requires unique support identities");
+
+      const scope = nodesInScope(ctx, input.scope === undefined ? ctx.about : nodes(input.scope));
+      const supplied = yield* read.observations({});
+      const freshState = stateDefault(ctx.graph, supplied, ctx.now);
+      const target = interpretationsDefault(freshState, { nodes: scope }).find(({ id }) => id === of);
+      if (target === undefined)
+        throw new Error("Correction requires a current interpretation in the selected Node scope");
+      const interpretationNodes = target.nodes ?? [];
+      const payload: Interpretation = { kind: "interpretation", text, tags };
+      const probe: Observation<Interpretation> = {
+        id: validationIdentity(supplied),
+        at: ctx.now,
+        by: DEFAULT_THEORY_REF,
+        about: [...ctx.about],
+        nodes: interpretationNodes,
+        cites: support,
+        surface: ctx.surface,
+        supersedes: target.id,
+        payload,
+      };
+      const valid = stateDefault(ctx.graph, [...supplied, probe], ctx.now).interpretations.some(
+        ({ id }) => id === probe.id,
+      );
+      if (!valid) throw new Error("Correction support must be current evidence related to the interpretation's Nodes");
+
+      const observation: ObservationWrite<Interpretation> = {
+        at: ctx.now,
+        about: [...ctx.about],
+        nodes: interpretationNodes,
+        cites: support,
+        surface: ctx.surface,
+        supersedes: target.id,
+        payload,
+      };
+      const id = yield* write(observation);
+      return { observation: { ...observation, id }, citations: [id, ...support] };
     },
   },
 ];
