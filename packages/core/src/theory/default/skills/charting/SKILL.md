@@ -17,7 +17,8 @@ Design the learning from the goal backward, as a teacher who had never seen this
 6. **Branch points.** Where the design forks on something only the learner knows (how broad, which modality matters, how deep), ask, and say what each answer changes.
 7. **Depth.** Chart the terminal performances and one or two levels beneath them now. A Node left coarse, whose prerequisites are not charted yet, carries `pedagogy:elaborate: true`; it is elaborated when the route reaches it and the learner cannot already do it, by charting its prerequisites and Edges into it and setting the mark to `false`, never by replacing it. The Mission's View is its targets' dependency cone as the graph now stands, so new prerequisites join the Mission without revising it. Tell the learner which parts are left coarse.
 8. **Reuse.** Before writing, use the host's content query to find existing Nodes for parts of the design. `coverage(scope?)` is evidence absence, not a search for missing topics. A useful existing Node is reused even when its trail is empty.
-9. In the learner-approved edit session, write the design:
+
+Give the Mission a concise `shortName` and keep the complete want as its `statement`. Include both in the Confirmation; the learner can ask to revise the name before accepting it. If the learner asks to change the name while a Confirmation is pending, replace it through the same **propose_mission** path with **supersedes** set to the pending Confirmation id. 9. In the learner-approved edit session, write the design:
 
 @procedures/graph-authoring.md
 

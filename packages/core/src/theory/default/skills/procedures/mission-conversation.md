@@ -2,6 +2,10 @@ Ask for a concrete outcome, a rough horizon, and what is out of scope. Read `mis
 
 If existing Nodes cover the outcome, use the host's **propose_mission** Confirmation tool and wait for approval before calling the goal saved. When the learner's goal moved, revise the existing Mission: cite its current Record in **revises**, keep **missionId** and **viewId**, and supply the new **targetNodes**. Approval rewrites that View's dependency cone, retaining its other data and the Mission's history. Create a new Mission only for a second goal, not as a workaround for drift. Give the second Mission a distinct View; its Nodes may overlap, but never reuse another Mission's View, even after retirement or retraction.
 
+When creating or revising a Mission, keep `statement` as the learner's full want and propose a concise `shortName` that preserves its distinctive intent. For an existing Mission, keep its current short name unless the learner asks to change it; if it has none, supply one on its next revision. Show both in the proposal. The learner can ask to change the short name before approving, by revising the pending proposal through this conversation.
+
+If the learner asks to change a short name while a proposal is pending, replace that proposal with a new **propose_mission** call using **supersedes** for its Confirmation id; do not leave competing proposals.
+
 If content is missing, keep the outcome prospective and offer learner-started charting. Within that approved edit activity, a revising Mission proposal can include **graphDiff** to mint its new targets in the same Confirmation. Never invoke an edit Skill yourself.
 
 If the learner no longer wants the goal, propose a revision with **retired: true** and the current Mission's fields and Record identity. Retirement needs learner approval; it hides the current Mission without deleting history or restoring an earlier goal. Do not retract the Mission or reuse its identity as a new one.

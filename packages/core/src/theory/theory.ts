@@ -45,6 +45,7 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
 export type MissionContext = Readonly<{
   id: string;
   statement: string;
+  shortName?: string;
   nodes: readonly NodeId[];
   priority: number;
 }>;
