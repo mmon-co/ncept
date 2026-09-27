@@ -83,6 +83,8 @@ export type Citation =
       readonly kind: "derived_from" | "based_on" | "inspired_by";
       readonly source: ExactPatchRef;
     }
+  | { readonly kind: "published_release"; readonly source: ExactPatchRef }
+  | { readonly kind: "public_attribution_unavailable" }
   | { readonly kind: "external_source"; readonly source: string };
 
 export interface StructureNode {
