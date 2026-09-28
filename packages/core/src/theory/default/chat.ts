@@ -87,7 +87,7 @@ function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAfforda
 function recommenderEntry(affordances: readonly UnusedAffordance[]): string[] {
   if (affordances.length === 0) return [];
   return [
-    "When the learner describes working around one of the affordances below, load `recommend-unused-affordances` before answering. Its Document-backed aside belongs in the same reply, alongside the learner's actual work. Do not merely acknowledge the workaround or treat it as a defect. If its Document link is already in your replies, do not repeat the recommendation.",
+    "When the learner describes working around one of the affordances below, load `recommend-unused-affordances` before answering. Its Document-backed aside belongs in the same reply, alongside the learner's actual work. Do not merely acknowledge the workaround or treat it as a defect. If its Document link is already in your replies, leave that workaround alone: do not mention the guide again, recap your earlier suggestion, offer to summarize it, or endorse continuing the workaround. Continue the learner's actual work unless they explicitly ask about the affordance.",
     `Common Concept affordances this learner has not used or been told about (recommend-unused-affordances; raise when):\n${affordances.map(({ label, raiseWhen }) => `- ${label}: ${raiseWhen}`).join("\n")}`,
   ];
 }
