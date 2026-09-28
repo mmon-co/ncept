@@ -122,6 +122,26 @@ function demonstration(id: ObservationId = "obs-attempt"): Observation<Demonstra
   return { ...attempt, id, by, nodes: ["node-one"] };
 }
 
+// Feature-use drive, replayable check 3: operation use is not a competence claim.
+// docs/attachments/journal-feature-use-as-official-node-evidence/index.md
+test("feature-use emits scoped use evidence without promoting competence", () => {
+  const program = event({ kind: "feature.used", operation: "settings.update", at, about: ["node-one"] }, ctx());
+  const write = written(program);
+  expect(write).toEqual({
+    at,
+    about: ["node-one"],
+    nodes: ["node-one"],
+    payload: { kind: "feature-use", operation: "settings.update" },
+  });
+  expect(program.next("obs-use").done).toBe(true);
+  const use = observation("obs-use", write);
+  expect(stateDefault(current, [use], now).nodes["node-one"]).toMatchObject({
+    featureUses: [use],
+    label: "unknown",
+    k: 0,
+  });
+  expect(stateDefault(current, [use], now).nodes["node-two"]?.featureUses).toEqual([]);
+});
 test("Record the original attempt: Recall keeps exact scoring, source time, scope, provenance and immutable text", () => {
   const value = recall();
   const program = event(outcome(value), ctx());

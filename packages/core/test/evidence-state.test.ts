@@ -76,6 +76,31 @@ function memory(state: ReturnType<typeof stateDefault>, node: NodeId = "node-a")
   return value;
 }
 
+// Feature-use drive check 3: effective use follows standing, time and supersession.
+// docs/attachments/journal-feature-use-as-official-node-evidence/index.md
+test("feature-use projection retains only effective use without prerequisite competence", () => {
+  const use = (id: string, day = 0, extra: Partial<Observation> = {}) =>
+    obs(id, { kind: "feature-use", operation: "settings.update" }, day, { nodes: ["node-b"], ...extra });
+  const records = [
+    use("old"),
+    use("replacement", 0, { supersedes: "obs-old" }),
+    use("abandoned", 0, { standing: "abandoned" }),
+    use("future", 1),
+    use("selected", 0, { standing: "selected" }),
+    use("profile", 0, { standing: "unscoped" }),
+  ];
+  const state = stateDefault(graph(), records, at);
+  expect(state.nodes["node-b"]?.featureUses.map(({ id }) => id)).toEqual([
+    "obs-replacement",
+    "obs-selected",
+    "obs-profile",
+  ]);
+  expect(state.nodes["node-b"]).toMatchObject({ label: "unknown", k: 0 });
+  expect(state.nodes["node-a"]).toMatchObject({ label: "unknown", k: 0, featureUses: [] });
+  expect(
+    stateDefault(graph(), records, "2026-09-02T00:00:00.000Z").nodes["node-b"]?.featureUses.map(({ id }) => id),
+  ).toContain("obs-future");
+});
 test("fold unchanged evidence on both sides of the inclusive 30-day forgetting boundary", () => {
   const records = [demonstration("one", -1), demonstration("two")];
   const saved = JSON.stringify(records);
