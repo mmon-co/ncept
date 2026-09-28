@@ -88,10 +88,14 @@ function pure<T>(program: Program<T>): T {
   return result.value;
 }
 
-function turn(observations: readonly Observation[], about: readonly NodeId[] = ["node-fractions"]) {
+function turn(
+  observations: readonly Observation[],
+  about: readonly NodeId[] = ["node-fractions"],
+  tutorMessages?: readonly string[],
+) {
   const g = graph();
   const setup = pure(
-    chat.turn({ graph: g, now, state: stateDefault(g, observations, now), surface: "surface-s", about }),
+    chat.turn({ graph: g, now, state: stateDefault(g, observations, now), surface: "surface-s", about, tutorMessages }),
   );
   const skill = setup.skills.find(({ name }) => name === "recommend-unused-affordances");
   if (skill === undefined) throw new Error("recommender Skill missing");
@@ -175,6 +179,15 @@ for (const [earlier, about] of [
     expect(prompt).toContain("- Branch a conversation:");
   });
 
+// The live Appearance drive repeated its guide offer on turn two, before any closing Memory existed.
+// docs/attachments/drive-feature-use-recommendation-with-an-evaluator-learner/review-unused.json
+test("an open Session's earlier tutor link removes the affordance from both entry and Skill candidates", () => {
+  const { prompt, skill } = turn([], [], [`1/2 + 1/3 is 5/6. Aside: [Find your work](${findUrl}).`]);
+  expect(prompt).not.toContain("- Find your work:");
+  expect(prompt).not.toContain("Asks where something is, or pages through many Missions or Sessions.");
+  expect(skill.body).not.toContain(findUrl);
+  expect(prompt).toContain("- Branch a conversation:");
+});
 test("with every affordance used, the prompt carries no recommender entry", () => {
   const { prompt } = turn([featureUse("node-mmon-find-your-work"), featureUse("node-mmon-branch-a-conversation")]);
   expect(prompt).not.toContain("recommend-unused-affordances;");

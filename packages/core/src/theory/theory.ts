@@ -53,6 +53,8 @@ export type ChatContext<S> = Context<S> &
   Readonly<{
     surface: SurfaceId;
     about: readonly NodeId[];
+    /** Tutor text on the current conversation branch, before this turn; not recorded evidence. */
+    tutorMessages?: readonly string[];
     missions?: readonly MissionContext[];
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;

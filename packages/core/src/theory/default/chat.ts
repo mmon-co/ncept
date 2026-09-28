@@ -72,14 +72,16 @@ function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
   });
 }
 
-/** Unused affordances whose Document link no recorded tutor message carries yet: the conversation retained at each
- * Session's close, including Sessions over no Nodes, is the record of an aside. */
+/** Exclude Document links already carried by tutor text, in this conversation or a closed Session. */
 function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
-  const told = ctx.state.observations.flatMap((observation) =>
-    isDefaultObservation(observation) && isMemory(observation.payload)
-      ? observation.payload.entries.filter(({ speaker }) => speaker.kind === "tutor").map(({ text }) => text)
-      : [],
-  );
+  const told = [
+    ...(ctx.tutorMessages ?? []),
+    ...ctx.state.observations.flatMap((observation) =>
+      isDefaultObservation(observation) && isMemory(observation.payload)
+        ? observation.payload.entries.filter(({ speaker }) => speaker.kind === "tutor").map(({ text }) => text)
+        : [],
+    ),
+  ];
   return unusedAffordances(ctx).filter(({ documentUrl }) => !told.some((text) => text.includes(documentUrl)));
 }
 
@@ -87,7 +89,7 @@ function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAfforda
 function recommenderEntry(affordances: readonly UnusedAffordance[]): string[] {
   if (affordances.length === 0) return [];
   return [
-    "When the learner describes working around one of the affordances below, load `recommend-unused-affordances` before answering. Its Document-backed aside belongs in the same reply, alongside the learner's actual work. Do not merely acknowledge the workaround or treat it as a defect. If its Document link is already in your replies, leave that workaround alone: do not mention the guide again, recap your earlier suggestion, offer to summarize it, or endorse continuing the workaround. Continue the learner's actual work unless they explicitly ask about the affordance.",
+    "When the learner describes working around one of the affordances below, load `recommend-unused-affordances` before answering. Its Document-backed aside belongs in the same reply, alongside the learner's actual work. Do not merely acknowledge the workaround or treat it as a defect.",
     `Common Concept affordances this learner has not used or been told about (recommend-unused-affordances; raise when):\n${affordances.map(({ label, raiseWhen }) => `- ${label}: ${raiseWhen}`).join("\n")}`,
   ];
 }
