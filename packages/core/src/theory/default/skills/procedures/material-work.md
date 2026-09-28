@@ -34,7 +34,27 @@ Open a draft through the host's mounted Material affordance. Keeping or revising
 
 ## Applet authoring
 
-Use an applet when the learner benefits from a live, reusable interaction; otherwise prefer the lighter Document or Quiz. Its HTML is the applet source, and its `meta` declares `abi: "applet:1"`, the `"@concept/applet": "1"` library, tutor queries and commands. Keep game state private in the applet's persisted `state(json)`. For chess, keep the position and move list there and declare `queries: { summary: "$.summary" }`, where `summary` is part of that same state. This makes the existing `applet_inspect` tool's named summary query the tutor's view; do not create a second published summary store or scrape rendered DOM.
+Use an applet when the learner benefits from a live, reusable interaction; otherwise prefer the lighter Document or Quiz. Its HTML is the applet source. Declare metadata in this shape, adding the commands and queries the interaction needs:
+
+```json
+{
+  "abi": "applet:1",
+  "libraries": { "@concept/applet": "1" },
+  "queries": { "summary": "$.summary" },
+  "commands": {
+    "setPosition": {
+      "inputSchema": {
+        "type": "object",
+        "properties": { "fen": { "type": "string" } },
+        "required": ["fen"],
+        "additionalProperties": false
+      }
+    }
+  }
+}
+```
+
+Keep game state private in the applet's persisted `state(json)`. For chess, keep the position and move list there, with `summary` part of that same state; the query is an RFC 9535 JSONPath expression over it. `applet_inspect` reads the declared query without running the frame. Do not create a second published summary store or scrape rendered DOM. The pinned library is provided only in the mounted frame, not the tutor's shell; verify through `applet_open` and the live browser frame, not by importing `@concept/applet` in `bash`.
 
 After `applet_add`, explicitly call `applet_open` to mount the new Material in the active Session; adding it only saves and lists it. The tutor's command tools for that opening are available when the next tutor turn is prepared.
 
