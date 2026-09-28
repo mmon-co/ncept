@@ -460,7 +460,12 @@ test("Attach a closing transcript span: every scoped Node gets verbatim text, to
       from: span.from,
       to: span.from,
     });
-  expect(event(close([]), ctx()).next().done).toBe(true);
+  // A Session over no Nodes keeps its conversation, retrieved by no Node memory and interpreted by no judgment.
+  const unscoped = event(close([]), ctx());
+  expect(request(unscoped)).toEqual({ kind: "read", select: { kind: "transcript", surface, span } });
+  expect(written(unscoped, transcript)).toMatchObject({ nodes: [], payload: { kind: "memory" } });
+  expect(request(unscoped, "obs-unscoped")).toEqual({ kind: "read", select: { kind: "observations" } });
+  expect(unscoped.next([]).done).toBe(true);
 });
 
 test("Compact a long memory tail: below and at eight entries yield no judge; nine retains originals and original citations", () => {

@@ -3,7 +3,7 @@ import { renderSpeech } from "../speaker";
 import { lastMetadataContribution, NODE_LABEL_PROPERTY } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
-import { memoryDefault, type DefaultState } from "./state";
+import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { listSkills, skillBody, skillInvocation, tutorSystemPrompt } from "./skills";
 import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
@@ -72,31 +72,33 @@ function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
   });
 }
 
-function recommenderFacts(ctx: ChatContext<DefaultState>): readonly string[] {
-  const available = unusedAffordances(ctx);
-  const mentioned = new Set(
-    available.flatMap(({ node, documentUrl }) =>
-      Object.values(ctx.state.memories).some(
-        (memory) =>
-          memory?.originals.some(({ speaker, text }) => speaker.kind === "tutor" && text.includes(documentUrl)) ===
-          true,
-      )
-        ? [node]
-        : [],
-    ),
+/** Unused affordances whose Document link no recorded tutor message carries yet: the conversation retained at each
+ * Session's close, including Sessions over no Nodes, is the record of an aside. */
+function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
+  const told = ctx.state.observations.flatMap((observation) =>
+    isDefaultObservation(observation) && isMemory(observation.payload)
+      ? observation.payload.entries.filter(({ speaker }) => speaker.kind === "tutor").map(({ text }) => text)
+      : [],
   );
+  return unusedAffordances(ctx).filter(({ documentUrl }) => !told.some((text) => text.includes(documentUrl)));
+}
+
+/** The always-loaded entry: what to recognize, so the tutor need not load the Skill to notice a workaround. */
+function recommenderEntry(affordances: readonly UnusedAffordance[]): string[] {
+  if (affordances.length === 0) return [];
   return [
-    `Available Common Concept affordances (effective use is checked outside the Session scope):\n${JSON.stringify(available)}`,
-    `Prior recommendations found in the Profile's recorded tutor conversation:\n${JSON.stringify([...mentioned])}`,
+    `Common Concept affordances this learner has not used or been told about (recommend-unused-affordances; raise when):\n${affordances.map(({ label, raiseWhen }) => `- ${label}: ${raiseWhen}`).join("\n")}`,
   ];
 }
 
-function chatSkills(ctx: ChatContext<DefaultState>) {
+function chatSkills(affordances: readonly UnusedAffordance[]) {
   return listSkills().map((meta) => ({
     ...meta,
     body:
       meta.name === "recommend-unused-affordances"
-        ? skillInvocation(meta.name, recommenderFacts(ctx))
+        ? skillInvocation(meta.name, [
+            `Unused, untold Common Concept affordances (use is checked across the Profile, not the Session's Nodes):\n${JSON.stringify(affordances)}`,
+          ])
         : skillBody(meta.name),
   }));
 }
@@ -126,6 +128,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
+  const affordances = recommendableAffordances(ctx);
   const prompt = [
     tutorSystemPrompt(),
     "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Retrieve the current interpretation before correcting it with `correct_interpretation` and current support. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
@@ -134,10 +137,11 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
       ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`
       : "This Session opened over no Nodes; attach the Nodes you work on.",
     ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
+    ...recommenderEntry(affordances),
   ].join("\n\n");
   return {
     prompt,
-    skills: chatSkills(ctx),
+    skills: chatSkills(affordances),
     tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
 }

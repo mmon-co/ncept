@@ -197,7 +197,7 @@ function isSpeaker(value: unknown): value is Speaker {
   );
 }
 
-function isMemory(value: unknown): value is Memory {
+export function isMemory(value: unknown): value is Memory {
   return (
     object(value) &&
     value.kind === "memory" &&

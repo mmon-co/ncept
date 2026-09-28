@@ -344,7 +344,9 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
     });
     return;
   }
-  if (input.kind !== "surface.close" || input.about.length === 0) return;
+  if (input.kind !== "surface.close") return;
+  // A Session over no Nodes still keeps its conversation: it is the record of what the tutor already said,
+  // such as an affordance aside, though no Node memory retrieves or interprets it.
   const transcript = yield* read.transcript(input.surface, input.span);
   if (transcript.turns.length > 0) {
     const memory = yield* write({
@@ -362,8 +364,10 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
         })),
       },
     });
-    const observations = yield* read.observations({});
-    yield* interpretSurfaceClose(input, transcript, memory, stateDefault(ctx.graph, observations, ctx.now), ctx);
+    if (input.about.length > 0) {
+      const observations = yield* read.observations({});
+      yield* interpretSurfaceClose(input, transcript, memory, stateDefault(ctx.graph, observations, ctx.now), ctx);
+    }
   }
   const current = stateDefault(ctx.graph, yield* read.observations({}), ctx.now);
   for (const node of new Set(input.about)) {
