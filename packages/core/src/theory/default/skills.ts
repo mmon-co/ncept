@@ -11,6 +11,7 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   planning: sources["planning/SKILL.md"],
   probing: sources["probing/SKILL.md"],
   realignment: sources["realignment/SKILL.md"],
+  "recommend-unused-affordances": sources["recommend-unused-affordances/SKILL.md"],
   "recording-review": sources["recording-review/SKILL.md"],
 };
 

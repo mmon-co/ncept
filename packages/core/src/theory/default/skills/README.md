@@ -1,8 +1,8 @@
 # Default theory Skill catalog
 
-Markdown is the authoring source for the eight Agent Skills-compatible entries and their shared procedures. `base.md` holds the always-loaded tutor instruction. Each `<name>/SKILL.md` declares its name, description, facet (`position`, `chart`, `advance`) and permitted entries (`learner`, `model`, `system`). `@procedures/<name>.md` includes are inlined into the delivered body.
+Markdown is the authoring source for the nine Agent Skills-compatible entries and their shared procedures. `base.md` holds the always-loaded tutor instruction. Each `<name>/SKILL.md` declares its name, description, facet (`position`, `chart`, `advance`) and permitted entries (`learner`, `model`, `system`). `@procedures/<name>.md` includes are inlined into the delivered body.
 
-`bun run build:skills` embeds the Markdown deterministically in `sources.ts`. `bun scripts/build-skills.ts --check` rejects stale embedded sources. Core imports only the generated strings, not files or raw-loader plugins. Regenerate the executable identity afterward with `bun scripts/default-implementation-digest.ts`; its `--check` validates the pin.
+`bun run build:skills` embeds the Markdown deterministically in `sources.ts`. `bun scripts/build-skills.ts --check` rejects stale embedded sources. Core imports only the generated strings, not files or raw-loader plugins. Regenerate the executable identity afterward with `bun scripts/default-implementation-digest.ts`; its `--check` validates the pin. The unused-affordance Skill adds its current candidates and remembered recommendations at each chat hook from the effective Profile state; that request-time context is not part of the static Skill release.
 
 `../skills.ts` returns catalog values. Entries without model permission are suggest-only and carry `disable-model-invocation: true` in bundles. System-only entries are absent from the tutor index; the host must omit them from model-mounted directories. The `facet` and `entry` facts also accompany each Skill in `chat.open` and `chat.turn`.
 

@@ -1,10 +1,105 @@
 import { renderSpeech } from "../speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
+import { lastMetadataContribution, NODE_LABEL_PROPERTY } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import { memoryDefault, type DefaultState } from "./state";
-import { listSkills, skillBody, tutorSystemPrompt } from "./skills";
+import { listSkills, skillBody, skillInvocation, tutorSystemPrompt } from "./skills";
 import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
+const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
+const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
+const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
+
+type UnusedAffordance = {
+  readonly node: string;
+  readonly label: string;
+  readonly raiseWhen: string;
+  readonly documentId: string;
+  readonly documentUrl: string;
+};
+
+function metadataValue(ctx: ChatContext<DefaultState>, node: string, property: string): unknown {
+  const candidates = ctx.graph.metadataSets.flatMap((set) => {
+    if (
+      !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
+      !(property in set.properties)
+    )
+      return [];
+    const source = ctx.graph.provenance.metadataProperties[set.id]?.[property]?.at(-1);
+    if (source === undefined) throw new Error(`Missing provenance for ${property} on ${node}`);
+    return [{ value: set.properties[property], source }];
+  });
+  return lastMetadataContribution(ctx.graph, candidates)?.value;
+}
+
+function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
+  const officialPatches = new Set(
+    ctx.graph.patchOrder.flatMap(({ identity }) =>
+      ctx.graph.patchMetadata[identity]?.properties[COMMON_CONCEPT_PATCH_PROPERTY] === true ? [identity] : [],
+    ),
+  );
+  return ctx.graph.nodes.flatMap(({ id }) => {
+    if (
+      !id.startsWith("node-mmon-") ||
+      !ctx.graph.provenance.nodes[id]?.some(({ patch }) => officialPatches.has(patch.identity))
+    )
+      return [];
+    const state = ctx.state.nodes[id];
+    const label = metadataValue(ctx, id, NODE_LABEL_PROPERTY);
+    const raiseWhen = metadataValue(ctx, id, RAISE_WHEN_PROPERTY);
+    const document = ctx.graph.materials.find(
+      (material) => material.playground === "document" && material.type === "markdown" && material.about.includes(id),
+    );
+    if (
+      state === undefined ||
+      state.featureUses.length !== 0 ||
+      typeof label !== "string" ||
+      label.trim() === "" ||
+      typeof raiseWhen !== "string" ||
+      raiseWhen.trim() === "" ||
+      document === undefined
+    )
+      return [];
+    return [
+      {
+        node: id,
+        label,
+        raiseWhen,
+        documentId: document.id,
+        documentUrl: `${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(document.id)}`,
+      },
+    ];
+  });
+}
+
+function recommenderFacts(ctx: ChatContext<DefaultState>): readonly string[] {
+  const available = unusedAffordances(ctx);
+  const mentioned = new Set(
+    available.flatMap(({ node, documentUrl }) =>
+      Object.values(ctx.state.memories).some(
+        (memory) =>
+          memory?.originals.some(({ speaker, text }) => speaker.kind === "tutor" && text.includes(documentUrl)) ===
+          true,
+      )
+        ? [node]
+        : [],
+    ),
+  );
+  return [
+    `Available Common Concept affordances (effective use is checked outside the Session scope):\n${JSON.stringify(available)}`,
+    `Prior recommendations found in the Profile's recorded tutor conversation:\n${JSON.stringify([...mentioned])}`,
+  ];
+}
+
+function chatSkills(ctx: ChatContext<DefaultState>) {
+  return listSkills().map((meta) => ({
+    ...meta,
+    body:
+      meta.name === "recommend-unused-affordances"
+        ? skillInvocation(meta.name, recommenderFacts(ctx))
+        : skillBody(meta.name),
+  }));
+}
 
 /** Preserve the existing scoped-memory prompt bound; the memory tool reads the rest. */
 const MEMORY_PREFETCH_LIMIT = 16 * 1024;
@@ -42,8 +137,8 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
   ].join("\n\n");
   return {
     prompt,
+    skills: chatSkills(ctx),
     tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
-    skills: listSkills().map((meta) => ({ ...meta, body: skillBody(meta.name) })),
   };
 }
 
