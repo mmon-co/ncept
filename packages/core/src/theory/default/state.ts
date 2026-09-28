@@ -33,6 +33,11 @@ export interface Demonstration {
   readonly task: string;
   readonly response: string;
 }
+/** An accepted operation, not a demonstration of every clause of a Node's criterion. */
+export interface FeatureUse {
+  readonly kind: "feature-use";
+  readonly operation: string;
+}
 export interface Claim {
   readonly kind: "claim";
   readonly statement: string;
@@ -81,6 +86,7 @@ export interface Interpretation {
 }
 export type DefaultPayload =
   | Demonstration
+  | FeatureUse
   | Claim
   | Retraction
   | Homing
@@ -151,6 +157,11 @@ export function isDemonstration(value: unknown): value is Demonstration {
     (value.grader === "mechanical" || value.grader === "tutor" || value.grader === "learner") &&
     typeof value.task === "string" &&
     typeof value.response === "string"
+  );
+}
+export function isFeatureUse(value: unknown): value is FeatureUse {
+  return (
+    object(value) && value.kind === "feature-use" && typeof value.operation === "string" && value.operation.length > 0
   );
 }
 export function isClaim(value: unknown): value is Claim {
@@ -244,6 +255,9 @@ function assertDefaultPayload(payload: unknown): void {
   switch (payload.kind) {
     case "demonstration":
       valid = isDemonstration(payload);
+      break;
+    case "feature-use":
+      valid = isFeatureUse(payload);
       break;
     case "claim":
       valid = isClaim(payload);
@@ -390,6 +404,8 @@ export const DEFAULT_PARAMETERS: DefaultParameters = {
 };
 
 export interface NodeState {
+  /** Effective operation receipts; these do not change competence labels or prerequisite coverage. */
+  readonly featureUses: readonly Observation<FeatureUse>[];
   readonly label: NodeLabel;
   readonly k: number;
   readonly window: number;
@@ -473,6 +489,7 @@ export function labelDefaultNode(input: {
   else if (covering.length > 0 || knows) label = "probably-known";
   else if (lastSuccess !== undefined && (stale || forgotten)) label = "suspect";
   return {
+    featureUses: [],
     label,
     k,
     window: parameters.window.size,
@@ -719,7 +736,15 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
         .filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays))
         .map((record) => ({ node, record })),
     );
-    nodes[id] = labelDefaultNode({ records: homed[id] ?? [], covering, at: now, parameters });
+    nodes[id] = {
+      ...labelDefaultNode({ records: homed[id] ?? [], covering, at: now, parameters }),
+      featureUses: observations.filter(
+        (observation): observation is Observation<FeatureUse> =>
+          isDefaultObservation(observation) &&
+          isFeatureUse(observation.payload) &&
+          observation.nodes?.includes(id) === true,
+      ),
+    };
     memories[id] = projectMemory(id, homed[id] ?? [], observations);
   }
   return {

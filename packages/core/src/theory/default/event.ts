@@ -273,6 +273,15 @@ export function* refinePendingHomes(ctx: Context<DefaultState>): Program<void> {
 
 /** The interpreter provides read-your-writes; persistence, atomicity and execution failures are the host's. */
 export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Program<void> {
+  if (input.kind === "feature.used") {
+    yield* write({
+      at: input.at,
+      about: [...input.about],
+      nodes: [...new Set(input.about)],
+      payload: { kind: "feature-use", operation: input.operation },
+    });
+    return;
+  }
   if (input.kind === "outcome") {
     const { payload } = input;
     if (!isRecallOutcome(payload) && !isQuizOutcome(payload) && !isAttemptOutcome(payload)) {

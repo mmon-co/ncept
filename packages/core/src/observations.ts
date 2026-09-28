@@ -57,6 +57,12 @@ export type PlatformEvent =
       readonly cites?: readonly ObservationId[];
       readonly payload: unknown;
     }
+  | {
+      readonly kind: "feature.used";
+      readonly operation: string;
+      readonly at: string;
+      readonly about: readonly NodeId[];
+    }
   | { readonly kind: "object.put"; readonly object: ObjectId; readonly meta: ObjectMeta; readonly surface?: SurfaceId }
   | {
       readonly kind: "patch.changed";
