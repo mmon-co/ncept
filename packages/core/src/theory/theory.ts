@@ -65,6 +65,8 @@ export type ChatContext<S> = Context<S> &
   Readonly<{
     surface: SurfaceId;
     about: readonly NodeId[];
+    /** Nodes used by unscoped default readings; omitted means the whole graph. Explicit scopes override this. */
+    unscopedNodes?: readonly NodeId[];
     /** Tutor text on the current conversation branch, before this turn; not recorded evidence. */
     tutorMessages?: readonly string[];
     missions?: readonly MissionContext[];

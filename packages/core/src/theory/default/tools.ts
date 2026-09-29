@@ -136,6 +136,13 @@ function nodesInScope(ctx: Ctx, scope?: readonly NodeId[]): readonly NodeId[] {
     .filter((id) => scope === undefined || scope.includes(id))
     .sort();
 }
+
+function readingNodes(ctx: Ctx, scope?: readonly NodeId[]): readonly NodeId[] {
+  const selected = nodesInScope(ctx, scope);
+  if (scope !== undefined || ctx.unscopedNodes === undefined) return selected;
+  const defaultScope = new Set(ctx.unscopedNodes);
+  return selected.filter((id) => defaultScope.has(id));
+}
 function missionFacts(ctx: Ctx, scope?: readonly NodeId[]) {
   const selected = new Set(nodesInScope(ctx, scope));
   return (ctx.missions ?? []).filter(({ nodes }) => scope === undefined || nodes.some((id) => selected.has(id)));
@@ -244,7 +251,7 @@ function scopedTool(
 export const defaultInstrumentTools: readonly DefaultTool[] = [
   scopedTool("frontier", "Reachable not-known Nodes, facts and citations; no ranking.", (ctx, scope) => {
     const frontier = defaultQueryTokens.frontier(ctx.state, ctx.graph);
-    return nodesInScope(ctx, scope)
+    return readingNodes(ctx, scope)
       .filter((id) => frontier.has(id))
       .map((id) => ({
         ...candidate(ctx, id),
@@ -315,12 +322,12 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     trail,
   ),
   scopedTool("coverage", "Nodes with no records.", (ctx, scope) =>
-    nodesInScope(ctx, scope)
+    readingNodes(ctx, scope)
       .filter((id) => defaultNodeState(ctx.state, id).records.length === 0)
       .map((id) => candidate(ctx, id)),
   ),
   scopedTool("probes", "Suspect and probably-known Nodes with coverage facts.", (ctx, scope) =>
-    nodesInScope(ctx, scope).flatMap((id) => {
+    readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
       return state.label === "suspect" || state.label === "probably-known"
         ? [{ ...candidate(ctx, id), coveredBy: state.coveredBy, stale: state.stale, rule: trail(ctx, id).rule }]

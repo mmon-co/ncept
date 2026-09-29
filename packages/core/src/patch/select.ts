@@ -2,7 +2,16 @@ import type { TagIndex } from "../theory/theory";
 import { isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
 import { materialKey, sameExactPatchRef } from "./model";
-import type { EdgeId, ExactPatchRef, GraphQuery, MetadataSetId, NodeId, ResolvedGraph, SelectedGraph } from "./model";
+import type {
+  EdgeId,
+  ExactPatchRef,
+  GraphQuery,
+  MetadataSetId,
+  NodeId,
+  PatchId,
+  ResolvedGraph,
+  SelectedGraph,
+} from "./model";
 
 interface Fragment {
   readonly nodes: Set<NodeId>;
@@ -304,6 +313,22 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       metadataProperties: metadataPropertyProvenance,
     },
   };
+}
+
+/** Nodes whose every structural contribution comes from one of the selected Patches. */
+export function nodesContributedOnlyBy(graph: ResolvedGraph, patches: ReadonlySet<PatchId>): ReadonlySet<NodeId> {
+  return new Set(
+    graph.nodes
+      .filter(({ id }) => {
+        const contributions = graph.provenance.nodes[id];
+        return (
+          contributions !== undefined &&
+          contributions.length > 0 &&
+          contributions.every(({ patch }) => patches.has(patch.identity))
+        );
+      })
+      .map(({ id }) => id),
+  );
 }
 
 /** Select a valid attributed subgraph through the restricted tag algebra. */
