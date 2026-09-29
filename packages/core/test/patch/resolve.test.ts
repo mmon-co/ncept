@@ -339,6 +339,7 @@ test("exact masks suppress only their targeted entity and metadata contributions
   ]);
 });
 
+// Also replays check 4 (ordinary-Patch strictness) in docs/attachments/layer-a-variant-over-a-newer-release-of-its-source/index.md.
 test("a stale exact mask reports the Patch whose delta must change", () => {
   const oldSource = based(ref("patch-source", "8"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
   const newSource = based(ref("patch-source", "9"), [], [{ kind: "add-node", node: { id: "node-shared" } }]);
