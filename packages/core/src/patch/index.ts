@@ -8,4 +8,5 @@ export * from "./project";
 export * from "./compile";
 export * from "./release";
 export * from "./view";
+export * from "./variants";
 export * from "./route";
