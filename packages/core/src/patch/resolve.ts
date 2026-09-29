@@ -1,3 +1,4 @@
+import { satisfies } from "semver";
 import { canonicalJson } from "../digest";
 import {
   discoveryTags,
@@ -124,7 +125,15 @@ function validateMaskTarget(
   const operation = source.delta.operations[mask.operationIndex];
   if (operation === undefined) staleMask(owner, mask, "the source operation does not exist");
 
-  const matches =
+  const matches = matchesMask(operation, mask);
+  if (!matches) staleMask(owner, mask, "the source operation contributes to a different entity");
+  if (mask.property === undefined) return;
+  if (operation.kind !== "add-metadata-set" || !Object.hasOwn(operation.metadataSet.properties, mask.property))
+    staleMask(owner, mask, "the source operation does not contribute that metadata property");
+}
+
+function matchesMask(operation: SemanticOperation, mask: ExactContributionMask): boolean {
+  return (
     (operation.kind === "add-node" && mask.entity.kind === "node" && operation.node.id === mask.entity.id) ||
     (operation.kind === "add-edge" && mask.entity.kind === "edge" && operation.edge.id === mask.entity.id) ||
     (operation.kind === "add-metadata-set" &&
@@ -135,11 +144,8 @@ function validateMaskTarget(
       materialKey(operation.material) === materialKey(mask.entity)) ||
     (operation.kind === "remove-material" &&
       mask.entity.kind === "material" &&
-      materialKey(operation) === materialKey(mask.entity));
-  if (!matches) staleMask(owner, mask, "the source operation contributes to a different entity");
-  if (mask.property === undefined) return;
-  if (operation.kind !== "add-metadata-set" || !Object.hasOwn(operation.metadataSet.properties, mask.property))
-    staleMask(owner, mask, "the source operation does not contribute that metadata property");
+      materialKey(operation) === materialKey(mask.entity))
+  );
 }
 
 function registerMask(
@@ -157,6 +163,131 @@ function registerMask(
   maskedProperties.add(maskedPropertyKey(mask.source, mask.operationIndex, mask.property));
 }
 
+export interface VariantResolution {
+  readonly graph: ResolvedGraph;
+  /** Original authored masks, suitable for a translator's to-do list. */
+  readonly staleMasks: readonly ExactContributionMask[];
+}
+
+function contributedValue(operation: SemanticOperation, mask: ExactContributionMask): unknown {
+  if (operation.kind === "add-metadata-set") {
+    if (mask.property === undefined) return operation.metadataSet;
+    const value = operation.metadataSet.properties[mask.property];
+    return value === undefined ? undefined : { subjects: operation.metadataSet.subjects, value };
+  }
+  if (operation.kind === "add-material" || operation.kind === "edit-material") return operation.material;
+  return operation;
+}
+
+/** Layer a variant's terminal Patch on a source release. The host supplies that release's
+ * version: release names are not part of content identity. `variant-of` is `<PatchId>@<range>`.
+ * Outside the claim's range (or without a claim), return the source unchanged.
+ * Both bundles retain their authored exact closures; neither is mutated. */
+export function resolveVariantBundle(
+  source: ClosedPatchBundle,
+  variant: ClosedPatchBundle,
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+): VariantResolution {
+  const sourceGraph = resolvePatchBundle(source, availablePlaygrounds);
+  const owner = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, variant.terminal));
+  if (!owner) throw new PatchCompileError("invalid-bundle", "terminal variant Patch revision is missing");
+  const claim = owner.metadata.properties["variant-of"];
+  const prefix = `${source.terminal.identity}@`;
+  if (typeof claim !== "string" || !claim.startsWith(prefix) || !satisfies(sourceVersion, claim.slice(prefix.length)))
+    return { graph: sourceGraph, staleMasks: [] };
+
+  const base = owner.bases.find(({ identity }) => identity === source.terminal.identity);
+  if (!base) throw new PatchCompileError("invalid-bundle", "variant-of must name a direct base");
+  const oldGraph = resolvePatchBundle(variant, availablePlaygrounds);
+  if (sameExactPatchRef(base, source.terminal)) return { graph: oldGraph, staleMasks: [] };
+  const original = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, base));
+  const current = source.revisions.find(({ ref }) => sameExactPatchRef(ref, source.terminal));
+  if (!original || !current) throw new PatchCompileError("invalid-bundle", "variant source revision is missing");
+
+  const staleMasks: ExactContributionMask[] = [];
+  const operations = new Map<number, SemanticOperation | null>();
+  owner.delta.operations.forEach((operation, index) => {
+    if (operation.kind !== "mask-contribution" || !sameExactPatchRef(operation.mask.source, base)) return;
+    const mask = operation.mask;
+    const old = original.delta.operations[mask.operationIndex];
+    if (!old) staleMask(owner.ref, mask, "the source operation does not exist");
+    const candidates = current.delta.operations
+      .map((value, operationIndex) => ({ value, operationIndex }))
+      .filter(({ value }) => matchesMask(value, mask) && contributedValue(value, mask) !== undefined);
+    const target = candidates.length === 1 ? candidates[0] : undefined;
+    const value = target && contributedValue(target.value, mask);
+    if (target && value !== undefined && canonicalJson(value) === canonicalJson(contributedValue(old, mask))) {
+      operations.set(index, {
+        kind: "mask-contribution",
+        mask: { ...mask, source: current.ref, operationIndex: target.operationIndex },
+      });
+    } else {
+      staleMasks.push(mask);
+      operations.set(index, null);
+    }
+  });
+
+  const currentNodes = new Set(sourceGraph.nodes.map(({ id }) => id));
+  const removedNodes = new Set(oldGraph.nodes.map(({ id }) => id).filter((id) => !currentNodes.has(id)));
+  // Nodes authored by the variant itself are not removed source Nodes.
+  for (const operation of owner.delta.operations)
+    if (operation.kind === "add-node") removedNodes.delete(operation.node.id);
+  owner.delta.operations.forEach((originalOperation, index) => {
+    if (originalOperation.kind === "mask-contribution") return;
+    let operation = originalOperation;
+    const about =
+      operation.kind === "add-metadata-set"
+        ? operation.metadataSet.subjects.filter((subject) => subject.kind === "node").map(({ id }) => id)
+        : operation.kind === "add-material" || operation.kind === "edit-material"
+          ? operation.material.about
+          : [];
+    if (about.some((id) => removedNodes.has(id))) {
+      operations.set(index, null);
+      return;
+    }
+    for (const mask of staleMasks) {
+      if (!matchesMask(operation, mask)) continue;
+      if (mask.property !== undefined && operation.kind === "add-metadata-set") {
+        const properties = { ...operation.metadataSet.properties };
+        delete properties[mask.property];
+        if (Object.keys(properties).length === 0) {
+          operations.set(index, null);
+          return;
+        }
+        operation = { ...operation, metadataSet: { ...operation.metadataSet, properties } };
+      } else {
+        operations.set(index, null);
+        return;
+      }
+    }
+    operations.set(index, operation);
+  });
+
+  const revisions = new Map(
+    [...variant.revisions, ...source.revisions].map((revision) => [exactPatchRefKey(revision.ref), revision]),
+  );
+  revisions.set(exactPatchRefKey(owner.ref), {
+    ...owner,
+    bases: owner.bases.map((ref) => (sameExactPatchRef(ref, base) ? source.terminal : ref)),
+  });
+  // Keep only the effective closure; the old release was comparison evidence, not a second source layer.
+  const closure = new Map<string, PatchRevision>();
+  const visit = (ref: ExactPatchRef): void => {
+    const key = exactPatchRefKey(ref);
+    if (closure.has(key)) return;
+    const revision = revisions.get(key);
+    if (!revision)
+      throw new PatchCompileError("unresolvable-dependency", `missing Patch ${ref.identity}@${ref.digest}`);
+    closure.set(key, revision);
+    revision.bases.forEach(visit);
+  };
+  visit(owner.ref);
+  return {
+    graph: resolveBundle({ terminal: owner.ref, revisions: [...closure.values()] }, availablePlaygrounds, operations),
+    staleMasks,
+  };
+}
 interface Contribution<Value> {
   readonly value: Value;
   readonly provenance: ContributionProvenance;
@@ -238,6 +369,14 @@ export function resolvePatchBundle(
   bundle: ClosedPatchBundle,
   availablePlaygrounds?: ReadonlySet<string>,
 ): ResolvedGraph {
+  return resolveBundle(bundle, availablePlaygrounds);
+}
+
+function resolveBundle(
+  bundle: ClosedPatchBundle,
+  availablePlaygrounds?: ReadonlySet<string>,
+  variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
+): ResolvedGraph {
   const ordered = orderRevisions(bundle);
   const orderedRevisions = ordered.revisions;
   const collection: ContributionCollection = {
@@ -255,9 +394,13 @@ export function resolvePatchBundle(
     validateMetadataProperties(revision.metadata.properties);
     for (const operation of revision.delta.operations)
       if (operation.kind === "add-metadata-set") validateMetadataProperties(operation.metadataSet.properties);
-    revision.delta.operations.forEach((operation, index) =>
-      collectOperation(revision.ref, operation, index, collection),
-    );
+    revision.delta.operations.forEach((original, index) => {
+      const operation =
+        sameExactPatchRef(revision.ref, bundle.terminal) && variantOperations?.has(index)
+          ? variantOperations.get(index)
+          : original;
+      if (operation) collectOperation(revision.ref, operation, index, collection);
+    });
     collection.appliedRevisions.set(exactPatchRefKey(revision.ref), revision);
   }
 
