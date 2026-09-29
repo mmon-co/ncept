@@ -7,7 +7,7 @@ import {
   type ResolvedGraph,
 } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
-import type { Tag, TheoryProjection } from "../theory";
+import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
 import { type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
@@ -182,6 +182,21 @@ export const defaultTags = [
 function indicatorTag(indicator: Indicator): Tag {
   return { tag: indicator.kind, caption: indicator.message, cites: indicator.citations };
 }
+function nodeProgressMessage(node: NodeState): MessageDescriptor {
+  const hasSuccess = node.lastSuccess !== undefined;
+  return {
+    id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
+    defaultMessage: hasSuccess
+      ? "{demonstrated} of {window}, last success {lastSuccess}; aided practice {aidedPractice}"
+      : "{demonstrated} of {window}, last success none; aided practice {aidedPractice}",
+    values: {
+      demonstrated: node.k,
+      window: node.window,
+      aidedPractice: node.aidedPractice,
+      ...(node.lastSuccess === undefined ? {} : { lastSuccess: node.lastSuccess }),
+    },
+  };
+}
 
 /**
  * The graph-wide facts — query token membership and indicators — are computed once here and then
@@ -213,6 +228,7 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
       {
         tag: node.label,
         caption: `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`,
+        message: nodeProgressMessage(node),
         cites: node.citations,
       },
       ...selected.flatMap(([tag, members]) =>

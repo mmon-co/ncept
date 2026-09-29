@@ -9,7 +9,8 @@
     "./observations": "./src/observations.ts",
     "./theory": "./src/theory/index.ts",
     "./theory/speaker": "./src/theory/speaker.ts",
-    "./theory/default": "./src/theory/default/index.ts"
+    "./theory/default": "./src/theory/default/index.ts",
+    "./theory/default/messages": "./src/theory/default/messages.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",

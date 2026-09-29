@@ -10,7 +10,19 @@ import type {
   TheoryRef,
 } from "../observations";
 
-export type Tag = Readonly<{ tag: string; caption?: string; cites?: readonly ObservationId[]; rank?: number }>;
+export type MessageDescriptor = Readonly<{
+  id: string;
+  defaultMessage: string;
+  values?: Readonly<Record<string, string | number>>;
+}>;
+export type Tag = Readonly<{
+  tag: string;
+  caption?: string;
+  /** Structured theory output for the Application to resolve in its active locale. */
+  message?: MessageDescriptor;
+  cites?: readonly ObservationId[];
+  rank?: number;
+}>;
 /** Which Nodes carry a tag. Membership only: the set is not ordered and callers own no part of it. */
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
 /** One graph-wide computation: every Node and Edge of the graph has an entry, empty where nothing applies. */

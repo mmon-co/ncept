@@ -27,6 +27,7 @@ export const defaultTheory = {
   event,
 } satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome; attempt: AttemptOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
+export * from "./messages";
 export * from "./state";
 export * from "./tags";
 export * from "./outcomes";
