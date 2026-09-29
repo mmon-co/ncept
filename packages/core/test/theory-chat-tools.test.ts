@@ -328,3 +328,26 @@ test("chat prefetch preserves memory sources and the existing 16KiB cap", () => 
     entries: [{ text: "x".repeat(20_000) }],
   });
 });
+
+// Replay check 2 in docs/attachments/keep-the-application-patch-out-of-the-learners-own-planning/index.md
+// at Core's public tool boundary; the host supplies the learner's unscoped Nodes.
+test("unscoped readings leave excluded Nodes reachable through an explicit scope", () => {
+  const independent = { ...graph, edges: [] };
+  const attachment: Observation = {
+    id: "obs-attach",
+    at: now,
+    by: DEFAULT_THEORY_REF,
+    payload: { kind: "homing", of: claim.id, homes: ["node-a", "node-b"], revision: ref },
+  };
+  for (const name of ["frontier", "coverage", "probes"]) {
+    const observations = name === "probes" ? [claim, attachment] : [];
+    const ctx = { ...context(), graph: independent, state: stateDefault(independent, observations, now) };
+    const read = (scope: readonly string[] | undefined, unscopedNodes?: readonly ("node-a" | "node-b")[]) =>
+      pure(tool(name).run(scope === undefined ? {} : { scope }, { ...ctx, unscopedNodes }));
+    expect(read(undefined)).toMatchObject([{ node: "node-a" }, { node: "node-b" }]);
+    expect(read(undefined, ["node-b"])).toMatchObject([{ node: "node-b" }]);
+    expect(read(["node-a"], ["node-b"])).toMatchObject([{ node: "node-a" }]);
+    expect(read(undefined, [])).toEqual([]);
+    expect(read([], ["node-b"])).toEqual([]);
+  }
+});

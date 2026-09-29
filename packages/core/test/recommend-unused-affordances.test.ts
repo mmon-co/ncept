@@ -95,7 +95,17 @@ function turn(
 ) {
   const g = graph();
   const setup = pure(
-    chat.turn({ graph: g, now, state: stateDefault(g, observations, now), surface: "surface-s", about, tutorMessages }),
+    // Unscoped learner readings must not restrict the recommender's own inventory
+    // (planning isolation packet, check 2).
+    chat.turn({
+      graph: g,
+      now,
+      state: stateDefault(g, observations, now),
+      surface: "surface-s",
+      about,
+      tutorMessages,
+      unscopedNodes: ["node-fractions"],
+    }),
   );
   const skill = setup.skills.find(({ name }) => name === "recommend-unused-affordances");
   if (skill === undefined) throw new Error("recommender Skill missing");

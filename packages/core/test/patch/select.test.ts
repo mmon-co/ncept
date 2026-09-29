@@ -5,6 +5,7 @@ import {
   type View,
   parseGraphQuery,
   resolvePatchBundle,
+  nodesContributedOnlyBy,
   selectGraph,
   type GraphQuery,
   type PatchRevision,
@@ -92,6 +93,19 @@ function selectedIds(query: GraphQuery) {
   };
 }
 
+// Check 2's shared-Node expectation in
+// docs/attachments/keep-the-application-patch-out-of-the-learners-own-planning/index.md.
+test("only exclusive structural contributions are excluded, not Nodes shared with another Patch", () => {
+  const learner: PatchRevision = {
+    ...revision,
+    ref: { identity: "patch-learner", digest: `sha256:${"b".repeat(64)}` },
+    bases: [revision.ref],
+    delta: { operations: [{ kind: "add-node", node: { id: "node-c" } }] },
+  };
+  const shared = resolvePatchBundle({ terminal: learner.ref, revisions: [revision, learner] });
+  expect([...nodesContributedOnlyBy(shared, new Set([revision.ref.identity]))]).toEqual(["node-a", "node-b"]);
+  expect(selectGraph(shared).nodes.map(({ id }) => id)).toEqual(["node-a", "node-b", "node-c"]);
+});
 test("tag fragments compose component-wise and normalize dangling topology", () => {
   expect(selectedIds({ union: [{ tag: "left" }, { tag: "right" }] })).toEqual({
     nodes: ["node-a", "node-b", "node-c"],
