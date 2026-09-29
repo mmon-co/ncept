@@ -1,4 +1,4 @@
-import { satisfies } from "semver";
+import { satisfies, tryParse, tryParseRange } from "std-semver";
 import { canonicalJson } from "../digest";
 import {
   discoveryTags,
@@ -194,8 +194,10 @@ export function resolveVariantBundle(
   if (!owner) throw new PatchCompileError("invalid-bundle", "terminal variant Patch revision is missing");
   const claim = owner.metadata.properties["patch:variant-of"];
   const prefix = `${source.terminal.identity}@`;
-  if (typeof claim !== "string" || !claim.startsWith(prefix) || !satisfies(sourceVersion, claim.slice(prefix.length)))
-    return { graph: sourceGraph, staleMasks: [] };
+  if (typeof claim !== "string" || !claim.startsWith(prefix)) return { graph: sourceGraph, staleMasks: [] };
+  const version = tryParse(sourceVersion);
+  const range = tryParseRange(claim.slice(prefix.length));
+  if (!version || !range || !satisfies(version, range)) return { graph: sourceGraph, staleMasks: [] };
 
   const base = owner.bases.find(({ identity }) => identity === source.terminal.identity);
   if (!base) throw new PatchCompileError("invalid-bundle", "patch:variant-of must name a direct base");
