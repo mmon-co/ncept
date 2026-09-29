@@ -180,7 +180,7 @@ function contributedValue(operation: SemanticOperation, mask: ExactContributionM
 }
 
 /** Layer a variant's terminal Patch on a source release. The host supplies that release's
- * version: release names are not part of content identity. `variant-of` is `<PatchId>@<range>`.
+ * version: release names are not part of content identity. `patch:variant-of` is `<PatchId>@<range>`.
  * Outside the claim's range (or without a claim), return the source unchanged.
  * Both bundles retain their authored exact closures; neither is mutated. */
 export function resolveVariantBundle(
@@ -192,13 +192,13 @@ export function resolveVariantBundle(
   const sourceGraph = resolvePatchBundle(source, availablePlaygrounds);
   const owner = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, variant.terminal));
   if (!owner) throw new PatchCompileError("invalid-bundle", "terminal variant Patch revision is missing");
-  const claim = owner.metadata.properties["variant-of"];
+  const claim = owner.metadata.properties["patch:variant-of"];
   const prefix = `${source.terminal.identity}@`;
   if (typeof claim !== "string" || !claim.startsWith(prefix) || !satisfies(sourceVersion, claim.slice(prefix.length)))
     return { graph: sourceGraph, staleMasks: [] };
 
   const base = owner.bases.find(({ identity }) => identity === source.terminal.identity);
-  if (!base) throw new PatchCompileError("invalid-bundle", "variant-of must name a direct base");
+  if (!base) throw new PatchCompileError("invalid-bundle", "patch:variant-of must name a direct base");
   const oldGraph = resolvePatchBundle(variant, availablePlaygrounds);
   if (sameExactPatchRef(base, source.terminal)) return { graph: oldGraph, staleMasks: [] };
   const original = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, base));
