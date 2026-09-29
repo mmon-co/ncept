@@ -358,26 +358,35 @@ function composeVariantLayer(
   };
 }
 
-/** Read an adopted Notebook with its confirmed variants layered in their adoption order. */
+/** Read an adopted Notebook with its confirmed variants layered in their adoption order.
+ * A layer that does not compile over its source gives way whole: its learners read the source
+ * release rather than losing the graph to one variant's authoring error. */
 export function resolvePatchBundleWithVariants(
   notebook: ClosedPatchBundle,
   layers: readonly PatchVariantLayer[],
   availablePlaygrounds?: ReadonlySet<string>,
 ): VariantResolution {
   let projected = notebook;
+  let graph = resolvePatchBundle(notebook, availablePlaygrounds);
   const staleMasks: ExactContributionMask[] = [];
   for (const layer of layers) {
-    const composed = composeVariantLayer(
-      projected,
-      layer.source,
-      layer.variant,
-      layer.sourceVersion,
-      availablePlaygrounds,
-    );
-    projected = composed.bundle;
-    staleMasks.push(...composed.staleMasks);
+    try {
+      const composed = composeVariantLayer(
+        projected,
+        layer.source,
+        layer.variant,
+        layer.sourceVersion,
+        availablePlaygrounds,
+      );
+      if (composed.bundle === projected) continue;
+      graph = resolvePatchBundle(composed.bundle, availablePlaygrounds);
+      projected = composed.bundle;
+      staleMasks.push(...composed.staleMasks);
+    } catch (error) {
+      if (!(error instanceof PatchCompileError)) throw error;
+    }
   }
-  return { graph: resolvePatchBundle(projected, availablePlaygrounds), staleMasks };
+  return { graph, staleMasks };
 }
 
 /** Resolve one adopted source's read-time variant. */
