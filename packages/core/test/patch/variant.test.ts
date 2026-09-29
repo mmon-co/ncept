@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
 import { variantLayerFixture } from "../../../../docs/attachments/variant-layer/try";
 import { attachmentDigest } from "../../src/digest";
-import { materialKey, resolveVariantBundle } from "../../src/patch";
+import {
+  bundleForRevision,
+  candidateRevision,
+  emptyPatch,
+  materialKey,
+  resolvePatchBundleWithVariant,
+  resolveVariantBundle,
+  revisionContent,
+} from "../../src/patch";
 
 // Replays checks 1–3 in docs/attachments/layer-a-variant-over-a-newer-release-of-its-source/index.md.
 for (const [version, remove] of [
@@ -53,3 +61,23 @@ for (const [version, remove] of [
     }
   });
 }
+test("a read-time variant overlays a Notebook base without replacing its terminal", () => {
+  const { current, sourceBundle, variantBundle } = variantLayerFixture();
+  const notebook = candidateRevision("patch-notebook", { ...emptyPatch(), bases: [current.ref] });
+  const contents = new Map(sourceBundle.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]));
+  contents.set(notebook.ref.digest, revisionContent(notebook));
+  const notebookBundle = bundleForRevision(notebook.ref, contents);
+  const original = structuredClone(notebookBundle);
+
+  const { graph, staleMasks } = resolvePatchBundleWithVariant(notebookBundle, sourceBundle, variantBundle, "1.6.0");
+
+  expect(graph.terminal.identity).toBe(notebook.ref.identity);
+  expect(graph.terminal).not.toEqual(notebook.ref);
+  expect(graph.metadataSets.find(({ id }) => id === "metadata-a")?.properties["display:label"]).toBe("甲");
+  expect(graph.metadataSets.find(({ id }) => id === "metadata-b")?.properties["display:label"]).toBe("Beta revised");
+  expect(graph.materials.find(({ id }) => id === "lesson")?.content.hash).toBe(
+    attachmentDigest(new TextEncoder().encode("译文")),
+  );
+  expect(staleMasks).toHaveLength(1);
+  expect(notebookBundle).toEqual(original);
+});

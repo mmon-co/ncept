@@ -1,5 +1,6 @@
 import { satisfies, tryParse, tryParseRange } from "std-semver";
 import { canonicalJson } from "../digest";
+import { candidateRevision } from "./release";
 import {
   discoveryTags,
   isAttachment,
@@ -179,30 +180,26 @@ function contributedValue(operation: SemanticOperation, mask: ExactContributionM
   return operation;
 }
 
-/** Layer a variant's terminal Patch on a source release. The host supplies that release's
- * version: release names are not part of content identity. `patch:variant-of` is `<PatchId>@<range>`.
- * Outside the claim's range (or without a claim), return the source unchanged.
- * Both bundles retain their authored exact closures; neither is mutated. */
-export function resolveVariantBundle(
+function variantOverlayBundle(
   source: ClosedPatchBundle,
   variant: ClosedPatchBundle,
   sourceVersion: string,
   availablePlaygrounds?: ReadonlySet<string>,
-): VariantResolution {
+): { readonly bundle: ClosedPatchBundle; readonly staleMasks: ExactContributionMask[]; readonly applied: boolean } {
   const sourceGraph = resolvePatchBundle(source, availablePlaygrounds);
   const owner = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, variant.terminal));
   if (!owner) throw new PatchCompileError("invalid-bundle", "terminal variant Patch revision is missing");
   const claim = owner.metadata.properties["patch:variant-of"];
   const prefix = `${source.terminal.identity}@`;
-  if (typeof claim !== "string" || !claim.startsWith(prefix)) return { graph: sourceGraph, staleMasks: [] };
+  if (typeof claim !== "string" || !claim.startsWith(prefix)) return { bundle: source, staleMasks: [], applied: false };
   const version = tryParse(sourceVersion);
   const range = tryParseRange(claim.slice(prefix.length));
-  if (!version || !range || !satisfies(version, range)) return { graph: sourceGraph, staleMasks: [] };
+  if (!version || !range || !satisfies(version, range)) return { bundle: source, staleMasks: [], applied: false };
 
   const base = owner.bases.find(({ identity }) => identity === source.terminal.identity);
   if (!base) throw new PatchCompileError("invalid-bundle", "patch:variant-of must name a direct base");
   const oldGraph = resolvePatchBundle(variant, availablePlaygrounds);
-  if (sameExactPatchRef(base, source.terminal)) return { graph: oldGraph, staleMasks: [] };
+  if (sameExactPatchRef(base, source.terminal)) return { bundle: variant, staleMasks: [], applied: true };
   const original = variant.revisions.find(({ ref }) => sameExactPatchRef(ref, base));
   const current = source.revisions.find(({ ref }) => sameExactPatchRef(ref, source.terminal));
   if (!original || !current) throw new PatchCompileError("invalid-bundle", "variant source revision is missing");
@@ -272,8 +269,15 @@ export function resolveVariantBundle(
   revisions.set(exactPatchRefKey(owner.ref), {
     ...owner,
     bases: owner.bases.map((ref) => (sameExactPatchRef(ref, base) ? source.terminal : ref)),
+    delta: {
+      ...owner.delta,
+      operations: owner.delta.operations.flatMap((operation, index) => {
+        if (!operations.has(index)) return [operation];
+        const replacement = operations.get(index);
+        return replacement === null || replacement === undefined ? [] : [replacement];
+      }),
+    },
   });
-  // Keep only the effective closure; the old release was comparison evidence, not a second source layer.
   const closure = new Map<string, PatchRevision>();
   const visit = (ref: ExactPatchRef): void => {
     const key = exactPatchRefKey(ref);
@@ -286,9 +290,105 @@ export function resolveVariantBundle(
   };
   visit(owner.ref);
   return {
-    graph: resolveBundle({ terminal: owner.ref, revisions: [...closure.values()] }, availablePlaygrounds, operations),
+    bundle: { terminal: owner.ref, revisions: [...closure.values()] },
     staleMasks,
+    applied: true,
   };
+}
+
+/** Layer a variant's terminal Patch on a source release. The host supplies that release's
+ * version: release names are not part of content identity. `patch:variant-of` is `<PatchId>@<range>`.
+ * Outside the claim's range (or without a claim), return the source unchanged. */
+export function resolveVariantBundle(
+  source: ClosedPatchBundle,
+  variant: ClosedPatchBundle,
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+): VariantResolution {
+  const layer = variantOverlayBundle(source, variant, sourceVersion, availablePlaygrounds);
+  return {
+    graph: resolvePatchBundle(layer.applied ? layer.bundle : source, availablePlaygrounds),
+    staleMasks: layer.staleMasks,
+  };
+}
+
+/** One confirmed variant layer the host selected for the source release currently in scope. */
+export interface PatchVariantLayer {
+  readonly source: ClosedPatchBundle;
+  readonly variant: ClosedPatchBundle;
+  readonly sourceVersion: string;
+}
+
+function composeVariantLayer(
+  notebook: ClosedPatchBundle,
+  source: ClosedPatchBundle,
+  variant: ClosedPatchBundle,
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+): { readonly bundle: ClosedPatchBundle; readonly staleMasks: ExactContributionMask[] } {
+  const layer = variantOverlayBundle(source, variant, sourceVersion, availablePlaygrounds);
+  if (!layer.applied) return { bundle: notebook, staleMasks: [] };
+  const terminal = notebook.revisions.find(({ ref }) => sameExactPatchRef(ref, notebook.terminal));
+  if (!terminal) throw new PatchCompileError("invalid-bundle", "Notebook terminal revision is missing");
+  if (!terminal.bases.some((base) => sameExactPatchRef(base, source.terminal)))
+    throw new PatchCompileError("invalid-bundle", "adopted source is not a direct Notebook base");
+  const replacement = candidateRevision(terminal.ref.identity, {
+    bases: terminal.bases.map((base) => (sameExactPatchRef(base, source.terminal) ? layer.bundle.terminal : base)),
+    delta: terminal.delta,
+    metadata: terminal.metadata,
+  });
+  const revisions = new Map(
+    [...notebook.revisions, ...layer.bundle.revisions].map((revision) => [exactPatchRefKey(revision.ref), revision]),
+  );
+  revisions.set(exactPatchRefKey(replacement.ref), replacement);
+  const closure = new Map<string, PatchRevision>();
+  const visit = (ref: ExactPatchRef): void => {
+    const key = exactPatchRefKey(ref);
+    if (closure.has(key)) return;
+    const revision = revisions.get(key);
+    if (!revision)
+      throw new PatchCompileError("unresolvable-dependency", `missing Patch ${ref.identity}@${ref.digest}`);
+    closure.set(key, revision);
+    revision.bases.forEach(visit);
+  };
+  visit(replacement.ref);
+  return {
+    bundle: { terminal: replacement.ref, revisions: [...closure.values()] },
+    staleMasks: layer.staleMasks,
+  };
+}
+
+/** Read an adopted Notebook with its confirmed variants layered in their adoption order. */
+export function resolvePatchBundleWithVariants(
+  notebook: ClosedPatchBundle,
+  layers: readonly PatchVariantLayer[],
+  availablePlaygrounds?: ReadonlySet<string>,
+): VariantResolution {
+  let projected = notebook;
+  const staleMasks: ExactContributionMask[] = [];
+  for (const layer of layers) {
+    const composed = composeVariantLayer(
+      projected,
+      layer.source,
+      layer.variant,
+      layer.sourceVersion,
+      availablePlaygrounds,
+    );
+    projected = composed.bundle;
+    staleMasks.push(...composed.staleMasks);
+  }
+  return { graph: resolvePatchBundle(projected, availablePlaygrounds), staleMasks };
+}
+
+/** Resolve one adopted source's read-time variant. */
+export function resolvePatchBundleWithVariant(
+  notebook: ClosedPatchBundle,
+  source: ClosedPatchBundle,
+  variant: ClosedPatchBundle,
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+): VariantResolution {
+  return resolvePatchBundleWithVariants(notebook, [{ source, variant, sourceVersion }], availablePlaygrounds);
 }
 interface Contribution<Value> {
   readonly value: Value;
