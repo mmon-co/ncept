@@ -22,6 +22,7 @@ import {
   interpretationsDefault,
   isClaim,
   isDemonstration,
+  isTeaching,
   memoryDefault,
   stateDefault,
   DEFAULT_THEORY_REF,
@@ -411,6 +412,35 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
       nodesInScope(ctx, [node]);
       const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
       if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
+      const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
+      const id = yield* write(observation);
+      return { observation: { ...observation, id }, citations: [id] };
+    },
+  },
+  {
+    name: "record_teaching",
+    description: [
+      "Record one explicit teaching act for a scoped Node after you have actually explained its content to the learner, with a worked example or equivalent reasoning.",
+      "Do not call on Skill entry, scope, reading, practice, an unrelated explanation, or merely creating/opening a Material. For a Document, accepted presentation of its opened surface records the occurrence instead.",
+      "Copy a substantial passage of the explanation you just delivered, including its worked step; this is not competence evidence.",
+    ].join(" "),
+    schema: schema(
+      {
+        node: nodeProperty,
+        explanation: { type: "string", minLength: 40 },
+      },
+      ["node", "explanation"],
+    ),
+    *run(raw, ctx) {
+      const input = args(raw, ["node", "explanation"], ["node", "explanation"]);
+      const node = nodeId(input.node);
+      nodesInScope(ctx, [node]);
+      const payload = {
+        kind: "teaching",
+        node: { node, provenance: ctx.graph.terminal },
+        explanation: string(input.explanation),
+      };
+      if (!isTeaching(payload)) throw new Error("Teaching needs an actual explanation");
       const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
       const id = yield* write(observation);
       return { observation: { ...observation, id }, citations: [id] };

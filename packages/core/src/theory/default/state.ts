@@ -38,6 +38,12 @@ export interface FeatureUse {
   readonly kind: "feature-use";
   readonly operation: string;
 }
+/** An explicit teaching act, separate from competence evidence. */
+export interface Teaching {
+  readonly kind: "teaching";
+  readonly node: NodeRef;
+  readonly explanation: string;
+}
 export interface Claim {
   readonly kind: "claim";
   readonly statement: string;
@@ -87,6 +93,7 @@ export interface Interpretation {
 export type DefaultPayload =
   | Demonstration
   | FeatureUse
+  | Teaching
   | Claim
   | Retraction
   | Homing
@@ -162,6 +169,15 @@ export function isDemonstration(value: unknown): value is Demonstration {
 export function isFeatureUse(value: unknown): value is FeatureUse {
   return (
     object(value) && value.kind === "feature-use" && typeof value.operation === "string" && value.operation.length > 0
+  );
+}
+export function isTeaching(value: unknown): value is Teaching {
+  return (
+    object(value) &&
+    value.kind === "teaching" &&
+    isNodeRef(value.node) &&
+    typeof value.explanation === "string" &&
+    value.explanation.trim().length >= 40
   );
 }
 export function isClaim(value: unknown): value is Claim {
@@ -258,6 +274,9 @@ function assertDefaultPayload(payload: unknown): void {
       break;
     case "feature-use":
       valid = isFeatureUse(payload);
+      break;
+    case "teaching":
+      valid = isTeaching(payload);
       break;
     case "claim":
       valid = isClaim(payload);
