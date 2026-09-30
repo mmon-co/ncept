@@ -487,31 +487,25 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
         throw new Error("Correction requires a current interpretation in the selected Node scope");
       const interpretationNodes = target.nodes ?? [];
       const payload: Interpretation = { kind: "interpretation", text, tags };
-      const probe: Observation<Interpretation> = {
-        id: validationIdentity(supplied),
+      const observation = {
         at: ctx.now,
-        by: DEFAULT_THEORY_REF,
         about: [...ctx.about],
         nodes: interpretationNodes,
         cites: support,
         surface: target.surface,
         supersedes: target.id,
         payload,
+      } satisfies ObservationWrite<Interpretation>;
+      const probe: Observation<Interpretation> = {
+        ...observation,
+        id: validationIdentity(supplied),
+        by: DEFAULT_THEORY_REF,
       };
       const valid = stateDefault(ctx.graph, [...supplied, probe], ctx.now).interpretations.some(
         ({ id }) => id === probe.id,
       );
       if (!valid) throw new Error("Correction support must be current evidence related to the interpretation's Nodes");
 
-      const observation: ObservationWrite<Interpretation> = {
-        at: ctx.now,
-        about: [...ctx.about],
-        nodes: interpretationNodes,
-        cites: support,
-        surface: target.surface,
-        supersedes: target.id,
-        payload,
-      };
       const id = yield* write(observation);
       return { observation: { ...observation, id }, citations: [id, ...support] };
     },
