@@ -304,7 +304,15 @@ test("instruments preserve factual ordering, labels, citations, memory and missi
   ];
   const ctx: ChatContext<DefaultState> = {
     ...context(evidence),
-    missions: [{ id: "mission-a", statement: "Learn a and b", nodes: ["node-a", "node-b"], priority: 1 }],
+    missions: [
+      {
+        id: "mission-a",
+        change: "change-mission-a",
+        statement: "Learn a and b",
+        nodes: ["node-a", "node-b"],
+        priority: 1,
+      },
+    ],
     openSurfaces: [{ surface: "surface-other", about: ["node-b"] }],
   };
   const run = (name: string, args: unknown = {}) => pure(tool(name).run(args, ctx));

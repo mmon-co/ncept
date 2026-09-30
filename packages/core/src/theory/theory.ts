@@ -56,6 +56,8 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
  */
 export type MissionContext = Readonly<{
   id: string;
+  /** Effective current Mission revision; the tutor passes this value as `revises`. */
+  change: string;
   statement: string;
   shortName?: string;
   nodes: readonly NodeId[];

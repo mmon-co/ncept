@@ -362,7 +362,11 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       ],
     };
   }),
-  scopedTool("mission", "Effective Missions and their resolved View scopes.", missionFacts),
+  scopedTool(
+    "mission",
+    "Effective Missions, their current `change-*` revisions, and their resolved View scopes.",
+    missionFacts,
+  ),
   {
     name: "close_recount",
     description:
