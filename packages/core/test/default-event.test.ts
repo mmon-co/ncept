@@ -468,6 +468,66 @@ test("Attach a closing transcript span: every scoped Node gets verbatim text, to
   expect(unscoped.next([]).done).toBe(true);
 });
 
+// Independent drive checks 1–2: a two-Node close admits one cited reading and summarizes both
+// memory tails without replacing the original text or the reading's source identities.
+// docs/attachments/generalize-node-memory-to-source-backed-tagged-observations/independent-drive.md
+test("a two-Node reading retains its Record and 11 transcript turns beyond both memory summaries", () => {
+  const record = demonstration("obs-comparison-record");
+  const prior = memoryEntries(7);
+  const eleven: Transcript = {
+    ...transcript,
+    span: { from: "message-0", to: "message-10" },
+    turns: Array.from({ length: 11 }, (_, index) => ({
+      id: `message-${index}`,
+      speaker: index % 2 ? { kind: "tutor" as const } : { kind: "learner" as const },
+      at,
+      text: index === 0 ? "One of four equal parts is one quarter." : `Comparison turn ${index}`,
+    })),
+  };
+  const closeEvent = { ...close(["node-one", "node-two"]), span: eleven.span };
+  const source = [...prior, record];
+  const program = event(closeEvent, ctx(source));
+  expect(request(program)).toEqual({ kind: "read", select: { kind: "transcript", surface, span: eleven.span } });
+  const batchWrite = written(program, eleven);
+  const batch = observation("obs-comparison-batch", batchWrite);
+  expect(request(program, batch.id).kind).toBe("read");
+  const withBatch = [...source, batch];
+  expect(request(program, withBatch).kind).toBe("judge");
+  const readingWrite = written(program, {
+    interpretations: [
+      {
+        text: "A tentative comparison of fractions and decimals",
+        tags: ["memory-drive"],
+        nodes: ["node-one", "node-two"],
+        cites: [record.id, batch.id],
+      },
+    ],
+  });
+  const reading = observation("obs-comparison-reading", readingWrite);
+  expect(reading.cites).toEqual([batch.id, record.id]);
+  expect(reading.nodes).toEqual(["node-one", "node-two"]);
+  expect(request(program, reading.id).kind).toBe("read");
+  const withReading = [...withBatch, reading];
+  let summaryId: `obs-${string}` | undefined;
+  for (const node of ["node-one", "node-two"] as const) {
+    expect(request(program, summaryId ?? withReading).kind).toBe("judge");
+    const summaryWrite = written(program, `Summary of ${node}`);
+    summaryId = `obs-summary-${node}`;
+    withReading.push(observation(summaryId, summaryWrite));
+  }
+  expect(program.next(summaryId).done).toBe(true);
+  const projected = ctx(withReading).state;
+  expect(projected.records.map(({ id }) => id)).toContain(record.id);
+  expect(projected.interpretations.map(({ id }) => id)).toEqual([reading.id]);
+  for (const node of ["node-one", "node-two"] as const) {
+    const memory = projected.memories[node];
+    expect(memory?.entries[0]).toMatchObject({ kind: "summary", text: `Summary of ${node}` });
+    expect(memory?.originals.filter(({ observation }) => observation === batch.id).map(({ text }) => text)).toEqual(
+      eleven.turns.map(({ text }) => text),
+    );
+  }
+  expect(projected.interpretations[0]?.cites).toEqual([batch.id, record.id]);
+});
 test("Compact a long memory tail: below and at eight entries yield no judge; nine retains originals and original citations", () => {
   for (const count of [7, 8, 9]) {
     const entries = memoryEntries(count);

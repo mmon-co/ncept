@@ -103,6 +103,94 @@ test("every tool named by the default Skills is mounted", () => {
   expect(missing).toEqual([]);
 });
 
+// Independent drive check 3: a later Session corrects a two-Node reading, then asks by the
+// original conversation's surface and the same normalized tag; both original sources remain handles.
+// docs/attachments/generalize-node-memory-to-source-backed-tagged-observations/independent-drive.md
+test("a later Session's correction stays findable under the originating surface", () => {
+  const record = demonstration("obs-source-record", now);
+  const batch: Observation = {
+    id: "obs-source-batch",
+    at: now,
+    by: DEFAULT_THEORY_REF,
+    nodes: ["node-a", "node-b"],
+    surface: "surface-source",
+    payload: {
+      kind: "memory",
+      entries: [
+        {
+          speaker: { kind: "learner" },
+          text: "I compare fractions and decimals",
+          at: now,
+          source: { kind: "transcript", surface: "surface-source", from: "message-first", to: "message-last" },
+        },
+      ],
+    },
+  };
+  const original: Observation = {
+    id: "obs-source-reading",
+    at: now,
+    by: DEFAULT_THEORY_REF,
+    nodes: ["node-a", "node-b"],
+    surface: "surface-source",
+    cites: [batch.id],
+    payload: { kind: "interpretation", text: "A tentative comparison", tags: ["memory-drive"] },
+  };
+  const initial = [record, batch, original];
+  const reader = (observations: readonly Observation[]) => context(observations);
+  const find = (observations: readonly Observation[]) =>
+    pure(
+      tool("interpretations").run(
+        {
+          tag: " MEMORY-DRIVE ",
+          scope: ["node-a", "node-b"],
+          surface: "surface-source",
+        },
+        reader(observations),
+      ),
+    );
+  expect(find(initial)).toMatchObject([
+    {
+      id: original.id,
+      nodes: ["node-a", "node-b"],
+      sourceHandles: [{ kind: "transcript", surface: "surface-source", from: "message-first", to: "message-last" }],
+    },
+  ]);
+  const program = tool("correct_interpretation").run(
+    {
+      of: original.id,
+      text: "Only the fraction check was demonstrated",
+      tags: ["memory-drive"],
+      support: [record.id, batch.id],
+      scope: ["node-a", "node-b"],
+    },
+    { ...reader(initial), surface: "surface-later", about: ["node-a", "node-b"] },
+  );
+  expect(program.next().value).toEqual({ kind: "read", select: { kind: "observations" } });
+  const next = program.next(initial);
+  if (next.done || next.value.kind !== "write") throw new Error("Expected a correction write");
+  const correction: Observation = { ...next.value.observation, at: now, id: "obs-replacement", by: DEFAULT_THEORY_REF };
+  expect(program.next(correction.id).done).toBe(true);
+  expect(find([...initial, correction])).toMatchObject([
+    {
+      id: correction.id,
+      text: "Only the fraction check was demonstrated",
+      sourceHandles: [
+        { kind: "observation", observation: record.id },
+        { kind: "transcript", surface: "surface-source", from: "message-first", to: "message-last" },
+      ],
+    },
+  ]);
+  expect(find([...initial, correction])).toHaveLength(1);
+  const withdrawn: Observation = {
+    id: "obs-source-withdrawn",
+    at: now,
+    by: DEFAULT_THEORY_REF,
+    cites: [record.id],
+    payload: { kind: "retraction", of: record.id },
+  };
+  expect(find([...initial, correction, withdrawn])).toEqual([]);
+  expect([...initial, correction, withdrawn].map(({ id }) => id)).toContain(original.id);
+});
 test("record demonstration writes verbatim attempt with explicit time, source scope and attribution", () => {
   const ctx = context();
   const program = tool("record_demonstration").run(

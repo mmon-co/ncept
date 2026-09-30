@@ -494,7 +494,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
         about: [...ctx.about],
         nodes: interpretationNodes,
         cites: support,
-        surface: ctx.surface,
+        surface: target.surface,
         supersedes: target.id,
         payload,
       };
@@ -508,7 +508,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
         about: [...ctx.about],
         nodes: interpretationNodes,
         cites: support,
-        surface: ctx.surface,
+        surface: target.surface,
         supersedes: target.id,
         payload,
       };
