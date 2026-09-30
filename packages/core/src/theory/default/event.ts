@@ -1,6 +1,7 @@
 import { renderSpeech } from "../speaker";
 import {
   judge,
+  isObservationId,
   read,
   write,
   type ObservationId,
@@ -33,9 +34,6 @@ const MAX_INTERPRETATION_NODES = 8;
 
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isObservationId(value: unknown): value is ObservationId {
-  return typeof value === "string" && value.startsWith("obs-");
 }
 
 function excerpt(text: string): string {
