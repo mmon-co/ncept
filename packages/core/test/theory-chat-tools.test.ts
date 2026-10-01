@@ -229,6 +229,45 @@ test("record demonstration writes verbatim attempt with explicit time, source sc
   expect(state.nodes["node-b"]?.records[0]?.id).toBe("obs-written");
 });
 
+test("only record_retrieval_opener marks a demonstration as a lesson-opening retrieval", () => {
+  const input = {
+    node: "node-b",
+    outcome: "success",
+    unaided: true,
+    grader: "tutor",
+    task: "What does the last number word name when you count a set?",
+    response: "How many there are.",
+  };
+  const opener = written(tool("record_retrieval_opener").run(input, context()));
+  expect(opener).toEqual({
+    at: now,
+    about: ["node-a"],
+    nodes: ["node-b"],
+    surface: "surface-chat",
+    payload: {
+      ...input,
+      kind: "demonstration",
+      recording: "retrieval-opener",
+      node: { node: "node-b", provenance: ref },
+    },
+  });
+  expect(written(tool("record_demonstration").run(input, context())).payload).not.toHaveProperty("recording");
+  // The marker is not an argument a generic recording can carry, and the opener stays inside scope.
+  expect(() =>
+    tool("record_demonstration")
+      .run({ ...input, recording: "retrieval-opener" }, context())
+      .next(),
+  ).toThrow();
+  expect(() =>
+    tool("record_retrieval_opener")
+      .run({ ...input, node: "node-missing" }, context())
+      .next(),
+  ).toThrow();
+  // It is evidence of a demonstration like any other.
+  const state = stateDefault(graph, [{ ...opener, id: "obs-opener", at: now, by: DEFAULT_THEORY_REF }], now);
+  expect(state.nodes["node-b"]?.records[0]?.id).toBe("obs-opener");
+});
+
 test("record teaching writes a verbatim Node-anchored act, refuses a stub explanation, and gives no competence credit", () => {
   const explanation = "Touch each dot once while saying one, two, three, four; the last word names how many there are.";
   const observation = written(tool("record_teaching").run({ node: "node-b", explanation }, context()));
