@@ -229,6 +229,25 @@ test("record demonstration writes verbatim attempt with explicit time, source sc
   expect(state.nodes["node-b"]?.records[0]?.id).toBe("obs-written");
 });
 
+test("record teaching writes a verbatim Node-anchored act, refuses a stub explanation, and gives no competence credit", () => {
+  const explanation = "Touch each dot once while saying one, two, three, four; the last word names how many there are.";
+  const observation = written(tool("record_teaching").run({ node: "node-b", explanation }, context()));
+  expect(observation).toEqual({
+    at: now,
+    about: ["node-a"],
+    nodes: ["node-b"],
+    surface: "surface-chat",
+    payload: { kind: "teaching", node: { node: "node-b", provenance: ref }, explanation },
+  });
+  expect(() =>
+    tool("record_teaching").run({ node: "node-b", explanation: "Counting is easy." }, context()).next(),
+  ).toThrow();
+  expect(() => tool("record_teaching").run({ node: "node-missing", explanation }, context()).next()).toThrow();
+  const before = stateDefault(graph, [], now);
+  const after = stateDefault(graph, [{ ...observation, id: "obs-teaching", at: now, by: DEFAULT_THEORY_REF }], now);
+  expect(after.nodes).toEqual(before.nodes);
+});
+
 test("claim recording and content attachment write distinct citable observations, including explicit homelessness", () => {
   const recorded = tool("record_claim").run(
     { statement: " I know a ", prompt: "What do you know?", stance: "knows" },
