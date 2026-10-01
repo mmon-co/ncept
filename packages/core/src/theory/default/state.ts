@@ -32,7 +32,10 @@ export interface Demonstration {
   readonly grader: "mechanical" | "tutor" | "learner";
   readonly task: string;
   readonly response: string;
+  /** Set only by the explicit lesson-opening retrieval recording tool. */
+  readonly recording?: "retrieval-opener";
 }
+export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
 /** An accepted operation, not a demonstration of every clause of a Node's criterion. */
 export interface FeatureUse {
   readonly kind: "feature-use";
@@ -163,8 +166,12 @@ export function isDemonstration(value: unknown): value is Demonstration {
     typeof value.unaided === "boolean" &&
     (value.grader === "mechanical" || value.grader === "tutor" || value.grader === "learner") &&
     typeof value.task === "string" &&
-    typeof value.response === "string"
+    typeof value.response === "string" &&
+    (value.recording === undefined || value.recording === "retrieval-opener")
   );
+}
+export function isRetrievalOpenerDemonstration(value: unknown): value is RetrievalOpenerDemonstration {
+  return isDemonstration(value) && value.recording === "retrieval-opener";
 }
 export function isFeatureUse(value: unknown): value is FeatureUse {
   return (
