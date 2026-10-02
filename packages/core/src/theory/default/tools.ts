@@ -22,6 +22,7 @@ import {
   interpretationsDefault,
   isClaim,
   isDemonstration,
+  isRetrievalOpenerDemonstration,
   isTeaching,
   memoryDefault,
   stateDefault,
@@ -386,7 +387,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     name: "record_demonstration",
     description: [
       "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue or a skip is not one.",
-      "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor.",
+      "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
       "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
       "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
       "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
@@ -412,6 +413,41 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
       nodesInScope(ctx, [node]);
       const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
       if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
+      const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
+      const id = yield* write(observation);
+      return { observation: { ...observation, id }, citations: [id] };
+    },
+  },
+  {
+    name: "record_retrieval_opener",
+    description:
+      "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Quiz, Review, Material outcome, or generic demonstration.",
+    schema: schema(
+      {
+        node: nodeProperty,
+        outcome: { enum: ["success", "failure"] },
+        unaided: { type: "boolean" },
+        grader: { enum: ["mechanical", "tutor", "learner"] },
+        task: { type: "string" },
+        response: { type: "string" },
+      },
+      ["node", "outcome", "unaided", "grader", "task", "response"],
+    ),
+    *run(raw, ctx) {
+      const input = args(
+        raw,
+        ["node", "outcome", "unaided", "grader", "task", "response"],
+        ["node", "outcome", "unaided", "grader", "task", "response"],
+      );
+      const node = nodeId(input.node);
+      nodesInScope(ctx, [node]);
+      const payload = {
+        ...input,
+        kind: "demonstration",
+        recording: "retrieval-opener",
+        node: { node, provenance: ctx.graph.terminal },
+      };
+      if (!isRetrievalOpenerDemonstration(payload)) throw new Error("Invalid retrieval opener demonstration");
       const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
       const id = yield* write(observation);
       return { observation: { ...observation, id }, citations: [id] };
@@ -598,7 +634,7 @@ export const defaultBackgroundTools: readonly DefaultTool[] = [
 
 /** Keyed scoring retains the selected option's error verbatim; skips never call this. */
 export function keyedDemonstration(
-  input: Omit<Demonstration, "kind" | "grader" | "outcome" | "response"> & {
+  input: Omit<Demonstration, "kind" | "grader" | "outcome" | "response" | "recording"> & {
     readonly response: string;
     readonly option: { readonly correct: boolean; readonly error?: string };
   },
