@@ -189,11 +189,14 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
     defaultMessage: hasSuccess
       ? "{demonstrated} of {window}, last success {lastSuccess}; aided practice {aidedPractice}"
       : "{demonstrated} of {window}, last success none; aided practice {aidedPractice}",
+    remainderMessage: hasSuccess
+      ? "last success {lastSuccess}; aided practice {aidedPractice}"
+      : "last success none; aided practice {aidedPractice}",
     values: {
       demonstrated: node.k,
       window: node.window,
       aidedPractice: node.aidedPractice,
-      ...(node.lastSuccess === undefined ? {} : { lastSuccess: node.lastSuccess }),
+      ...(node.lastSuccess === undefined ? {} : { lastSuccess: { type: "date" as const, value: node.lastSuccess } }),
     },
   };
 }
