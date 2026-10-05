@@ -1,6 +1,6 @@
 import { renderSpeech } from "../speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
-import { lastMetadataContribution, NODE_LABEL_PROPERTY } from "../../patch";
+import { lastMetadataContribution, NODE_CRITERION_PROPERTY, NODE_LABEL_PROPERTY, type NodeId } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
@@ -10,11 +10,15 @@ const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
 const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
 
-type UnusedAffordance = {
-  readonly node: string;
+type ProductDocument = {
+  readonly node: NodeId;
   readonly label: string;
-  readonly raiseWhen: string;
+  readonly summary: string;
   readonly documentId: string;
+};
+
+type Recommendation = ProductDocument & {
+  readonly raiseWhen: string;
   readonly documentUrl: string;
 };
 
@@ -32,7 +36,7 @@ function metadataValue(ctx: ChatContext<DefaultState>, node: string, property: s
   return lastMetadataContribution(ctx.graph, candidates)?.value;
 }
 
-function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
+function officialDocuments(ctx: ChatContext<DefaultState>): ProductDocument[] {
   const officialPatches = new Set(
     ctx.graph.patchOrder.flatMap(({ identity }) =>
       ctx.graph.patchMetadata[identity]?.properties[COMMON_CONCEPT_PATCH_PROPERTY] === true ? [identity] : [],
@@ -44,19 +48,16 @@ function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
       !ctx.graph.provenance.nodes[id]?.some(({ patch }) => officialPatches.has(patch.identity))
     )
       return [];
-    const state = ctx.state.nodes[id];
     const label = metadataValue(ctx, id, NODE_LABEL_PROPERTY);
-    const raiseWhen = metadataValue(ctx, id, RAISE_WHEN_PROPERTY);
+    const summary = metadataValue(ctx, id, NODE_CRITERION_PROPERTY);
     const document = ctx.graph.materials.find(
       (material) => material.playground === "document" && material.type === "markdown" && material.about.includes(id),
     );
     if (
-      state === undefined ||
-      state.featureUses.length !== 0 ||
       typeof label !== "string" ||
       label.trim() === "" ||
-      typeof raiseWhen !== "string" ||
-      raiseWhen.trim() === "" ||
+      typeof summary !== "string" ||
+      summary.trim() === "" ||
       document === undefined
     )
       return [];
@@ -64,16 +65,18 @@ function unusedAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
       {
         node: id,
         label,
-        raiseWhen,
+        summary,
         documentId: document.id,
-        documentUrl: `${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(document.id)}`,
       },
     ];
   });
 }
 
 /** Exclude Document links already carried by tutor text, in this conversation or a closed Session. */
-function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAffordance[] {
+function recommendableAffordances(
+  ctx: ChatContext<DefaultState>,
+  documents: readonly ProductDocument[],
+): Recommendation[] {
   const told = [
     ...(ctx.tutorMessages ?? []),
     ...ctx.state.observations.flatMap((observation) =>
@@ -82,25 +85,30 @@ function recommendableAffordances(ctx: ChatContext<DefaultState>): UnusedAfforda
         : [],
     ),
   ];
-  return unusedAffordances(ctx).filter(({ documentUrl }) => !told.some((text) => text.includes(documentUrl)));
+  return documents.flatMap((document) => {
+    const state = ctx.state.nodes[document.node];
+    const raiseWhen = metadataValue(ctx, document.node, RAISE_WHEN_PROPERTY);
+    const documentUrl = `${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(document.documentId)}`;
+    if (
+      state === undefined ||
+      state.featureUses.length !== 0 ||
+      typeof raiseWhen !== "string" ||
+      raiseWhen.trim() === "" ||
+      told.some((text) => text.includes(documentUrl))
+    )
+      return [];
+    return [{ ...document, raiseWhen, documentUrl }];
+  });
 }
 
-/** The always-loaded entry: what to recognize, so the tutor need not load the Skill to notice a workaround. */
-function recommenderEntry(affordances: readonly UnusedAffordance[]): string[] {
-  if (affordances.length === 0) return [];
-  return [
-    "When the learner describes working around one of the affordances below, load `recommend-unused-affordances` before answering. Its Document-backed aside belongs in the same reply, alongside the learner's actual work. Do not merely acknowledge the workaround or treat it as a defect.",
-    `Common Concept affordances this learner has not used or been told about (recommend-unused-affordances; raise when):\n${affordances.map(({ label, raiseWhen }) => `- ${label}: ${raiseWhen}`).join("\n")}`,
-  ];
-}
-
-function chatSkills(affordances: readonly UnusedAffordance[]) {
+function chatSkills(documents: readonly ProductDocument[], recommendations: readonly Recommendation[]) {
   return listSkills().map((meta) => ({
     ...meta,
     body:
-      meta.name === "recommend-unused-affordances"
+      meta.name === "app-help"
         ? skillInvocation(meta.name, [
-            `Unused, untold Common Concept affordances (use is checked across the Profile, not the Session's Nodes):\n${JSON.stringify(affordances)}`,
+            `Official Common Concept Document index (reference mode; includes used and previously mentioned Nodes):\n${JSON.stringify(documents)}`,
+            `Eligible recommendation candidates (recommendation mode only; filtered by Profile-wide feature use and tutor mentions on this branch and closed Sessions):\n${JSON.stringify(recommendations)}`,
           ])
         : skillBody(meta.name),
   }));
@@ -131,7 +139,8 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
-  const affordances = recommendableAffordances(ctx);
+  const documents = officialDocuments(ctx);
+  const recommendations = recommendableAffordances(ctx, documents);
   const prompt = [
     tutorSystemPrompt(),
     "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Retrieve the current interpretation before correcting it with `correct_interpretation` and current support. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
@@ -140,11 +149,11 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
       ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`
       : "This Session opened over no Nodes; attach the Nodes you work on.",
     ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
-    ...recommenderEntry(affordances),
+    "For questions about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` first. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
     prompt,
-    skills: chatSkills(affordances),
+    skills: chatSkills(documents, recommendations),
     tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
 }
