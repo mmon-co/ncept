@@ -260,6 +260,6 @@ test("app-help stays in every Session when no recommendation is eligible", () =>
   const help = appHelp(opened);
   expect(help.recommendations).toEqual([]);
   expect(help.references.some(({ node }) => node === appearanceNode)).toBe(true);
-  expect(opened.prompt).toContain("load " + String.fromCharCode(96) + "app-help" + String.fromCharCode(96) + " first");
+  expect(opened.prompt).toContain("load " + String.fromCharCode(96) + "app-help" + String.fromCharCode(96) + " again");
   expect(opened.prompt).toContain("before reading the relevant Document");
 });

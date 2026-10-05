@@ -7,7 +7,7 @@ entry: [learner, model]
 
 # Application help
 
-Use this Skill when the learner asks how the application looks or behaves, how to do something in it, or whether something is a problem.
+Use this Skill when the learner asks how the application looks or behaves, how to do something in it, or whether something is a problem. Load it afresh on each such turn: the host recomputes the recommendation candidates for the current turn, and an earlier loaded body is stale.
 
 ## Reference mode
 
@@ -19,8 +19,8 @@ Distinguish expected behavior described by the Document from an actual defect. D
 
 ## Recommendation mode
 
-The host supplies a separate candidate list containing only official affordances with a `pedagogy:raise-when` cue, no effective feature-use receipt anywhere in the Profile, and no Document link in tutor text on the selected open branch or closed-Session tutor memory. A candidate includes its raise condition and exact `documentUrl`. Use this list only for an incidental recommendation when the learner describes a matching workaround; never infer a recommendation from the reference index.
+The host supplies a separate candidate list containing only official affordances with a `pedagogy:raise-when` cue, no effective feature-use receipt anywhere in the Profile, and no Document link in tutor text on the selected open branch or closed-Session tutor memory. A candidate includes its raise condition and exact `documentUrl`. Use this list as the sole authority for unsolicited recommendations when the learner describes a matching workaround; never infer a recommendation from the reference index or from a Document. Never suggest, direct the learner to, or repeat an action absent from the fresh candidate list, even if the reference index or Document describes it. A direct request for instructions about an operation is reference help, not an unsolicited recommendation.
 
-If a candidate closely matches, add one short aside to the answer already needed: name its current home, explain briefly why it helps, and link its Document using the supplied URL and affordance label. Keep the learner's actual work as the focus. If no candidate fits, say nothing.
+If a candidate closely matches, add one short aside to the answer already needed: name its current home, explain briefly why it helps, and link its Document as `[Document label](documentUrl)` using the supplied URL exactly. Keep the learner's actual work as the focus. If no candidate fits, say nothing.
 
 Never recommend an affordance whose use or prior recommendation filtered it out. In particular, reference-mode access to a used or previously mentioned Document does not make it eligible. Omit it silently: no recap, offer, announcement of omission or endorsement of the workaround. Do not require a replacement affordance. An explicit request for help with a used or previously mentioned affordance is reference help, not permission to recommend it again.

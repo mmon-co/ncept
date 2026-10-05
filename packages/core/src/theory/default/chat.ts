@@ -149,7 +149,7 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
       ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`
       : "This Session opened over no Nodes; attach the Nodes you work on.",
     ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
-    "For questions about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` first. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
+    "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
     prompt,
