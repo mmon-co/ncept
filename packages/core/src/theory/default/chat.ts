@@ -145,14 +145,16 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
     tutorSystemPrompt(),
     "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Retrieve the current interpretation before correcting it with `correct_interpretation` and current support. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
     "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations. Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
-    ctx.about.length
-      ? `This Session opened over ${ctx.about.join(", ")}. Node memory at open (other Sessions' spans and Records; read memory(node) for what changed since):\n\n${scopedMemory(ctx) || "(none)"}`
-      : "This Session opened over no Nodes; attach the Nodes you work on.",
-    ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
     "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
     prompt,
+    context: [
+      ctx.about.length
+        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; read memory(node) for more):\n\n${scopedMemory(ctx) || "(none)"}`
+        : "This Session is attached to no Nodes; attach the Nodes you work on.",
+      ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
+    ].join("\n\n"),
     skills: chatSkills(documents, recommendations),
     tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
