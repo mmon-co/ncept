@@ -79,6 +79,11 @@ export interface AttemptOutcome {
       }
     | { readonly format: "short"; readonly accepted: readonly string[] }
     | { readonly format: "open"; readonly by: "tutor" | "learner"; readonly rubric?: string; readonly model?: string }
+    | {
+        readonly format: "expectations";
+        /** Ideas a full answer covers, each evidence about its own Nodes; together they are the Problem's `about`. */
+        readonly expectations: readonly { id: string; about: readonly NodeId[]; criterion: string }[];
+      }
   );
   /** A choice option id, or the literal short/open text. */
   readonly response: string;
@@ -86,6 +91,8 @@ export interface AttemptOutcome {
     readonly correct: boolean;
     readonly grader: "mechanical" | "tutor" | "learner";
     readonly feedback?: string;
+    /** The expectations met by the response the learner declared their best. */
+    readonly met?: readonly string[];
   };
   readonly revision: ExactPatchRef;
 }
@@ -143,6 +150,35 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
         (problem.rubric !== undefined || problem.model !== undefined) &&
         assessment.grader === problem.by
       );
+    case "expectations": {
+      const expectations: unknown = problem.expectations;
+      const met: unknown = assessment.met;
+      const about = new Set<unknown>(Array.isArray(problem.about) ? problem.about : []);
+      if (
+        !Array.isArray(expectations) ||
+        expectations.length === 0 ||
+        !expectations.every(
+          (e: unknown) =>
+            object(e) &&
+            text(e.id) &&
+            text(e.criterion) &&
+            Array.isArray(e.about) &&
+            e.about.length > 0 &&
+            e.about.every((node: unknown) => nodeId(node) && about.has(node)),
+        )
+      )
+        return false;
+      const ids = expectations.map(({ id }: { id: string }) => id);
+      const covered = new Set(expectations.flatMap(({ about }: { about: string[] }) => about));
+      return (
+        new Set(ids).size === ids.length &&
+        covered.size === problem.about.length &&
+        assessment.grader === "tutor" &&
+        Array.isArray(met) &&
+        met.every((id: unknown) => typeof id === "string" && ids.includes(id)) &&
+        assessment.correct === (new Set(met).size === ids.length)
+      );
+    }
     default:
       return false;
   }
@@ -246,6 +282,22 @@ export interface OriginalAttempt {
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
   const { problem, response, assessment } = outcome;
+  // One response, one demonstration per expectation Node: met is success, unmet after the learner's best is failure.
+  if (problem.format === "expectations")
+    return problem.expectations.flatMap(({ id, about, criterion }) =>
+      about.map((node) => ({
+        at,
+        payload: {
+          kind: "demonstration" as const,
+          node: { node, provenance: { ...outcome.revision } },
+          outcome: assessment.met?.includes(id) ? ("success" as const) : ("failure" as const),
+          unaided: true,
+          grader: assessment.grader,
+          task: `${problem.prompt}\nExpectation: ${criterion}`,
+          response: assessment.feedback === undefined ? response : `${response}\n${assessment.feedback}`,
+        },
+      })),
+    );
   const choice = problem.format === "choice" ? problem.options : undefined;
   const answer = choice?.find(({ id }) => id === response)?.label ?? response;
   return problem.about.map((node) => ({
