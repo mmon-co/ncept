@@ -52,6 +52,11 @@ function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+export interface CheckResult {
+  readonly outcome: "shown" | "absent" | "mistaken";
+  readonly error?: string;
+}
+const checkOutcome = (value: unknown) => value === "shown" || value === "absent" || value === "mistaken";
 const nodeId = (value: unknown): value is NodeId => typeof value === "string" && /^node-.+/.test(value);
 const exactRef = (value: unknown): value is ExactPatchRef =>
   object(value) &&
@@ -81,9 +86,19 @@ export interface AttemptOutcome {
     | { readonly format: "open"; readonly by: "tutor" | "learner"; readonly rubric?: string; readonly model?: string }
     | {
         readonly format: "expectations";
-        /** Ideas a full answer covers, each evidence about its own Nodes; together they are the Problem's `about`. */
-        readonly expectations: readonly { id: string; about: readonly NodeId[]; criterion: string; unmet?: string }[];
-        readonly pumps: readonly string[];
+        readonly help: "pump" | "hint" | "correct";
+        /** What one response is classified against, each evidence about its own Nodes; together they are the Problem's `about`. */
+        readonly checks: readonly {
+          id: string;
+          about: readonly NodeId[];
+          ask: string;
+          shown: string;
+          absent: string;
+          mistaken?: Readonly<Record<string, string>>;
+          hint?: string;
+          corrections?: Readonly<Record<string, string>>;
+        }[];
+        readonly pumps: readonly { text: string; checks: readonly string[] }[];
       }
   );
   /** A choice option id, or the literal short/open text. */
@@ -92,8 +107,9 @@ export interface AttemptOutcome {
     readonly correct: boolean;
     readonly grader: "mechanical" | "tutor" | "learner";
     readonly feedback?: string;
-    /** The expectations met by the response the learner declared their best. */
-    readonly met?: readonly string[];
+    /** Expectations: each check as the final response left it, and as it stood when help first touched it. */
+    readonly checks?: Readonly<Record<string, CheckResult>>;
+    readonly helped?: Readonly<Record<string, CheckResult>>;
   };
   readonly revision: ExactPatchRef;
 }
@@ -152,36 +168,34 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
         assessment.grader === problem.by
       );
     case "expectations": {
-      const expectations: unknown = problem.expectations;
-      const met: unknown = assessment.met;
+      const checks: unknown = problem.checks;
       const about = new Set<unknown>(Array.isArray(problem.about) ? problem.about : []);
-      if (
-        !Array.isArray(expectations) ||
-        expectations.length === 0 ||
-        !expectations.every(
-          (e: unknown) =>
-            object(e) &&
-            text(e.id) &&
-            text(e.criterion) &&
-            (e.unmet === undefined || text(e.unmet)) &&
-            Array.isArray(e.about) &&
-            e.about.length > 0 &&
-            e.about.every((node: unknown) => nodeId(node) && about.has(node)),
-        )
-      )
-        return false;
-      const ids = expectations.map(({ id }: { id: string }) => id);
-      const covered = new Set(expectations.flatMap(({ about }: { about: string[] }) => about));
+      if (!Array.isArray(checks) || checks.length === 0 || !Array.isArray(problem.pumps)) return false;
+      const valid = checks.every(
+        (c: unknown) =>
+          object(c) &&
+          text(c.id) &&
+          text(c.ask) &&
+          text(c.shown) &&
+          text(c.absent) &&
+          Array.isArray(c.about) &&
+          c.about.length > 0 &&
+          c.about.every((node: unknown) => nodeId(node) && about.has(node)),
+      );
+      const results = (value: unknown) =>
+        object(value) && Object.values(value).every((r) => object(r) && checkOutcome(r.outcome));
+      const final = assessment.checks;
       return (
-        Array.isArray(problem.pumps) &&
-        problem.pumps.length > 0 &&
-        problem.pumps.every(text) &&
-        new Set(ids).size === ids.length &&
-        covered.size === problem.about.length &&
+        valid &&
+        ["pump", "hint", "correct"].includes(String(problem.help)) &&
         assessment.grader === "tutor" &&
-        Array.isArray(met) &&
-        met.every((id: unknown) => typeof id === "string" && ids.includes(id)) &&
-        assessment.correct === (new Set(met).size === ids.length)
+        results(final) &&
+        (assessment.helped === undefined || results(assessment.helped)) &&
+        assessment.correct ===
+          checks.every((c: { id: string }) => {
+            const result: unknown = object(final) ? final[c.id] : undefined;
+            return object(result) && result.outcome === "shown";
+          })
       );
     }
     default:
@@ -284,25 +298,46 @@ export interface OriginalAttempt {
   readonly payload: Demonstration;
 }
 
+function checkNote(
+  check: { shown: string; absent: string; mistaken?: Readonly<Record<string, string>> },
+  { outcome, error }: CheckResult,
+): string {
+  if (outcome === "shown") return `Shown: ${check.shown}`;
+  if (outcome === "absent") return `Not taken up: ${check.absent}`;
+  return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
+}
+
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
   const { problem, response, assessment } = outcome;
-  // One response, one demonstration per expectation Node: met is success, unmet after the learner's best is failure.
+  // One response, one demonstration per check and Node. A check help touched is recorded twice:
+  // unaided as it stood before the help, aided as the final response left it.
   if (problem.format === "expectations")
-    return problem.expectations.flatMap(({ id, about, criterion }) =>
-      about.map((node) => ({
-        at,
-        payload: {
-          kind: "demonstration" as const,
-          node: { node, provenance: { ...outcome.revision } },
-          outcome: assessment.met?.includes(id) ? ("success" as const) : ("failure" as const),
-          unaided: true,
-          grader: assessment.grader,
-          task: `${problem.prompt}\nExpectation: ${criterion}`,
-          response: assessment.feedback === undefined ? response : `${response}\n${assessment.feedback}`,
-        },
-      })),
-    );
+    return problem.checks.flatMap((check) => {
+      const final = assessment.checks?.[check.id] ?? { outcome: "absent" as const };
+      const before = assessment.helped?.[check.id];
+      const states =
+        before === undefined
+          ? [{ result: final, unaided: true }]
+          : [
+              { result: before, unaided: true },
+              { result: final, unaided: false },
+            ];
+      return states.flatMap(({ result, unaided }) =>
+        check.about.map((node) => ({
+          at,
+          payload: {
+            kind: "demonstration" as const,
+            node: { node, provenance: { ...outcome.revision } },
+            outcome: result.outcome === "shown" ? ("success" as const) : ("failure" as const),
+            unaided,
+            grader: assessment.grader,
+            task: `${problem.prompt}\nCheck: ${check.ask}`,
+            response: `${response}\n${checkNote(check, result)}`,
+          },
+        })),
+      );
+    });
   const choice = problem.format === "choice" ? problem.options : undefined;
   const answer = choice?.find(({ id }) => id === response)?.label ?? response;
   return problem.about.map((node) => ({
