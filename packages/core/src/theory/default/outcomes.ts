@@ -137,7 +137,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     !exactRef(value.revision)
   )
     return false;
-  if (assessment.dontKnow === true) return true;
+  const dontKnow = assessment.dontKnow === true;
   switch (problem.format) {
     case "choice": {
       const options: unknown = problem.options;
@@ -155,14 +155,17 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       )
         return false;
       const chosen = options.find(({ id }) => id === response);
-      return assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct;
+      return (
+        dontKnow ||
+        (assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct)
+      );
     }
     case "short":
       return (
         Array.isArray(problem.accepted) &&
         problem.accepted.length > 0 &&
         problem.accepted.every(text) &&
-        assessment.grader === "mechanical"
+        (dontKnow || assessment.grader === "mechanical")
       );
     case "open":
       return (
@@ -170,7 +173,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
         optional(problem.rubric) &&
         optional(problem.model) &&
         (problem.rubric !== undefined || problem.model !== undefined) &&
-        assessment.grader === problem.by
+        (dontKnow || assessment.grader === problem.by)
       );
     case "expectations": {
       const checks: unknown = problem.checks;
@@ -193,14 +196,15 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       return (
         valid &&
         ["pump", "hint", "correct"].includes(String(problem.help)) &&
-        assessment.grader === "tutor" &&
-        results(final) &&
-        (assessment.helped === undefined || results(assessment.helped)) &&
-        assessment.correct ===
-          checks.every((c: { id: string }) => {
-            const result: unknown = object(final) ? final[c.id] : undefined;
-            return object(result) && result.outcome === "shown";
-          })
+        (dontKnow ||
+          (assessment.grader === "tutor" &&
+            results(final) &&
+            (assessment.helped === undefined || results(assessment.helped)) &&
+            assessment.correct ===
+              checks.every((c: { id: string }) => {
+                const result: unknown = object(final) ? final[c.id] : undefined;
+                return object(result) && result.outcome === "shown";
+              })))
       );
     }
     default:
