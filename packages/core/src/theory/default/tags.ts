@@ -76,6 +76,8 @@ function coarseNodes(graph: ResolvedGraph): ReadonlySet<NodeId> {
 
 /** Facts only. Empty citations on absence indicators mean no evidence, not invented support. */
 export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): readonly Indicator[] {
+  // Failure and "I don't know" weigh alike for mastery, so item and window comparisons see only success or not.
+  const succeeded = ({ payload }: { readonly payload: Demonstration }) => payload.outcome === "success";
   const cone = dependentCones(graph);
   const results: Indicator[] = [];
   function add(kind: string, nodes: readonly NodeId[], records: readonly HomedRecord[], message: string) {
@@ -96,13 +98,15 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
     for (const task of tasks) {
       const item = attempts.filter(({ payload }) => payload.task === task);
       if (item.length < 2) continue;
-      const constant = item.every(({ payload }) => payload.outcome === item[0]?.payload.outcome);
+      const constant = item.every((record) => succeeded(record) === succeeded(item[0] ?? record));
       const peers = tasks
         .filter((other) => other !== task)
         .flatMap((other) => {
           const records = attempts.filter(({ payload }) => payload.task === other);
           return records.length === item.length &&
-            records.every((record, index) => record.payload.outcome === item[index]?.payload.outcome)
+            records.every(
+              (record, index) => succeeded(record) === succeeded(item[index] ?? record) && item[index] !== undefined,
+            )
             ? records
             : [];
         });
@@ -119,7 +123,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       .slice(-node.window);
     if (
       window.length >= 3 &&
-      window.every((record, index) => index === 0 || record.payload.outcome !== window[index - 1]?.payload.outcome)
+      window.every((record, index) => index === 0 || succeeded(record) !== succeeded(window[index - 1] ?? record))
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
     if (coarse.has(id)) add("coarse", [id], [], "Left coarse at charting: its prerequisites are not charted yet");
