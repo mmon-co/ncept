@@ -53,10 +53,11 @@ function text(value: unknown): value is string {
 }
 
 export interface CheckResult {
-  readonly outcome: "shown" | "absent" | "mistaken";
+  readonly outcome: "shown" | "absent" | "mistaken" | "skipped";
   readonly error?: string;
 }
-const checkOutcome = (value: unknown) => value === "shown" || value === "absent" || value === "mistaken";
+const checkOutcome = (value: unknown) =>
+  value === "shown" || value === "absent" || value === "mistaken" || value === "skipped";
 const nodeId = (value: unknown): value is NodeId => typeof value === "string" && /^node-.+/.test(value);
 const exactRef = (value: unknown): value is ExactPatchRef =>
   object(value) &&
@@ -304,6 +305,7 @@ function checkNote(
 ): string {
   if (outcome === "shown") return `Shown: ${check.shown}`;
   if (outcome === "absent") return `Not taken up: ${check.absent}`;
+  if (outcome === "skipped") return "Set aside: I can't say";
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
 }
 
