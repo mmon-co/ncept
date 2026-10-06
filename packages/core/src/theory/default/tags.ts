@@ -133,7 +133,9 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
             ? "success"
             : "failure"
           : report.payload.grader === "learner"
-            ? report.payload.outcome
+            ? report.payload.outcome === "success"
+              ? "success"
+              : "failure"
             : undefined;
       if (outcome === undefined) continue;
       const contradictions = graded.filter(({ payload }) => payload.outcome !== outcome);
