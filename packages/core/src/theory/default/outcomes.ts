@@ -82,7 +82,8 @@ export interface AttemptOutcome {
     | {
         readonly format: "expectations";
         /** Ideas a full answer covers, each evidence about its own Nodes; together they are the Problem's `about`. */
-        readonly expectations: readonly { id: string; about: readonly NodeId[]; criterion: string }[];
+        readonly expectations: readonly { id: string; about: readonly NodeId[]; criterion: string; unmet?: string }[];
+        readonly pumps: readonly string[];
       }
   );
   /** A choice option id, or the literal short/open text. */
@@ -162,6 +163,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
             object(e) &&
             text(e.id) &&
             text(e.criterion) &&
+            (e.unmet === undefined || text(e.unmet)) &&
             Array.isArray(e.about) &&
             e.about.length > 0 &&
             e.about.every((node: unknown) => nodeId(node) && about.has(node)),
@@ -171,6 +173,9 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       const ids = expectations.map(({ id }: { id: string }) => id);
       const covered = new Set(expectations.flatMap(({ about }: { about: string[] }) => about));
       return (
+        Array.isArray(problem.pumps) &&
+        problem.pumps.length > 0 &&
+        problem.pumps.every(text) &&
         new Set(ids).size === ids.length &&
         covered.size === problem.about.length &&
         assessment.grader === "tutor" &&
