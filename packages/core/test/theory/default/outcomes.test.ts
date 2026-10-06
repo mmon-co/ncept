@@ -69,7 +69,8 @@ test("a set-aside check is evidence of not knowing, not an absent check", () => 
   expect(problemAttempts(attempt({ outcome: "skipped" }), AT)).toEqual([
     expect.objectContaining({
       payload: expect.objectContaining({
-        outcome: "failure",
+        outcome: "dont-know",
+        grader: "learner",
         unaided: true,
         response: expect.stringContaining("Set aside: I can't say"),
       }),

@@ -106,6 +106,7 @@ export interface AttemptOutcome {
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
+    readonly dontKnow?: boolean;
     readonly grader: "mechanical" | "tutor" | "learner";
     readonly feedback?: string;
     /** Expectations: each check as the final response left it, and as it stood when help first touched it. */
@@ -131,9 +132,12 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     typeof response !== "string" ||
     typeof assessment.correct !== "boolean" ||
     !optional(assessment.feedback) ||
+    (assessment.dontKnow !== undefined &&
+      (assessment.dontKnow !== true || assessment.correct !== false || assessment.grader !== "learner")) ||
     !exactRef(value.revision)
   )
     return false;
+  if (assessment.dontKnow === true) return true;
   switch (problem.format) {
     case "choice": {
       const options: unknown = problem.options;
@@ -312,6 +316,19 @@ function checkNote(
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
   const { problem, response, assessment } = outcome;
+  if (assessment.dontKnow)
+    return problem.about.map((node) => ({
+      at,
+      payload: {
+        kind: "demonstration",
+        node: { node, provenance: { ...outcome.revision } },
+        outcome: "dont-know",
+        unaided: true,
+        grader: "learner",
+        task: problem.prompt,
+        response,
+      },
+    }));
   // One response, one demonstration per check and Node. A check help touched is recorded twice:
   // unaided as it stood before the help, aided as the final response left it.
   if (problem.format === "expectations")
@@ -331,9 +348,14 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
           payload: {
             kind: "demonstration" as const,
             node: { node, provenance: { ...outcome.revision } },
-            outcome: result.outcome === "shown" ? ("success" as const) : ("failure" as const),
+            outcome:
+              result.outcome === "shown"
+                ? ("success" as const)
+                : result.outcome === "skipped"
+                  ? ("dont-know" as const)
+                  : ("failure" as const),
             unaided,
-            grader: assessment.grader,
+            grader: result.outcome === "skipped" ? ("learner" as const) : assessment.grader,
             task: `${problem.prompt}\nCheck: ${check.ask}`,
             response: `${response}\n${checkNote(check, result)}`,
           },
@@ -373,9 +395,24 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
       },
     }));
   }
-  return outcome.questions.flatMap((question) => {
+  return outcome.questions.flatMap<OriginalAttempt>((question) => {
     const response = outcome.responses.find(({ questionId }) => questionId === question.id);
-    if (response === undefined || response.skipped) return [];
+    if (response === undefined) return [];
+    if (response.skipped)
+      return [
+        {
+          at: outcome.at,
+          payload: {
+            kind: "demonstration" as const,
+            node: { ...outcome.node },
+            outcome: "dont-know" as const,
+            unaided: true,
+            grader: "learner" as const,
+            task: question.prompt,
+            response: response.comment ? `I don\u0027t know\n${response.comment}` : "I don\u0027t know",
+          },
+        },
+      ];
     const option = question.options.find(({ id }) => id === response.selectedOptionId);
     if (option === undefined) throw new Error("Invalid question response");
     const answer = response.comment ? `${option.label}\n${response.comment}` : option.label;

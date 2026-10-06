@@ -115,7 +115,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
         );
     }
     const window = attempts
-      .filter(({ payload }) => payload.unaided || payload.outcome === "failure")
+      .filter(({ payload }) => payload.unaided || payload.outcome !== "success")
       .slice(-node.window);
     if (
       window.length >= 3 &&
@@ -151,7 +151,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       ({ payload }) => payload.unaided && payload.outcome === "success",
     );
     const failures = demonstrations(state.nodes[edge.from]?.records ?? []).filter(
-      ({ payload }) => payload.unaided && payload.outcome === "failure",
+      ({ payload }) => payload.unaided && payload.outcome !== "success",
     );
     for (const failure of failures) {
       const earlier = successes.filter((success) => Date.parse(success.at) < Date.parse(failure.at));

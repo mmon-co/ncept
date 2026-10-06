@@ -27,7 +27,7 @@ export interface NodeRef {
 export interface Demonstration {
   readonly kind: "demonstration";
   readonly node: NodeRef;
-  readonly outcome: "success" | "failure";
+  readonly outcome: "success" | "failure" | "dont-know";
   readonly unaided: boolean;
   readonly grader: "mechanical" | "tutor" | "learner";
   readonly task: string;
@@ -162,7 +162,7 @@ export function isDemonstration(value: unknown): value is Demonstration {
     object(value) &&
     value.kind === "demonstration" &&
     isNodeRef(value.node) &&
-    (value.outcome === "success" || value.outcome === "failure") &&
+    (value.outcome === "success" || value.outcome === "failure" || value.outcome === "dont-know") &&
     typeof value.unaided === "boolean" &&
     (value.grader === "mechanical" || value.grader === "tutor" || value.grader === "learner") &&
     typeof value.task === "string" &&
@@ -489,11 +489,11 @@ export function labelDefaultNode(input: {
     (record): record is Observation<Demonstration> => record.payload.kind === "demonstration",
   );
   const attempts = demonstrations
-    .filter(({ payload }) => payload.unaided || payload.outcome === "failure")
+    .filter(({ payload }) => payload.unaided || payload.outcome !== "success")
     .slice(-parameters.window.size);
   const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
-  const lastFailure = demonstrations.filter(({ payload }) => payload.outcome === "failure").at(-1);
+  const lastFailure = demonstrations.filter(({ payload }) => payload.outcome !== "success").at(-1);
   const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
   const stale = lastSuccess !== undefined && !isCurrentSuccess(lastSuccess, at, parameters.forgettingHorizonDays);
   const knows = records.some(

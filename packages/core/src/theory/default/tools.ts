@@ -386,7 +386,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
   {
     name: "record_demonstration",
     description: [
-      "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue or a skip is not one.",
+      "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
       "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
       "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
       "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
@@ -395,7 +395,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     schema: schema(
       {
         node: nodeProperty,
-        outcome: { enum: ["success", "failure"] },
+        outcome: { enum: ["success", "failure", "dont-know"] },
         unaided: { type: "boolean" },
         grader: { enum: ["mechanical", "tutor", "learner"] },
         task: { type: "string" },
@@ -425,7 +425,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     schema: schema(
       {
         node: nodeProperty,
-        outcome: { enum: ["success", "failure"] },
+        outcome: { enum: ["success", "failure", "dont-know"] },
         unaided: { type: "boolean" },
         grader: { enum: ["mechanical", "tutor", "learner"] },
         task: { type: "string" },
