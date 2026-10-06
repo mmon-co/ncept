@@ -77,7 +77,10 @@ export type ChatContext<S> = Context<S> &
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;
 export type ChatSetup<S = unknown> = Readonly<{
+  /** Stable instructions placed before the conversation. */
   prompt: string;
+  /** Current facts appended as an immutable snapshot at this turn, not in the prefix. */
+  context?: string;
   tools: readonly Tool<unknown, unknown, S>[];
   skills: readonly Skill[];
 }>;
