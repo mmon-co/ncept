@@ -1,12 +1,6 @@
 import { dependentCones } from "./dependent-cone";
-import { pathDefault } from "./path";
-import {
-  lastMetadataContribution,
-  NODE_ELABORATE_PROPERTY,
-  type EdgeId,
-  type NodeId,
-  type ResolvedGraph,
-} from "../../patch";
+import { pathDefault, pathProperty } from "./path";
+import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
 import { type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
@@ -61,17 +55,7 @@ function demonstrations(records: readonly HomedRecord[]): readonly Observation<D
 /** Nodes whose latest `pedagogy:elaborate` contribution is `true`: left coarse at charting. */
 function coarseNodes(graph: ResolvedGraph): ReadonlySet<NodeId> {
   return new Set(
-    graph.nodes
-      .filter(({ id }) => {
-        const contributions = graph.metadataSets.flatMap((set) => {
-          if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === id)) return [];
-          const value = set.properties[NODE_ELABORATE_PROPERTY];
-          const source = graph.provenance.metadataProperties[set.id]?.[NODE_ELABORATE_PROPERTY]?.at(-1);
-          return value === undefined || source === undefined ? [] : [{ value, source }];
-        });
-        return lastMetadataContribution(graph, contributions)?.value === true;
-      })
-      .map(({ id }) => id),
+    graph.nodes.filter(({ id }) => pathProperty(graph, id, NODE_ELABORATE_PROPERTY) === true).map(({ id }) => id),
   );
 }
 

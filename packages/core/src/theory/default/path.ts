@@ -1,4 +1,4 @@
-import { lastMetadataContribution, route, type NodeId, type ResolvedGraph } from "../../patch";
+import { lastMetadataContribution, NODE_ELABORATE_PROPERTY, route, type NodeId, type ResolvedGraph } from "../../patch";
 import { LESSON_TAG_PREFIX, type Lesson, type MissionPath } from "../theory";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
@@ -129,7 +129,7 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
         chunk = [];
       };
       for (const id of prefix) {
-        if (!charted.has(id) && pathProperty(graph, id, "pedagogy:elaborate") === true) {
+        if (!charted.has(id) && pathProperty(graph, id, NODE_ELABORATE_PROPERTY) === true) {
           if (chunk.length && unit.name !== undefined) warn(LESSON_TAG_PREFIX + unit.name, prefix);
           flush();
           section.lessons.push({ nodes: [id], chart: true });
