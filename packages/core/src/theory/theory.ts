@@ -1,5 +1,6 @@
 import type { ContentDigest } from "../digest";
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
+import type { ModeEntry, SessionMode } from "./modes";
 import type {
   JsonSchema,
   Observation,
@@ -109,6 +110,10 @@ export type MissionContext = Readonly<{
 export type ChatContext<S> = Context<S> &
   Readonly<{
     surface: SurfaceId;
+    /** The declared theory mode for this Session; empty only for mode-less theories. */
+    mode: string;
+    /** Resolved opening facts, pinned with the Session revision. */
+    entry?: ModeEntry;
     about: readonly NodeId[];
     /** Nodes used by unscoped default readings; omitted means the whole graph. Explicit scopes override this. */
     unscopedNodes?: readonly NodeId[];
@@ -152,7 +157,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
-  readonly chat: {
+  readonly modes?: Readonly<Record<string, SessionMode<S>>>;
+  readonly chat?: {
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
     turn(ctx: ChatContext<S>): Program<ChatSetup<S>>;
   };

@@ -1,6 +1,6 @@
 import type { Theory } from "../theory";
 import { theoryRelease } from "../release";
-import { chat } from "./chat";
+import { chat, modes } from "./chat";
 import { event } from "./event";
 import { DEFAULT_IMPLEMENTATION_DIGEST } from "./implementation-digest";
 import {
@@ -26,6 +26,7 @@ export const defaultTheory = {
   tags: defaultTags,
   outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome, attempt: isAttemptOutcome },
   chat,
+  modes,
   event,
 } satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome; attempt: AttemptOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);

@@ -3,6 +3,7 @@ import { renderSpeech } from "../speaker";
 import { lastMetadataContribution, NODE_CRITERION_PROPERTY, NODE_LABEL_PROPERTY, type NodeId } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
+import type { SessionMode } from "../modes";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { listSkills, skillBody, skillInvocation, tutorSystemPrompt } from "./skills";
 import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
@@ -169,3 +170,40 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
  * into the interactive conversation it is running, so no theory Program can read or cite them.
  */
 export const chat = { open: setup, turn: setup };
+
+const capabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
+
+/** The default theory’s Session choices; host capabilities are mounted separately. */
+export const modes = {
+  empty: {
+    title: "Session",
+    entry: { required: false, kinds: [] },
+    capabilities,
+    switches: [
+      { mode: "charting", then: "here" },
+      { mode: "lesson", then: "here" },
+    ],
+    setup,
+  },
+  charting: {
+    title: "Charting",
+    entry: { required: false, kinds: ["goal", "mission", "target"] },
+    capabilities,
+    switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
+    setup,
+  },
+  lesson: {
+    title: "Lesson",
+    entry: { required: true, kinds: ["lesson"] },
+    capabilities,
+    switches: [
+      { mode: "lesson", then: "next", carry: { kind: "brief" } },
+      {
+        mode: "charting",
+        then: "aside",
+        carry: { kind: "compacted", focus: "Re-chart the current Lesson and its blockers" },
+      },
+    ],
+    setup,
+  },
+} satisfies Readonly<Record<string, SessionMode<DefaultState>>>;
