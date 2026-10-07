@@ -65,6 +65,35 @@ export type MissionPath = Readonly<{
 }>;
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 
+/** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
+export type LessonSnapshot = Readonly<{
+  mission: Readonly<{ id: string; statement: string; shortName?: string }>;
+  number: number;
+  of: number;
+  name: string;
+  section: Readonly<{ number: number; milestone: NodeId; name: string }>;
+  nodes: readonly NodeId[];
+}>;
+export type LessonNodeReading = Readonly<{
+  id: NodeId;
+  label: string;
+  criterion: string;
+  demonstrated: boolean;
+  /** The projection's existing score caption/message, not a new assessment. */
+  score?: Tag;
+}>;
+/** A current reading shared by the learner's checklist and the tutor's turn context. */
+export type LessonProgress = Readonly<{
+  lesson: LessonSnapshot;
+  nodes: readonly LessonNodeReading[];
+  edges: readonly Readonly<{ from: NodeId; to: NodeId }>[];
+  alsoShown: readonly LessonNodeReading[];
+  demonstratedCount: number;
+  complete: boolean;
+  minutesLeft: number;
+  rough: boolean;
+}>;
+
 export type MissionContext = Readonly<{
   id: string;
   /** Effective current Mission revision; the tutor passes this value as `revises`. */
@@ -86,6 +115,8 @@ export type ChatContext<S> = Context<S> &
     missions?: readonly MissionContext[];
     /** Measured by the host from lesson Session activity, never by the theory. */
     lessonTiming?: LessonTiming;
+    /** The fixed Lesson's current checklist, from the host's same reading as the header. */
+    lesson?: LessonProgress;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;
 export type ChatSetup<S = unknown> = Readonly<{
