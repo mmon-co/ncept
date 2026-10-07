@@ -178,7 +178,18 @@ function trail(ctx: Ctx, node: NodeId) {
           : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
-function closeRecount(ctx: Ctx) {
+function closeRecount(ctx: Ctx, rawPractising?: unknown) {
+  const practising = rawPractising === undefined ? [] : rawPractising;
+  if (!Array.isArray(practising)) throw new Error("Expected practice directions");
+  const directions = practising.map((entry) => {
+    if (!object(entry) || Object.keys(entry).some((key) => key !== "node" && key !== "why"))
+      throw new Error("Expected practice directions with a Node and reason");
+    const node = nodeId(entry.node);
+    if (!ctx.graph.nodes.some((candidate) => candidate.id === node)) throw new Error("Missing Node " + node);
+    const why = string(entry.why).trim();
+    if (why === "") throw new Error("A practice direction needs a reason");
+    return { node, why };
+  });
   const labelByNode = new Map(
     projectVisualGraph({ graph: ctx.graph, annotations: {} }).nodes.map(({ id, label }) => [id, label] as const),
   );
@@ -219,6 +230,7 @@ function closeRecount(ctx: Ctx) {
             response: payload.response,
           };
     }),
+    practising: directions,
   };
 }
 function nodeTool(name: string, description: string, run: (ctx: Ctx, node: NodeId) => unknown): DefaultTool {
@@ -392,11 +404,21 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   {
     name: "close_recount",
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active Records from this Session. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount.",
-    schema: schema({}),
+      "Learner-facing close material for this Session: display labels, current standing, and active Records from this Session. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
+    schema: schema({
+      practising: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { node: nodeProperty, why: { type: "string", minLength: 1 } },
+          required: ["node", "why"],
+          additionalProperties: false,
+        },
+      },
+    }),
     *run(raw, ctx) {
-      args(raw, []);
-      return closeRecount(ctx);
+      const input = args(raw, ["practising"]);
+      return closeRecount(ctx, input.practising);
     },
   },
 ];
