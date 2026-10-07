@@ -1,6 +1,6 @@
 ---
 name: realignment
-description: Existing content does not fit the capability or the learner's goal. Inspect cited warnings or the learner's complaint, distinguish content from recording errors, and propose a bounded edit. The learner must start this graph-editing activity.
+description: Existing content does not fit the capability or the learner's goal. Inspect cited warnings or the learner's complaint, distinguish content from recording errors, and propose a bounded edit. The learner starts this non-mode Skill from its slash command.
 facet: chart
 entry: [learner]
 ---

@@ -24,6 +24,7 @@ const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
   "procedures/quiz-authoring.md": sources["procedures/quiz-authoring.md"],
 };
 
+const MODE_PROCEDURES = new Set(["charting", "lesson"]);
 const FACETS = ["position", "chart", "advance"] as const;
 type Facet = (typeof FACETS)[number];
 
@@ -74,6 +75,7 @@ function parseSkillFile(dir: string, raw: string): SkillFile {
 
 function skillFiles(): SkillFile[] {
   return Object.entries(SKILL_SOURCES)
+    .filter(([name]) => !MODE_PROCEDURES.has(name))
     .map(([name, source]) => parseSkillFile(name, source))
     .sort((left, right) => left.meta.name.localeCompare(right.meta.name));
 }
@@ -90,6 +92,30 @@ function inlineIncludes(text: string, seen: readonly string[] = []): string {
 
 export function listSkills(): SkillMeta[] {
   return skillFiles().map(({ meta }) => meta);
+}
+
+/** The automatically loaded body of a Session mode, not a separately loadable Skill. */
+export function modeProcedure(name: "charting" | "lesson"): string {
+  const source = SKILL_SOURCES[name];
+  if (source === undefined) throw new Error(`unknown mode procedure: ${name}`);
+  return inlineIncludes(parseSkillFile(name, source).body).trim();
+}
+
+/** Skills the tutor may load in a mode; mode procedures themselves never enter this catalog. */
+export function skillsForMode(mode?: string): SkillMeta[] {
+  const all = listSkills();
+  const names =
+    mode === "empty"
+      ? new Set(["app-help"])
+      : mode === "charting"
+        ? new Set(["mission", "app-help"])
+        : mode === "lesson"
+          ? new Set(all.map(({ name }) => name))
+          : mode === undefined || mode === ""
+            ? new Set(all.map(({ name }) => name))
+            : undefined;
+  if (names === undefined) throw new Error(`Unknown default Session mode ${mode}`);
+  return all.filter(({ name }) => names.has(name));
 }
 
 /** The Skill's body with its procedures inlined: a self-contained bundle. */
@@ -126,14 +152,14 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
   return [skillBody(name), ...facts].join("\n\n");
 }
 
-function skillEntry(entry: readonly Entry[]): string {
+function skillEntry(name: string, entry: readonly Entry[]): string {
   const descriptions: string[] = [];
   if (entry.includes("model")) descriptions.push("the tutor may start it");
   if (entry.includes("learner")) {
     descriptions.push(
       entry.includes("model")
         ? "the learner may also start it"
-        : "the learner starts it after you propose it and say why (do not start it yourself)",
+        : `the learner starts it with /${name} (do not start it yourself)`,
     );
   }
   if (entry.includes("system")) descriptions.push("the host starts it");
@@ -141,15 +167,16 @@ function skillEntry(entry: readonly Entry[]): string {
 }
 
 /**
- * The always-loaded tier: the base unit and the index of every Skill, grouped
- * by facet, with its entry stated explicitly.
+ * The always-loaded tier: the base unit and the current mode's Skill index,
+ * grouped by facet, with each entry stated explicitly.
  */
-export function tutorSystemPrompt(): string {
+export function tutorSystemPrompt(mode?: string): string {
   const base = sources["base.md"].trim();
+  const available = skillsForMode(mode).filter(({ entry }) => entry.some((value) => value !== "system"));
   const index = FACETS.map((facet) => {
-    const rows = skillFiles()
-      .filter(({ meta }) => meta.facet === facet)
-      .map(({ meta }) => `- **${meta.name}**: ${meta.description} (Entry: ${skillEntry(meta.entry)}.)`);
+    const rows = available
+      .filter((meta) => meta.facet === facet)
+      .map((meta) => `- **${meta.name}**: ${meta.description} (Entry: ${skillEntry(meta.name, meta.entry)}.)`);
     return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;
   });
   return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: after a tutor- or learner-started Skill's entry requirement is met, load its body with the \`skill\` tool. The host starts host-started Skills.\n\n${index.join("\n\n")}`;

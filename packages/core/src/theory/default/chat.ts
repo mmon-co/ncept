@@ -5,9 +5,21 @@ import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import type { SessionMode } from "../modes";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { listSkills, skillBody, skillInvocation, tutorSystemPrompt } from "./skills";
+import { modeProcedure, skillBody, skillInvocation, skillsForMode, tutorSystemPrompt } from "./skills";
 import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
+const READ_ONLY_INSTRUMENTS = new Set([
+  "frontier",
+  "route",
+  "interpretations",
+  "trail",
+  "coverage",
+  "probes",
+  "warnings",
+  "items",
+  "memory",
+  "mission",
+]);
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
 const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
 
@@ -102,8 +114,12 @@ function recommendableAffordances(
   });
 }
 
-function chatSkills(documents: readonly ProductDocument[], recommendations: readonly Recommendation[]) {
-  return listSkills().map((meta) => ({
+function chatSkills(
+  mode: string | undefined,
+  documents: readonly ProductDocument[],
+  recommendations: readonly Recommendation[],
+) {
+  return skillsForMode(mode).map((meta) => ({
     ...meta,
     body:
       meta.name === "app-help"
@@ -137,15 +153,29 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
     : text;
 }
 
-function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>> {
+function* setup(
+  ctx: ChatContext<DefaultState>,
+  mode?: "empty" | "charting" | "lesson",
+): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const documents = officialDocuments(ctx);
   const recommendations = recommendableAffordances(ctx, documents);
   const prompt = [
-    tutorSystemPrompt(),
-    "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Retrieve the current interpretation before correcting it with `correct_interpretation` and current support. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
-    "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations. Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
+    tutorSystemPrompt(mode),
+    "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
+    ...(mode === "lesson" || mode === undefined
+      ? ["Before correcting an interpretation, retrieve its current source handles and support with `interpretations`."]
+      : []),
+    mode === "empty" || mode === "charting"
+      ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
+      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations.",
+    ...(mode === "empty" || mode === "charting"
+      ? []
+      : [
+          "Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
+        ]),
+    ...(mode === "charting" || mode === "lesson" ? [modeProcedure(mode)] : []),
     "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
@@ -153,14 +183,25 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
     context: [
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; read memory(node) for more):\n\n${scopedMemory(ctx) || "(none)"}`
-        : "This Session is attached to no Nodes; attach the Nodes you work on.",
+        : mode === "empty"
+          ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
+          : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
       ...(ctx.lesson === undefined
         ? []
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
     ].join("\n\n"),
-    skills: chatSkills(documents, recommendations),
-    tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
+    skills: chatSkills(mode, documents, recommendations),
+    tools:
+      mode === "empty"
+        ? defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name))
+        : mode === "charting"
+          ? [
+              ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+              ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
+              ...defaultBackgroundTools.filter((tool) => tool.name === "attach_claim"),
+            ]
+          : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
 }
 
@@ -171,31 +212,33 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
  */
 export const chat = { open: setup, turn: setup };
 
-const capabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
+const emptyCapabilities = ["reads"] as const;
+const chartingCapabilities = ["reads", "graph-draft", "web"] as const;
+const lessonCapabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
 
 /** The default theory’s Session choices; host capabilities are mounted separately. */
 export const modes = {
   empty: {
     title: "Session",
     entry: { required: false, kinds: [] },
-    capabilities,
+    capabilities: emptyCapabilities,
     switches: [
       { mode: "charting", then: "here" },
       { mode: "lesson", then: "here" },
     ],
-    setup,
+    setup: (ctx) => setup(ctx, "empty"),
   },
   charting: {
     title: "Charting",
     entry: { required: false, kinds: ["goal", "mission", "target"] },
-    capabilities,
+    capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
-    setup,
+    setup: (ctx) => setup(ctx, "charting"),
   },
   lesson: {
     title: "Lesson",
     entry: { required: true, kinds: ["lesson"] },
-    capabilities,
+    capabilities: lessonCapabilities,
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
       {
@@ -204,6 +247,6 @@ export const modes = {
         carry: { kind: "compacted", focus: "Re-chart the current Lesson and its blockers" },
       },
     ],
-    setup,
+    setup: (ctx) => setup(ctx, "lesson"),
   },
 } satisfies Readonly<Record<string, SessionMode<DefaultState>>>;

@@ -1,6 +1,6 @@
 ---
 name: charting
-description: A proposed pursuit has no adequate graph content. Design the learning backward from the learner's goal, choosing how to teach before what to chart, then write the missing content, reusing what fits. Existing content that misfits needs realignment instead. The learner must start this editing activity.
+description: A pursuit has no adequate graph content. Design the learning backward from the learner's goal, choosing how to teach before what to chart, then write the missing content, reusing what fits. Existing content that misfits needs realignment instead. This procedure is loaded automatically in Charting mode.
 facet: chart
 entry: [learner]
 ---
@@ -38,4 +38,4 @@ Once concrete target identities and the reviewed graph pass the host's validatio
 
 After the Mission is accepted, the host shows the path and **Begin lesson n**; do not recap the plan. Reply with exactly one sentence, “Lesson n comes first because …”, naming that lesson and what it unblocks for this learner. Do not offer probing. The probing Skill stays learner-invoked until [[projects/concept/issues/assess-after-charting-with-an-open-prompt]] replaces it. For claims about Nodes already accepted, use `record_claim` and attach them to the current Node(s) whose capability statements match; charting text alone is not a demonstration.
 
-When work ends with a change of scope, offer the next Skill through `propose_skill` with `scope` set to `target`, `view` or `nodes` and `destination: { kind: new-session, mode: handoff, focus: ... }`. Use `side` when the learner wants to keep this Session open. The focus tells the harness what the carried summary should preserve.
+If the learner is ready to work before using **Begin lesson n**, offer `switch_mode` into the matching Mission-path Lesson. Use only the movement and default carry declared for the current mode; Charting's registry route is to a new Lesson turn. The Lesson procedure loads with that mode and needs no Skill invocation.

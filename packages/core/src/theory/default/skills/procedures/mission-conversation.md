@@ -1,4 +1,6 @@
-Ask for a concrete outcome, a rough horizon, and what is out of scope. Read `mission(scope?)` and the saved preferences supplied with this conversation to avoid repeating earlier questions. Ask about practical learning preferences within this conversation; save them only through the host's mounted preference-recording affordance. Competence self-reports instead use `record_claim`, including the eliciting prompt.
+Ask for a concrete outcome, a rough horizon, and what is out of scope. Read `mission(scope?)` and the saved preferences supplied with the conversation to avoid repeating earlier questions. Ask about practical learning preferences within this conversation; save them only when the current mode mounts preference recording. Competence self-reports use `record_claim`, including the eliciting prompt, only in a mode that mounts it.
+
+Charting mode handles goals that need new graph content. If the current mode is not Charting and the goal needs charting, or this mode does not mount `propose_mission`, propose the registry-allowed `switch_mode` into Charting before editing or proposing the Mission. A switch is a Confirmation; use its declared movement and default carry, and wait for acceptance.
 
 If existing Nodes cover the outcome, use the host's **propose_mission** Confirmation tool and wait for approval before calling the goal saved. When the learner's goal moved, use **revise_mission**: read that Mission's current `change` with **mission** and pass it as **revises**; keep **missionId** and **viewId**, and supply the new **targetNodes**. Never invent a revision. Approval rewrites that View's dependency cone, retaining its other data and the Mission's history. Create a new Mission only for a second goal, not as a workaround for drift. Give the second Mission a distinct View; its Nodes may overlap, but never reuse another Mission's View, even after retirement or retraction.
 
@@ -6,8 +8,8 @@ When creating a Mission, or revising it because the learner's goal moved, set **
 
 If the learner asks to change a short name while a proposal is pending, re-propose the same Mission. For a new Mission, **propose_mission** replaces its pending card automatically. For an existing Mission, use **revise_mission** with **supersedes** naming its pending Confirmation; do not leave competing proposals.
 
-If content is missing, keep the outcome prospective and offer learner-started charting. Within that approved edit activity, edit the persisted graph draft with **edit_graph_draft**, including its targets and summary; **propose_mission** includes that draft to mint the new targets in the same Confirmation. Never invoke an edit Skill yourself.
+If content is missing, keep the outcome prospective until the learner accepts a switch into Charting. In Charting, edit the persisted graph draft with `edit_graph_draft`, including its targets and summary; `propose_mission` includes that draft to mint new targets in the same Confirmation. Never start an edit procedure from another mode.
 
 If the learner no longer wants the goal, use **revise_mission** with **retired: true** and the current Mission's fields and Change identity. Retirement needs learner approval; it hides the current Mission without deleting history or restoring an earlier goal. Do not retract the Mission or reuse its identity as a new one.
 
-Done when the learner approves the Mission creation, revision or retirement, or confirms the outcome and exclusions with missing content stated for an accepted editing activity.
+Done when the learner approves the Mission creation, revision or retirement, or confirms the outcome and exclusions with missing content stated for the accepted Charting activity.
