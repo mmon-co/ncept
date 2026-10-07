@@ -13,6 +13,8 @@ import {
 } from "../../observations";
 import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
+import { readMissionPath } from "../path";
+import { pathDefault } from "./path";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
@@ -366,8 +368,26 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   }),
   scopedTool(
     "mission",
-    "Effective Missions, their current `change-*` revisions, and their resolved View scopes.",
-    missionFacts,
+    "Effective Missions, revisions and resolved scopes, with numbered lesson sections, cleared stops and estimated minutes left. Chart lessons are stops for elaborating coarse Nodes.",
+    (ctx, scope) =>
+      missionFacts(ctx, scope).map((mission) => ({
+        ...mission,
+        path: readMissionPath(
+          pathDefault(
+            ctx.graph,
+            mission.targets ??
+              mission.nodes.filter(
+                (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
+              ),
+          ),
+          new Set(
+            Object.entries(ctx.state.nodes)
+              .filter(([, state]) => state !== undefined && isDefaultKnown(state))
+              .map(([id]) => id),
+          ),
+          ctx.lessonTiming ?? { minutesPerNode: 20, rough: true },
+        ),
+      })),
   ),
   {
     name: "close_recount",

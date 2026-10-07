@@ -1,4 +1,5 @@
 import { dependentCones } from "./dependent-cone";
+import { pathDefault } from "./path";
 import {
   lastMetadataContribution,
   NODE_ELABORATE_PROPERTY,
@@ -171,6 +172,9 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
     }
   }
   for (const record of state.homeless) add("homeless", [], [record], "Record has no home after Patch revision");
+  const targets = graph.nodes.filter(({ id }) => !graph.edges.some((edge) => edge.from === id)).map(({ id }) => id);
+  for (const warning of pathDefault(graph, targets).warnings)
+    add(warning.kind, warning.nodes, [], `Lesson ${warning.name} splits around a section or outside blocker`);
   return results;
 }
 
@@ -181,6 +185,7 @@ export const defaultTags = [
   "instability",
   "unused",
   "coarse",
+  "lesson-split",
   "self-report",
   "edge-contradiction",
   "homeless",

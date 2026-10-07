@@ -8,6 +8,9 @@
     "./patch": "./src/patch/index.ts",
     "./observations": "./src/observations.ts",
     "./theory": "./src/theory/index.ts",
+    "./theory/path": "./src/theory/path.ts",
+    "./theory/default/path": "./src/theory/default/path.ts",
+    "./theory/default/state": "./src/theory/default/state.ts",
     "./theory/speaker": "./src/theory/speaker.ts",
     "./theory/default": "./src/theory/default/index.ts",
     "./theory/default/messages": "./src/theory/default/messages.ts"

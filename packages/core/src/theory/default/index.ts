@@ -13,6 +13,7 @@ import {
 } from "./outcomes";
 import { DEFAULT_THEORY_REF, stateDefault, type DefaultState } from "./state";
 import { defaultTags, projectDefault } from "./tags";
+import { pathDefault } from "./path";
 
 /** One implementation, assembled without a provider, store, scheduler or host reference. */
 export const defaultTheory = {
@@ -21,12 +22,14 @@ export const defaultTheory = {
   digest: DEFAULT_IMPLEMENTATION_DIGEST,
   state: stateDefault,
   project: projectDefault,
+  path: pathDefault,
   tags: defaultTags,
   outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome, attempt: isAttemptOutcome },
   chat,
   event,
 } satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome; attempt: AttemptOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
+export * from "./path";
 export * from "./messages";
 export * from "./state";
 export * from "./tags";

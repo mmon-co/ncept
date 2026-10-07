@@ -56,6 +56,15 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
  * preferences are not here: they are the Application's own saved instructions, assembled
  * into the interactive tutor conversation, and no theory Program reads or cites them.
  */
+/** Graph-authored lesson membership uses the existing define-tag operation. */
+export const LESSON_TAG_PREFIX = "lesson:";
+export type Lesson = Readonly<{ name?: string; nodes: readonly NodeId[]; chart?: true }>;
+export type MissionPath = Readonly<{
+  sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
+  warnings: readonly { readonly kind: "lesson-split"; readonly name: string; readonly nodes: readonly NodeId[] }[];
+}>;
+export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
+
 export type MissionContext = Readonly<{
   id: string;
   /** Effective current Mission revision; the tutor passes this value as `revises`. */
@@ -63,6 +72,7 @@ export type MissionContext = Readonly<{
   statement: string;
   shortName?: string;
   nodes: readonly NodeId[];
+  targets?: readonly NodeId[];
   priority: number;
 }>;
 export type ChatContext<S> = Context<S> &
@@ -74,6 +84,8 @@ export type ChatContext<S> = Context<S> &
     /** Tutor text on the current conversation branch, before this turn; not recorded evidence. */
     tutorMessages?: readonly string[];
     missions?: readonly MissionContext[];
+    /** Measured by the host from lesson Session activity, never by the theory. */
+    lessonTiming?: LessonTiming;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;
 export type ChatSetup<S = unknown> = Readonly<{
@@ -103,6 +115,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly digest: ContentDigest;
   state(graph: ResolvedGraph, observations: readonly Observation[], now: string): S;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
+  /** Stable graph-only stops. A theory without this method has no Lessons. */
+  path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   readonly chat: {
