@@ -79,6 +79,8 @@ export type LessonNodeReading = Readonly<{
   label: string;
   criterion: string;
   demonstrated: boolean;
+  /** A removed captured member stays visible and unticked. */
+  unavailable?: boolean;
   /** The projection's existing score caption/message, not a new assessment. */
   score?: Tag;
 }>;
