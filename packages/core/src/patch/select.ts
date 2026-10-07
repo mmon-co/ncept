@@ -331,6 +331,15 @@ export function nodesContributedOnlyBy(graph: ResolvedGraph, patches: ReadonlySe
   );
 }
 
+/** Project a Node subset using the same Edge, Material and metadata narrowing as query selection. */
+export function selectNodeSubset(graph: ResolvedGraph, nodes: ReadonlySet<NodeId>): SelectedGraph {
+  return selectedGraph(graph, {
+    nodes: new Set(nodes),
+    edges: new Set(graph.edges.map(({ id }) => id)),
+    metadataSets: new Set(graph.metadataSets.map(({ id }) => id)),
+  });
+}
+
 /** Select a valid attributed subgraph through the restricted tag algebra. */
 export function selectGraph(graph: ResolvedGraph, query?: GraphQuery, tags?: TagIndex): SelectedGraph {
   if (query === undefined) return graph;
