@@ -154,6 +154,9 @@ function* setup(ctx: ChatContext<DefaultState>): Program<ChatSetup<DefaultState>
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; read memory(node) for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; attach the Nodes you work on.",
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
+      ...(ctx.lesson === undefined
+        ? []
+        : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
     ].join("\n\n"),
     skills: chatSkills(documents, recommendations),
     tools: [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
