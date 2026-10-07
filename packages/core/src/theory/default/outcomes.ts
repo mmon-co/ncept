@@ -68,7 +68,7 @@ const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(va
 
 /**
  * One assessed Quizzes Playground response, with the Problem captured at open and the revision pinned there.
- * Grader follows format: choice and short are mechanical, open is its declared assessor.
+ * Answer describes the response surface; grader records who judged it.
  */
 export interface AttemptOutcome {
   readonly kind: "attempt";
@@ -78,36 +78,38 @@ export interface AttemptOutcome {
     readonly about: readonly NodeId[];
     readonly prompt: string;
     readonly presentation?: string;
-  } & (
-    | {
-        readonly format: "choice";
-        readonly options: readonly { id: string; label: string; correct: boolean; error?: string }[];
-      }
-    | { readonly format: "short"; readonly accepted: readonly string[] }
-    | { readonly format: "open"; readonly by: "tutor" | "learner"; readonly rubric?: string; readonly model?: string }
-    | {
-        readonly format: "expectations";
-        readonly help: "pump" | "hint" | "correct";
-        /** What one response is classified against, each evidence about its own Nodes; together they are the Problem's `about`. */
-        readonly checks: readonly {
-          id: string;
-          about: readonly NodeId[];
-          ask: string;
-          shown: string;
-          absent: string;
-          mistaken?: Readonly<Record<string, string>>;
-          hint?: string;
-          corrections?: Readonly<Record<string, string>>;
-        }[];
-        readonly pumps: readonly { text: string; checks: readonly string[] }[];
-      }
-  );
-  /** A choice option id, or the literal short/open text. */
+    readonly answer:
+      | {
+          readonly kind: "choice";
+          readonly options: readonly { id: string; label: string; correct: boolean; error?: string }[];
+        }
+      | { readonly kind: "short" }
+      | { readonly kind: "text" };
+    readonly grader:
+      | { readonly by: "mechanical"; readonly accepted?: readonly string[] }
+      | { readonly by: "tutor" | "learner"; readonly rubric?: string }
+      | {
+          readonly by: "checks";
+          readonly help: "pump" | "hint" | "correct";
+          readonly checks: readonly {
+            id: string;
+            about: readonly NodeId[];
+            ask: string;
+            shown: string;
+            absent: string;
+            mistaken?: Readonly<Record<string, string>>;
+            hint?: string;
+            corrections?: Readonly<Record<string, string>>;
+          }[];
+          readonly pumps: readonly { text: string; checks: readonly string[] }[];
+        };
+  };
+  /** A choice option id, or the literal short/text answer. */
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
     readonly dontKnow?: boolean;
-    readonly grader: "mechanical" | "tutor" | "learner";
+    readonly grader: "mechanical" | "tutor" | "learner" | "decision";
     readonly feedback?: string;
     /** Expectations: each check as the final response left it, and as it stood when help first touched it. */
     readonly checks?: Readonly<Record<string, CheckResult>>;
@@ -138,78 +140,72 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
   )
     return false;
   const dontKnow = assessment.dontKnow === true;
-  switch (problem.format) {
-    case "choice": {
-      const options: unknown = problem.options;
-      if (
-        !Array.isArray(options) ||
-        !options.every(
-          (option: unknown) =>
-            object(option) &&
-            text(option.id) &&
-            text(option.label) &&
-            typeof option.correct === "boolean" &&
-            optional(option.error),
-        ) ||
-        new Set(options.map(({ id }) => id)).size !== options.length
-      )
-        return false;
-      const chosen = options.find(({ id }) => id === response);
-      return (
-        dontKnow ||
-        (assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct)
-      );
-    }
-    case "short":
-      return (
-        Array.isArray(problem.accepted) &&
-        problem.accepted.length > 0 &&
-        problem.accepted.every(text) &&
-        (dontKnow || assessment.grader === "mechanical")
-      );
-    case "open":
-      return (
-        (problem.by === "tutor" || problem.by === "learner") &&
-        optional(problem.rubric) &&
-        optional(problem.model) &&
-        (problem.rubric !== undefined || problem.model !== undefined) &&
-        (dontKnow || assessment.grader === problem.by)
-      );
-    case "expectations": {
-      const checks: unknown = problem.checks;
-      const about = new Set<unknown>(Array.isArray(problem.about) ? problem.about : []);
-      if (!Array.isArray(checks) || checks.length === 0 || !Array.isArray(problem.pumps)) return false;
-      const valid = checks.every(
-        (c: unknown) =>
-          object(c) &&
-          text(c.id) &&
-          text(c.ask) &&
-          text(c.shown) &&
-          text(c.absent) &&
-          Array.isArray(c.about) &&
-          c.about.length > 0 &&
-          c.about.every((node: unknown) => nodeId(node) && about.has(node)),
-      );
-      const results = (value: unknown) =>
-        object(value) && Object.values(value).every((r) => object(r) && checkOutcome(r.outcome));
-      const final = assessment.checks;
-      return (
-        valid &&
-        ["pump", "hint", "correct"].includes(String(problem.help)) &&
-        (dontKnow ||
-          (assessment.grader === "tutor" &&
-            results(final) &&
-            (assessment.helped === undefined || results(assessment.helped)) &&
-            assessment.correct ===
-              checks.every((c: { id: string }) => {
-                const result: unknown = object(final) ? final[c.id] : undefined;
-                return object(result) && result.outcome === "shown";
-              })))
-      );
-    }
-    default:
+  const { answer, grader } = problem;
+  if (!object(answer) || !object(grader)) return false;
+  if (answer.kind === "choice") {
+    const options: unknown = answer.options;
+    if (
+      grader.by !== "mechanical" ||
+      grader.accepted !== undefined ||
+      !Array.isArray(options) ||
+      !options.every(
+        (option: unknown) =>
+          object(option) &&
+          text(option.id) &&
+          text(option.label) &&
+          typeof option.correct === "boolean" &&
+          optional(option.error),
+      ) ||
+      new Set(options.map(({ id }) => id)).size !== options.length
+    )
       return false;
+    const chosen = options.find(({ id }) => id === response);
+    return (
+      dontKnow || (assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct)
+    );
   }
+  if (answer.kind === "short")
+    return (
+      grader.by === "mechanical" &&
+      Array.isArray(grader.accepted) &&
+      grader.accepted.length > 0 &&
+      grader.accepted.every(text) &&
+      (dontKnow || assessment.grader === "mechanical")
+    );
+  if (answer.kind !== "text") return false;
+  if (grader.by === "tutor" || grader.by === "learner")
+    return optional(grader.rubric) && (dontKnow || assessment.grader === grader.by);
+  if (grader.by !== "checks") return false;
+  const checks: unknown = grader.checks;
+  const about = new Set<unknown>(Array.isArray(problem.about) ? problem.about : []);
+  if (!Array.isArray(checks) || checks.length === 0 || !Array.isArray(grader.pumps)) return false;
+  const valid = checks.every(
+    (c: unknown) =>
+      object(c) &&
+      text(c.id) &&
+      text(c.ask) &&
+      text(c.shown) &&
+      text(c.absent) &&
+      Array.isArray(c.about) &&
+      c.about.length > 0 &&
+      c.about.every((node: unknown) => nodeId(node) && about.has(node)),
+  );
+  const results = (value: unknown) =>
+    object(value) && Object.values(value).every((r) => object(r) && checkOutcome(r.outcome));
+  const final = assessment.checks;
+  return (
+    valid &&
+    ["pump", "hint", "correct"].includes(String(grader.help)) &&
+    (dontKnow ||
+      (assessment.grader === "decision" &&
+        results(final) &&
+        (assessment.helped === undefined || results(assessment.helped)) &&
+        assessment.correct ===
+          checks.every((c: { id: string }) => {
+            const result: unknown = object(final) ? final[c.id] : undefined;
+            return object(result) && result.outcome === "shown";
+          })))
+  );
 }
 /** Guards validate the supported payload, including the captured grading invariants. */
 export function isRecallOutcome(value: unknown): value is RecallOutcome {
@@ -335,8 +331,8 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
     }));
   // One response, one demonstration per check and Node. A check help touched is recorded twice:
   // unaided as it stood before the help, aided as the final response left it.
-  if (problem.format === "expectations")
-    return problem.checks.flatMap((check) => {
+  if (problem.grader.by === "checks")
+    return problem.grader.checks.flatMap((check) => {
       const final = assessment.checks?.[check.id] ?? { outcome: "absent" as const };
       const before = assessment.helped?.[check.id];
       const states =
@@ -366,7 +362,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         })),
       );
     });
-  const choice = problem.format === "choice" ? problem.options : undefined;
+  const choice = problem.answer.kind === "choice" ? problem.answer.options : undefined;
   const answer = choice?.find(({ id }) => id === response)?.label ?? response;
   return problem.about.map((node) => ({
     at,

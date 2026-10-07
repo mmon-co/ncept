@@ -29,7 +29,7 @@ export interface Demonstration {
   readonly node: NodeRef;
   readonly outcome: "success" | "failure" | "dont-know";
   readonly unaided: boolean;
-  readonly grader: "mechanical" | "tutor" | "learner";
+  readonly grader: "mechanical" | "tutor" | "learner" | "decision";
   readonly task: string;
   readonly response: string;
   /** Set only by the explicit lesson-opening retrieval recording tool. */
@@ -164,7 +164,10 @@ export function isDemonstration(value: unknown): value is Demonstration {
     isNodeRef(value.node) &&
     (value.outcome === "success" || value.outcome === "failure" || value.outcome === "dont-know") &&
     typeof value.unaided === "boolean" &&
-    (value.grader === "mechanical" || value.grader === "tutor" || value.grader === "learner") &&
+    (value.grader === "mechanical" ||
+      value.grader === "tutor" ||
+      value.grader === "learner" ||
+      value.grader === "decision") &&
     typeof value.task === "string" &&
     typeof value.response === "string" &&
     (value.recording === undefined || value.recording === "retrieval-opener")
