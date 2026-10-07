@@ -105,7 +105,9 @@ export function isMetadataValue(value: unknown): value is MetadataValue {
     typeof value === "string" ||
     typeof value === "boolean" ||
     (typeof value === "number" && Number.isFinite(value)) ||
-    (Array.isArray(value) && value.every((item) => typeof item === "string")) ||
+    (Array.isArray(value) &&
+      (value.every((item) => typeof item === "string") ||
+        (value.every(isMaterialMeta) && isMaterialMeta({ entries: value })))) ||
     isAttachment(value)
   );
 }
@@ -115,7 +117,7 @@ export function validateMetadataProperties(properties: Readonly<Record<string, M
     if (!isMetadataValue(value))
       throw new PatchCompileError(
         "invalid-metadata-value",
-        `metadata property '${key}' is not a scalar, string list or Attachment`,
+        `metadata property '${key}' is not a scalar, string list, bounded JSON-object list or Attachment`,
       );
 }
 
