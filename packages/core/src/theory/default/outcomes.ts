@@ -423,7 +423,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       unaided: true,
       grader: assessment.grader,
       task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
-      response: assessment.feedback === undefined ? answer : `${answer}\n${assessment.feedback}`,
+      response: answer,
     },
   }));
 }
