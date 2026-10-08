@@ -220,6 +220,7 @@ const lessonCapabilities = ["reads", "materials", "graph-draft", "applets", "web
 export const modes = {
   empty: {
     title: "Session",
+    frontTab: "map",
     entry: { required: false, kinds: [] },
     capabilities: emptyCapabilities,
     switches: [
@@ -230,6 +231,8 @@ export const modes = {
   },
   charting: {
     title: "Charting",
+    frontTab: "map",
+    noteTemplates: ["I already know this.", "I don't need this.", "Why is this needed?", "These are one thing for me."],
     entry: { required: false, kinds: ["goal", "mission", "target"] },
     capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
@@ -237,6 +240,7 @@ export const modes = {
   },
   lesson: {
     title: "Lesson",
+    frontTab: "document",
     entry: { required: true, kinds: ["lesson"] },
     capabilities: lessonCapabilities,
     switches: [
