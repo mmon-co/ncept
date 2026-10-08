@@ -116,6 +116,8 @@ export interface AttemptOutcome {
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
+    /** Answer supplied or reference available: practice, not independent calibration. */
+    readonly aided?: true;
     readonly dontKnow?: boolean;
     readonly grader: "mechanical" | "tutor" | "learner" | "decision";
     readonly feedback?: string;
@@ -141,6 +143,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     !optional(problem.presentation) ||
     typeof response !== "string" ||
     typeof assessment.correct !== "boolean" ||
+    (assessment.aided !== undefined && assessment.aided !== true) ||
     !optional(assessment.feedback) ||
     (assessment.dontKnow !== undefined &&
       (assessment.dontKnow !== true || assessment.correct !== false || assessment.grader !== "learner")) ||
@@ -345,7 +348,7 @@ function checkNote(
 /** Only targeted checks in a submitted calibration response are evidence; Edges infer the rest. */
 export function calibrationClaims(outcome: AttemptOutcome): readonly { node: NodeId; payload: Claim }[] {
   const { problem, response, assessment } = outcome;
-  if (!outcome.calibration || problem.grader.by !== "checks") return [];
+  if (!outcome.calibration || assessment.aided || problem.grader.by !== "checks") return [];
   return problem.grader.checks.flatMap((check) => {
     const result = assessment.dontKnow
       ? { outcome: "skipped" as const }
@@ -373,7 +376,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         kind: "demonstration",
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
-        unaided: true,
+        unaided: !assessment.aided,
         grader: "learner",
         task: problem.prompt,
         response,
@@ -387,9 +390,9 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       const before = assessment.helped?.[check.id];
       const states =
         before === undefined
-          ? [{ result: final, unaided: true }]
+          ? [{ result: final, unaided: !assessment.aided }]
           : [
-              { result: before, unaided: true },
+              { result: before, unaided: !assessment.aided },
               { result: final, unaided: false },
             ];
       return states.flatMap(({ result, unaided }) =>
@@ -420,7 +423,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       kind: "demonstration",
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
-      unaided: true,
+      unaided: !assessment.aided,
       grader: assessment.grader,
       task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
       response: answer,
