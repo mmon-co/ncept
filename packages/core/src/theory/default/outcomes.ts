@@ -376,7 +376,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         kind: "demonstration",
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
-        unaided: !assessment.aided,
+        unaided: true,
         grader: "learner",
         task: problem.prompt,
         response,
@@ -390,9 +390,9 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       const before = assessment.helped?.[check.id];
       const states =
         before === undefined
-          ? [{ result: final, unaided: !assessment.aided }]
+          ? [{ result: final, unaided: true }]
           : [
-              { result: before, unaided: !assessment.aided },
+              { result: before, unaided: true },
               { result: final, unaided: false },
             ];
       return states.flatMap(({ result, unaided }) =>
@@ -423,7 +423,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       kind: "demonstration",
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
-      unaided: !assessment.aided,
+      unaided: true,
       grader: assessment.grader,
       task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
       response: answer,
