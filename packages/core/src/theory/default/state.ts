@@ -480,10 +480,19 @@ export function isCurrentSuccess(
   );
 }
 
-/** Inputs are active, time-ordered records from homing, plus successes from the strict dependent cone. */
+/** The latest tentative competence report, newer than any actual failure. */
+function knowsClaim(records: readonly HomedRecord[]): Observation<Claim> | undefined {
+  const latest = records.findLast((record): record is Observation<Claim> => record.payload.kind === "claim");
+  const failure = records.findLast(({ payload }) => payload.kind === "demonstration" && payload.outcome !== "success");
+  return latest?.payload.stance === "knows" && (failure === undefined || Date.parse(latest.at) > Date.parse(failure.at))
+    ? latest
+    : undefined;
+}
+
+/** Inputs are active, time-ordered records from homing, plus known evidence from the strict dependent cone. */
 export function labelDefaultNode(input: {
   readonly records: readonly HomedRecord[];
-  readonly covering: readonly { readonly node: NodeId; readonly record: Observation<Demonstration> }[];
+  readonly covering: readonly { readonly node: NodeId; readonly record: HomedRecord }[];
   readonly at: string;
   readonly parameters: DefaultParameters;
 }): NodeState {
@@ -496,15 +505,10 @@ export function labelDefaultNode(input: {
     .slice(-parameters.window.size);
   const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
-  const lastFailure = demonstrations.filter(({ payload }) => payload.outcome !== "success").at(-1);
   const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
   const stale = lastSuccess !== undefined && !isCurrentSuccess(lastSuccess, at, parameters.forgettingHorizonDays);
-  const knows = records.some(
-    ({ payload, at: recordedAt }) =>
-      payload.kind === "claim" &&
-      payload.stance === "knows" &&
-      (lastFailure === undefined || Date.parse(recordedAt) > Date.parse(lastFailure.at)),
-  );
+  // A newer not-known claim replaces an earlier tentative knows claim; it is not a demonstration failure.
+  const knows = knowsClaim(records) !== undefined;
   const forgotten =
     lastSuccess !== undefined &&
     records.some(
@@ -760,11 +764,14 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = defaultNodeParameters(graph, id, DEFAULT_PARAMETERS);
-    const covering = cone(id).flatMap((node) =>
-      (homed[node] ?? [])
-        .filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays))
-        .map((record) => ({ node, record })),
-    );
+    const covering = cone(id).flatMap((node) => {
+      const records = homed[node] ?? [];
+      const claim = knowsClaim(records);
+      return [
+        ...records.filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays)),
+        ...(claim === undefined ? [] : [claim]),
+      ].map((record) => ({ node, record }));
+    });
     nodes[id] = {
       ...labelDefaultNode({ records: homed[id] ?? [], covering, at: now, parameters }),
       featureUses: observations.filter(
