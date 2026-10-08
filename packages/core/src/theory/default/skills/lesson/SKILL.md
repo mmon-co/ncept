@@ -31,4 +31,4 @@ The first lesson to use a resource charted in a Node's `pedagogy:resources` make
 
 @procedures/material-work.md
 
-When the learner chooses a different Lesson scope, propose `switch_mode` using the current registry's allowed route and default carry. For a Charting transition, use its declared aside route when available; never invent a carry or offer a mode procedure as a Skill. A learner-only non-mode Skill is started by its slash command (for example `/probing`), not by a Skill Confirmation.
+When the learner chooses a different Lesson scope, propose `switch_mode` using the current registry's allowed route and a carry suited to the destination. For a Charting transition, use its declared aside route when available; a specific graph edit in the lesson's context can carry `full`. A mode procedure is not a Skill. A learner-only non-mode Skill is started by its slash command (for example `/probing`), not by a Skill Confirmation.
