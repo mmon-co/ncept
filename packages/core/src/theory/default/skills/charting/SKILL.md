@@ -5,8 +5,6 @@ facet: chart
 entry: [learner]
 ---
 
-<skill_context> <skill_dir>/Users/mlegls/dev/mmon/concept__worktrees/move-charting-and-material-contracts-into-tools-implement-1/packages/core/src/theory/default/skills/charting</skill_dir> <workspace_dir>/Users/mlegls/dev/mmon/concept__worktrees/move-charting-and-material-contracts-into-tools-implement-1</workspace_dir> </skill_context>
-
 # Charting
 
 Design the learning from the goal backward, as a teacher who had never seen this system would, and work it out with the learner in conversation. The graph records the design; it does not suggest it. Do not chart what a typical course on the subject would cover unless the design arrives there.
