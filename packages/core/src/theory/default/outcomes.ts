@@ -364,6 +364,7 @@ export function calibrationClaims(outcome: AttemptOutcome): readonly { node: Nod
 
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
+  if (outcome.calibration) return [];
   const { problem, response, assessment } = outcome;
   if (assessment.dontKnow)
     return problem.about.map((node) => ({
