@@ -764,16 +764,15 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = defaultNodeParameters(graph, id, DEFAULT_PARAMETERS);
-    // A dependent's tentative knows claim does not outrank this Node's own not-known claim recorded at the same time or later (one calibration submission stamps all its claims alike).
+    // A dependent's tentative knows claim never outranks this Node's own latest unfamiliar claim.
     const own = (homed[id] ?? []).findLast((record) => record.payload.kind === "claim");
-    const denied =
-      own?.payload.kind === "claim" && own.payload.stance === "unfamiliar" ? Date.parse(own.at) : undefined;
+    const denied = own?.payload.kind === "claim" && own.payload.stance === "unfamiliar";
     const covering = cone(id).flatMap((node) => {
       const records = homed[node] ?? [];
       const claim = knowsClaim(records);
       return [
         ...records.filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays)),
-        ...(claim === undefined || (denied !== undefined && denied >= Date.parse(claim.at)) ? [] : [claim]),
+        ...(claim === undefined || denied ? [] : [claim]),
       ].map((record) => ({ node, record }));
     });
     nodes[id] = {
