@@ -210,6 +210,8 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown) {
     capabilities: [...nodes]
       .map((node) => ({ label: labelOf(node), standing: defaultNodeState(ctx.state, node).label }))
       .sort((left, right) => left.label.localeCompare(right.label)),
+    recordsScope:
+      "Conversational Records on this Session surface only. Material attempts have their own surfaces and are reported separately to the conversation; absence here does not mean unanswered.",
     records: records.map(({ record, about }) => {
       const association = about.length === 0 ? {} : { about };
       const payload = record.payload;
@@ -404,7 +406,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   {
     name: "close_recount",
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active Records from this Session. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
+      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
     schema: schema({
       practising: {
         type: "array",
