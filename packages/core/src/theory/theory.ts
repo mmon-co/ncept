@@ -80,6 +80,8 @@ export type LessonNodeReading = Readonly<{
   label: string;
   criterion: string;
   demonstrated: boolean;
+  /** Tentatively ticked, still needs a real Lesson check. */
+  probablyKnown?: true;
   /** A removed captured member stays visible and unticked. */
   unavailable?: boolean;
   /** The projection's existing score caption/message, not a new assessment. */

@@ -9,7 +9,7 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   lesson: sources["lesson/SKILL.md"],
   mission: sources["mission/SKILL.md"],
   planning: sources["planning/SKILL.md"],
-  probing: sources["probing/SKILL.md"],
+  calibrate: sources["calibrate/SKILL.md"],
   realignment: sources["realignment/SKILL.md"],
   "app-help": sources["app-help/SKILL.md"],
   "recording-review": sources["recording-review/SKILL.md"],
@@ -20,7 +20,6 @@ const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
   "procedures/graph-authoring.md": sources["procedures/graph-authoring.md"],
   "procedures/material-work.md": sources["procedures/material-work.md"],
   "procedures/mission-conversation.md": sources["procedures/mission-conversation.md"],
-  "procedures/probe-loop.md": sources["procedures/probe-loop.md"],
   "procedures/quiz-authoring.md": sources["procedures/quiz-authoring.md"],
 };
 
@@ -108,7 +107,7 @@ export function skillsForMode(mode?: string): SkillMeta[] {
     mode === "empty"
       ? new Set(["app-help"])
       : mode === "charting"
-        ? new Set(["mission", "app-help"])
+        ? new Set(["mission", "calibrate", "app-help"])
         : mode === "lesson"
           ? new Set(all.map(({ name }) => name))
           : mode === undefined || mode === ""

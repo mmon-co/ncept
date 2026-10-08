@@ -213,7 +213,7 @@ function* setup(
 export const chat = { open: setup, turn: setup };
 
 const emptyCapabilities = ["reads"] as const;
-const chartingCapabilities = ["reads", "graph-draft", "web"] as const;
+const chartingCapabilities = ["reads", "graph-draft", "materials", "web"] as const;
 const lessonCapabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
 
 /** The default theory’s Session choices; host capabilities are mounted separately. */

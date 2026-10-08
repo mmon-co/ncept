@@ -1,6 +1,6 @@
 import { isContentDigest } from "../../digest";
 import { isObservationTimestamp } from "../../observations";
-import type { Demonstration, NodeRef } from "./state";
+import type { Claim, Demonstration, NodeRef } from "./state";
 import type { ExactPatchRef, NodeId } from "../../patch";
 
 /** Content captured when retrieval happened, not a pointer to an editable card. */
@@ -72,6 +72,8 @@ const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(va
  */
 export interface AttemptOutcome {
   readonly kind: "attempt";
+  /** Broad calibration checks are tentative claims, never demonstrations. */
+  readonly calibration?: true;
   readonly problem: {
     readonly id: string;
     readonly digest: string;
@@ -148,6 +150,16 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
   const dontKnow = assessment.dontKnow === true;
   const { answer, grader } = problem;
   if (!object(answer) || !object(grader)) return false;
+  if (
+    value.calibration !== undefined &&
+    (value.calibration !== true ||
+      answer.kind !== "text" ||
+      grader.by !== "checks" ||
+      grader.help !== "pump" ||
+      !Array.isArray(grader.checks) ||
+      !grader.checks.every((c: unknown) => object(c) && Array.isArray(c.about) && c.about.length === 1))
+  )
+    return false;
   if (answer.kind === "choice") {
     const options: unknown = answer.options;
     if (
@@ -328,6 +340,26 @@ function checkNote(
   if (outcome === "absent") return `Not taken up: ${check.absent}`;
   if (outcome === "skipped") return "Set aside: I can't say";
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
+}
+
+/** Only targeted checks in a submitted calibration response are evidence; Edges infer the rest. */
+export function calibrationClaims(outcome: AttemptOutcome): readonly { node: NodeId; payload: Claim }[] {
+  const { problem, response, assessment } = outcome;
+  if (!outcome.calibration || problem.grader.by !== "checks") return [];
+  return problem.grader.checks.flatMap((check) => {
+    const result = assessment.dontKnow
+      ? { outcome: "skipped" as const }
+      : (assessment.checks?.[check.id] ?? { outcome: "absent" as const });
+    return check.about.map((node) => ({
+      node,
+      payload: {
+        kind: "claim" as const,
+        stance: result.outcome === "shown" ? ("knows" as const) : ("unfamiliar" as const),
+        prompt: `${problem.prompt}\nCheck: ${check.ask}`,
+        statement: `${response}\n${checkNote(check, result)}`,
+      },
+    }));
+  });
 }
 
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
