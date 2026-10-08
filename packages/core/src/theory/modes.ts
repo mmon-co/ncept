@@ -26,6 +26,10 @@ export type ModeSwitchDefault =
 /** @public A mode's entry requirement, capabilities, transitions and current tutor setup. */
 export type SessionMode<S = unknown> = Readonly<{
   title: string;
+  /** Initial side-panel tab: "map" or a host Playground identity; absent falls back to Map. */
+  frontTab?: string;
+  /** Editable text templates offered by the draft's empty note editor. */
+  noteTemplates?: readonly string[];
   entry: Readonly<{ required: boolean; kinds: readonly ModeEntry["kind"][] }>;
   capabilities: readonly HostCapability[];
   switches: readonly ModeSwitchDefault[];
