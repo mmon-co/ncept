@@ -29,6 +29,7 @@ import {
   memoryDefault,
   stateDefault,
   DEFAULT_THEORY_REF,
+  DEFAULT_PARAMETERS,
   type DefaultState,
   type Demonstration,
   type Interpretation,
@@ -168,14 +169,10 @@ function trail(ctx: Ctx, node: NodeId) {
   const state = defaultNodeState(ctx.state, node);
   const rule =
     state.label === "demonstrated"
-      ? "window-and-current-success"
+      ? "demonstration-window"
       : state.label === "probably-known"
-        ? state.coveredBy.length > 0
-          ? "current-dependent-success"
-          : "knows-claim-newer-than-failure"
-        : state.label === "suspect"
-          ? "past-horizon-or-newer-forgotten-claim"
-          : "no-qualifying-evidence";
+        ? "knows-claim-newer-than-failure"
+        : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
 function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
@@ -345,11 +342,11 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     "trail",
     [
       "Original records and the rule producing this Node's label. The first qualifying rule applies:",
-      "1. demonstrated: the window holds (default two successes in the last three unaided attempts, with aided failures included), and the last unaided success is current. Aided successes count only as practice.",
-      "2. probably-known: a dependent has a current unaided success, or an attached knows claim is newer than any failure on this Node.",
-      "3. suspect: a past unaided success is beyond the forgetting horizon or a forgotten claim is newer, and nothing above qualifies.",
-      "4. unknown: otherwise. A first failure changes no prerequisite's label.",
-      "A fresh dependent covers a stale success or a forgotten claim. A newer knows claim can follow failure; a later failure defeats that claim unless other qualifying evidence remains. The horizon starts at 30 days as configurable policy, not an empirical constant. Node window overrides are content metadata. Only demonstrated and probably-known count as known for routing.",
+      "1. demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
+      "2. probably-known: an attached knows claim is newer than any failure on this Node.",
+      "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
+      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. Claims start a short schedule without covering prerequisites. Review tags select acquired Nodes below the retention thresholds.",
+      "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
     trail,
   ),
@@ -358,11 +355,12 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       .filter((id) => defaultNodeState(ctx.state, id).records.length === 0)
       .map((id) => candidate(ctx, id)),
   ),
-  scopedTool("probes", "Suspect and probably-known Nodes with coverage facts.", (ctx, scope) =>
+  scopedTool("probes", "Claimed or due Nodes with acquisition and retention facts.", (ctx, scope) =>
     readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
-      return state.label === "suspect" || state.label === "probably-known"
-        ? [{ ...candidate(ctx, id), coveredBy: state.coveredBy, stale: state.stale, rule: trail(ctx, id).rule }]
+      return state.label === "probably-known" ||
+        (isDefaultKnown(state) && (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due)
+        ? [{ ...candidate(ctx, id), schedule: state.schedule, rule: trail(ctx, id).rule }]
         : [];
     }),
   ),

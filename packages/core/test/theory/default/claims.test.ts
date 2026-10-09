@@ -3,7 +3,7 @@ import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
 import type { Observation } from "../../../src/observations";
 import { defaultTheory, DEFAULT_THEORY_REF, type Claim, type Demonstration } from "../../../src/theory/default";
 
-test("direct unfamiliar evidence survives later inferred claims until own newer evidence clears it", () => {
+test("claims and acquisition do not cover prerequisites", () => {
   const ref = { identity: "patch-claims", digest: `sha256:${"a".repeat(64)}` } as const;
   const revision: PatchRevision = {
     ref,
@@ -46,9 +46,8 @@ test("direct unfamiliar evidence survives later inferred claims until own newer 
   const records = [unfamiliar, dependent];
   const state = defaultTheory.state(graph, records, now);
   expect(state.nodes["node-prerequisite"]?.label).toBe("unknown");
-  expect(state.nodes["node-prerequisite"]?.coveredBy).toEqual([]);
   expect(state.nodes["node-dependent"]?.label).toBe("probably-known");
-  expect(state.nodes["node-untouched"]?.label).toBe("probably-known");
+  expect(state.nodes["node-untouched"]?.label).toBe("unknown");
   const own: Observation<Claim> = {
     ...dependent,
     id: "obs-own",
@@ -79,6 +78,6 @@ test("direct unfamiliar evidence survives later inferred claims until own newer 
     payload: { ...demonstration.payload, node: { node: "node-dependent", provenance: ref } },
   };
   expect(defaultTheory.state(graph, [...records, dependentDemonstration], now).nodes["node-prerequisite"]?.label).toBe(
-    "probably-known",
+    "unknown",
   );
 });

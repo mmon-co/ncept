@@ -1,3 +1,4 @@
+import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "../speaker";
 import { dependentCones } from "./dependent-cone";
 import {
@@ -419,21 +420,34 @@ export function projectGraphChange(
   });
 }
 
-export type NodeLabel = "demonstrated" | "probably-known" | "suspect" | "unknown";
+export type NodeLabel = "demonstrated" | "probably-known" | "unknown";
 export type DemonstrationWindow = Readonly<{ size: number; required: number }>;
 export type DefaultParameters = Readonly<{
-  forgettingHorizonDays: number;
   window: DemonstrationWindow;
+  retention: Readonly<{ due: number; fading: number; claimStabilityDays: number }>;
 }>;
 
-/** A configurable initial policy, not an empirically estimated forgetting constant. */
 export const DEFAULT_PARAMETERS: DefaultParameters = {
-  forgettingHorizonDays: 30,
   window: { size: 3, required: 2 },
+  retention: { due: 0.9, fading: 0.7, claimStabilityDays: 1 },
 };
 
+export interface NodeSchedule {
+  readonly stability: number;
+  readonly difficulty: number;
+  readonly reps: number;
+  readonly lapses: number;
+  readonly lastReview: string;
+  readonly retrievability: number;
+  readonly citations: readonly ObservationId[];
+}
+
+const DAY_MS = 86_400_000;
+/** Daily reviews have no learning steps; disabling fuzz keeps replay deterministic. */
+const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
+
 export interface NodeState {
-  /** Effective operation receipts; these do not change competence labels or prerequisite coverage. */
+  /** Effective operation receipts; these do not change competence labels or schedules. */
   readonly featureUses: readonly Observation<FeatureUse>[];
   readonly label: NodeLabel;
   readonly k: number;
@@ -444,8 +458,7 @@ export interface NodeState {
   readonly citations: readonly ObservationId[];
   /** Original active evidence in chronological order; never memory or summaries. */
   readonly records: readonly HomedRecord[];
-  readonly coveredBy: readonly NodeId[];
-  readonly stale: boolean;
+  readonly schedule?: NodeSchedule;
 }
 
 export function acceptsWindow(value: unknown): value is DemonstrationWindow {
@@ -465,21 +478,6 @@ export function acceptsWindow(value: unknown): value is DemonstrationWindow {
   );
 }
 
-export function isCurrentSuccess(
-  record: HomedRecord,
-  at: string,
-  horizonDays: number,
-): record is Observation<Demonstration> {
-  const age = Date.parse(at) - Date.parse(record.at);
-  return (
-    record.payload.kind === "demonstration" &&
-    record.payload.unaided &&
-    record.payload.outcome === "success" &&
-    age >= 0 &&
-    age <= horizonDays * 86_400_000
-  );
-}
-
 /** The latest tentative competence report, newer than any actual failure. */
 function knowsClaim(records: readonly HomedRecord[]): Observation<Claim> | undefined {
   const latest = records.findLast((record): record is Observation<Claim> => record.payload.kind === "claim");
@@ -489,38 +487,21 @@ function knowsClaim(records: readonly HomedRecord[]): Observation<Claim> | undef
     : undefined;
 }
 
-/** Inputs are active, time-ordered records from homing, plus known evidence from the strict dependent cone. */
+/** Acquisition reads only this Node's own active, time-ordered evidence, without a horizon. */
 export function labelDefaultNode(input: {
   readonly records: readonly HomedRecord[];
-  readonly covering: readonly { readonly node: NodeId; readonly record: HomedRecord }[];
-  readonly at: string;
   readonly parameters: DefaultParameters;
 }): NodeState {
-  const { records, covering, at, parameters } = input;
+  const { records, parameters } = input;
   const demonstrations = records.filter(
     (record): record is Observation<Demonstration> => record.payload.kind === "demonstration",
   );
-  const attempts = demonstrations
-    .filter(({ payload }) => payload.unaided || payload.outcome !== "success")
-    .slice(-parameters.window.size);
+  const attempts = demonstrations.filter(({ payload }) => payload.unaided).slice(-parameters.window.size);
   const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
   const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
-  const stale = lastSuccess !== undefined && !isCurrentSuccess(lastSuccess, at, parameters.forgettingHorizonDays);
-  // A newer not-known claim replaces an earlier tentative knows claim; it is not a demonstration failure.
   const knows = knowsClaim(records) !== undefined;
-  const forgotten =
-    lastSuccess !== undefined &&
-    records.some(
-      ({ payload, at: recordedAt }) =>
-        payload.kind === "claim" &&
-        payload.stance === "forgotten" &&
-        Date.parse(recordedAt) > Date.parse(lastSuccess.at),
-    );
-  let label: NodeLabel = "unknown";
-  if (k >= parameters.window.required && lastSuccess !== undefined && !stale) label = "demonstrated";
-  else if (covering.length > 0 || knows) label = "probably-known";
-  else if (lastSuccess !== undefined && (stale || forgotten)) label = "suspect";
+  const label: NodeLabel = k >= parameters.window.required ? "demonstrated" : knows ? "probably-known" : "unknown";
   return {
     featureUses: [],
     label,
@@ -529,10 +510,52 @@ export function labelDefaultNode(input: {
     required: parameters.window.required,
     ...(lastSuccess === undefined ? {} : { lastSuccess: lastSuccess.at }),
     aidedPractice: demonstrations.filter(({ payload }) => !payload.unaided).length,
-    citations: [...new Set([...records.map(({ id }) => id), ...covering.map(({ record }) => record.id)])],
+    citations: records.map(({ id }) => id),
     records,
-    coveredBy: [...new Set(covering.map(({ node }) => node))],
-    stale,
+  };
+}
+
+/** Direct and implicit evidence share one UTC-day review slot. Claims only initialize an absent schedule. */
+function scheduleDefaultNode(
+  records: readonly HomedRecord[],
+  implicit: readonly HomedRecord[],
+  now: string,
+  parameters: DefaultParameters,
+): NodeSchedule | undefined {
+  let card: Card | undefined;
+  let reviewDay: string | undefined;
+  const citations: ObservationId[] = [];
+  for (const record of [...records, ...implicit].sort(compareObservations)) {
+    const { payload, at, id } = record;
+    if (payload.kind === "claim") {
+      if (payload.stance !== "knows" || card !== undefined) continue;
+      card = {
+        ...SCHEDULER.next(createEmptyCard(at), at, Rating.Good).card,
+        stability: parameters.retention.claimStabilityDays,
+        reps: 0,
+      };
+    } else {
+      if (!payload.unaided) continue;
+      const day = new Date(at).toISOString().slice(0, 10);
+      if (day === reviewDay) continue;
+      card = SCHEDULER.next(
+        card ?? createEmptyCard(at),
+        at,
+        payload.outcome === "success" ? Rating.Good : Rating.Again,
+      ).card;
+      reviewDay = day;
+    }
+    citations.push(id);
+  }
+  if (card?.last_review === undefined) return undefined;
+  return {
+    stability: card.stability,
+    difficulty: card.difficulty,
+    reps: card.reps,
+    lapses: card.lapses,
+    lastReview: card.last_review.toISOString(),
+    retrievability: forgetting_curve((Date.parse(now) - card.last_review.getTime()) / DAY_MS, card.stability),
+    citations,
   };
 }
 
@@ -759,24 +782,19 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     for (const node of present) (homed[node] ??= []).push(record);
     placed.set(record.id, [...initial, ...present]);
   }
-  const cone = dependentCones(graph);
   const nodes: Partial<Record<NodeId, NodeState>> = {};
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = defaultNodeParameters(graph, id, DEFAULT_PARAMETERS);
-    // A dependent's tentative knows claim never outranks this Node's own latest unfamiliar claim.
-    const own = (homed[id] ?? []).findLast((record) => record.payload.kind === "claim");
-    const denied = own?.payload.kind === "claim" && own.payload.stance === "unfamiliar";
-    const covering = cone(id).flatMap((node) => {
-      const records = homed[node] ?? [];
-      const claim = knowsClaim(records);
-      return [
-        ...records.filter((record) => isCurrentSuccess(record, now, parameters.forgettingHorizonDays)),
-        ...(claim === undefined || denied ? [] : [claim]),
-      ].map((record) => ({ node, record }));
-    });
+    const own = homed[id] ?? [];
+    const implicit = graph.edges
+      .filter(({ from }) => from === id)
+      .flatMap(({ to }) => homed[to] ?? [])
+      .filter(({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success");
+    const schedule = scheduleDefaultNode(own, implicit, now, parameters);
     nodes[id] = {
-      ...labelDefaultNode({ records: homed[id] ?? [], covering, at: now, parameters }),
+      ...labelDefaultNode({ records: own, parameters }),
+      ...(schedule === undefined ? {} : { schedule }),
       featureUses: observations.filter(
         (observation): observation is Observation<FeatureUse> =>
           isDefaultObservation(observation) &&

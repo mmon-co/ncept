@@ -345,7 +345,7 @@ function checkNote(
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
 }
 
-/** Only targeted checks in a submitted calibration response are evidence; Edges infer the rest. */
+/** Only targeted checks in a submitted calibration response produce tentative claims. */
 export function calibrationClaims(outcome: AttemptOutcome): readonly { node: NodeId; payload: Claim }[] {
   const { problem, response, assessment } = outcome;
   if (!outcome.calibration || assessment.aided || problem.grader.by !== "checks") return [];

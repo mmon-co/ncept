@@ -3,7 +3,7 @@ import { pathDefault, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
-import { type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
+import { DEFAULT_PARAMETERS, type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
   const value = state.nodes[node];
@@ -33,12 +33,16 @@ export const defaultQueryTokens = {
   known: select(isDefaultKnown),
   demonstrated: select((node) => node.label === "demonstrated"),
   "probably-known": select((node) => node.label === "probably-known"),
-  suspect: select((node) => node.label === "suspect"),
   unknown: select((node) => node.label === "unknown"),
   reachable: (state, graph, reached = reachableNodes(state, graph)) => reached,
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
-  stale: select((node) => node.stale),
+  "review:due": select(
+    (node) => isDefaultKnown(node) && (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due,
+  ),
+  "review:fading": select(
+    (node) => isDefaultKnown(node) && (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading,
+  ),
 } satisfies Record<string, QueryToken>;
 
 export interface Indicator {
@@ -103,9 +107,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
           `Task ${JSON.stringify(task)}: ${constant ? "observed outcomes never differ" : "outcome sequence matches other items"}`,
         );
     }
-    const window = attempts
-      .filter(({ payload }) => payload.unaided || payload.outcome !== "success")
-      .slice(-node.window);
+    const window = attempts.filter(({ payload }) => payload.unaided).slice(-node.window);
     if (
       window.length >= 3 &&
       window.every((record, index) => index === 0 || succeeded(record) !== succeeded(window[index - 1] ?? record))
@@ -162,7 +164,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
   return results;
 }
 
-/** Display and query tags share exactly the same membership predicates. No ranking policy. */
+/** Display and query tags share exactly the same membership predicates. */
 export const defaultTags = [
   ...Object.keys(defaultQueryTokens),
   "item-outcomes",
@@ -218,10 +220,16 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     }
   }
   const contradictions = indicators.filter(({ kind }) => kind === "edge-contradiction");
+  const cone = dependentCones(graph);
 
   const nodes: Record<NodeId, readonly Tag[]> = {};
   for (const { id } of graph.nodes) {
     const node = defaultNodeState(state, id);
+    // A whole dependent outranks any retention difference; higher ranks come first.
+    const reviewRank =
+      cone(id).filter((dependent) => !isDefaultKnown(defaultNodeState(state, dependent))).length +
+      1 -
+      (node.schedule?.retrievability ?? 1);
     nodes[id] = [
       {
         tag: node.label,
@@ -230,7 +238,16 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
         cites: node.citations,
       },
       ...selected.flatMap(([tag, members]) =>
-        tag !== node.label && members.has(id) ? [{ tag, cites: node.citations }] : [],
+        tag !== node.label && members.has(id)
+          ? [
+              {
+                tag,
+                ...(tag.startsWith("review:")
+                  ? { rank: reviewRank, cites: node.schedule?.citations }
+                  : { cites: node.citations }),
+              },
+            ]
+          : [],
       ),
       ...(perNode.get(id) ?? []),
     ];
