@@ -294,7 +294,7 @@ function scopedTool(
   };
 }
 
-/** Read-only evidence and retrieval context from the host's current graph and observations. */
+/** Evidence readings, retrieval context and the Session's closing diagnosis. */
 export const defaultInstrumentTools: readonly DefaultTool[] = [
   scopedTool("frontier", "Reachable not-known Nodes, facts and citations; no ranking.", (ctx, scope) => {
     const frontier = defaultQueryTokens.frontier(ctx.state, ctx.graph);
@@ -454,10 +454,9 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       const input = args(raw, ["practising", "milestoneDiagnosis"]);
       const recount = closeRecount(ctx, input.practising, input.milestoneDiagnosis);
       for (const node of recount.milestoneDiagnosis?.regressedComponents ?? []) {
-        const slip = ctx.state.records.findLast(
+        const slip = defaultNodeState(ctx.state, node).records.findLast(
           (record) =>
             isDemonstration(record.payload) &&
-            record.payload.node.node === node &&
             record.payload.unaided &&
             record.payload.outcome !== "success" &&
             (ctx.sessionObservations?.includes(record.id) ?? record.surface === ctx.surface),

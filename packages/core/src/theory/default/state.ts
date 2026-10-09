@@ -40,7 +40,7 @@ export interface Demonstration {
 export interface Lapse {
   readonly kind: "lapse";
   readonly node: NodeRef;
-  /** The same lesson's already-recorded failed attempt, if any. */
+  /** The same lesson's already-recorded slip or diagnosis, if any. */
   readonly of?: ObservationId;
 }
 export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
