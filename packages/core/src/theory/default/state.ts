@@ -515,7 +515,10 @@ export function labelDefaultNode(input: {
   };
 }
 
-/** Direct and implicit evidence share one UTC-day review slot. Claims only initialize an absent schedule. */
+/**
+ * One review per UTC day: the Node's first unaided attempt, else the first implicit credit from a dependent.
+ * Claims only initialize an absent schedule.
+ */
 function scheduleDefaultNode(
   records: readonly HomedRecord[],
   implicit: readonly HomedRecord[],
@@ -525,7 +528,12 @@ function scheduleDefaultNode(
   let card: Card | undefined;
   let reviewDay: string | undefined;
   const citations: ObservationId[] = [];
-  for (const record of [...records, ...implicit].sort(compareObservations)) {
+  const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
+  const directDays = new Set(
+    records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
+  );
+  const credit = implicit.filter(({ at }) => !directDays.has(dayOf(at)));
+  for (const record of [...records, ...credit].sort(compareObservations)) {
     const { payload, at, id } = record;
     if (payload.kind === "claim") {
       if (payload.stance !== "knows" || card !== undefined) continue;
@@ -536,7 +544,7 @@ function scheduleDefaultNode(
       };
     } else {
       if (!payload.unaided) continue;
-      const day = new Date(at).toISOString().slice(0, 10);
+      const day = dayOf(at);
       if (day === reviewDay) continue;
       card = SCHEDULER.next(
         card ?? createEmptyCard(at),
