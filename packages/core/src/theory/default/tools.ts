@@ -25,6 +25,7 @@ import {
   interpretationsDefault,
   isClaim,
   isDemonstration,
+  isLapse,
   isRetrievalOpenerDemonstration,
   isTeaching,
   memoryDefault,
@@ -362,7 +363,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       "1. demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
-      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. Claims start a short schedule without covering prerequisites. Review tags select acquired Nodes below the retention thresholds.",
+      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select acquired Nodes below the retention thresholds.",
       "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
     trail,
@@ -376,7 +377,8 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
       return state.label === "probably-known" ||
-        (isDefaultKnown(state) && (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due)
+        (isDefaultKnown(state) &&
+          (state.schedule?.lapsed === true || (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due))
         ? [{ ...candidate(ctx, id), schedule: state.schedule, rule: trail(ctx, id).rule }]
         : [];
     }),
@@ -435,7 +437,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   {
     name: "close_recount",
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis without changing standing.",
+      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis and records component lapses for Review without changing acquisition standing.",
     schema: schema({
       milestoneDiagnosis: milestoneDiagnosisSchema,
       practising: {
@@ -450,7 +452,34 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     }),
     *run(raw, ctx) {
       const input = args(raw, ["practising", "milestoneDiagnosis"]);
-      return closeRecount(ctx, input.practising, input.milestoneDiagnosis);
+      const recount = closeRecount(ctx, input.practising, input.milestoneDiagnosis);
+      for (const node of recount.milestoneDiagnosis?.regressedComponents ?? []) {
+        const slip = ctx.state.records.findLast(
+          (record) =>
+            isDemonstration(record.payload) &&
+            record.payload.node.node === node &&
+            record.payload.unaided &&
+            record.payload.outcome !== "success" &&
+            (ctx.sessionObservations?.includes(record.id) ?? record.surface === ctx.surface),
+        );
+        const priorLapse = ctx.state.observations.findLast(
+          (record) => isLapse(record.payload) && record.payload.node.node === node && record.surface === ctx.surface,
+        );
+        const of = slip?.id ?? priorLapse?.id;
+        yield* write({
+          at: ctx.now,
+          surface: ctx.surface,
+          about: [...ctx.about],
+          nodes: [node],
+          ...(of === undefined ? {} : { cites: [of] }),
+          payload: {
+            kind: "lapse",
+            node: { node, provenance: ctx.graph.terminal },
+            ...(of === undefined ? {} : { of }),
+          },
+        });
+      }
+      return recount;
     },
   },
 ];
