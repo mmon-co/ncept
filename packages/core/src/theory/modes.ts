@@ -16,8 +16,9 @@ export type ModeEntry =
       kind: "checkpoint";
       missionId: string;
       milestone: NodeId;
-      sessionId: string;
-      closedAt: string;
+      /** Absent when evidence cleared the milestone without a closed Lesson. */
+      sessionId?: string;
+      closedAt?: string;
       outcome: unknown;
       closingNote?: string;
     }>;
