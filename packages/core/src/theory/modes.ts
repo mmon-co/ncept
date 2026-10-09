@@ -10,7 +10,16 @@ export type ModeEntry =
   | Readonly<{ kind: "goal"; text: string }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>
-  | Readonly<{ kind: "lesson"; lesson: LessonSnapshot }>;
+  | Readonly<{ kind: "lesson"; lesson: LessonSnapshot }>
+  | Readonly<{
+      kind: "checkpoint";
+      missionId: string;
+      milestone: NodeId;
+      sessionId: string;
+      closedAt: string;
+      outcome: unknown;
+      closingNote?: string;
+    }>;
 
 /** @public Context carried to a new Session; an in-place switch has no carry. */
 export type ModeCarry =

@@ -221,6 +221,7 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown) {
   for (const { record } of records) for (const node of homes(record)) nodes.add(node);
 
   return {
+    lessonComplete: ctx.lesson?.complete ?? false,
     capabilities: [...nodes]
       .map((node) => ({ label: labelOf(node), standing: defaultNodeState(ctx.state, node).label }))
       .sort((left, right) => left.label.localeCompare(right.label)),

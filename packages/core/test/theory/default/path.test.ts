@@ -78,23 +78,13 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
       const members = new Set(section.lessons.flatMap(({ nodes }) => nodes));
       const fresh = [...cone([section.milestone])].filter((id) => !claimed.has(id));
       expect([...members].sort(), `section ownership at trial ${trial}`).toEqual(fresh.sort());
-      const charts = section.lessons.filter((lesson) => lesson.chart);
-      const coarse = [...members].filter((id) =>
-        operations.some(
-          (operation) =>
-            operation.kind === "add-metadata-set" &&
-            operation.metadataSet.subjects.some((subject) => subject.id === id) &&
-            operation.metadataSet.properties["pedagogy:elaborate"] === true,
-        ),
-      );
-      expect(charts.length, `one Chart stop per coarse section at trial ${trial}`).toBe(coarse.length ? 1 : 0);
-      if (charts[0]) {
-        expect(section.lessons[0], `Chart stop opens its section at trial ${trial}`).toBe(charts[0]);
-        expect([...charts[0].nodes].sort()).toEqual(coarse.sort());
-      }
+      const checkpoints = section.lessons.filter((lesson) => lesson.checkpoint);
+      expect(checkpoints.length, `one checkpoint per milestone at trial ${trial}`).toBe(1);
+      expect(section.lessons.at(-1), `checkpoint follows its milestone at trial ${trial}`).toBe(checkpoints[0]);
+      expect(checkpoints[0]?.nodes).toEqual([section.milestone]);
       for (const lesson of section.lessons) {
         expect(lesson.nodes.length).toBeGreaterThan(0);
-        if (lesson.chart) continue;
+        if (lesson.checkpoint) continue;
         for (const id of lesson.nodes) {
           const prerequisites = edges.filter(({ to }) => to === id).map(({ from }) => from);
           expect(

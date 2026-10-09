@@ -28,13 +28,16 @@ export function readMissionPath(
       milestone: section.milestone,
       lessons: section.lessons.map((lesson) => ({
         ...lesson,
-        number: ++number,
-        cleared: lesson.nodes.every((id) => known.has(id)),
+        number: lesson.checkpoint ? number : ++number,
+        cleared: !lesson.checkpoint && lesson.nodes.every((id) => known.has(id)),
       })),
       minutesLeft: remaining(section.lessons),
     })),
     warnings: path.warnings,
-    lessonCount: path.sections.reduce((total, section) => total + section.lessons.length, 0),
+    lessonCount: path.sections.reduce(
+      (total, section) => total + section.lessons.filter((lesson) => !lesson.checkpoint).length,
+      0,
+    ),
     minutesLeft: remaining(path.sections.flatMap(({ lessons }) => lessons)),
     rough: timing.rough,
   };
