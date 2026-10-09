@@ -232,7 +232,12 @@ export const modes = {
   charting: {
     title: "Charting",
     frontTab: "map",
-    noteTemplates: ["I already know this.", "I don't need this.", "Why is this needed?", "These are one thing for me."],
+    noteTemplates: [
+      { id: "default.charting.note.known", defaultMessage: "I already know this." },
+      { id: "default.charting.note.unwanted", defaultMessage: "I don't need this." },
+      { id: "default.charting.note.why", defaultMessage: "Why is this needed?" },
+      { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
+    ],
     entry: { required: false, kinds: ["goal", "mission", "target"] },
     capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],

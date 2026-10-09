@@ -16,4 +16,8 @@ export const defaultTheoryMessages = {
     en: "last success {lastSuccess}; aided practice {aidedPractice}",
     "zh-CN": "最近成功：{lastSuccess}；辅助练习 {aidedPractice}",
   },
+  "default.charting.note.known": { en: "I already know this.", "zh-CN": "这个我已经会了。" },
+  "default.charting.note.unwanted": { en: "I don't need this.", "zh-CN": "这个我不需要。" },
+  "default.charting.note.why": { en: "Why is this needed?", "zh-CN": "为什么需要这个？" },
+  "default.charting.note.merge": { en: "These are one thing for me.", "zh-CN": "对我来说这些是一回事。" },
 } as const;

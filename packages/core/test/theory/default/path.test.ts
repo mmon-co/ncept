@@ -114,3 +114,49 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
     }
   }
 });
+
+test("independent sections follow target order, not per-section sequence hints", () => {
+  // As charted in production: each section numbers its own Nodes from 1, so a later, smaller
+  // section's milestone carries a lower sequence than the first section's.
+  type Operation = PatchRevision["delta"]["operations"][number];
+  const node = (id: NodeId, sequence: number, milestone = false): Operation[] => [
+    { kind: "add-node", node: { id } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: `metadata-${id}`,
+        subjects: [{ kind: "node", id }],
+        properties: { "pedagogy:sequence": sequence, "pedagogy:milestone": milestone },
+      },
+    },
+  ];
+  const edge = (from: NodeId, to: NodeId): Operation => ({
+    kind: "add-edge",
+    edge: { id: `edge-${from}-${to}`, from, to },
+  });
+  const revision: PatchRevision = {
+    ref: { identity: "patch-path-order", digest: `sha256:${"b".repeat(64)}` },
+    bases: [],
+    metadata: { properties: {}, citations: [] },
+    delta: {
+      operations: [
+        ...node("node-words", 1),
+        ...node("node-sentences", 2),
+        ...node("node-conversation", 3, true),
+        edge("node-words", "node-conversation"),
+        edge("node-sentences", "node-conversation"),
+        ...node("node-compliments", 1),
+        ...node("node-social", 2, true),
+        edge("node-compliments", "node-social"),
+      ],
+    },
+  };
+  const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
+  const path = defaultTheory.path(graph, ["node-conversation", "node-social"]);
+  expect(path.sections.map(({ milestone }) => milestone)).toEqual(["node-conversation", "node-social"]);
+  expect(path.sections[0]?.lessons.map(({ nodes }) => nodes)).toEqual([
+    ["node-words"],
+    ["node-sentences"],
+    ["node-conversation"],
+  ]);
+});
