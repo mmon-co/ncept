@@ -36,6 +36,13 @@ export interface Demonstration {
   /** Set only by the explicit lesson-opening retrieval recording tool. */
   readonly recording?: "retrieval-opener";
 }
+/** Diagnosed regression affects retention, never the acquisition window. */
+export interface Lapse {
+  readonly kind: "lapse";
+  readonly node: NodeRef;
+  /** The same lesson's already-recorded slip or diagnosis, if any. */
+  readonly of?: ObservationId;
+}
 export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
 /** An accepted operation, not a demonstration of every clause of a Node's criterion. */
 export interface FeatureUse {
@@ -96,6 +103,7 @@ export interface Interpretation {
 }
 export type DefaultPayload =
   | Demonstration
+  | Lapse
   | FeatureUse
   | Teaching
   | Claim
@@ -172,6 +180,14 @@ export function isDemonstration(value: unknown): value is Demonstration {
     typeof value.task === "string" &&
     typeof value.response === "string" &&
     (value.recording === undefined || value.recording === "retrieval-opener")
+  );
+}
+export function isLapse(value: unknown): value is Lapse {
+  return (
+    object(value) &&
+    value.kind === "lapse" &&
+    isNodeRef(value.node) &&
+    (value.of === undefined || isObservationId(value.of))
   );
 }
 export function isRetrievalOpenerDemonstration(value: unknown): value is RetrievalOpenerDemonstration {
@@ -282,6 +298,9 @@ function assertDefaultPayload(payload: unknown): void {
   switch (payload.kind) {
     case "demonstration":
       valid = isDemonstration(payload);
+      break;
+    case "lapse":
+      valid = isLapse(payload);
       break;
     case "feature-use":
       valid = isFeatureUse(payload);
@@ -439,6 +458,8 @@ export interface NodeSchedule {
   readonly lapses: number;
   readonly lastReview: string;
   readonly retrievability: number;
+  /** Observed forgetting stays due until an unaided success, independently of FSRS R. */
+  readonly lapsed: boolean;
   readonly citations: readonly ObservationId[];
 }
 
@@ -517,23 +538,26 @@ export function labelDefaultNode(input: {
 
 /**
  * One review per UTC day: the Node's first unaided attempt, else the first implicit credit from a dependent.
- * Claims only initialize an absent schedule.
+ * Diagnosed lapses supply Again unless they repeat a recorded slip. Claims only initialize an absent schedule.
  */
 function scheduleDefaultNode(
   records: readonly HomedRecord[],
   implicit: readonly HomedRecord[],
+  lapses: readonly Observation<Lapse>[],
   now: string,
   parameters: DefaultParameters,
 ): NodeSchedule | undefined {
   let card: Card | undefined;
   let reviewDay: string | undefined;
   const citations: ObservationId[] = [];
+  let lapsed = false;
   const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
-  const directDays = new Set(
-    records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
-  );
+  const directDays = new Set([
+    ...records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
+    ...lapses.map(({ at }) => dayOf(at)),
+  ]);
   const credit = implicit.filter(({ at }) => !directDays.has(dayOf(at)));
-  for (const record of [...records, ...credit].sort(compareObservations)) {
+  for (const record of [...records, ...credit, ...lapses].sort(compareObservations)) {
     const { payload, at, id } = record;
     if (payload.kind === "claim") {
       if (payload.stance !== "knows" || card !== undefined) continue;
@@ -543,13 +567,27 @@ function scheduleDefaultNode(
         reps: 0,
       };
     } else {
-      if (!payload.unaided) continue;
+      if (payload.kind !== "lapse" && !payload.unaided) continue;
+      lapsed = payload.kind === "lapse" || payload.outcome !== "success";
+      // A close diagnosis repeats the slip, not its FSRS review, even across midnight.
+      const recordedSlip =
+        payload.kind === "lapse" &&
+        payload.of !== undefined &&
+        [...records, ...lapses].some(
+          ({ id, payload: attempt }) =>
+            id === payload.of &&
+            (attempt.kind === "lapse" ||
+              (attempt.kind === "demonstration" && attempt.unaided && attempt.outcome !== "success")),
+        );
       const day = dayOf(at);
-      if (day === reviewDay) continue;
+      if (day === reviewDay || recordedSlip) {
+        citations.push(id);
+        continue;
+      }
       card = SCHEDULER.next(
         card ?? createEmptyCard(at),
         at,
-        payload.outcome === "success" ? Rating.Good : Rating.Again,
+        payload.kind !== "lapse" && payload.outcome === "success" ? Rating.Good : Rating.Again,
       ).card;
       reviewDay = day;
     }
@@ -562,6 +600,7 @@ function scheduleDefaultNode(
     reps: card.reps,
     lapses: card.lapses,
     lastReview: card.last_review.toISOString(),
+    lapsed,
     retrievability: forgetting_curve((Date.parse(now) - card.last_review.getTime()) / DAY_MS, card.stability),
     citations,
   };
@@ -799,7 +838,11 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
       .filter(({ from }) => from === id)
       .flatMap(({ to }) => homed[to] ?? [])
       .filter(({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success");
-    const schedule = scheduleDefaultNode(own, implicit, now, parameters);
+    const lapses = observations.filter(
+      (observation): observation is Observation<Lapse> =>
+        isDefaultObservation(observation) && isLapse(observation.payload) && observation.payload.node.node === id,
+    );
+    const schedule = scheduleDefaultNode(own, implicit, lapses, now, parameters);
     nodes[id] = {
       ...labelDefaultNode({ records: own, parameters }),
       ...(schedule === undefined ? {} : { schedule }),
