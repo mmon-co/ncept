@@ -186,7 +186,9 @@ function* setup(
         : mode === "empty"
           ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
           : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
-      ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
+      ...(ctx.entry?.kind !== "checkpoint"
+        ? []
+        : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
       ...(ctx.lesson === undefined
         ? []
