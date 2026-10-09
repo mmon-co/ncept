@@ -15,6 +15,9 @@ export type MissionPathReading = Readonly<{
   rough: boolean;
 }>;
 
+/** A numbered stop: a teaching Lesson, neither a Review nor a Checkpoint. */
+export const isNumberedLesson = (stop: Pick<Lesson, "review" | "checkpoint">) => !stop.review && !stop.checkpoint;
+
 /** Numbers count cleared lessons too. Repeated Nodes count only once toward time. */
 export function readMissionPath(
   path: MissionPath,
@@ -26,7 +29,7 @@ export function readMissionPath(
   const remaining = (lessons: readonly Lesson[]) =>
     new Set(
       lessons
-        .filter((lesson) => !lesson.review && !lesson.checkpoint)
+        .filter(isNumberedLesson)
         .flatMap(({ nodes }) => nodes)
         .filter((id) => !known.has(id)),
     ).size *
@@ -40,16 +43,13 @@ export function readMissionPath(
       lessons: section.lessons.map((lesson) => ({
         ...lesson,
         number: lesson.checkpoint ? number : lesson.review ? number + 1 : ++number,
-        cleared: !lesson.review && !lesson.checkpoint && lesson.nodes.every((id) => known.has(id)),
+        cleared: isNumberedLesson(lesson) && lesson.nodes.every((id) => known.has(id)),
         ...(lesson.review ? { minutes: lesson.nodes.length * reviewTiming.minutesPerNode } : {}),
       })),
       minutesLeft: remaining(section.lessons),
     })),
     warnings: path.warnings,
-    lessonCount: path.sections.reduce(
-      (total, section) => total + section.lessons.filter((lesson) => !lesson.review && !lesson.checkpoint).length,
-      0,
-    ),
+    lessonCount: path.sections.reduce((total, section) => total + section.lessons.filter(isNumberedLesson).length, 0),
     minutesLeft: remaining(path.sections.flatMap(({ lessons }) => lessons)),
     rough:
       timing.rough ||
