@@ -589,7 +589,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
         if (latest === undefined) throw new Error(`No active demonstration or claim on ${node} in this Session`);
         of = latest.id;
       }
-      assertDefaultRetraction(of, supplied, activeDefaultRecords(observations));
+      assertDefaultRetraction(of, observations);
       const observation = {
         at: ctx.now,
         about: [...ctx.about],

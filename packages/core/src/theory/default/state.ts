@@ -333,14 +333,8 @@ export function activeDefaultRecords(observations: readonly Observation[]): read
     )
     .sort(compareObservations);
 }
-/** Supplied history establishes identity; the elected active Records establish eligibility. */
-export function assertDefaultRetraction(
-  of: ObservationId,
-  observations: readonly Observation[],
-  records: readonly HomedRecord[] = activeDefaultRecords(observations),
-): void {
-  if (!observations.some(({ id }) => id === of)) throw new Error(`Unknown Record id: ${of}`);
-  if (!records.some(({ id }) => id === of))
+export function assertDefaultRetraction(of: ObservationId, observations: readonly Observation[]): void {
+  if (!activeDefaultRecords(observations).some(({ id }) => id === of))
     throw new Error("Retraction requires an active default demonstration or claim");
 }
 
