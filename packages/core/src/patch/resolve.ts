@@ -39,7 +39,10 @@ function exactRelease(ref: ExactPatchRef): string {
   return ref.digest;
 }
 
-function orderRevisions(bundle: ClosedPatchBundle): {
+function orderRevisions(
+  bundle: ClosedPatchBundle,
+  roots: readonly ExactPatchRef[] = [bundle.terminal],
+): {
   readonly revisions: PatchRevision[];
   readonly closure: ReadonlyMap<string, ReadonlySet<string>>;
 } {
@@ -53,8 +56,11 @@ function orderRevisions(bundle: ClosedPatchBundle): {
       );
     revisions.set(key, revision);
   }
-  const terminal = revisions.get(exactPatchRefKey(bundle.terminal));
-  if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+  const terminals = roots.map((ref) => {
+    const revision = revisions.get(exactPatchRefKey(ref));
+    if (!revision) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
+    return revision;
+  });
 
   const selectedByIdentity = new Map<PatchId, ExactPatchRef>();
   const active = new Set<string>();
@@ -96,7 +102,7 @@ function orderRevisions(bundle: ClosedPatchBundle): {
     applied.add(key);
     ordered.push(revision);
   };
-  visit(terminal);
+  terminals.forEach(visit);
   if (ordered.length !== revisions.size)
     throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
   return { revisions: ordered, closure };
@@ -483,12 +489,57 @@ export function resolvePatchBundle(
   return resolveBundle(bundle, availablePlaygrounds);
 }
 
+/** Read independently authorized direct bases without claiming a closed terminal bundle.
+ * If any base is absent, the terminal's own contributions are withheld whole: its overlays,
+ * masks, metadata and Material edits have a dependency we cannot establish. No missing-source
+ * content is needed to project the remaining complete closures. The terminal is a checkpoint
+ * identity, not evidence that this graph is complete or suitable for authoring/export. */
+export function resolveAvailablePatchGraph(
+  terminal: PatchRevision,
+  bases: readonly ClosedPatchBundle[],
+  layers: readonly PatchVariantLayer[] = [],
+  availablePlaygrounds?: ReadonlySet<string>,
+): ResolvedGraph {
+  const direct = new Set(terminal.bases.map(exactPatchRefKey));
+  const supplied = new Set(bases.map((base) => exactPatchRefKey(base.terminal)));
+  if (supplied.size !== bases.length || bases.some((base) => !direct.has(exactPatchRefKey(base.terminal))))
+    throw new PatchCompileError("invalid-bundle", "available bases must be distinct direct terminal bases");
+  if (layers.some((layer) => !supplied.has(exactPatchRefKey(layer.source.terminal))))
+    throw new PatchCompileError("invalid-bundle", "variant source must be an available base");
+  const revisions = (bundles: readonly ClosedPatchBundle[]) => [
+    ...new Map(
+      bundles.flatMap((base) => base.revisions).map((revision) => [exactPatchRefKey(revision.ref), revision]),
+    ).values(),
+  ];
+  if (supplied.size === direct.size) {
+    const bundle = { terminal: terminal.ref, revisions: [...revisions(bases), terminal] };
+    return { ...resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds).graph, terminal: terminal.ref };
+  }
+  const projected = bases.map((base) => {
+    const layer = layers.find((candidate) => sameExactPatchRef(candidate.source.terminal, base.terminal));
+    if (!layer) return base;
+    try {
+      return variantOverlayBundle(base, layer.variant, layer.sourceVersion, availablePlaygrounds).bundle;
+    } catch (error) {
+      if (!(error instanceof PatchCompileError)) throw error;
+      return base;
+    }
+  });
+  return resolveBundle(
+    { terminal: terminal.ref, revisions: revisions(projected) },
+    availablePlaygrounds,
+    undefined,
+    projected.map((base) => base.terminal),
+  );
+}
+
 function resolveBundle(
   bundle: ClosedPatchBundle,
   availablePlaygrounds?: ReadonlySet<string>,
   variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
+  roots?: readonly ExactPatchRef[],
 ): ResolvedGraph {
-  const ordered = orderRevisions(bundle);
+  const ordered = orderRevisions(bundle, roots);
   const orderedRevisions = ordered.revisions;
   const collection: ContributionCollection = {
     nodes: new Map(),
