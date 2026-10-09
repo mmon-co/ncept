@@ -235,6 +235,7 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
         tag: node.label,
         caption: `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`,
         message: nodeProgressMessage(node),
+        ...(isDefaultKnown(node) && node.schedule ? { rank: node.schedule.retrievability } : {}),
         cites: node.citations,
       },
       ...selected.flatMap(([tag, members]) =>

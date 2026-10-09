@@ -246,7 +246,7 @@ export const modes = {
   lesson: {
     title: "Lesson",
     frontTab: "document",
-    entry: { required: true, kinds: ["lesson"] },
+    entry: { required: true, kinds: ["lesson", "review"] },
     capabilities: lessonCapabilities,
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
