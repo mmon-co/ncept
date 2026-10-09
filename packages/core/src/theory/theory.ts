@@ -126,6 +126,8 @@ export type ChatContext<S> = Context<S> &
     unscopedNodes?: readonly NodeId[];
     /** Tutor text on the current conversation branch, before this turn; not recorded evidence. */
     tutorMessages?: readonly string[];
+    /** Evidence accepted in this Session, including its Material surfaces. */
+    sessionObservations?: readonly ObservationId[];
     missions?: readonly MissionContext[];
     /** Measured by the host from lesson Session activity, never by the theory. */
     lessonTiming?: LessonTiming;

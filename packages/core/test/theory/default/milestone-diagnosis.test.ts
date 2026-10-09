@@ -8,7 +8,7 @@ import {
   type MilestoneDiagnosis,
 } from "../../../src/theory/default";
 
-test("a milestone's close diagnosis reaches the check-in opening without becoming evidence", () => {
+test("a milestone's close diagnosis reaches the check-in opening without changing acquisition", () => {
   const revision: PatchRevision = {
     ref: { identity: "patch-milestone-diagnosis", digest: `sha256:${"a".repeat(64)}` },
     bases: [],
@@ -68,8 +68,11 @@ test("a milestone's close diagnosis reaches the check-in opening without becomin
     ],
     regressedComponents: ["node-component"],
   };
-  const result = close.run({ milestoneDiagnosis: diagnosis }, ctx).next();
-  if (!result.done) throw new Error("A diagnosis must not write theory evidence");
+  const program = close.run({ milestoneDiagnosis: diagnosis }, ctx);
+  const lapse = program.next();
+  if (lapse.done || lapse.value.kind !== "write") throw new Error("Missing component lapse");
+  const result = program.next("obs-component-lapse");
+  if (!result.done) throw new Error("Unexpected diagnosis effect");
   const recount = JSON.parse(JSON.stringify(result.value));
   const acceptedDiagnosis = readMilestoneDiagnosis(recount.milestoneDiagnosis);
   expect(acceptedDiagnosis).toEqual(diagnosis);
