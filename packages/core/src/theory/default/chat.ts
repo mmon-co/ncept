@@ -186,6 +186,7 @@ function* setup(
         : mode === "empty"
           ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
           : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
+      ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
       ...(ctx.entry?.kind === "review"
         ? [
@@ -243,7 +244,7 @@ export const modes = {
       { id: "default.charting.note.why", defaultMessage: "Why is this needed?" },
       { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
     ],
-    entry: { required: false, kinds: ["goal", "mission", "target"] },
+    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint"] },
     capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),

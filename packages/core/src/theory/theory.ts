@@ -59,7 +59,12 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
  */
 /** Graph-authored lesson membership uses the existing define-tag operation. */
 export const LESSON_TAG_PREFIX = "lesson:";
-export type Lesson = Readonly<{ name?: string; nodes: readonly NodeId[]; chart?: true; review?: true }>;
+export type Lesson = Readonly<{
+  name?: string;
+  nodes: readonly NodeId[];
+  review?: true;
+  checkpoint?: Readonly<{ milestone: NodeId; required: boolean }>;
+}>;
 export type MissionPath = Readonly<{
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
   warnings: readonly { readonly kind: "lesson-split"; readonly name: string; readonly nodes: readonly NodeId[] }[];

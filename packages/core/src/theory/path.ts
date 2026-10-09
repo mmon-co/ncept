@@ -26,7 +26,7 @@ export function readMissionPath(
   const remaining = (lessons: readonly Lesson[]) =>
     new Set(
       lessons
-        .filter((lesson) => !lesson.review)
+        .filter((lesson) => !lesson.review && !lesson.checkpoint)
         .flatMap(({ nodes }) => nodes)
         .filter((id) => !known.has(id)),
     ).size *
@@ -39,15 +39,15 @@ export function readMissionPath(
       milestone: section.milestone,
       lessons: section.lessons.map((lesson) => ({
         ...lesson,
-        number: lesson.review ? number + 1 : ++number,
-        cleared: !lesson.review && lesson.nodes.every((id) => known.has(id)),
+        number: lesson.checkpoint ? number : lesson.review ? number + 1 : ++number,
+        cleared: !lesson.review && !lesson.checkpoint && lesson.nodes.every((id) => known.has(id)),
         ...(lesson.review ? { minutes: lesson.nodes.length * reviewTiming.minutesPerNode } : {}),
       })),
       minutesLeft: remaining(section.lessons),
     })),
     warnings: path.warnings,
     lessonCount: path.sections.reduce(
-      (total, section) => total + section.lessons.filter((lesson) => !lesson.review).length,
+      (total, section) => total + section.lessons.filter((lesson) => !lesson.review && !lesson.checkpoint).length,
       0,
     ),
     minutesLeft: remaining(path.sections.flatMap(({ lessons }) => lessons)),

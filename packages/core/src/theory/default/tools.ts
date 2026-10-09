@@ -15,6 +15,7 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch
 import type { ChatContext, Tool } from "../theory";
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
+import { milestoneDiagnosisSchema, readMilestoneDiagnosis } from "./diagnosis";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
@@ -189,7 +190,22 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
       task: payload.kind === "demonstration" ? payload.task : (payload.prompt ?? payload.statement),
     }));
 }
-function closeRecount(ctx: Ctx, rawPractising?: unknown) {
+function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown) {
+  const milestoneDiagnosis = rawDiagnosis === undefined ? undefined : readMilestoneDiagnosis(rawDiagnosis);
+  if (rawDiagnosis !== undefined) {
+    if (milestoneDiagnosis === undefined)
+      throw new Error("Expected a milestone diagnosis with errors and regressed components");
+    const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
+    if (ctx.mode !== "lesson" || lesson?.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
+      throw new Error("A milestone diagnosis requires a milestone Lesson");
+    const prerequisites = route(ctx.graph, lesson.section.milestone);
+    for (const node of milestoneDiagnosis.regressedComponents)
+      if (
+        prerequisites.kind !== "found" ||
+        !prerequisites.nodes.some((candidate) => candidate.id === node && node !== lesson.section.milestone)
+      )
+        throw new Error("Regressed component is not a milestone prerequisite: " + node);
+  }
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
   const directions = practising.map((entry) => {
@@ -244,6 +260,7 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown) {
           };
     }),
     practising: directions,
+    ...(milestoneDiagnosis === undefined ? {} : { milestoneDiagnosis }),
   };
 }
 function nodeTool(name: string, description: string, run: (ctx: Ctx, node: NodeId) => unknown): DefaultTool {
@@ -394,7 +411,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   }),
   scopedTool(
     "mission",
-    "Effective Missions, revisions and resolved scopes, with numbered lesson sections, cleared stops and estimated minutes left. Chart lessons are stops for elaborating coarse Nodes.",
+    "Effective Missions, revisions and resolved scopes, with numbered lesson sections, cleared stops and estimated minutes left. Checkpoints follow milestone Lessons and refine the next section.",
     (ctx, scope) =>
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
@@ -418,8 +435,9 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
   {
     name: "close_recount",
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
+      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis without changing standing.",
     schema: schema({
+      milestoneDiagnosis: milestoneDiagnosisSchema,
       practising: {
         type: "array",
         items: {
@@ -431,8 +449,8 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       },
     }),
     *run(raw, ctx) {
-      const input = args(raw, ["practising"]);
-      return closeRecount(ctx, input.practising);
+      const input = args(raw, ["practising", "milestoneDiagnosis"]);
+      return closeRecount(ctx, input.practising, input.milestoneDiagnosis);
     },
   },
 ];
