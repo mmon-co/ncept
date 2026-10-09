@@ -107,7 +107,10 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       }
       return prefix;
     };
-    const charted = new Set<NodeId>();
+    // A section with coarse Nodes opens with one Chart stop: the check-in after the previous
+    // milestone that charts this section to lesson size. It disappears once nothing is coarse.
+    const coarse = members.filter((id) => pathProperty(graph, id, NODE_ELABORATE_PROPERTY) === true).sort(compare);
+    if (coarse.length) section.lessons.push({ nodes: coarse, chart: true });
     while (units.length) {
       const candidates = units.map((unit) => ({ unit, prefix: readyPrefix(unit) }));
       const whole = candidates.filter(({ unit, prefix }) => prefix.length === unit.nodes.length);
@@ -125,23 +128,8 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
           LESSON_TAG_PREFIX + unit.name,
           groups.find((tag) => tag.name === LESSON_TAG_PREFIX + unit.name)?.nodes ?? unit.nodes,
         );
-      let chunk: NodeId[] = [];
-      const flush = () => {
-        if (chunk.length)
-          section.lessons.push({ ...(unit.name === undefined ? {} : { name: unit.name }), nodes: chunk });
-        chunk = [];
-      };
-      for (const id of prefix) {
-        if (!charted.has(id) && pathProperty(graph, id, NODE_ELABORATE_PROPERTY) === true) {
-          if (chunk.length && unit.name !== undefined) warn(LESSON_TAG_PREFIX + unit.name, prefix);
-          flush();
-          section.lessons.push({ nodes: [id], chart: true });
-          charted.add(id);
-        }
-        chunk.push(id);
-        emitted.add(id);
-      }
-      flush();
+      section.lessons.push({ ...(unit.name === undefined ? {} : { name: unit.name }), nodes: prefix });
+      for (const id of prefix) emitted.add(id);
       unit.nodes = unit.nodes.filter((id) => !prefix.includes(id));
       if (!unit.nodes.length) units.splice(units.indexOf(unit), 1);
     }

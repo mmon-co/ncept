@@ -178,6 +178,20 @@ function trail(ctx: Ctx, node: NodeId) {
           : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
+function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
+  const state = stateDefault(ctx.graph, observations, ctx.now);
+  return state.records
+    .filter((record) => record.surface === ctx.surface)
+    .map(({ id, nodes, payload }) => ({
+      id,
+      nodes:
+        (payload.kind === "claim" ? state.homing.claims : state.homing.homes)[id] ??
+        nodes ??
+        (payload.kind === "demonstration" ? [payload.node.node] : []),
+      outcome: payload.kind === "demonstration" ? payload.outcome : payload.stance,
+      task: payload.kind === "demonstration" ? payload.task : (payload.prompt ?? payload.statement),
+    }));
+}
 function closeRecount(ctx: Ctx, rawPractising?: unknown) {
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
@@ -550,11 +564,31 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
   {
     name: "record_retraction",
     description:
-      "Correct evidence by retracting an existing demonstration or claim; never rewrite a Record. Never retract a retraction or platform record.",
-    schema: schema({ of: { type: "string", pattern: "^obs-.+" } }, ["of"]),
+      "Correct evidence by retracting an existing demonstration or claim; never rewrite a Record. Pass either of (an exact Record id) or node (the latest active Record on that Node in this Session). Never retract a retraction or platform record.",
+    schema: {
+      ...schema({ of: { type: "string", pattern: "^obs-.+" }, node: nodeProperty }),
+      oneOf: [{ required: ["of"] }, { required: ["node"] }],
+    },
     *run(raw, ctx) {
-      const of = observationId(args(raw, ["of"], ["of"]).of);
-      const observations = effectiveObservations(electedObservations(yield* read.observations({})), ctx.now);
+      const input = args(raw, ["of", "node"]);
+      if ((input.of === undefined) === (input.node === undefined))
+        throw new Error("Pass exactly one of of (Record id) or node (latest active Record in this Session)");
+      const supplied = yield* read.observations({});
+      const observations = effectiveObservations(electedObservations(supplied), ctx.now);
+      let of: ObservationId;
+      if (input.of !== undefined) {
+        of = observationId(input.of);
+        if (!supplied.some(({ id }) => id === of))
+          throw new Error(
+            `Unknown Record id: ${of}. Retry record_retraction with an exact id from this Session's active Records (of), or their Node (node): ${JSON.stringify(retractionCandidates(ctx, supplied))}`,
+          );
+      } else {
+        const node = nodeId(input.node);
+        nodesInScope(ctx, [node]);
+        const latest = retractionCandidates(ctx, supplied).findLast((record) => record.nodes.includes(node));
+        if (latest === undefined) throw new Error(`No active demonstration or claim on ${node} in this Session`);
+        of = latest.id;
+      }
       assertDefaultRetraction(of, observations);
       const observation = {
         at: ctx.now,
