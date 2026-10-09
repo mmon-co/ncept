@@ -48,8 +48,11 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
     const ready = [...pendingMilestones].filter((id) =>
       cone(id).every((prerequisite) => prerequisite === id || !pendingMilestones.has(prerequisite)),
     );
-    // Targets are the final milestones unless another target depends on them.
-    ready.sort((a, b) => Number(targetSet.has(a)) - Number(targetSet.has(b)) || compare(a, b));
+    // Targets are the final milestones unless another target depends on them. Independent
+    // sections follow the Mission's target order; sequence hints order Nodes within a section.
+    ready.sort(
+      (a, b) => Number(targetSet.has(a)) - Number(targetSet.has(b)) || (rank.get(a) ?? 0) - (rank.get(b) ?? 0),
+    );
     const next = ready[0];
     if (next === undefined) throw new Error("Milestone dependency cycle");
     pendingMilestones.delete(next);
