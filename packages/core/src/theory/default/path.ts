@@ -107,10 +107,7 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       }
       return prefix;
     };
-    // A section with coarse Nodes opens with one Chart stop: the check-in after the previous
-    // milestone that charts this section to lesson size. It disappears once nothing is coarse.
-    const coarse = members.filter((id) => pathProperty(graph, id, NODE_ELABORATE_PROPERTY) === true).sort(compare);
-    if (coarse.length) section.lessons.push({ nodes: coarse, chart: true });
+
     while (units.length) {
       const candidates = units.map((unit) => ({ unit, prefix: readyPrefix(unit) }));
       const whole = candidates.filter(({ unit, prefix }) => prefix.length === unit.nodes.length);
@@ -133,6 +130,14 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       unit.nodes = unit.nodes.filter((id) => !prefix.includes(id));
       if (!unit.nodes.length) units.splice(units.indexOf(unit), 1);
     }
+  }
+  for (const [index, section] of sections.entries()) {
+    const next = sections[index + 1];
+    const required =
+      next?.lessons.some((lesson) =>
+        lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
+      ) ?? false;
+    section.lessons.push({ nodes: [section.milestone], checkpoint: { milestone: section.milestone, required } });
   }
   return { sections, warnings: [...warnings.values()] };
 }
