@@ -38,10 +38,14 @@ export const defaultQueryTokens = {
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   "review:due": select(
-    (node) => isDefaultKnown(node) && (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due,
+    (node) =>
+      isDefaultKnown(node) &&
+      (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
-    (node) => isDefaultKnown(node) && (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading,
+    (node) =>
+      isDefaultKnown(node) &&
+      (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
   ),
 } satisfies Record<string, QueryToken>;
 
