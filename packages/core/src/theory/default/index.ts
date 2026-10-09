@@ -31,6 +31,7 @@ export const defaultTheory = {
 } satisfies Theory<DefaultState, { recall: RecallOutcome; quiz: QuizOutcome; attempt: AttemptOutcome }>;
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
 export * from "./path";
+export * from "./diagnosis";
 export * from "./messages";
 export * from "./state";
 export * from "./tags";
