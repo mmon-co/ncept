@@ -159,7 +159,7 @@ test("independent sections follow target order, not per-section sequence hints",
   const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
   const path = defaultTheory.path(graph, ["node-conversation", "node-social"]);
   expect(path.sections.map(({ milestone }) => milestone)).toEqual(["node-conversation", "node-social"]);
-  expect(path.sections[0]?.lessons.map(({ nodes }) => nodes)).toEqual([
+  expect(path.sections[0]?.lessons.filter((lesson) => !lesson.checkpoint).map(({ nodes }) => nodes)).toEqual([
     ["node-words"],
     ["node-sentences"],
     ["node-conversation"],
