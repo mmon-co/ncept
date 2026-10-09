@@ -187,6 +187,11 @@ function* setup(
           ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
           : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
+      ...(ctx.entry?.kind === "review"
+        ? [
+            `Current Review (frozen batch; use the Review opening, not the teaching Lesson steps):\n${JSON.stringify(ctx.entry)}`,
+          ]
+        : []),
       ...(ctx.lesson === undefined
         ? []
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
