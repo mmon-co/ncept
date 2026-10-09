@@ -1,6 +1,6 @@
 import type { Program } from "../observations";
 import type { NodeId } from "../patch";
-import type { ChatContext, ChatSetup, LessonSnapshot } from "./theory";
+import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "./theory";
 
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
 export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" | "web" | "preferences" | "bash";
@@ -28,8 +28,8 @@ export type SessionMode<S = unknown> = Readonly<{
   title: string;
   /** Initial side-panel tab: "map" or a host Playground identity; absent falls back to Map. */
   frontTab?: string;
-  /** Editable text templates offered by the draft's empty note editor. */
-  noteTemplates?: readonly string[];
+  /** Editable text templates offered by the draft's empty note editor, resolved in the reader's locale. */
+  noteTemplates?: readonly MessageDescriptor[];
   entry: Readonly<{ required: boolean; kinds: readonly ModeEntry["kind"][] }>;
   capabilities: readonly HostCapability[];
   switches: readonly ModeSwitchDefault[];
