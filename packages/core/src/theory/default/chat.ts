@@ -157,7 +157,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 
 function* setup(
   ctx: ChatContext<DefaultState>,
-  mode?: "empty" | "charting" | "lesson",
+  mode?: "empty" | "charting" | "lesson" | "scene",
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
@@ -177,7 +177,7 @@ function* setup(
       : [
           "Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
         ]),
-    ...(mode === "charting" || mode === "lesson" ? [modeProcedure(mode)] : []),
+    ...(mode === "charting" || mode === "lesson" || mode === "scene" ? [modeProcedure(mode)] : []),
     "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
@@ -195,6 +195,9 @@ function* setup(
             `Current Review (frozen batch; use the Review opening, not the teaching Lesson steps):\n${JSON.stringify(ctx.entry)}`,
           ]
         : []),
+      ...(ctx.scene === undefined
+        ? []
+        : [`Current Scene attempt (accepted facts; posed task and rubric):\n${JSON.stringify(ctx.scene)}`]),
       ...(ctx.lesson === undefined
         ? []
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
@@ -209,7 +212,12 @@ function* setup(
               ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
               ...defaultBackgroundTools.filter((tool) => tool.name === "attach_claim"),
             ]
-          : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
+          : mode === "scene"
+            ? [
+                ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+                ...defaultRecordingTools.filter((tool) => tool.name === "record_demonstration"),
+              ]
+            : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
 }
 
@@ -258,6 +266,7 @@ export const modes = {
     capabilities: lessonCapabilities,
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
+      { mode: "scene", then: "aside", carry: { kind: "full" } },
       {
         mode: "charting",
         then: "aside",
@@ -265,5 +274,15 @@ export const modes = {
       },
     ],
     setup: (ctx) => setup(ctx, "lesson"),
+  },
+  scene: {
+    title: "Scene",
+    reply: "in-character-and-aside",
+    assessment: "bounded-scene",
+    entry: { kinds: ["target"], required: true },
+    frontTab: "map",
+    capabilities: ["reads"],
+    switches: [],
+    setup: (ctx) => setup(ctx, "scene"),
   },
 } satisfies Readonly<Record<string, SessionMode<DefaultState>>>;
