@@ -1,20 +1,20 @@
 /** Locale resources owned by the default Pedagogy package, resolved by the Application. */
 export const defaultTheoryMessages = {
   "default.node-progress.completion.complete": {
-    en: "Completion from {playground}: complete",
-    "zh-CN": "{playground} 完成状态：已完成",
+    en: "Completion from {playground}: complete; scope {scope}; report {report}; valid until {validUntil}",
+    "zh-CN": "{playground} 完成状态：已完成；范围 {scope}；报告 {report}；有效期至 {validUntil}",
   },
   "default.node-progress.completion.incomplete": {
-    en: "Completion from {playground}: incomplete",
-    "zh-CN": "{playground} 完成状态：未完成",
+    en: "Completion from {playground}: incomplete; scope {scope}; report {report}; valid until {validUntil}",
+    "zh-CN": "{playground} 完成状态：未完成；范围 {scope}；报告 {report}；有效期至 {validUntil}",
   },
   "default.node-progress.completion.expired": {
-    en: "Completion from {playground}: expired",
-    "zh-CN": "{playground} 完成状态：已过期",
+    en: "Completion from {playground}: expired; scope {scope}; report {report}; valid until {validUntil}",
+    "zh-CN": "{playground} 完成状态：已过期；范围 {scope}；报告 {report}；有效期至 {validUntil}",
   },
   "default.node-progress.completion.absent": {
-    en: "Completion from {playground}: absent",
-    "zh-CN": "{playground} 完成状态：尚未报告",
+    en: "Completion from {playground}: absent; scope {scope}; report {report}; valid until {validUntil}",
+    "zh-CN": "{playground} 完成状态：尚未报告；范围 {scope}；报告 {report}；有效期至 {validUntil}",
   },
   "default.node-progress.no-success": {
     en: "{demonstrated} of {window}, last success none; aided practice {aidedPractice}",

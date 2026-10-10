@@ -1,4 +1,5 @@
 import { dependentCones } from "./dependent-cone";
+import { canonicalJson } from "../../digest";
 import { pathDefault, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
@@ -188,9 +189,14 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
     const { binding, status } = node.completion;
     return {
       id: `default.node-progress.completion.${status}`,
-      defaultMessage: `Completion from {playground}: ${status}`,
-      remainderMessage: `Completion from {playground}: ${status}`,
-      values: { playground: binding.playground },
+      defaultMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}; valid until {validUntil}`,
+      remainderMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}; valid until {validUntil}`,
+      values: {
+        playground: binding.playground,
+        scope: canonicalJson(binding.scope),
+        report: node.completion.report?.id ?? "—",
+        validUntil: node.completion.report?.payload.validUntil ?? "—",
+      },
     };
   }
   const hasSuccess = node.lastSuccess !== undefined;
