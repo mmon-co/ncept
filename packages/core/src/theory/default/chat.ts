@@ -1,6 +1,12 @@
 import { renderSpeech } from "../speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
-import { lastMetadataContribution, NODE_CRITERION_PROPERTY, NODE_LABEL_PROPERTY, type NodeId } from "../../patch";
+import {
+  lastMetadataContribution,
+  metadataSetsForEntity,
+  NODE_CRITERION_PROPERTY,
+  NODE_LABEL_PROPERTY,
+  type NodeId,
+} from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import type { SessionMode } from "../modes";
@@ -35,13 +41,9 @@ type Recommendation = ProductDocument & {
   readonly documentUrl: string;
 };
 
-function metadataValue(ctx: ChatContext<DefaultState>, node: string, property: string): unknown {
-  const candidates = ctx.graph.metadataSets.flatMap((set) => {
-    if (
-      !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
-      !(property in set.properties)
-    )
-      return [];
+function metadataValue(ctx: ChatContext<DefaultState>, node: NodeId, property: string): unknown {
+  const candidates = metadataSetsForEntity(ctx.graph, { kind: "node", id: node }).flatMap((set) => {
+    if (!(property in set.properties)) return [];
     const source = ctx.graph.provenance.metadataProperties[set.id]?.[property]?.at(-1);
     if (source === undefined) throw new Error(`Missing provenance for ${property} on ${node}`);
     return [{ value: set.properties[property], source }];
