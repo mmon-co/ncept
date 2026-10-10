@@ -13,7 +13,6 @@ import {
 } from "../../observations";
 import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch";
 import type { ChatContext, Tool } from "../theory";
-
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
 import { sceneTask, sceneResponse } from "./scene";
