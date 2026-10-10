@@ -1,12 +1,18 @@
-import { lastMetadataContribution, NODE_ELABORATE_PROPERTY, route, type NodeId, type ResolvedGraph } from "../../patch";
+import {
+  lastMetadataContribution,
+  metadataSetsForEntity,
+  NODE_ELABORATE_PROPERTY,
+  route,
+  type NodeId,
+  type ResolvedGraph,
+} from "../../patch";
 import { LESSON_TAG_PREFIX, type Lesson, type MissionPath } from "../theory";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
   return lastMetadataContribution(
     graph,
-    graph.metadataSets.flatMap((set) => {
-      if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === node)) return [];
+    metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
       const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
       return source === undefined ? [] : [{ value: set.properties[key], source }];
     }),

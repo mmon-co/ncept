@@ -1,7 +1,7 @@
 import { contentDigest, type ContentDigest } from "../digest";
 import { compileGraph } from "./compile";
 import { PatchCompileError } from "./errors";
-import { discoveryTags, isAttachment, lastMetadataContribution } from "./metadata";
+import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -10,6 +10,7 @@ import {
   type PatchMetadata,
   type ExactPatchRef,
   type NodeId,
+  type EntityMetadataSubject,
   type PatchContent,
   type PatchId,
   type PatchRevision,
@@ -272,11 +273,10 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
   if (content.bases.length !== 0) throw new PatchContentError(`${identity} is not a root Patch`);
   const revision = candidateRevision(identity, content);
   const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
-  const property = (kind: "node" | "edge", id: string, key: string) =>
+  const property = (entity: EntityMetadataSubject, key: string) =>
     lastMetadataContribution(
       graph,
-      graph.metadataSets.flatMap((set) => {
-        if (!set.subjects.some((subject) => subject.kind === kind && subject.id === id)) return [];
+      metadataSetsForEntity(graph, entity).flatMap((set) => {
         const value = set.properties[key];
         const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
         return value !== undefined && source !== undefined ? [{ value, source }] : [];
@@ -291,7 +291,7 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
     author,
     labels: discoveryTags(content.metadata.properties),
     nodes: graph.nodes.map(({ id }) => {
-      const label = property("node", id, NODE_LABEL_PROPERTY);
+      const label = property({ kind: "node", id }, NODE_LABEL_PROPERTY);
       const lesson = graph.materials.find(
         (material) => material.playground === "document" && material.id === `material-${id.slice(5)}`,
       )?.content;
@@ -300,7 +300,7 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
       return { id, label, lesson };
     }),
     edges: graph.edges.map((edge) => {
-      const role = property("edge", edge.id, "graph:role");
+      const role = property({ kind: "edge", id: edge.id }, "graph:role");
       if (role !== "dependency") throw new PatchContentError(`Edge ${edge.id} is missing authored content`);
       return { ...edge, role };
     }),

@@ -109,9 +109,11 @@ export interface StructureEdge {
   readonly to: NodeId;
 }
 
-export type MetadataSubject =
+export type EntityMetadataSubject =
   | { readonly kind: "node"; readonly id: NodeId }
   | { readonly kind: "edge"; readonly id: EdgeId };
+
+export type MetadataSubject = EntityMetadataSubject | { readonly kind: "tag"; readonly name: string };
 
 export interface MetadataSet {
   readonly id: MetadataSetId;
