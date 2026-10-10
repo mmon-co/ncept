@@ -61,7 +61,7 @@ export declare const implementation: {
             }[];
             entry: {
                 required: false;
-                kinds: ("goal" | "mission" | "target" | "checkpoint")[];
+                kinds: ("opening" | "checkpoint0" | "goal" | "mission" | "target" | "checkpoint")[];
             };
             capabilities: readonly ["reads", "graph-draft", "materials", "web"];
             switches: {

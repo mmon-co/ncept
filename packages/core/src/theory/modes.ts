@@ -19,6 +19,7 @@ export type MissionStartEntry =
 
 /** @public Resolved entry facts; the host resolves Lesson selectors before calling the theory. */
 export type ModeEntry =
+  | MissionStartEntry
   | Readonly<{ kind: "goal"; text: string }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>

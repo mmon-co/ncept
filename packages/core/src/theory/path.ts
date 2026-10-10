@@ -39,6 +39,7 @@ export function readMissionPath(
       .filter((lesson) => lesson.review)
       .reduce((sum, lesson) => sum + lesson.nodes.length * reviewTiming.minutesPerNode, 0);
   return {
+    ...(path.start === undefined ? {} : { start: path.start }),
     sections: path.sections.map((section) => ({
       milestone: section.milestone,
       lessons: section.lessons.map((lesson) => ({

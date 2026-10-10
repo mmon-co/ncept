@@ -418,13 +418,16 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
         path: readMissionPath(
-          pathDefault(
-            ctx.graph,
-            mission.targets ??
-              mission.nodes.filter(
-                (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
-              ),
-          ),
+          {
+            ...pathDefault(
+              ctx.graph,
+              mission.targets ??
+                mission.nodes.filter(
+                  (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
+                ),
+            ),
+            ...(mission.start === undefined ? {} : { start: mission.start }),
+          },
           new Set(
             Object.entries(ctx.state.nodes)
               .filter(([, state]) => state !== undefined && isDefaultKnown(state))
