@@ -1,9 +1,10 @@
 import type { NodeId } from "../patch";
-import type { Lesson, LessonTiming, MissionPath } from "./theory";
+import type { Lesson, LessonTiming, MissionPath, MissionStartReading } from "./theory";
 
 /** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
+  start?: MissionStartReading;
   sections: readonly {
     readonly milestone: NodeId;
     readonly lessons: readonly LessonReading[];

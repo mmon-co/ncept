@@ -65,7 +65,22 @@ export type Lesson = Readonly<{
   review?: true;
   checkpoint?: Readonly<{ milestone: NodeId; required: boolean }>;
 }>;
+/** Mission-owned stops supplied by the host, outside the graph's numbered Lessons. */
+export type MissionStartReading = Readonly<{
+  opening?: Readonly<{ required: boolean }>;
+  milestone0?: Readonly<{ nodes: readonly NodeId[] }>;
+  checkpoint0?: Readonly<{
+    required: boolean;
+    sessionId: string;
+    closedAt: string;
+    outcome: unknown;
+    closingNote?: string;
+  }>;
+}>;
+/** The accepted opening's assumptions; stored in the Mission's ordinary revision history. */
+export type MissionOpeningState = Readonly<{ completedAt: string; knownNodes: readonly NodeId[] }>;
 export type MissionPath = Readonly<{
+  start?: MissionStartReading;
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
   warnings: readonly { readonly kind: "lesson-split"; readonly name: string; readonly nodes: readonly NodeId[] }[];
 }>;
@@ -73,6 +88,8 @@ export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 
 /** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
 export type LessonSnapshot = Readonly<{
+  /** Optional Mission-owned check of the opening's assumptions, addressed as Lesson 0. */
+  milestone0?: true;
   mission: Readonly<{ id: string; statement: string; shortName?: string }>;
   number: number;
   of: number;
@@ -105,6 +122,7 @@ export type LessonProgress = Readonly<{
 }>;
 
 export type MissionContext = Readonly<{
+  start?: MissionStartReading;
   id: string;
   /** Effective current Mission revision; the tutor passes this value as `revises`. */
   change: string;
