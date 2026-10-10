@@ -119,7 +119,9 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
     if (coarse.has(id)) add("coarse", [id], [], "Left coarse at charting: its prerequisites are not charted yet");
-    if (node.records.length === 0 && cone(id).every((dependent) => (state.nodes[dependent]?.records.length ?? 0) === 0))
+    const used = (dependent: NodeId) =>
+      (state.nodes[dependent]?.records.length ?? 0) > 0 || state.nodes[dependent]?.completion?.report !== undefined;
+    if (!used(id) && cone(id).every((dependent) => !used(dependent)))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
     for (const report of node.records) {
