@@ -1,0 +1,30 @@
+import { chat, modes } from "./chat";
+import { event } from "./event";
+import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
+import { DEFAULT_THEORY_REF, stateDefault } from "./state";
+import { defaultTags, projectDefault } from "./tags";
+import { pathDefault } from "./path";
+
+/** The single default implementation assembly, before executable generation and identity. */
+export const implementation = {
+  id: DEFAULT_THEORY_REF.theory,
+  version: DEFAULT_THEORY_REF.version,
+  state: stateDefault,
+  project: projectDefault,
+  path: pathDefault,
+  tags: defaultTags,
+  outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome, attempt: isAttemptOutcome },
+  chat,
+  modes,
+  event,
+} satisfies Omit<
+  import("../theory").Theory<
+    import("./state").DefaultState,
+    {
+      recall: import("./outcomes").RecallOutcome;
+      quiz: import("./outcomes").QuizOutcome;
+      attempt: import("./outcomes").AttemptOutcome;
+    }
+  >,
+  "digest"
+>;
