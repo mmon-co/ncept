@@ -18,4 +18,5 @@ export * from "./tags";
 export * from "./outcomes";
 export * from "./chat";
 export * from "./tools";
+export * from "./scene";
 export * from "./skills";
