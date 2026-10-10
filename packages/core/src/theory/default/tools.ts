@@ -197,15 +197,22 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
     if (milestoneDiagnosis === undefined)
       throw new Error("Expected a milestone diagnosis with errors and regressed components");
     const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
-    if (ctx.mode !== "lesson" || lesson?.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
+    if (
+      ctx.mode !== "lesson" ||
+      !lesson ||
+      (!lesson.milestone0 && (lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone))
+    )
       throw new Error("A milestone diagnosis requires a milestone Lesson");
-    const prerequisites = route(ctx.graph, lesson.section.milestone);
+    const allowed = new Set(
+      (lesson.milestone0 ? lesson.nodes : [lesson.section.milestone]).flatMap((node) => {
+        const cone = route(ctx.graph, node);
+        return cone.kind === "found"
+          ? cone.nodes.map(({ id }) => id).filter((id) => lesson.milestone0 || id !== lesson.section.milestone)
+          : [];
+      }),
+    );
     for (const node of milestoneDiagnosis.regressedComponents)
-      if (
-        prerequisites.kind !== "found" ||
-        !prerequisites.nodes.some((candidate) => candidate.id === node && node !== lesson.section.milestone)
-      )
-        throw new Error("Regressed component is not a milestone prerequisite: " + node);
+      if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
   }
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
