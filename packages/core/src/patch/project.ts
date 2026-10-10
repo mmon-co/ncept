@@ -1,12 +1,10 @@
 import { PatchCompileError } from "./errors";
-import { lastMetadataContribution } from "./metadata";
+import { lastMetadataContribution, metadataSetsForEntity } from "./metadata";
 import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model";
 import { NODE_LABEL_PROPERTY } from "./model";
 
-function metadataForNode(graph: SelectedGraph, node: NodeId): MetadataSet[] {
-  return graph.metadataSets.filter((set) =>
-    set.subjects.some((subject) => subject.kind === "node" && subject.id === node),
-  );
+function metadataForNode(graph: SelectedGraph, node: NodeId): readonly MetadataSet[] {
+  return metadataSetsForEntity(graph, { kind: "node", id: node });
 }
 
 function property<T extends string | number>(
