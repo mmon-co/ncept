@@ -7,6 +7,7 @@ import {
   type ContributionProvenance,
   type MetadataSet,
   type MetadataSubject,
+  type EntityMetadataSubject,
   type MetadataValue,
   type ResolvedGraph,
 } from "./model";
@@ -33,11 +34,33 @@ export function lastMetadataContribution<T>(
   return selected;
 }
 
+export function metadataSubjectKey(subject: MetadataSubject): string {
+  return `${subject.kind}\0${subject.kind === "tag" ? subject.name : subject.id}`;
+}
+
+export function metadataSubjectAppliesToEntity(
+  graph: Pick<ResolvedGraph, "tags">,
+  subject: MetadataSubject,
+  entity: EntityMetadataSubject,
+): boolean {
+  if (subject.kind !== "tag") return subject.kind === entity.kind && subject.id === entity.id;
+  const tag = graph.tags.find(({ name }) => name === subject.name);
+  return entity.kind === "node" ? tag?.nodes.includes(entity.id) === true : tag?.edges.includes(entity.id) === true;
+}
+
+export function metadataSetsForEntity(
+  graph: Pick<ResolvedGraph, "tags" | "metadataSets">,
+  entity: EntityMetadataSubject,
+): readonly MetadataSet[] {
+  return graph.metadataSets.filter((set) =>
+    set.subjects.some((subject) => metadataSubjectAppliesToEntity(graph, subject, entity)),
+  );
+}
+
 /** A Metadata set identifies what it is attached to: contributions may not move it, and a
  * repeated subject is not an attachment either. */
 export function sameMetadataSubjects(left: Pick<MetadataSet, "subjects">, right: Pick<MetadataSet, "subjects">) {
-  const key = (subject: MetadataSubject) => `${subject.kind}\0${subject.id}`;
-  const distinct = (set: Pick<MetadataSet, "subjects">) => [...new Set(set.subjects.map(key))].sort();
+  const distinct = (set: Pick<MetadataSet, "subjects">) => [...new Set(set.subjects.map(metadataSubjectKey))].sort();
   const leftKeys = distinct(left);
   const rightKeys = distinct(right);
   return (

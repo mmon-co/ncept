@@ -1,6 +1,6 @@
 import { canonicalJson } from "../digest";
 import { PatchCompileError } from "./errors";
-import { sameMetadataSubjects } from "./metadata";
+import { discoveryTags, sameMetadataSubjects } from "./metadata";
 import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 import type {
   ClosedPatchBundle,
@@ -93,6 +93,8 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
   const definedTags = new Set<string>();
   for (const revision of closure.values()) {
     const source = revision.ref;
+    for (const label of discoveryTags(revision.metadata.properties))
+      definedTags.add(`patch:${source.identity}:${label}`);
     revision.delta.operations.forEach((operation, operationIndex) => {
       if (operation.kind === "define-tag") {
         definedTags.add(operation.tag.name);
@@ -187,6 +189,43 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
     );
   };
 
+  // Captured properties keep their relative scalar precedence, not the sets' identifier order.
+  const patchOrder = new Map(view.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
+  const metadataContributions = view.metadataSets
+    .flatMap((metadataSet) => {
+      const inheritedEntity = inheritsEntity(view.provenance.metadataSets[metadataSet.id]);
+      const groups = new Map<string, { source: ContributionProvenance; metadataSet: MetadataSet }>();
+      for (const [key, value] of Object.entries(metadataSet.properties)) {
+        if (inheritedEntity && inheritsProperty(metadataSet.id, key)) continue;
+        const source = view.provenance.metadataProperties[metadataSet.id]?.[key]?.at(-1);
+        if (source === undefined)
+          throw new PatchCompileError("invalid-bundle", `missing provenance for '${key}' on '${metadataSet.id}'`);
+        const groupKey = contributionKey(source.patch, source.operationIndex);
+        const prior = groups.get(groupKey);
+        groups.set(groupKey, {
+          source,
+          metadataSet: { ...metadataSet, properties: { ...prior?.metadataSet.properties, [key]: value } },
+        });
+      }
+      if (!inheritedEntity && groups.size === 0) {
+        const source = view.provenance.metadataSets[metadataSet.id]?.at(-1);
+        if (source === undefined)
+          throw new PatchCompileError("invalid-bundle", `missing provenance for '${metadataSet.id}'`);
+        groups.set(contributionKey(source.patch, source.operationIndex), { source, metadataSet });
+      }
+      return [...groups.values()];
+    })
+    .sort(
+      (a, b) =>
+        (patchOrder.get(exactPatchRefKey(a.source.patch)) ?? -1) -
+          (patchOrder.get(exactPatchRefKey(b.source.patch)) ?? -1) || a.source.operationIndex - b.source.operationIndex,
+    );
+
+  const subjectTags = new Set(
+    view.metadataSets.flatMap((set) =>
+      set.subjects.flatMap((subject) => (subject.kind === "tag" ? [subject.name] : [])),
+    ),
+  );
   const generatedPatchTags = new Set(
     Object.entries(view.patchMetadata).flatMap(([identity, metadata]) =>
       Object.entries(metadata.properties).flatMap(([key, value]) =>
@@ -208,19 +247,13 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       if (last !== undefined && supplied(last)) return [];
       return [{ kind: inheritsEntity(chain) ? ("edit-material" as const) : ("add-material" as const), material }];
     }),
-    ...view.metadataSets.flatMap((metadataSet) => {
-      if (!inheritsEntity(view.provenance.metadataSets[metadataSet.id]))
-        return [{ kind: "add-metadata-set" as const, metadataSet }];
-      const properties = Object.fromEntries(
-        Object.entries(metadataSet.properties).filter(([key]) => !inheritsProperty(metadataSet.id, key)),
-      );
-      return Object.keys(properties).length === 0
-        ? []
-        : [{ kind: "add-metadata-set" as const, metadataSet: { ...metadataSet, properties } }];
-    }),
+    ...metadataContributions.map(({ metadataSet }) => ({ kind: "add-metadata-set" as const, metadataSet })),
     ...view.tags
       .filter(
-        (tag) => tag.authority === "patch" && !generatedPatchTags.has(tag.name) && !inherited.definedTags.has(tag.name),
+        (tag) =>
+          (tag.authority === "patch" || subjectTags.has(tag.name)) &&
+          (!generatedPatchTags.has(tag.name) || subjectTags.has(tag.name)) &&
+          !inherited.definedTags.has(tag.name),
       )
       .map(({ name, nodes, edges, metadataSets }) => ({
         kind: "define-tag" as const,
