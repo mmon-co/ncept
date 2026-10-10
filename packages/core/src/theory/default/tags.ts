@@ -184,6 +184,15 @@ function indicatorTag(indicator: Indicator): Tag {
   return { tag: indicator.kind, caption: indicator.message, cites: indicator.citations };
 }
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
+  if (node.completion !== undefined) {
+    const { binding, status } = node.completion;
+    return {
+      id: `default.node-progress.completion.${status}`,
+      defaultMessage: `Completion from {playground}: ${status}`,
+      remainderMessage: `Completion from {playground}: ${status}`,
+      values: { playground: binding.playground },
+    };
+  }
   const hasSuccess = node.lastSuccess !== undefined;
   return {
     id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
@@ -237,7 +246,10 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     nodes[id] = [
       {
         tag: node.label,
-        caption: `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`,
+        caption:
+          node.completion === undefined
+            ? `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`
+            : `Completion from ${node.completion.binding.playground}: ${node.completion.status}`,
         message: nodeProgressMessage(node),
         ...(isDefaultKnown(node) && node.schedule ? { rank: node.schedule.retrievability } : {}),
         cites: node.citations,
@@ -277,5 +289,17 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     ];
   }
 
-  return { nodes, edges, learner: indicators.map(indicatorTag) };
+  const expiry = Object.values(state.nodes)
+    .flatMap((node) =>
+      node?.completion?.status === "complete" && node.completion.report?.payload.validUntil !== undefined
+        ? [node.completion.report.payload.validUntil]
+        : [],
+    )
+    .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  return {
+    nodes,
+    edges,
+    learner: indicators.map(indicatorTag),
+    ...(expiry === undefined ? {} : { validUntil: expiry }),
+  };
 }

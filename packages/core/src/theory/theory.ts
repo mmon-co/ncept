@@ -30,6 +30,8 @@ export type Tag = Readonly<{
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
 /** One graph-wide computation: every Node and Edge of the graph has an entry, empty where nothing applies. */
 export type TheoryProjection = Readonly<{
+  /** Earliest clock instant at which this projection must be recomputed. */
+  validUntil?: string;
   nodes: Readonly<Record<NodeId, readonly Tag[]>>;
   edges: Readonly<Record<EdgeId, readonly Tag[]>>;
   learner: readonly Tag[];

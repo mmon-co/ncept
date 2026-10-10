@@ -2,6 +2,8 @@ import { isContentDigest } from "../../digest";
 import { isObservationTimestamp } from "../../observations";
 import type { Claim, Demonstration, NodeRef } from "./state";
 import type { ExactPatchRef, NodeId } from "../../patch";
+export { isCompletionOutcome } from "./state";
+export type { CompletionOutcome } from "./state";
 
 /** Content captured when retrieval happened, not a pointer to an editable card. */
 export interface RecallOutcome {

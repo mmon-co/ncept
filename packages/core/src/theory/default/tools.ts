@@ -170,11 +170,13 @@ function trail(ctx: Ctx, node: NodeId) {
   nodesInScope(ctx, [node]);
   const state = defaultNodeState(ctx.state, node);
   const rule =
-    state.label === "demonstrated"
-      ? "demonstration-window"
-      : state.label === "probably-known"
-        ? "knows-claim-newer-than-failure"
-        : "no-qualifying-evidence";
+    state.completion !== undefined
+      ? "playground-completion"
+      : state.label === "demonstrated"
+        ? "demonstration-window"
+        : state.label === "probably-known"
+          ? "knows-claim-newer-than-failure"
+          : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
 function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
@@ -360,7 +362,8 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     "trail",
     [
       "Original records and the rule producing this Node's label. The first qualifying rule applies:",
-      "1. demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
+      "A Node with pedagogy:completion uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.",
+      "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
       "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select acquired Nodes below the retention thresholds.",

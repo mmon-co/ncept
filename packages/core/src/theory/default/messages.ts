@@ -1,5 +1,21 @@
 /** Locale resources owned by the default Pedagogy package, resolved by the Application. */
 export const defaultTheoryMessages = {
+  "default.node-progress.completion.complete": {
+    en: "Completion from {playground}: complete",
+    "zh-CN": "{playground} 完成状态：已完成",
+  },
+  "default.node-progress.completion.incomplete": {
+    en: "Completion from {playground}: incomplete",
+    "zh-CN": "{playground} 完成状态：未完成",
+  },
+  "default.node-progress.completion.expired": {
+    en: "Completion from {playground}: expired",
+    "zh-CN": "{playground} 完成状态：已过期",
+  },
+  "default.node-progress.completion.absent": {
+    en: "Completion from {playground}: absent",
+    "zh-CN": "{playground} 完成状态：尚未报告",
+  },
   "default.node-progress.no-success": {
     en: "{demonstrated} of {window}, last success none; aided practice {aidedPractice}",
     "zh-CN": "{demonstrated}/{window}，尚无成功；辅助练习 {aidedPractice}",
