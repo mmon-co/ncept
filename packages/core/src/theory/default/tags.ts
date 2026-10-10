@@ -14,6 +14,11 @@ export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
 export function isDefaultKnown(node: NodeState): boolean {
   return node.label === "demonstrated" || node.label === "probably-known";
 }
+/** Acquisition withdrawal does not discard a completion-bound Node’s recall schedule. */
+export function isDefaultReviewable(node: NodeState): boolean {
+  return isDefaultKnown(node) || (node.completion !== undefined && node.schedule !== undefined);
+}
+
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */
 type QueryToken = (state: DefaultState, graph: ResolvedGraph, reached?: ReadonlySet<NodeId>) => ReadonlySet<NodeId>;
 function select(predicate: (node: NodeState) => boolean): QueryToken {
@@ -40,12 +45,12 @@ export const defaultQueryTokens = {
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   "review:due": select(
     (node) =>
-      isDefaultKnown(node) &&
+      isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
     (node) =>
-      isDefaultKnown(node) &&
+      isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
   ),
 } satisfies Record<string, QueryToken>;
