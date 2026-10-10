@@ -4,6 +4,7 @@ import { canonicalJson } from "../../digest";
 import { dependentCones } from "./dependent-cone";
 import {
   lastMetadataContribution,
+  metadataSetsForEntity,
   NODE_CRITERION_PROPERTY,
   sameExactPatchRef,
   type ExactPatchRef,
@@ -426,8 +427,7 @@ export interface HomingCandidate {
 }
 export function homingCandidates(graph: ResolvedGraph): readonly HomingCandidate[] {
   return graph.nodes.map(({ id }) => {
-    const contributions = graph.metadataSets.flatMap((set) => {
-      if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === id)) return [];
+    const contributions = metadataSetsForEntity(graph, { kind: "node", id }).flatMap((set) => {
       const value = set.properties[NODE_CRITERION_PROPERTY];
       if (value === undefined) return [];
       const source = graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
@@ -696,9 +696,8 @@ export function defaultNodeParameters(
   function property(key: string): unknown {
     return lastMetadataContribution(
       graph,
-      graph.metadataSets.flatMap((set) => {
-        if (!set.subjects.some((subject) => subject.kind === "node" && subject.id === node) || !(key in set.properties))
-          return [];
+      metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
+        if (!(key in set.properties)) return [];
         const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
         if (source === undefined) throw new Error(`Missing provenance for ${key} on ${node}`);
         return [{ value: set.properties[key], source }];

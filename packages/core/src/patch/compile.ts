@@ -13,6 +13,7 @@ import type {
   VisualGraph,
 } from "./model";
 import { exactPatchRefKey, NODE_LABEL_PROPERTY } from "./model";
+import { metadataSetsForEntity } from "./metadata";
 import { projectVisualGraph } from "./project";
 import { resolvePatchBundle } from "./resolve";
 import { selectGraph } from "./select";
@@ -63,9 +64,15 @@ export function composePatch(
   operations: SemanticDelta["operations"],
   citations: PatchMetadata["citations"] = [],
 ): PatchContent {
+  const replacedTags = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
   return {
     bases: content.bases,
-    delta: { operations: [...content.delta.operations, ...operations] },
+    delta: {
+      operations: [
+        ...content.delta.operations.filter((op) => op.kind !== "define-tag" || !replacedTags.has(op.tag.name)),
+        ...operations,
+      ],
+    },
     metadata: { ...content.metadata, citations: [...content.metadata.citations, ...citations] },
   };
 }
@@ -202,11 +209,13 @@ function reportFor(
 
 function resolvedLabels(graph: ResolvedGraph): Set<NodeId> {
   return new Set(
-    graph.metadataSets.flatMap((set) =>
-      typeof set.properties[NODE_LABEL_PROPERTY] === "string"
-        ? set.subjects.flatMap((subject) => (subject.kind === "node" ? [subject.id] : []))
-        : [],
-    ),
+    graph.nodes
+      .filter(({ id }) =>
+        metadataSetsForEntity(graph, { kind: "node", id }).some(
+          (set) => typeof set.properties[NODE_LABEL_PROPERTY] === "string",
+        ),
+      )
+      .map(({ id }) => id),
   );
 }
 

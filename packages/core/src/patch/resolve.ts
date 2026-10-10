@@ -706,11 +706,16 @@ function resolveBundle(
       throw new PatchCompileError("dangling-edge", `edge '${edge.id}' has missing endpoints`);
   for (const set of metadataSets.values())
     for (const subject of set.subjects) {
-      const present = subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id);
+      const present =
+        subject.kind === "tag"
+          ? tags.has(subject.name)
+          : subject.kind === "node"
+            ? nodes.has(subject.id)
+            : edges.has(subject.id);
       if (!present)
         throw new PatchCompileError(
           "dangling-metadata",
-          `metadata set '${set.id}' targets missing ${subject.kind} '${subject.id}'`,
+          `metadata set '${set.id}' targets missing ${subject.kind} '${subject.kind === "tag" ? subject.name : subject.id}'`,
         );
     }
   for (const tag of tags.values()) {
