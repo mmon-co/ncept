@@ -1,5 +1,6 @@
 import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
+import { isGuidanceEntries, PEDAGOGY_GUIDANCE_PROPERTY } from "./guidance";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -137,10 +138,12 @@ export function isMetadataValue(value: unknown): value is MetadataValue {
 
 export function validateMetadataProperties(properties: Readonly<Record<string, MetadataValue>>): void {
   for (const [key, value] of Object.entries(properties))
-    if (!isMetadataValue(value))
+    if (key === PEDAGOGY_GUIDANCE_PROPERTY ? !isGuidanceEntries(value) : !isMetadataValue(value))
       throw new PatchCompileError(
         "invalid-metadata-value",
-        `metadata property '${key}' is not a scalar, string list, bounded JSON-object list or Attachment`,
+        key === PEDAGOGY_GUIDANCE_PROPERTY
+          ? `metadata property '${key}' must be an ordered guidance entry list`
+          : `metadata property '${key}' is not a scalar, string list, bounded JSON-object list or Attachment`,
       );
 }
 

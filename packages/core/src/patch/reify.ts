@@ -1,6 +1,7 @@
 import { canonicalJson } from "../digest";
 import { PatchCompileError } from "./errors";
 import { discoveryTags, sameMetadataSubjects } from "./metadata";
+import { isGuidanceEntries, PEDAGOGY_GUIDANCE_PROPERTY } from "./guidance";
 import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 import type {
   ClosedPatchBundle,
@@ -196,7 +197,9 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       const inheritedEntity = inheritsEntity(view.provenance.metadataSets[metadataSet.id]);
       const groups = new Map<string, { source: ContributionProvenance; metadataSet: MetadataSet }>();
       for (const [key, value] of Object.entries(metadataSet.properties)) {
-        if (inheritedEntity && inheritsProperty(metadataSet.id, key)) continue;
+        // Reauthor guidance even from retained bases: flattened sources can precede them,
+        // while every captured operation resolves after all retained contributions.
+        if (key !== PEDAGOGY_GUIDANCE_PROPERTY && inheritedEntity && inheritsProperty(metadataSet.id, key)) continue;
         const source = view.provenance.metadataProperties[metadataSet.id]?.[key]?.at(-1);
         if (source === undefined)
           throw new PatchCompileError("invalid-bundle", `missing provenance for '${key}' on '${metadataSet.id}'`);
@@ -218,13 +221,20 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
     .sort(
       (a, b) =>
         (patchOrder.get(exactPatchRefKey(a.source.patch)) ?? -1) -
-          (patchOrder.get(exactPatchRefKey(b.source.patch)) ?? -1) || a.source.operationIndex - b.source.operationIndex,
+          (patchOrder.get(exactPatchRefKey(b.source.patch)) ?? -1) ||
+        a.source.operationIndex - b.source.operationIndex ||
+        (a.metadataSet.id < b.metadataSet.id ? -1 : a.metadataSet.id > b.metadataSet.id ? 1 : 0),
     );
 
-  const subjectTags = new Set(
-    view.metadataSets.flatMap((set) =>
-      set.subjects.flatMap((subject) => (subject.kind === "tag" ? [subject.name] : [])),
-    ),
+  const referencedTags = new Set(
+    view.metadataSets.flatMap((set) => [
+      ...set.subjects.flatMap((subject) => (subject.kind === "tag" ? [subject.name] : [])),
+      ...(isGuidanceEntries(set.properties[PEDAGOGY_GUIDANCE_PROPERTY])
+        ? set.properties[PEDAGOGY_GUIDANCE_PROPERTY].flatMap(({ mode }) =>
+            mode === "append" ? [] : ("replace" in mode ? mode.replace : mode.keep).map(({ name }) => name),
+          )
+        : []),
+    ]),
   );
   const generatedPatchTags = new Set(
     Object.entries(view.patchMetadata).flatMap(([identity, metadata]) =>
@@ -251,8 +261,8 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
     ...view.tags
       .filter(
         (tag) =>
-          (tag.authority === "patch" || subjectTags.has(tag.name)) &&
-          (!generatedPatchTags.has(tag.name) || subjectTags.has(tag.name)) &&
+          (tag.authority === "patch" || referencedTags.has(tag.name)) &&
+          (!generatedPatchTags.has(tag.name) || referencedTags.has(tag.name)) &&
           !inherited.definedTags.has(tag.name),
       )
       .map(({ name, nodes, edges, metadataSets }) => ({
