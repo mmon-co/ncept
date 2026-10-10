@@ -7,6 +7,7 @@ import type {
   ExactPatchRef,
   GraphQuery,
   MetadataSetId,
+  MetadataSubject,
   NodeId,
   PatchId,
   ResolvedGraph,
@@ -14,6 +15,7 @@ import type {
 } from "./model";
 
 interface Fragment {
+  readonly tags: Set<string>;
   readonly nodes: Set<NodeId>;
   readonly edges: Set<EdgeId>;
   readonly metadataSets: Set<MetadataSetId>;
@@ -118,10 +120,42 @@ function combine(left: Fragment, right: Fragment, operation: "union" | "intersec
     return new Set([...leftIds].filter((id) => !rightIds.has(id)));
   };
   return {
+    tags: ids(left.tags, right.tags),
     nodes: ids(left.nodes, right.nodes),
     edges: ids(left.edges, right.edges),
     metadataSets: ids(left.metadataSets, right.metadataSets),
   };
+}
+
+function subjectInFragment(graph: ResolvedGraph, subject: MetadataSubject, fragment: Fragment): boolean {
+  if (subject.kind === "node") return fragment.nodes.has(subject.id);
+  if (subject.kind === "edge") return fragment.edges.has(subject.id);
+  const tag = graph.tags.find(({ name }) => name === subject.name);
+  return (
+    fragment.tags.has(subject.name) ||
+    tag?.nodes.some((id) => fragment.nodes.has(id)) === true ||
+    tag?.edges.some((id) => fragment.edges.has(id)) === true
+  );
+}
+
+function includeSubjects(graph: ResolvedGraph, subjects: readonly MetadataSubject[], fragment: Fragment): void {
+  const includeEdge = (id: EdgeId) => {
+    const edge = graph.edges.find((edge) => edge.id === id);
+    if (edge === undefined) throw new PatchCompileError("dangling-metadata", `missing edge '${id}'`);
+    fragment.edges.add(id);
+    fragment.nodes.add(edge.from);
+    fragment.nodes.add(edge.to);
+  };
+  for (const subject of subjects) {
+    if (subject.kind === "node") fragment.nodes.add(subject.id);
+    else if (subject.kind === "edge") includeEdge(subject.id);
+    else {
+      fragment.tags.add(subject.name);
+      const tag = graph.tags.find(({ name }) => name === subject.name);
+      for (const id of tag?.nodes ?? []) fragment.nodes.add(id);
+      for (const id of tag?.edges ?? []) includeEdge(id);
+    }
+  }
 }
 
 function tagFragment(graph: ResolvedGraph, name: string, tags?: TagIndex): Fragment {
@@ -138,6 +172,7 @@ function tagFragment(graph: ResolvedGraph, name: string, tags?: TagIndex): Fragm
   const nodes = new Set(tag.nodes);
   const edges = new Set(tag.edges);
   const metadataSets = new Set(tag.metadataSets);
+  const fragment = { nodes, edges, metadataSets, tags: new Set([name]) };
 
   const includeEdge = (id: EdgeId): void => {
     const edge = graph.edges.find((candidate) => candidate.id === id);
@@ -151,14 +186,11 @@ function tagFragment(graph: ResolvedGraph, name: string, tags?: TagIndex): Fragm
     const metadata = graph.metadataSets.find((candidate) => candidate.id === id);
     if (metadata === undefined)
       throw new PatchCompileError("dangling-tag", `tag '${name}' targets missing metadata set '${id}'`);
-    for (const subject of metadata.subjects)
-      if (subject.kind === "node") nodes.add(subject.id);
-      else includeEdge(subject.id);
+    includeSubjects(graph, metadata.subjects, fragment);
   }
   for (const metadata of graph.metadataSets)
-    if (metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))))
-      metadataSets.add(metadata.id);
-  return { nodes, edges, metadataSets };
+    if (metadata.subjects.some((subject) => subjectInFragment(graph, subject, fragment))) metadataSets.add(metadata.id);
+  return fragment;
 }
 
 function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[], dependents = false): Fragment {
@@ -180,14 +212,13 @@ function coneFragment(graph: ResolvedGraph, targets: readonly NodeId[], dependen
         pending.push(dependents ? edge.to : edge.from);
       }
   }
+  const fragment: Fragment = { nodes, edges, metadataSets: new Set(), tags: new Set() };
   const metadataSets = new Set(
     graph.metadataSets
-      .filter((metadata) =>
-        metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))),
-      )
+      .filter((metadata) => metadata.subjects.some((subject) => subjectInFragment(graph, subject, fragment)))
       .map(({ id }) => id),
   );
-  return { nodes, edges, metadataSets };
+  return { ...fragment, metadataSets };
 }
 
 function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment {
@@ -200,27 +231,17 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
   const metadataSets = new Set(
     graph.metadataSets.filter(({ id }) => contributed(graph.provenance.metadataSets[id])).map(({ id }) => id),
   );
+  const fragment = { nodes, edges, metadataSets, tags: new Set<string>() };
   for (const edge of graph.edges)
     if (edges.has(edge.id)) {
       nodes.add(edge.from);
       nodes.add(edge.to);
     }
   for (const metadata of graph.metadataSets)
-    if (metadataSets.has(metadata.id))
-      for (const subject of metadata.subjects)
-        if (subject.kind === "node") nodes.add(subject.id);
-        else {
-          const edge = graph.edges.find(({ id }) => id === subject.id);
-          if (edge !== undefined) {
-            edges.add(edge.id);
-            nodes.add(edge.from);
-            nodes.add(edge.to);
-          }
-        }
+    if (metadataSets.has(metadata.id)) includeSubjects(graph, metadata.subjects, fragment);
   for (const metadata of graph.metadataSets)
-    if (metadata.subjects.some((subject) => (subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id))))
-      metadataSets.add(metadata.id);
-  return { nodes, edges, metadataSets };
+    if (metadata.subjects.some((subject) => subjectInFragment(graph, subject, fragment))) metadataSets.add(metadata.id);
+  return fragment;
 }
 
 function evaluate(graph: ResolvedGraph, query: GraphQuery, tags?: TagIndex): Fragment {
@@ -253,9 +274,7 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
   );
   const selectedMetadata = graph.metadataSets.flatMap((metadata) => {
     if (!fragment.metadataSets.has(metadata.id)) return [];
-    const subjects = metadata.subjects.filter((subject) =>
-      subject.kind === "node" ? nodes.has(subject.id) : edges.has(subject.id),
-    );
+    const subjects = metadata.subjects.filter((subject) => subjectInFragment(graph, subject, { ...fragment, edges }));
     return subjects.length === 0 ? [] : [{ ...metadata, subjects }];
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
@@ -334,6 +353,7 @@ export function nodesContributedOnlyBy(graph: ResolvedGraph, patches: ReadonlySe
 /** Project a Node subset using the same Edge, Material and metadata narrowing as query selection. */
 export function selectNodeSubset(graph: ResolvedGraph, nodes: ReadonlySet<NodeId>): SelectedGraph {
   return selectedGraph(graph, {
+    tags: new Set(),
     nodes: new Set(nodes),
     edges: new Set(graph.edges.map(({ id }) => id)),
     metadataSets: new Set(graph.metadataSets.map(({ id }) => id)),
