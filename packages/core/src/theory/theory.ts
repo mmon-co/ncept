@@ -1,6 +1,7 @@
 import type { ContentDigest } from "../digest";
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
+import type { SceneAttemptView } from "./scene-attempt";
 import type {
   JsonSchema,
   Observation,
@@ -30,6 +31,8 @@ export type Tag = Readonly<{
 export type TagIndex = (tag: string) => ReadonlySet<NodeId>;
 /** One graph-wide computation: every Node and Edge of the graph has an entry, empty where nothing applies. */
 export type TheoryProjection = Readonly<{
+  /** Earliest clock instant at which this projection must be recomputed. */
+  validUntil?: string;
   nodes: Readonly<Record<NodeId, readonly Tag[]>>;
   edges: Readonly<Record<EdgeId, readonly Tag[]>>;
   learner: readonly Tag[];
@@ -139,6 +142,8 @@ export type ChatContext<S> = Context<S> &
     mode: string;
     /** Resolved opening facts, pinned with the Session revision. */
     entry?: ModeEntry;
+    /** Accepted Scene check facts, supplied only for a mode with bounded-scene assessment. */
+    scene?: SceneAttemptView;
     about: readonly NodeId[];
     /** Nodes used by unscoped default readings; omitted means the whole graph. Explicit scopes override this. */
     unscopedNodes?: readonly NodeId[];

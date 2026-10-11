@@ -132,7 +132,8 @@ export function isMetadataValue(value: unknown): value is MetadataValue {
     (Array.isArray(value) &&
       (value.every((item) => typeof item === "string") ||
         (value.every(isMaterialMeta) && isMaterialMeta({ entries: value })))) ||
-    isAttachment(value)
+    isAttachment(value) ||
+    (isMaterialMeta(value) && value.kind !== "blob")
   );
 }
 
@@ -143,7 +144,7 @@ export function validateMetadataProperties(properties: Readonly<Record<string, M
         "invalid-metadata-value",
         key === PEDAGOGY_GUIDANCE_PROPERTY
           ? `metadata property '${key}' must be an ordered guidance entry list`
-          : `metadata property '${key}' is not a scalar, string list, bounded JSON-object list or Attachment`,
+          : `metadata property '${key}' is not a scalar, string list, bounded JSON object/object list or Attachment`,
       );
 }
 

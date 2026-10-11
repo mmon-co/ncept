@@ -14,6 +14,7 @@ import type { Context } from "../theory";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
 import {
   stateDefault,
+  isCompletionOutcome,
   projectGraphChange,
   homingCandidates,
   expandNodeMemory,
@@ -282,6 +283,20 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
   }
   if (input.kind === "outcome") {
     const { payload } = input;
+    if (isCompletionOutcome(payload)) {
+      if (input.about !== undefined && !input.about.includes(payload.node.node))
+        throw new Error("Completion is outside outcome scope");
+      yield* write({
+        at: input.at,
+        surface: input.surface,
+        about: input.about ?? [payload.node.node],
+        nodes: [payload.node.node],
+        ...(input.cites === undefined ? {} : { cites: [...input.cites] }),
+        payload,
+      });
+      return;
+    }
+    if (object(payload) && payload.kind === "completion") throw new Error("Invalid completion outcome");
     if (!isRecallOutcome(payload) && !isQuizOutcome(payload) && !isAttemptOutcome(payload)) {
       if (
         typeof input.payload === "object" &&

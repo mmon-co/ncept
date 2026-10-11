@@ -1,7 +1,7 @@
 import { chat, modes } from "./chat";
 import { event } from "./event";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
-import { DEFAULT_THEORY_REF, stateDefault } from "./state";
+import { DEFAULT_THEORY_REF, stateDefault, isCompletionOutcome } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
 
@@ -13,7 +13,12 @@ export const implementation = {
   project: projectDefault,
   path: pathDefault,
   tags: defaultTags,
-  outcomes: { recall: isRecallOutcome, quiz: isQuizOutcome, attempt: isAttemptOutcome },
+  outcomes: {
+    completion: isCompletionOutcome,
+    recall: isRecallOutcome,
+    quiz: isQuizOutcome,
+    attempt: isAttemptOutcome,
+  },
   chat,
   modes,
   event,
@@ -21,6 +26,7 @@ export const implementation = {
   import("../theory").Theory<
     import("./state").DefaultState,
     {
+      completion: import("./state").CompletionOutcome;
       recall: import("./outcomes").RecallOutcome;
       quiz: import("./outcomes").QuizOutcome;
       attempt: import("./outcomes").AttemptOutcome;

@@ -31,7 +31,15 @@ export interface Material {
 /** Portable metadata references only; bytes, authority and running instances belong to the host. */
 export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };
 
-export type MetadataValue = string | number | boolean | null | readonly string[] | readonly MaterialMeta[] | Attachment;
+export type MetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly string[]
+  | readonly MaterialMeta[]
+  | MaterialMeta
+  | Attachment;
 
 export interface ExactPatchRef {
   readonly identity: PatchId;

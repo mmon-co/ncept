@@ -50,6 +50,10 @@ export type ModeSwitchDefault =
 /** @public A mode's entry requirement, capabilities, transitions and current tutor setup. */
 export type SessionMode<S = unknown> = Readonly<{
   title: string;
+  /** Absent: ordinary text. Opt-in mounts the host's terminal scene_reply presentation tool. */
+  reply?: "in-character-and-aside";
+  /** Opt-in bounded check lifecycle. The host binds original speech and finalizes before close. */
+  assessment?: "bounded-scene";
   /** Initial side-panel tab: "map" or a host Playground identity; absent falls back to Map. */
   frontTab?: string;
   /** Editable text templates offered by the draft's empty note editor, resolved in the reader's locale. */

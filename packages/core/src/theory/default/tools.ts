@@ -15,6 +15,7 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch
 import type { ChatContext, Tool } from "../theory";
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
+import { sceneTask, sceneResponse } from "./scene";
 import { milestoneDiagnosisSchema, readMilestoneDiagnosis } from "./diagnosis";
 import { refinePendingHomes } from "./event";
 import {
@@ -36,7 +37,7 @@ import {
   type Demonstration,
   type Interpretation,
 } from "./state";
-import { defaultNodeState, defaultQueryTokens, indicatorsDefault, isDefaultKnown } from "./tags";
+import { defaultNodeState, defaultQueryTokens, indicatorsDefault, isDefaultKnown, isDefaultReviewable } from "./tags";
 
 type Ctx = ChatContext<DefaultState>;
 type DefaultTool = Tool<unknown, unknown, DefaultState>;
@@ -170,11 +171,13 @@ function trail(ctx: Ctx, node: NodeId) {
   nodesInScope(ctx, [node]);
   const state = defaultNodeState(ctx.state, node);
   const rule =
-    state.label === "demonstrated"
-      ? "demonstration-window"
-      : state.label === "probably-known"
-        ? "knows-claim-newer-than-failure"
-        : "no-qualifying-evidence";
+    state.completion !== undefined
+      ? "playground-completion"
+      : state.label === "demonstrated"
+        ? "demonstration-window"
+        : state.label === "probably-known"
+          ? "knows-claim-newer-than-failure"
+          : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
 function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
@@ -367,10 +370,11 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     "trail",
     [
       "Original records and the rule producing this Node's label. The first qualifying rule applies:",
-      "1. demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
+      'pedagogy:completion is ordinary Node metadata; SRS uses { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
+      "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
-      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select acquired Nodes below the retention thresholds.",
+      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
       "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
     trail,
@@ -384,7 +388,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
       return state.label === "probably-known" ||
-        (isDefaultKnown(state) &&
+        (isDefaultReviewable(state) &&
           (state.schedule?.lapsed === true || (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due))
         ? [{ ...candidate(ctx, id), schedule: state.schedule, rule: trail(ctx, id).rule }]
         : [];
@@ -494,42 +498,131 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
 ];
 
 /** Only theory evidence is written. The host assigns identity and attribution, not pedagogy. */
-export const defaultRecordingTools: readonly DefaultTool[] = [
-  {
-    name: "record_demonstration",
-    description: [
-      "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
-      "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
-      "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
-      "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
-      "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
-    ].join(" "),
-    schema: schema(
-      {
-        node: nodeProperty,
-        outcome: { enum: ["success", "failure", "dont-know"] },
-        unaided: { type: "boolean" },
-        grader: { enum: ["mechanical", "tutor", "learner"] },
-        task: { type: "string" },
-        response: { type: "string" },
-      },
-      ["node", "outcome", "unaided", "grader", "task", "response"],
-    ),
-    *run(raw, ctx) {
-      const input = args(
-        raw,
-        ["node", "outcome", "unaided", "grader", "task", "response"],
-        ["node", "outcome", "unaided", "grader", "task", "response"],
-      );
-      const node = nodeId(input.node);
-      nodesInScope(ctx, [node]);
-      const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
-      if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
-      const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
-      const id = yield* write(observation);
-      return { observation: { ...observation, id }, citations: [id] };
+const recordDemonstration: DefaultTool = {
+  name: "record_demonstration",
+  description: [
+    "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
+    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
+    "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
+    "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
+    "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
+  ].join(" "),
+  schema: schema(
+    {
+      node: nodeProperty,
+      outcome: { enum: ["success", "failure", "dont-know"] },
+      unaided: { type: "boolean" },
+      grader: { enum: ["mechanical", "tutor", "learner"] },
+      task: { type: "string" },
+      response: { type: "string" },
     },
+    ["node", "outcome", "unaided", "grader"],
+  ),
+  *run(raw, ctx) {
+    const input = args(
+      raw,
+      ["node", "outcome", "unaided", "grader", "task", "response"],
+      ["node", "outcome", "unaided", "grader"],
+    );
+    const node = nodeId(input.node);
+    nodesInScope(ctx, [node]);
+    const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
+    if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
+    const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
+    const id = yield* write(observation);
+    return { observation: { ...observation, id }, citations: [id] };
   },
+};
+
+/** A Scene separates performance against its pin from assistance over the whole attempt. */
+export const recordSceneDemonstration: DefaultTool = {
+  name: "record_demonstration",
+  description:
+    "Record this sealed Scene once. Assess the pinned rubric using only the learner's actual responses, not corrected tutor dialogue. Do not add success requirements from the correction item. Assess assistance independently of success/failure across the entire source, including opening and all tutor asides. Help on the checked capability makes even a failed attempt aided; help alone is not a reason to mark failure. The host supplies the target, task, response and tutor grader, and derives unaided from assistance and the opening.",
+  schema: schema(
+    {
+      attempt: { type: "string", pattern: "^obs-.+" },
+      outcome: { enum: ["success", "failure", "dont-know"] },
+      rubricAssessment: {
+        type: "string",
+        minLength: 1,
+        description:
+          "Which pinned requirements the learner's actual responses met or missed; cite their words or original media. Do not impose unstated correctness requirements.",
+      },
+      assistance: schema(
+        {
+          kind: {
+            enum: ["none", "outside-capability", "checked-capability"],
+            description:
+              "Any hint, correction, example or suggested response on the checked capability anywhere in the attempt means checked-capability, regardless of outcome. Only glosses/context outside it mean outside-capability. No such help means none.",
+          },
+          evidence: {
+            type: "string",
+            minLength: 1,
+            description:
+              "Identify the tutor help and its relation to the checked capability across the whole source, or explain its absence. Later independent responses do not erase earlier help.",
+          },
+        },
+        ["kind", "evidence"],
+      ),
+    },
+    ["attempt", "outcome", "rubricAssessment", "assistance"],
+  ),
+  *run(raw, ctx) {
+    const input = args(
+      raw,
+      ["attempt", "outcome", "rubricAssessment", "assistance"],
+      ["attempt", "outcome", "rubricAssessment", "assistance"],
+    );
+    const assistance = args(input.assistance, ["kind", "evidence"], ["kind", "evidence"]);
+    if (
+      !string(input.rubricAssessment).trim() ||
+      !string(assistance.evidence).trim() ||
+      !["none", "outside-capability", "checked-capability"].includes(string(assistance.kind))
+    )
+      throw new Error("Scene grading needs a pinned-rubric assessment and whole-attempt assistance evidence");
+    const scene = ctx.scene;
+    if (scene === undefined) throw new Error("Scene grading needs its pinned check");
+    const attempt = observationId(input.attempt);
+    if (scene.attempt !== attempt) throw new Error("Attempt is not this Scene's selected check");
+    if (scene.state === "recorded") {
+      const observations = yield* read.observations({ surface: ctx.surface });
+      const observation = observations.find(({ id }) => id === scene.record);
+      if (observation === undefined) throw new Error("Recorded Scene source is unavailable; retry");
+      return { observation, citations: [scene.record] };
+    }
+    if (scene.state !== "finished") throw new Error("Seal an attempted Scene before recording it");
+    const transcript = yield* read.transcript(ctx.surface, {
+      from: scene.source.from.messageId,
+      to: scene.source.to.messageId,
+    });
+    if (transcript.turns.length === 0) throw new Error("Original Scene source is unavailable; retry");
+    const payload = {
+      kind: "demonstration",
+      node: scene.opening.node,
+      outcome: input.outcome,
+      unaided: scene.opening.unaided && assistance.kind !== "checked-capability",
+      grader: "tutor",
+      task: sceneTask(scene.opening),
+      response: sceneResponse(transcript),
+      scene: { attempt, source: scene.source },
+    };
+    if (!isDemonstration(payload)) throw new Error("Invalid Scene demonstration");
+    const observation = {
+      at: ctx.now,
+      about: [...ctx.about],
+      nodes: [scene.opening.node.node],
+      surface: ctx.surface,
+      cites: [attempt],
+      payload,
+    };
+    const id = yield* write(observation);
+    return { observation: { ...observation, id }, citations: [id] };
+  },
+};
+
+export const defaultRecordingTools: readonly DefaultTool[] = [
+  recordDemonstration,
   {
     name: "record_retrieval_opener",
     description:
