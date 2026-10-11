@@ -19,8 +19,8 @@ export declare const implementation: {
         attempt: typeof isAttemptOutcome;
     };
     chat: {
-        open: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
-        turn: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
+        open: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
+        turn: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
     };
     modes: {
         empty: {
@@ -72,6 +72,33 @@ export declare const implementation: {
                     kind: "brief";
                 };
             }[];
+            setup: (ctx: import("../theory").ChatContext<import("./state").DefaultState>) => import("../../observations").Program<Readonly<{
+                prompt: string;
+                context?: string;
+                tools: readonly Readonly<{
+                    name: string;
+                    description: string;
+                    schema: import("../../observations").JsonSchema;
+                    run(args: unknown, ctx: import("../theory").ChatContext<import("./state").DefaultState>): import("../../observations").Program<unknown>;
+                }>[];
+                skills: readonly Readonly<{
+                    name: string;
+                    description: string;
+                    body: string;
+                    facet: "position" | "chart" | "advance";
+                    entry: readonly ("learner" | "model" | "system")[];
+                }>[];
+            }>>;
+        };
+        authoring: {
+            title: string;
+            frontTab: string;
+            entry: {
+                required: false;
+                kinds: "goal"[];
+            };
+            capabilities: readonly ["reads", "graph-draft", "materials", "web"];
+            switches: never[];
             setup: (ctx: import("../theory").ChatContext<import("./state").DefaultState>) => import("../../observations").Program<Readonly<{
                 prompt: string;
                 context?: string;
