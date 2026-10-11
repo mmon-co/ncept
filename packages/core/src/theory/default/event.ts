@@ -11,14 +11,7 @@ import {
 } from "../../observations";
 import { isNodeId, sameExactPatchRef, type NodeId } from "../../patch";
 import type { Context } from "../theory";
-import {
-  isAttemptOutcome,
-  isQuizOutcome,
-  isRecallOutcome,
-  practiceAttempts,
-  problemAttempts,
-  calibrationClaims,
-} from "./outcomes";
+import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
 import {
   stateDefault,
   isCompletionOutcome,
@@ -322,19 +315,6 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
         !input.about.every((node) => payload.problem.about.includes(node)))
     )
       throw new Error("Invalid practice outcome");
-    if (isAttemptOutcome(payload) && payload.calibration) {
-      const claims = calibrationClaims(payload);
-      for (const { node, payload: claim } of claims)
-        yield* write({
-          at: input.at,
-          surface: input.surface,
-          about: input.about ?? payload.problem.about,
-          nodes: [node],
-          ...(input.cites === undefined ? {} : { cites: [...input.cites] }),
-          payload: claim,
-        });
-      return;
-    }
     // Capture every attempt before the first yield: the host must not be able to edit later cards
     // or questions between writes and silently change the evidence in this outcome.
     const attempts = isAttemptOutcome(payload) ? problemAttempts(payload, input.at) : practiceAttempts(payload);

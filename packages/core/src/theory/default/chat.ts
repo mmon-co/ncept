@@ -223,7 +223,10 @@ function* setup(
     skills: chatSkills(mode, documents, recommendations),
     tools:
       mode === "empty" || mode === "authoring"
-        ? defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name))
+        ? [
+            ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+            ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
+          ]
         : mode === "charting"
           ? [
               ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
@@ -233,6 +236,7 @@ function* setup(
           : mode === "scene"
             ? [
                 ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+                ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
                 recordSceneDemonstration,
               ]
             : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
@@ -272,7 +276,7 @@ export const modes = {
       { id: "default.charting.note.why", defaultMessage: "Why is this needed?" },
       { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
     ],
-    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint"] },
+    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint", "opening", "checkpoint0"] },
     capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),
