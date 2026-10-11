@@ -157,7 +157,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 
 function* setup(
   ctx: ChatContext<DefaultState>,
-  mode?: "empty" | "charting" | "lesson",
+  mode?: "empty" | "charting" | "authoring" | "lesson",
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
@@ -169,15 +169,15 @@ function* setup(
     ...(mode === "lesson" || mode === undefined
       ? ["Before correcting an interpretation, retrieve its current source handles and support with `interpretations`."]
       : []),
-    mode === "empty" || mode === "charting"
+    mode === "empty" || mode === "charting" || mode === "authoring"
       ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
       : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations.",
-    ...(mode === "empty" || mode === "charting"
+    ...(mode === "empty" || mode === "charting" || mode === "authoring"
       ? []
       : [
           "Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
         ]),
-    ...(mode === "charting" || mode === "lesson" ? [modeProcedure(mode)] : []),
+    ...(mode === "charting" || mode === "authoring" || mode === "lesson" ? [modeProcedure(mode)] : []),
     "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
@@ -201,7 +201,7 @@ function* setup(
     ].join("\n\n"),
     skills: chatSkills(mode, documents, recommendations),
     tools:
-      mode === "empty"
+      mode === "empty" || mode === "authoring"
         ? defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name))
         : mode === "charting"
           ? [
@@ -250,6 +250,14 @@ export const modes = {
     capabilities: chartingCapabilities,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),
+  },
+  authoring: {
+    title: "Authoring",
+    frontTab: "map",
+    entry: { required: false, kinds: ["goal"] },
+    capabilities: chartingCapabilities,
+    switches: [],
+    setup: (ctx) => setup(ctx, "authoring"),
   },
   lesson: {
     title: "Lesson",

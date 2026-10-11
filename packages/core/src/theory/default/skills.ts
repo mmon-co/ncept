@@ -5,6 +5,7 @@ import { sources } from "./skills/sources";
 
 const SKILL_SOURCES: Readonly<Record<string, string>> = {
   charting: sources["charting/SKILL.md"],
+  authoring: sources["authoring/SKILL.md"],
   "evaluator-sweep": sources["evaluator-sweep/SKILL.md"],
   lesson: sources["lesson/SKILL.md"],
   mission: sources["mission/SKILL.md"],
@@ -23,7 +24,7 @@ const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
   "procedures/quiz-authoring.md": sources["procedures/quiz-authoring.md"],
 };
 
-const MODE_PROCEDURES = new Set(["charting", "lesson"]);
+const MODE_PROCEDURES = new Set(["charting", "authoring", "lesson"]);
 const FACETS = ["position", "chart", "advance"] as const;
 type Facet = (typeof FACETS)[number];
 
@@ -94,7 +95,7 @@ export function listSkills(): SkillMeta[] {
 }
 
 /** The automatically loaded body of a Session mode, not a separately loadable Skill. */
-export function modeProcedure(name: "charting" | "lesson"): string {
+export function modeProcedure(name: "charting" | "authoring" | "lesson"): string {
   const source = SKILL_SOURCES[name];
   if (source === undefined) throw new Error(`unknown mode procedure: ${name}`);
   return inlineIncludes(parseSkillFile(name, source).body).trim();
@@ -104,7 +105,7 @@ export function modeProcedure(name: "charting" | "lesson"): string {
 export function skillsForMode(mode?: string): SkillMeta[] {
   const all = listSkills();
   const names =
-    mode === "empty"
+    mode === "empty" || mode === "authoring"
       ? new Set(["app-help"])
       : mode === "charting"
         ? new Set(["mission", "calibrate", "app-help"])
