@@ -17,7 +17,7 @@ Work in the selected Profile's graph, usually a Scratch Profile. The Session is 
 
 @procedures/graph-authoring.md
 
-Review the complete draft with the author: outcomes covered, criteria demonstrable, prerequisite Edges necessary, and coarse sections intentional. Apply revisions, then submit one `propose_graph_diff({})` for acceptance. The content exists only after successful acceptance.
+Review the complete draft with the author: outcomes covered, criteria demonstrable, prerequisite Edges necessary, and coarse sections intentional. Apply revisions, then submit one `propose_graph_diff({ viewName: "Patch name" })` for acceptance. This saves or revises the Session's target View with the authored targets in the same acceptance; use the agreed Patch name. The content exists only after successful acceptance.
 
 ## Materials
 
@@ -27,4 +27,4 @@ Author only Materials the agreed design needs, with activities serving its evide
 
 ## Pass it on
 
-Publication uses the existing capture → inspect → name → publish lifecycle, not a separate preview. After acceptance, help the author save a View covering the Patch's Nodes and capture it in Hub → Yours. Load `app-help` for application instructions. Trying it as a learner means adopting the named release into another Profile, just as another person would.
+Publication uses the existing capture → inspect → name → publish lifecycle, not a separate preview. After acceptance, the saved target View is ready to capture in Hub → Yours. Load `app-help` for application instructions. Trying it as a learner means adopting the named release into another Profile, just as another person would.
