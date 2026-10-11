@@ -3,6 +3,7 @@ import { renderSpeech } from "../speaker";
 import {
   lastMetadataContribution,
   metadataSetsForEntity,
+  nodeGuidance,
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
@@ -193,6 +194,16 @@ function* setup(
       ...(ctx.entry?.kind === "review"
         ? [
             `Current Review (frozen batch; use the Review opening, not the teaching Lesson steps):\n${JSON.stringify(ctx.entry)}`,
+          ]
+        : []),
+      ...(mode === "scene" && ctx.entry?.kind === "target"
+        ? [
+            `Current Scene target (criterion and effective guidance):\n${JSON.stringify({
+              node: ctx.entry.node,
+              label: metadataValue(ctx, ctx.entry.node, NODE_LABEL_PROPERTY),
+              criterion: metadataValue(ctx, ctx.entry.node, NODE_CRITERION_PROPERTY),
+              effectiveGuidance: nodeGuidance(ctx.graph, ctx.entry.node),
+            })}`,
           ]
         : []),
       ...(ctx.scene === undefined
