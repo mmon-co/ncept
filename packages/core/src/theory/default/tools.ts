@@ -496,7 +496,6 @@ const recordDemonstration: DefaultTool = {
   ].join(" "),
   schema: schema(
     {
-      attempt: { type: "string", pattern: "^obs-.+" },
       node: nodeProperty,
       outcome: { enum: ["success", "failure", "dont-know"] },
       unaided: { type: "boolean" },
@@ -509,52 +508,10 @@ const recordDemonstration: DefaultTool = {
   *run(raw, ctx) {
     const input = args(
       raw,
-      ["attempt", "node", "outcome", "unaided", "grader", "task", "response"],
+      ["node", "outcome", "unaided", "grader", "task", "response"],
       ["node", "outcome", "unaided", "grader"],
     );
     const node = nodeId(input.node);
-    if (ctx.scene !== undefined || input.attempt !== undefined) {
-      const attempt = observationId(input.attempt);
-      const scene = ctx.scene;
-      if (scene === undefined || scene.attempt !== attempt)
-        throw new Error("Attempt is not this Scene's selected check");
-      if (node !== scene.opening.node.node || input.grader !== "tutor")
-        throw new Error("Scene recording requires its pinned target and tutor grader");
-      if (scene.state === "recorded") {
-        const observations = yield* read.observations({ surface: ctx.surface });
-        const observation = observations.find(({ id }) => id === scene.record);
-        if (observation === undefined) throw new Error("Recorded Scene source is unavailable; retry");
-        return { observation, citations: [scene.record] };
-      }
-      if (scene.state !== "finished") throw new Error("Seal an attempted Scene before recording it");
-      const transcript = yield* read.transcript(ctx.surface, {
-        from: scene.source.from.messageId,
-        to: scene.source.to.messageId,
-      });
-      if (transcript.turns.length === 0) throw new Error("Original Scene source is unavailable; retry");
-      const payload = {
-        kind: "demonstration",
-        node: scene.opening.node,
-        outcome: input.outcome,
-        unaided: scene.opening.unaided && input.unaided === true,
-        grader: "tutor",
-        task: sceneTask(scene.opening),
-        response: sceneResponse(transcript),
-        scene: { attempt, source: scene.source },
-      };
-      if (typeof input.unaided !== "boolean" || !isDemonstration(payload))
-        throw new Error("Invalid Scene demonstration");
-      const observation = {
-        at: ctx.now,
-        about: [...ctx.about],
-        nodes: [node],
-        surface: ctx.surface,
-        cites: [attempt],
-        payload,
-      };
-      const id = yield* write(observation);
-      return { observation: { ...observation, id }, citations: [id] };
-    }
     nodesInScope(ctx, [node]);
     const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
     if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
@@ -611,17 +568,43 @@ export const recordSceneDemonstration: DefaultTool = {
       !["none", "outside-capability", "checked-capability"].includes(string(assistance.kind))
     )
       throw new Error("Scene grading needs a pinned-rubric assessment and whole-attempt assistance evidence");
-    if (ctx.scene === undefined) throw new Error("Scene grading needs its pinned check");
-    return yield* recordDemonstration.run(
-      {
-        attempt: input.attempt,
-        node: ctx.scene.opening.node.node,
-        outcome: input.outcome,
-        unaided: assistance.kind !== "checked-capability",
-        grader: "tutor",
-      },
-      ctx,
-    );
+    const scene = ctx.scene;
+    if (scene === undefined) throw new Error("Scene grading needs its pinned check");
+    const attempt = observationId(input.attempt);
+    if (scene.attempt !== attempt) throw new Error("Attempt is not this Scene's selected check");
+    if (scene.state === "recorded") {
+      const observations = yield* read.observations({ surface: ctx.surface });
+      const observation = observations.find(({ id }) => id === scene.record);
+      if (observation === undefined) throw new Error("Recorded Scene source is unavailable; retry");
+      return { observation, citations: [scene.record] };
+    }
+    if (scene.state !== "finished") throw new Error("Seal an attempted Scene before recording it");
+    const transcript = yield* read.transcript(ctx.surface, {
+      from: scene.source.from.messageId,
+      to: scene.source.to.messageId,
+    });
+    if (transcript.turns.length === 0) throw new Error("Original Scene source is unavailable; retry");
+    const payload = {
+      kind: "demonstration",
+      node: scene.opening.node,
+      outcome: input.outcome,
+      unaided: scene.opening.unaided && assistance.kind !== "checked-capability",
+      grader: "tutor",
+      task: sceneTask(scene.opening),
+      response: sceneResponse(transcript),
+      scene: { attempt, source: scene.source },
+    };
+    if (!isDemonstration(payload)) throw new Error("Invalid Scene demonstration");
+    const observation = {
+      at: ctx.now,
+      about: [...ctx.about],
+      nodes: [scene.opening.node.node],
+      surface: ctx.surface,
+      cites: [attempt],
+      payload,
+    };
+    const id = yield* write(observation);
+    return { observation: { ...observation, id }, citations: [id] };
   },
 };
 

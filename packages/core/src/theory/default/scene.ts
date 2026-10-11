@@ -3,7 +3,8 @@ import { write, type Program, type Transcript } from "../../observations";
 import type { ChatContext, Tool } from "../theory";
 import type { SceneOpeningPayload, SceneFinishPayload, SceneTranscriptSource } from "../scene-attempt";
 import type { DefaultState } from "./state";
-import { lastMetadataContribution, metadataSetsForEntity, NODE_CRITERION_PROPERTY } from "../../patch";
+import { NODE_CRITERION_PROPERTY } from "../../patch";
+import { pathProperty } from "./path";
 
 export const sceneTask = (opening: SceneOpeningPayload): string => opening.task + "\n\n## Rubric\n\n" + opening.rubric;
 export const sceneResponse = (transcript: Transcript): string =>
@@ -40,11 +41,7 @@ export const poseScene: Tool<unknown, unknown, DefaultState> = {
     if (ctx.scene !== undefined) return { attempt: ctx.scene.attempt, opening: ctx.scene.opening };
     if (ctx.entry?.kind !== "target") throw new Error("A Scene check needs a resolved target");
     const node = ctx.entry.node;
-    const candidates = metadataSetsForEntity(ctx.graph, { kind: "node", id: node }).flatMap((set) => {
-      const source = ctx.graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
-      return source === undefined ? [] : [{ value: set.properties[NODE_CRITERION_PROPERTY], source }];
-    });
-    const rubric = lastMetadataContribution(ctx.graph, candidates)?.value;
+    const rubric = pathProperty(ctx.graph, node, NODE_CRITERION_PROPERTY);
     if (typeof rubric !== "string" || !rubric.trim()) throw new Error("A Scene check needs a target criterion");
     const payload: SceneOpeningPayload = {
       kind: "scene-opening",
