@@ -5,8 +5,21 @@ import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
 export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" | "web" | "preferences" | "bash";
 
+/** Mission-owned Charting stops; neither manufactures a graph milestone Node. */
+export type MissionStartEntry =
+  | Readonly<{ kind: "opening"; missionId: string }>
+  | Readonly<{
+      kind: "checkpoint0";
+      missionId: string;
+      sessionId: string;
+      closedAt: string;
+      outcome: unknown;
+      closingNote?: string;
+    }>;
+
 /** @public Resolved entry facts; the host resolves Lesson selectors before calling the theory. */
 export type ModeEntry =
+  | MissionStartEntry
   | Readonly<{ kind: "goal"; text: string }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>

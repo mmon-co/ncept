@@ -11,7 +11,6 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   scene: sources["scene/SKILL.md"],
   mission: sources["mission/SKILL.md"],
   planning: sources["planning/SKILL.md"],
-  calibrate: sources["calibrate/SKILL.md"],
   realignment: sources["realignment/SKILL.md"],
   "app-help": sources["app-help/SKILL.md"],
   "recording-review": sources["recording-review/SKILL.md"],
@@ -109,7 +108,7 @@ export function skillsForMode(mode?: string): SkillMeta[] {
     mode === "empty" || mode === "authoring" || mode === "scene"
       ? new Set(["app-help"])
       : mode === "charting"
-        ? new Set(["mission", "calibrate", "app-help"])
+        ? new Set(["mission", "app-help"])
         : mode === "lesson"
           ? new Set(all.map(({ name }) => name))
           : mode === undefined || mode === ""
