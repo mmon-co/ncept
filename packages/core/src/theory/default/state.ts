@@ -6,6 +6,7 @@ import type {
   SceneDemonstrationEvidence,
   SceneTranscriptSource,
 } from "../scene-attempt";
+import { canonicalJson } from "../../digest";
 import { dependentCones } from "./dependent-cone";
 import {
   lastMetadataContribution,
@@ -31,6 +32,23 @@ export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" 
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
+}
+export type CompletionScope =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly CompletionScope[]
+  | { readonly [key: string]: CompletionScope };
+export interface CompletionBinding {
+  readonly playground: string;
+  readonly scope: CompletionScope;
+}
+export interface CompletionOutcome extends CompletionBinding {
+  readonly kind: "completion";
+  readonly node: NodeRef;
+  readonly state: "complete" | "incomplete";
+  readonly validUntil?: string;
 }
 export interface Demonstration {
   readonly kind: "demonstration";
@@ -112,6 +130,7 @@ export interface Interpretation {
 export type DefaultPayload =
   | SceneOpeningPayload
   | SceneFinishPayload
+  | CompletionOutcome
   | Demonstration
   | Lapse
   | FeatureUse
@@ -218,6 +237,31 @@ export function isSceneFinish(value: unknown): value is SceneFinishPayload {
     isObservationId(value.attempt) &&
     isSceneSource(value.source) &&
     (value.unattempted === undefined || value.unattempted === true)
+  );
+}
+function isCompletionScope(value: unknown): value is CompletionScope {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isCompletionScope);
+  return object(value) && Object.values(value).every(isCompletionScope);
+}
+export function isCompletionBinding(value: unknown): value is CompletionBinding {
+  return (
+    object(value) &&
+    typeof value.playground === "string" &&
+    value.playground.trim().length > 0 &&
+    "scope" in value &&
+    isCompletionScope(value.scope)
+  );
+}
+export function isCompletionOutcome(value: unknown): value is CompletionOutcome {
+  return (
+    object(value) &&
+    value.kind === "completion" &&
+    isNodeRef(value.node) &&
+    isCompletionBinding(value) &&
+    (value.state === "complete" || value.state === "incomplete") &&
+    (value.validUntil === undefined || isObservationTimestamp(value.validUntil))
   );
 }
 export function isDemonstration(value: unknown): value is Demonstration {
@@ -357,6 +401,9 @@ function assertDefaultPayload(payload: unknown): void {
       break;
     case "scene-finish":
       valid = isSceneFinish(payload);
+      break;
+    case "completion":
+      valid = isCompletionOutcome(payload);
       break;
     case "demonstration":
       valid = isDemonstration(payload);
@@ -529,6 +576,11 @@ const DAY_MS = 86_400_000;
 const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
 
 export interface NodeState {
+  readonly completion?: {
+    readonly binding: CompletionBinding;
+    readonly report?: Observation<CompletionOutcome>;
+    readonly status: "complete" | "incomplete" | "expired" | "absent";
+  };
   /** Effective operation receipts; these do not change competence labels or schedules. */
   readonly featureUses: readonly Observation<FeatureUse>[];
   readonly label: NodeLabel;
@@ -665,6 +717,33 @@ function scheduleDefaultNode(
     retrievability: forgetting_curve((Date.parse(now) - card.last_review.getTime()) / DAY_MS, card.stability),
     citations,
   };
+}
+
+export const COMPLETION_PROPERTY = "pedagogy:completion";
+/** Portable envelope; the named Playground owns the meaning of scope. */
+export function defaultNodeCompletion(graph: ResolvedGraph, node: NodeId): CompletionBinding | undefined {
+  const value = lastMetadataContribution(
+    graph,
+    graph.metadataSets.flatMap((set) => {
+      if (
+        !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
+        !(COMPLETION_PROPERTY in set.properties)
+      )
+        return [];
+      const source = graph.provenance.metadataProperties[set.id]?.[COMPLETION_PROPERTY]?.at(-1);
+      if (source === undefined) throw new Error(`Missing completion provenance for ${node}`);
+      return [{ value: set.properties[COMPLETION_PROPERTY], source }];
+    }),
+  )?.value;
+  if (value === undefined) return undefined;
+  if (!isCompletionBinding(value)) throw new Error(`Invalid completion binding for ${node}`);
+  return { playground: value.playground, scope: value.scope };
+}
+/** Stable authoring provenance, rather than the terminal of an unrelated graph edit. */
+export function completionNodeRef(graph: ResolvedGraph, node: NodeId): NodeRef {
+  const provenance = graph.provenance.nodes[node]?.at(-1)?.patch;
+  if (!provenance || !graph.nodes.some(({ id }) => id === node)) throw new Error(`Unknown completion Node ${node}`);
+  return { node, provenance };
 }
 
 export const WINDOW_SIZE_PROPERTY = "pedagogy:window-size";
@@ -903,8 +982,34 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
         isDefaultObservation(observation) && isLapse(observation.payload) && observation.payload.node.node === id,
     );
     const schedule = scheduleDefaultNode(own, implicit, lapses, now, parameters);
+    const binding = defaultNodeCompletion(graph, id);
+    const report =
+      binding === undefined
+        ? undefined
+        : observations.findLast(
+            (entry): entry is Observation<CompletionOutcome> =>
+              isDefaultObservation(entry) &&
+              isCompletionOutcome(entry.payload) &&
+              entry.payload.node.node === id &&
+              sameExactPatchRef(entry.payload.node.provenance, completionNodeRef(graph, id).provenance) &&
+              entry.payload.playground === binding.playground &&
+              canonicalJson(entry.payload.scope) === canonicalJson(binding.scope),
+          );
+    const status =
+      report === undefined
+        ? "absent"
+        : report.payload.validUntil !== undefined && Date.parse(report.payload.validUntil) <= Date.parse(now)
+          ? "expired"
+          : report.payload.state;
     nodes[id] = {
       ...labelDefaultNode({ records: own, parameters }),
+      ...(binding === undefined
+        ? {}
+        : {
+            completion: { binding, ...(report === undefined ? {} : { report }), status },
+            label: status === "complete" ? ("demonstrated" as const) : ("unknown" as const),
+            citations: report === undefined ? [] : [report.id],
+          }),
       ...(schedule === undefined ? {} : { schedule }),
       featureUses: observations.filter(
         (observation): observation is Observation<FeatureUse> =>
