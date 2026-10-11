@@ -54,28 +54,33 @@ export function isGuidanceEntries(value: unknown): value is readonly GuidanceEnt
   );
 }
 
-/** Cascade effective set values, not historical contributions or tag-name priority. */
-export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+/** Shared tag-to-Node cascade: Node settings follow tags, then exact Patch and operation order. */
+function nodeMetadataCascade<T>(
+  graph: ResolvedGraph,
+  node: NodeId,
+  key: string,
+  values: (value: unknown) => readonly T[],
+): readonly { value: T; origin: ResolvedGuidanceEntry["origin"] }[] {
   const entity = { kind: "node" as const, id: node };
   const patchOrder = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   const entries = metadataSetsForEntity(graph, entity).flatMap((set) => {
-    const value = set.properties[PEDAGOGY_GUIDANCE_PROPERTY];
-    if (!isGuidanceEntries(value)) return [];
+    const entries = values(set.properties[key]);
+    if (!entries.length) return [];
     const subjects = set.subjects
       .filter(
         (subject): subject is GuidanceSubject =>
           subject.kind !== "edge" && metadataSubjectAppliesToEntity(graph, subject, entity),
       )
       .sort((a, b) => compareKey(metadataSubjectKey(a), metadataSubjectKey(b)));
-    const source = graph.provenance.metadataProperties[set.id]?.[PEDAGOGY_GUIDANCE_PROPERTY]?.at(-1);
+    const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
     if (source === undefined)
-      throw new PatchCompileError("invalid-bundle", `missing guidance provenance for '${set.id}'`);
-    return value.map((entry, entryIndex): ResolvedGuidanceEntry => ({
-      ...entry,
+      throw new PatchCompileError("invalid-bundle", `missing metadata provenance for '${set.id}'`);
+    return entries.map((value, entryIndex) => ({
+      value,
       origin: { subjects, metadataSet: set.id, source, entryIndex },
     }));
   });
-  const nodeLevel = (entry: ResolvedGuidanceEntry) =>
+  const nodeLevel = (entry: (typeof entries)[number]) =>
     Number(entry.origin.subjects.some((subject) => subject.kind === "node"));
   entries.sort(
     (a, b) =>
@@ -86,6 +91,19 @@ export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly Resol
       compareKey(a.origin.metadataSet, b.origin.metadataSet) ||
       a.origin.entryIndex - b.origin.entryIndex,
   );
+  return entries;
+}
+
+/** Nearest scalar setting wins; overlapping tags use the same order as guidance. */
+export function nodeCascadedProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
+  return nodeMetadataCascade(graph, node, key, (value) => (value === undefined ? [] : [value])).at(-1)?.value;
+}
+
+/** Cascade effective set values, not historical contributions or tag-name priority. */
+export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+  const entries = nodeMetadataCascade(graph, node, PEDAGOGY_GUIDANCE_PROPERTY, (value) =>
+    isGuidanceEntries(value) ? value : [],
+  ).map(({ value, origin }) => ({ ...value, origin }));
   let surviving: ResolvedGuidanceEntry[] = [];
   for (const entry of entries) {
     if (entry.mode !== "append") {

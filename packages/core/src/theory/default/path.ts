@@ -2,11 +2,13 @@ import {
   lastMetadataContribution,
   metadataSetsForEntity,
   NODE_ELABORATE_PROPERTY,
+  nodeCascadedProperty,
   route,
   unscopedCopyTagName,
   type NodeId,
   type ResolvedGraph,
 } from "../../patch";
+import { dependentCones } from "./dependent-cone";
 import { LESSON_TAG_PREFIX, type Lesson, type MissionPath } from "../theory";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
@@ -18,6 +20,12 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
       return source === undefined ? [] : [{ value: set.properties[key], source }];
     }),
   )?.value;
+}
+
+/** Default-theory hint: an absolute integer, higher first, inherited from tags. */
+export function nodePriority(graph: ResolvedGraph, node: NodeId): number {
+  const value = nodeCascadedProperty(graph, node, "pedagogy:priority");
+  return typeof value === "number" && Number.isSafeInteger(value) ? value : 0;
 }
 
 /** A topological schedule with atomic lesson groups wherever their external blockers allow it.
@@ -39,12 +47,13 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
   };
   for (const target of targets) for (const id of cone(target)) if (!stable.includes(id)) stable.push(id);
   const rank = new Map(stable.map((id, index) => [id, index]));
-  const sequence = (id: NodeId) => {
-    const value = pathProperty(graph, id, "pedagogy:sequence");
-    return typeof value === "number" ? value : Infinity;
-  };
+  const dependents = dependentCones(graph);
+  const priority = new Map(stable.map((id) => [id, nodePriority(graph, id)]));
+  const importance = new Map(stable.map((id) => [id, dependents(id).filter((node) => rank.has(node)).length]));
   const compare = (a: NodeId, b: NodeId) =>
-    (sequence(a) < sequence(b) ? -1 : sequence(a) > sequence(b) ? 1 : 0) || (rank.get(a) ?? 0) - (rank.get(b) ?? 0);
+    (priority.get(b) ?? 0) - (priority.get(a) ?? 0) ||
+    (importance.get(b) ?? 0) - (importance.get(a) ?? 0) ||
+    (rank.get(a) ?? 0) - (rank.get(b) ?? 0);
   const prerequisites = new Map<NodeId, NodeId[]>(stable.map((id) => [id, []]));
   for (const edge of graph.edges) prerequisites.get(edge.to)?.push(edge.from);
   const targetSet = new Set(targets);
@@ -56,9 +65,11 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       cone(id).every((prerequisite) => prerequisite === id || !pendingMilestones.has(prerequisite)),
     );
     // Targets are the final milestones unless another target depends on them. Independent
-    // sections follow the Mission's target order; sequence hints order Nodes within a section.
+    // sections follow the Mission's target order; independent non-target milestones use priority.
     ready.sort(
-      (a, b) => Number(targetSet.has(a)) - Number(targetSet.has(b)) || (rank.get(a) ?? 0) - (rank.get(b) ?? 0),
+      (a, b) =>
+        Number(targetSet.has(a)) - Number(targetSet.has(b)) ||
+        (targetSet.has(a) && targetSet.has(b) ? (rank.get(a) ?? 0) - (rank.get(b) ?? 0) : compare(a, b)),
     );
     const next = ready[0];
     if (next === undefined) throw new Error("Milestone dependency cycle");

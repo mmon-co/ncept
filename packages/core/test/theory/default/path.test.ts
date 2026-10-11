@@ -23,7 +23,7 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
           id: `metadata-path-${i}`,
           subjects: [{ kind: "node", id }],
           properties: {
-            "pedagogy:sequence": sequence,
+            "pedagogy:priority": -sequence,
             "pedagogy:milestone": milestone,
             "pedagogy:elaborate": random() < 0.1,
           },
@@ -120,9 +120,8 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
   }
 });
 
-test("independent sections follow target order, not per-section sequence hints", () => {
-  // As charted in production: each section numbers its own Nodes from 1, so a later, smaller
-  // section's milestone carries a lower sequence than the first section's.
+test("independent target sections follow target order, not priority hints", () => {
+  // Authored priority cannot move an independent target ahead of the requested target order.
   type Operation = PatchRevision["delta"]["operations"][number];
   const node = (id: NodeId, sequence: number, milestone = false): Operation[] => [
     { kind: "add-node", node: { id } },
@@ -131,7 +130,7 @@ test("independent sections follow target order, not per-section sequence hints",
       metadataSet: {
         id: `metadata-${id}`,
         subjects: [{ kind: "node", id }],
-        properties: { "pedagogy:sequence": sequence, "pedagogy:milestone": milestone },
+        properties: { "pedagogy:priority": -sequence, "pedagogy:milestone": milestone },
       },
     },
   ];

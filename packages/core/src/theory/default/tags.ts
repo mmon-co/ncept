@@ -1,6 +1,6 @@
 import { dependentCones } from "./dependent-cone";
 import { canonicalJson } from "../../digest";
-import { pathDefault, pathProperty } from "./path";
+import { nodePriority, pathDefault, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
@@ -251,8 +251,9 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
   const nodes: Record<NodeId, readonly Tag[]> = {};
   for (const { id } of graph.nodes) {
     const node = defaultNodeState(state, id);
-    // A whole dependent outranks any retention difference; higher ranks come first.
+    // Priority outranks all dependents; a whole dependent outranks any retention difference.
     const reviewRank =
+      nodePriority(graph, id) * (graph.nodes.length + 1) +
       cone(id).filter((dependent) => !isDefaultKnown(defaultNodeState(state, dependent))).length +
       1 -
       (node.schedule?.retrievability ?? 1);
