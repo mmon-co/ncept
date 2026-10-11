@@ -17,7 +17,7 @@ function input(raw: unknown): Record<string, unknown> {
 export const poseScene: Tool<unknown, unknown, DefaultState> = {
   name: "pose_scene",
   description:
-    "Pin this Scene's one check for its resolved target. Supply nonempty Markdown task and rubric; deliver both verbatim in scene_reply. A retry returns the original check.",
+    "Pin this Scene's one check for its resolved target. Supply nonempty Markdown task and rubric that operationalize the target criterion, without adding correctness requirements from the item being taught; deliver both verbatim in scene_reply. A retry returns the original check.",
   schema: {
     type: "object",
     properties: {

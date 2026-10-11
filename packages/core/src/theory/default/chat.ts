@@ -13,7 +13,12 @@ import type { ChatContext, ChatSetup } from "../theory";
 import type { SessionMode } from "../modes";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { modeProcedure, skillBody, skillInvocation, skillsForMode, tutorSystemPrompt } from "./skills";
-import { defaultBackgroundTools, defaultInstrumentTools, defaultRecordingTools } from "./tools";
+import {
+  defaultBackgroundTools,
+  defaultInstrumentTools,
+  defaultRecordingTools,
+  recordSceneDemonstration,
+} from "./tools";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 const READ_ONLY_INSTRUMENTS = new Set([
   "frontier",
@@ -226,7 +231,7 @@ function* setup(
           : mode === "scene"
             ? [
                 ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
-                ...defaultRecordingTools.filter((tool) => tool.name === "record_demonstration"),
+                recordSceneDemonstration,
               ]
             : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
   };
