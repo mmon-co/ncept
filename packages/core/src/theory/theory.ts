@@ -1,6 +1,7 @@
 import type { ContentDigest } from "../digest";
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
+import type { SceneAttemptView } from "./scene-attempt";
 import type {
   JsonSchema,
   Observation,
@@ -123,6 +124,8 @@ export type ChatContext<S> = Context<S> &
     mode: string;
     /** Resolved opening facts, pinned with the Session revision. */
     entry?: ModeEntry;
+    /** Accepted Scene check facts, supplied only for a mode with bounded-scene assessment. */
+    scene?: SceneAttemptView;
     about: readonly NodeId[];
     /** Nodes used by unscoped default readings; omitted means the whole graph. Explicit scopes override this. */
     unscopedNodes?: readonly NodeId[];

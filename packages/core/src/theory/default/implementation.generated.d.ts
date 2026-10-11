@@ -19,8 +19,8 @@ export declare const implementation: {
         attempt: typeof isAttemptOutcome;
     };
     chat: {
-        open: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
-        turn: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
+        open: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
+        turn: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;
     };
     modes: {
         empty: {
@@ -136,10 +136,46 @@ export declare const implementation: {
                 mode: string;
                 then: "aside";
                 carry: {
+                    kind: "full";
+                    focus?: undefined;
+                };
+            } | {
+                mode: string;
+                then: "aside";
+                carry: {
                     kind: "compacted";
                     focus: string;
                 };
             })[];
+            setup: (ctx: import("../theory").ChatContext<import("./state").DefaultState>) => import("../../observations").Program<Readonly<{
+                prompt: string;
+                context?: string;
+                tools: readonly Readonly<{
+                    name: string;
+                    description: string;
+                    schema: import("../../observations").JsonSchema;
+                    run(args: unknown, ctx: import("../theory").ChatContext<import("./state").DefaultState>): import("../../observations").Program<unknown>;
+                }>[];
+                skills: readonly Readonly<{
+                    name: string;
+                    description: string;
+                    body: string;
+                    facet: "position" | "chart" | "advance";
+                    entry: readonly ("learner" | "model" | "system")[];
+                }>[];
+            }>>;
+        };
+        scene: {
+            title: string;
+            reply: "in-character-and-aside";
+            assessment: "bounded-scene";
+            entry: {
+                kinds: "target"[];
+                required: true;
+            };
+            frontTab: string;
+            capabilities: "reads"[];
+            switches: never[];
             setup: (ctx: import("../theory").ChatContext<import("./state").DefaultState>) => import("../../observations").Program<Readonly<{
                 prompt: string;
                 context?: string;
