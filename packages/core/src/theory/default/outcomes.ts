@@ -1,6 +1,6 @@
 import { isContentDigest } from "../../digest";
 import { isObservationTimestamp } from "../../observations";
-import type { Claim, Demonstration, NodeRef } from "./state";
+import type { Demonstration, NodeRef } from "./state";
 import type { ExactPatchRef, NodeId } from "../../patch";
 export { isCompletionOutcome } from "./state";
 export type { CompletionOutcome } from "./state";
@@ -74,8 +74,6 @@ const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(va
  */
 export interface AttemptOutcome {
   readonly kind: "attempt";
-  /** Broad calibration checks are tentative claims, never demonstrations. */
-  readonly calibration?: true;
   readonly problem: {
     readonly id: string;
     readonly digest: string;
@@ -118,7 +116,7 @@ export interface AttemptOutcome {
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
-    /** Answer supplied or reference available: practice, not independent calibration. */
+    /** Answer supplied or reference available: practice, not independent evidence. */
     readonly aided?: true;
     readonly dontKnow?: boolean;
     readonly grader: "mechanical" | "tutor" | "learner" | "decision";
@@ -155,16 +153,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
   const dontKnow = assessment.dontKnow === true;
   const { answer, grader } = problem;
   if (!object(answer) || !object(grader)) return false;
-  if (
-    value.calibration !== undefined &&
-    (value.calibration !== true ||
-      answer.kind !== "text" ||
-      grader.by !== "checks" ||
-      grader.help !== "pump" ||
-      !Array.isArray(grader.checks) ||
-      !grader.checks.every((c: unknown) => object(c) && Array.isArray(c.about) && c.about.length === 1))
-  )
-    return false;
+
   if (answer.kind === "choice") {
     const options: unknown = answer.options;
     if (
@@ -347,29 +336,8 @@ function checkNote(
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
 }
 
-/** Only targeted checks in a submitted calibration response produce tentative claims. */
-export function calibrationClaims(outcome: AttemptOutcome): readonly { node: NodeId; payload: Claim }[] {
-  const { problem, response, assessment } = outcome;
-  if (!outcome.calibration || assessment.aided || problem.grader.by !== "checks") return [];
-  return problem.grader.checks.flatMap((check) => {
-    const result = assessment.dontKnow
-      ? { outcome: "skipped" as const }
-      : (assessment.checks?.[check.id] ?? { outcome: "absent" as const });
-    return check.about.map((node) => ({
-      node,
-      payload: {
-        kind: "claim" as const,
-        stance: result.outcome === "shown" ? ("knows" as const) : ("unfamiliar" as const),
-        prompt: `${problem.prompt}\nCheck: ${check.ask}`,
-        statement: `${response}\n${checkNote(check, result)}`,
-      },
-    }));
-  });
-}
-
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
-  if (outcome.calibration) return [];
   const { problem, response, assessment } = outcome;
   if (assessment.dontKnow)
     return problem.about.map((node) => ({
@@ -378,7 +346,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         kind: "demonstration",
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
-        unaided: true,
+        unaided: !assessment.aided,
         grader: "learner",
         task: problem.prompt,
         response,
@@ -392,9 +360,9 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       const before = assessment.helped?.[check.id];
       const states =
         before === undefined
-          ? [{ result: final, unaided: true }]
+          ? [{ result: final, unaided: !assessment.aided }]
           : [
-              { result: before, unaided: true },
+              { result: before, unaided: !assessment.aided },
               { result: final, unaided: false },
             ];
       return states.flatMap(({ result, unaided }) =>
@@ -425,7 +393,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       kind: "demonstration",
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
-      unaided: true,
+      unaided: !assessment.aided,
       grader: assessment.grader,
       task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
       response: answer,

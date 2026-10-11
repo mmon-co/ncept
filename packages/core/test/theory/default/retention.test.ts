@@ -2,11 +2,9 @@ import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision } from "../../../src/patch";
 import type { Observation, ObservationId } from "../../../src/observations";
 import {
-  calibrationClaims,
   defaultTheory,
   DEFAULT_THEORY_REF,
   practiceAttempts,
-  type AttemptOutcome,
   type Claim,
   type Demonstration,
 } from "../../../src/theory/default";
@@ -118,37 +116,11 @@ test("a Node's own attempt is its day's review even after a dependent's earlier 
   );
 });
 
-test("knows claims, calibration included, schedule soon without covering prerequisites", () => {
-  const response = { outcome: "shown" as const };
-  const calibration: AttemptOutcome = {
-    kind: "attempt",
-    calibration: true,
-    problem: {
-      id: "problem",
-      digest: `sha256:${"c".repeat(64)}`,
-      about: ["node-claim"],
-      prompt: "Explain",
-      answer: { kind: "text" },
-      grader: {
-        by: "checks",
-        help: "pump",
-        checks: [{ id: "check", about: ["node-claim"], ask: "ask", shown: "shown", absent: "absent" }],
-        pumps: [],
-      },
-    },
-    response: "an answer",
-    assessment: { correct: true, grader: "decision", checks: { check: response } },
-    revision: ref,
-  };
-  const calibrated = calibrationClaims(calibration).map(({ node, payload }, index): Observation => ({
-    id: `obs-calibrated-${index}`,
-    at: "2026-10-01T08:00:00.000Z",
-    by: DEFAULT_THEORY_REF,
-    nodes: [node],
-    payload,
-  }));
-  expect(calibrated).toHaveLength(1);
-  const observations: Observation[] = [...calibrated, claim("obs-claim", "node-dependent", "2026-10-01T08:00:00.000Z")];
+test("knows claims schedule soon without covering prerequisites", () => {
+  const observations: Observation[] = [
+    claim("obs-claim", "node-claim", "2026-10-01T08:00:00.000Z"),
+    claim("obs-dependent", "node-dependent", "2026-10-01T08:00:00.000Z"),
+  ];
   expect(schedule(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toMatchObject({
     stability: 1,
     reps: 0,
