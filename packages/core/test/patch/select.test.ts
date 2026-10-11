@@ -94,7 +94,7 @@ function selectedIds(query: GraphQuery) {
 }
 
 // Check 2's shared-Node expectation in
-// docs/attachments/keep-the-application-patch-out-of-the-learners-own-planning/index.md.
+// https://github.com/mlegls/mmon-co/blob/a913d77ebf5b8df3ce82c4f365a629f2384b67bc/docs/attachments/keep-the-application-patch-out-of-the-learners-own-planning/index.md.
 test("only exclusive structural contributions are excluded, not Nodes shared with another Patch", () => {
   const learner: PatchRevision = {
     ...revision,
