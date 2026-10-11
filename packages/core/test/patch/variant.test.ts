@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { variantLayerFixture } from "../../../../docs/attachments/variant-layer/try";
+import { variantLayerFixture } from "./variant-layer";
 import { attachmentDigest } from "../../src/digest";
 import {
   bundleForRevision,
