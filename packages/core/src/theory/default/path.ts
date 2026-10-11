@@ -3,6 +3,7 @@ import {
   metadataSetsForEntity,
   NODE_ELABORATE_PROPERTY,
   route,
+  unscopedCopyTagName,
   type NodeId,
   type ResolvedGraph,
 } from "../../patch";
@@ -65,10 +66,14 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
     orderedMilestones.push(next);
   }
   const milestoneSet = new Set(milestones);
-  const groups = graph.tags.filter((tag) => tag.name.startsWith(LESSON_TAG_PREFIX));
+  const groups = graph.tags.filter((tag) => unscopedCopyTagName(tag.name).startsWith(LESSON_TAG_PREFIX));
   const warnings = new Map<string, MissionPath["warnings"][number]>();
   const warn = (name: string, nodes: readonly NodeId[]) => {
-    warnings.set(name, { kind: "lesson-split", name: name.slice(LESSON_TAG_PREFIX.length), nodes });
+    warnings.set(name, {
+      kind: "lesson-split",
+      name: unscopedCopyTagName(name).slice(LESSON_TAG_PREFIX.length),
+      nodes,
+    });
   };
   const claimed = new Set<NodeId>();
   const sections: { milestone: NodeId; lessons: Lesson[] }[] = [];
@@ -92,9 +97,17 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
   const emitted = new Set<NodeId>();
   for (const [index, section] of sections.entries()) {
     const members = stable.filter((id) => sectionOf.get(id) === index);
-    const units: { name?: string; nodes: NodeId[] }[] = groups.flatMap((group) => {
+    const units: { name?: string; groupKey?: string; nodes: NodeId[] }[] = groups.flatMap((group) => {
       const nodes = group.nodes.filter((id) => sectionOf.get(id) === index && !milestoneSet.has(id));
-      return nodes.length ? [{ name: group.name.slice(LESSON_TAG_PREFIX.length), nodes: [...new Set(nodes)] }] : [];
+      return nodes.length
+        ? [
+            {
+              name: unscopedCopyTagName(group.name).slice(LESSON_TAG_PREFIX.length),
+              groupKey: group.name,
+              nodes: [...new Set(nodes)],
+            },
+          ]
+        : [];
     });
     const grouped = new Set(units.flatMap(({ nodes }) => nodes));
     for (const id of members) if (!grouped.has(id)) units.push({ nodes: [id] });
@@ -126,11 +139,8 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       const chosen = available[0];
       if (chosen === undefined) throw new Error("Lesson dependency cycle");
       const { unit, prefix } = chosen;
-      if (prefix.length !== unit.nodes.length && unit.name !== undefined)
-        warn(
-          LESSON_TAG_PREFIX + unit.name,
-          groups.find((tag) => tag.name === LESSON_TAG_PREFIX + unit.name)?.nodes ?? unit.nodes,
-        );
+      if (prefix.length !== unit.nodes.length && unit.groupKey !== undefined)
+        warn(unit.groupKey, groups.find((tag) => tag.name === unit.groupKey)?.nodes ?? unit.nodes);
       section.lessons.push({ ...(unit.name === undefined ? {} : { name: unit.name }), nodes: prefix });
       for (const id of prefix) emitted.add(id);
       unit.nodes = unit.nodes.filter((id) => !prefix.includes(id));
