@@ -10,6 +10,7 @@ import {
   type MetadataSubject,
   type EntityMetadataSubject,
   type MetadataValue,
+  type PatchContent,
   type ResolvedGraph,
 } from "./model";
 
@@ -139,12 +140,30 @@ export function isMetadataValue(value: unknown): value is MetadataValue {
 
 export function validateMetadataProperties(properties: Readonly<Record<string, MetadataValue>>): void {
   for (const [key, value] of Object.entries(properties))
-    if (key === PEDAGOGY_GUIDANCE_PROPERTY ? !isGuidanceEntries(value) : !isMetadataValue(value))
+    if (!isMetadataValue(value) && !(key === PEDAGOGY_GUIDANCE_PROPERTY && isGuidanceEntries(value)))
       throw new PatchCompileError(
         "invalid-metadata-value",
-        key === PEDAGOGY_GUIDANCE_PROPERTY
-          ? `metadata property '${key}' must be an ordered guidance entry list`
-          : `metadata property '${key}' is not a scalar, string list, bounded JSON object/object list or Attachment`,
+        `metadata property '${key}' is not a scalar, string list, bounded JSON object/object list or Attachment`,
+      );
+}
+
+/**
+ * Property shapes a new revision must have. Checked when content is minted, not when accepted
+ * history is resolved: a revision written under an earlier vocabulary stays readable as history,
+ * and a migration overwrites it with a new revision rather than rewriting it.
+ */
+export function validateAuthoredContent(content: PatchContent): void {
+  const sets = [
+    content.metadata.properties,
+    ...content.delta.operations.flatMap((operation) =>
+      operation.kind === "add-metadata-set" ? [operation.metadataSet.properties] : [],
+    ),
+  ];
+  for (const properties of sets)
+    if (PEDAGOGY_GUIDANCE_PROPERTY in properties && !isGuidanceEntries(properties[PEDAGOGY_GUIDANCE_PROPERTY]))
+      throw new PatchCompileError(
+        "invalid-metadata-value",
+        `metadata property '${PEDAGOGY_GUIDANCE_PROPERTY}' must be an ordered guidance entry list`,
       );
 }
 
