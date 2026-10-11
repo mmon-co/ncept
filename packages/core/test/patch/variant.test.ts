@@ -11,7 +11,7 @@ import {
   revisionContent,
 } from "../../src/patch";
 
-// Replays checks 1–3 in docs/attachments/layer-a-variant-over-a-newer-release-of-its-source/index.md.
+// Replays checks 1–3 in https://github.com/mlegls/mmon-co/blob/a913d77ebf5b8df3ce82c4f365a629f2384b67bc/docs/attachments/layer-a-variant-over-a-newer-release-of-its-source/index.md.
 for (const [version, remove] of [
   ["1.6.0", false],
   ["2.0.0", false],
