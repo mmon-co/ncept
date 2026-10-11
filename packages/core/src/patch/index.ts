@@ -4,6 +4,7 @@ export * from "./guidance";
 export * from "./errors";
 export * from "./resolve";
 export * from "./reify";
+export * from "./copy";
 export * from "./select";
 export * from "./project";
 export * from "./compile";
