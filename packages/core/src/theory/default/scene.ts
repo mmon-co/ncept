@@ -3,6 +3,7 @@ import { write, type Program, type Transcript } from "../../observations";
 import type { ChatContext, Tool } from "../theory";
 import type { SceneOpeningPayload, SceneFinishPayload, SceneTranscriptSource } from "../scene-attempt";
 import type { DefaultState } from "./state";
+import { lastMetadataContribution, metadataSetsForEntity, NODE_CRITERION_PROPERTY } from "../../patch";
 
 export const sceneTask = (opening: SceneOpeningPayload): string => opening.task + "\n\n## Rubric\n\n" + opening.rubric;
 export const sceneResponse = (transcript: Transcript): string =>
@@ -17,35 +18,39 @@ function input(raw: unknown): Record<string, unknown> {
 export const poseScene: Tool<unknown, unknown, DefaultState> = {
   name: "pose_scene",
   description:
-    "Pin this Scene's one check for its resolved target. Supply nonempty Markdown task and rubric that operationalize the target criterion, without adding correctness requirements from the item being taught; deliver both verbatim in scene_reply. A retry returns the original check.",
+    "Pin this Scene's one check for its resolved target. Supply a nonempty Markdown scenario task. The target's effective criterion is pinned verbatim as the rubric, distinct from the learning item; deliver the returned task and rubric verbatim in scene_reply. A retry returns the original check.",
   schema: {
     type: "object",
     properties: {
       task: { type: "string", minLength: 1 },
-      rubric: { type: "string", minLength: 1 },
       unaided: { type: "boolean" },
     },
-    required: ["task", "rubric", "unaided"],
+    required: ["task", "unaided"],
     additionalProperties: false,
   },
   *run(raw, ctx) {
     const args = input(raw);
     if (
-      Object.keys(args).some((key) => !["task", "rubric", "unaided"].includes(key)) ||
+      Object.keys(args).some((key) => !["task", "unaided"].includes(key)) ||
       typeof args.task !== "string" ||
       !args.task.trim() ||
-      typeof args.rubric !== "string" ||
-      !args.rubric.trim() ||
       typeof args.unaided !== "boolean"
     )
-      throw new Error("Pose needs task, rubric and unaided");
+      throw new Error("Pose needs task and unaided");
     if (ctx.scene !== undefined) return { attempt: ctx.scene.attempt, opening: ctx.scene.opening };
     if (ctx.entry?.kind !== "target") throw new Error("A Scene check needs a resolved target");
+    const node = ctx.entry.node;
+    const candidates = metadataSetsForEntity(ctx.graph, { kind: "node", id: node }).flatMap((set) => {
+      const source = ctx.graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
+      return source === undefined ? [] : [{ value: set.properties[NODE_CRITERION_PROPERTY], source }];
+    });
+    const rubric = lastMetadataContribution(ctx.graph, candidates)?.value;
+    if (typeof rubric !== "string" || !rubric.trim()) throw new Error("A Scene check needs a target criterion");
     const payload: SceneOpeningPayload = {
       kind: "scene-opening",
       node: { node: ctx.entry.node, provenance: ctx.graph.terminal },
       task: args.task,
-      rubric: args.rubric,
+      rubric,
       unaided: args.unaided,
     };
     const attempt = yield* write({ surface: ctx.surface, about: [...ctx.about], nodes: [ctx.entry.node], payload });
