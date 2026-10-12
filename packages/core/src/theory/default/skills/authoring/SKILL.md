@@ -1,11 +1,11 @@
 ---
 name: authoring
-description: Design a Patch for other people to adopt, working backward from its audience and outcomes rather than the author's learner state. This procedure is loaded automatically in Authoring mode.
+description: Design a Patch for other people to adopt, working backward from its audience and outcomes rather than the author's learner state. This procedure is loaded automatically in Author mode.
 facet: chart
 entry: [learner]
 ---
 
-# Authoring
+# Author
 
 Make reusable learning content with the author, not a Mission for the author. Start from the goal entry's audience and outcome; if absent, ask who the Patch is for and what they should be able to do. Set its scope and intended grain together. Work backward: outcomes, then the demonstrations that would establish them, then activities and sources that prepare an unknown cohort for those demonstrations. Offer judgments and settle choices in conversation before transcribing them.
 
@@ -17,11 +17,11 @@ Work in the selected Profile's graph, usually a Scratch Profile. The Session is 
 
 @procedures/graph-authoring.md
 
-Review the complete draft with the author: outcomes covered, criteria demonstrable, prerequisite Edges necessary, and coarse sections intentional. Apply revisions, then submit one `propose_graph_diff({ viewName: "Patch name" })` for acceptance. This saves or revises the Session's target View with the authored targets in the same acceptance; use the agreed Patch name. The content exists only after successful acceptance.
+Review the complete draft with the author: outcomes covered, criteria demonstrable, prerequisite Edges necessary, and coarse sections intentional. Apply revisions, then submit one `propose {op:'graph-diff',input:{viewName:'Patch name'}}` for acceptance. This saves or revises the Session's target View with the authored targets in the same acceptance; use the agreed Patch name. The content exists only after successful acceptance.
 
 ## Materials
 
-Author only Materials the agreed design needs, with activities serving its evidence and outcomes. Use the following Material mechanics for intended adopters: do not wait for the author to demonstrate Nodes, or personalize by their saved preferences. A reusable reference may cover the agreed Patch scope immediately. Applets are not mounted in this mode; prefer Documents or Quizzes.
+Author only Materials the agreed design needs, with activities serving its evidence and outcomes. Use the following Material mechanics for intended adopters: do not wait for the author to demonstrate Nodes, or personalize by their saved preferences. A reusable reference may cover the agreed Patch scope immediately. Use `material {kind,op,input}` for the intended adopters; load its format through `skill {name:'material',resource}`. Author has no evaluation tool and records no personal evidence.
 
 @procedures/material-work.md
 

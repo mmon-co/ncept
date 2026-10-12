@@ -144,7 +144,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
   });
   const text = lines.join("\n");
   return text.length > MEMORY_PREFETCH_LIMIT
-    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; read memory(node) for the rest)`
+    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; use theory {name:'memory',input:{node}} for the rest)`
     : text;
 }
 
@@ -158,13 +158,15 @@ function* setup(
   const recommendations = recommendableAffordances(ctx, documents);
   const prompt = [
     tutorSystemPrompt(mode),
-    "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
+    "Interpretations are retrieved on demand, not prefetched with Node memory: use `theory {name:'interpretations',input}` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `theory {name:'memory',input:{node}}` and paginated original Record access remain available for their existing purposes.",
     ...(mode === "lesson" || mode === undefined
-      ? ["Before correcting an interpretation, retrieve its current source handles and support with `interpretations`."]
+      ? [
+          "Before correcting an interpretation, retrieve its current source handles and support with `theory {name:'interpretations',input}`.",
+        ]
       : []),
     mode === "empty" || mode === "charting" || mode === "authoring"
       ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
-      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations.",
+      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except in Lesson for a closing recount from `evaluation {op:'record',kind:'close-recount',input}`, which intentionally has no internal citations.",
     ...(mode === "empty" || mode === "charting" || mode === "authoring"
       ? []
       : [
@@ -179,9 +181,9 @@ function* setup(
     prompt,
     context: [
       ctx.about.length
-        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; read memory(node) for more):\n\n${scopedMemory(ctx) || "(none)"}`
+        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : mode === "empty"
-          ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
+          ? "This Session is attached to no Nodes; clarify the goal, then direct the learner to the existing Chart mode choice if its content is missing; Chat has no proposal tool."
           : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
