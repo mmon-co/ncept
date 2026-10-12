@@ -57,7 +57,7 @@ export function resolveDefaultCatalogProgram(
     (candidate) => candidate.name === target,
   );
   if (tool === undefined) throw new Error("Missing catalog Program");
-  return { tool, input: object(name === "theory" ? (envelope.input ?? {}) : envelope.input) };
+  return { tool, input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input) };
 }
 
 /** Only envelopes are mounted; original Programs remain available to internal host paths. */
