@@ -5,6 +5,8 @@ import type { NodeId, ResolvedGuidanceEntry } from "../../patch";
  * the implementation tickets supply the Programs and host handlers.
  */
 export const CATALOG_PAGE_SIZE = 20;
+/** Per-page safety only: larger collections remain traversable with cursors. */
+export const CATALOG_MAX_PAGE_SIZE = 100;
 
 export interface CatalogPage<T> {
   readonly page: readonly T[];
