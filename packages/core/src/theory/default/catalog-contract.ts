@@ -58,6 +58,12 @@ export interface MaterialToolInput {
   readonly command?: string;
 }
 
+/** The web-host generic absorbs media download without changing the media result. */
+export interface FetchPageToolInput {
+  readonly url: string;
+  readonly op?: "read" | "download";
+}
+
 export interface ProposeToolInput {
   readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "mode" | "missing-capability";
   readonly input: CatalogArguments;
@@ -86,6 +92,12 @@ export interface CompactGuidance {
   readonly guidance: Readonly<Record<string, ResolvedGuidanceEntry>>;
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
+
+/** Finalization can read only; these roots expose no writing operations. */
+export const CATALOG_READ_ONLY_TOOLS = ["theory", "query", "read"] as const;
+
+/** Harness excludes only these host generics, never a second domain-tool catalog. */
+export const CATALOG_WEB_ONLY_TOOLS = ["web_search", "fetch_page", "bash"] as const;
 
 /** Titles change; existing stored mode identities do not. Scene belongs to its own ticket. */
 export const CATALOG_MODE_TITLES = {
