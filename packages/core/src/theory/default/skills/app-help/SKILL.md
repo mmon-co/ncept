@@ -13,7 +13,7 @@ Use this Skill when the learner asks how the application looks or behaves, how t
 
 The host supplies a complete index of Document-backed Nodes from the adopted official Common Concept Patch. Each entry has its Node identity, label, one-line summary and Document id. This index is independent of whether the learner used or heard about the affordance, and independent of this Session's Nodes.
 
-Use `items({node: "<Node identity>"})` to read the relevant Document before explaining application behavior or calling it a defect. Product facts belong to Documents, not the index summaries. You may read a Document for reference even if its Node was used or previously recommended. A read is not an operation-use receipt and does not open the Document for the learner.
+Use `theory {name:'items',input:{node:'<Node identity>'}}` to read the relevant Document before explaining application behavior or calling it a defect. Product facts belong to Documents, not the index summaries. You may read a Document for reference even if its Node was used or previously recommended. A read is not an operation-use receipt and does not open the Document for the learner.
 
 Distinguish expected behavior described by the Document from an actual defect. Do not suggest **Report a problem**, incognito, disabling extensions, clearing caches or other defect workarounds for behavior the Document explains. If the Document does not explain the reported behavior, ask for the detail needed to diagnose it before calling it a defect.
 
