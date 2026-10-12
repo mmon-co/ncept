@@ -176,6 +176,7 @@ export type Skill = Readonly<{
   name: string;
   description: string;
   body: string;
+  resources?: readonly import("./skills").SkillResource[];
   facet: "position" | "chart" | "advance";
   entry: readonly ("learner" | "model" | "system")[];
 }>;
