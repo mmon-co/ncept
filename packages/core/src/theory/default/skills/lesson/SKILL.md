@@ -5,8 +5,6 @@ facet: advance
 entry: [learner, model]
 ---
 
-<skill_context> <skill_dir>/Users/mlegls/dev/mmon/concept__worktrees/make-milestone-0-an-ordinary-milestone-over-prior-experience-implement-1/packages/core/src/theory/default/skills/lesson</skill_dir> <workspace_dir>/Users/mlegls/dev/mmon/concept__worktrees/make-milestone-0-an-ordinary-milestone-over-prior-experience-implement-1</workspace_dir> </skill_context>
-
 # Lesson
 
 A Review uses the Session entry's frozen Node batch and the Review opening below, not the teaching steps. A teaching lesson covers one Lesson from the path and ends with one tangible win: the learner doing something they could not do at the start. Teach it in interactive Materials by default. Work the learner can show interactively is an applet or quiz, exposition they will come back to is a Document, and the conversation carries what is conversational: framing, questions, and working through what that work surfaces. Chat is the right medium only when the skill itself is conversation or the task has no better surface.
