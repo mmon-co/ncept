@@ -1,4 +1,6 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
+import { contentDigest } from "../../digest";
+import { CATALOG_PAGE_SIZE } from "./catalog-contract";
 import {
   effectiveObservations,
   isObservationId,
@@ -180,6 +182,51 @@ function trail(ctx: Ctx, node: NodeId) {
           : "no-qualifying-evidence";
   return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
 }
+function pagedTrail(ctx: Ctx, raw: unknown) {
+  const input = args(raw, ["node", "cursor", "limit"], ["node"]);
+  const node = nodeId(input.node);
+  const limit = input.limit ?? CATALOG_PAGE_SIZE;
+  if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit <= 0)
+    throw new Error("Trail limit must be a positive integer");
+  const reading = trail(ctx, node);
+  const revision = contentDigest({
+    node,
+    records: ctx.state.records.map(({ id }) => id),
+    order: reading.records.map(({ id }) => id),
+  });
+  let offset = 0;
+  if (input.cursor !== undefined) {
+    let cursor: unknown;
+    try {
+      cursor = JSON.parse(string(input.cursor));
+    } catch {
+      throw new Error("Invalid trail cursor; restart theory.trail without a cursor");
+    }
+    if (
+      !object(cursor) ||
+      cursor.node !== node ||
+      cursor.revision !== revision ||
+      typeof cursor.offset !== "number" ||
+      !Number.isSafeInteger(cursor.offset) ||
+      cursor.offset <= 0 ||
+      cursor.offset >= reading.records.length
+    )
+      throw new Error("Stale or invalid trail cursor; restart theory.trail without a cursor");
+    offset = cursor.offset;
+  }
+  const page = reading.records.slice(offset, offset + limit);
+  const next = offset + page.length;
+  const { records: _records, ...standing } = reading.state;
+  return {
+    node,
+    rule: reading.rule,
+    standing,
+    page,
+    isDone: next >= reading.records.length,
+    continueCursor: next >= reading.records.length ? null : JSON.stringify({ node, revision, offset: next }),
+  };
+}
+
 function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
   const state = stateDefault(ctx.graph, observations, ctx.now);
   return state.records
@@ -366,9 +413,12 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       );
     },
   },
-  nodeTool(
-    "trail",
-    [
+  {
+    name: "trail",
+    schema: schema({ node: nodeProperty, cursor: { type: "string" }, limit: { type: "integer", minimum: 1 } }, [
+      "node",
+    ]),
+    description: [
       "Original records and the rule producing this Node's label. The first qualifying rule applies:",
       'pedagogy:completion is ordinary Node metadata; SRS uses { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
       "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
@@ -377,8 +427,10 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
       "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
-    trail,
-  ),
+    *run(raw, ctx) {
+      return pagedTrail(ctx, raw);
+    },
+  },
   scopedTool("coverage", "Nodes with no records.", (ctx, scope) =>
     readingNodes(ctx, scope)
       .filter((id) => defaultNodeState(ctx.state, id).records.length === 0)
