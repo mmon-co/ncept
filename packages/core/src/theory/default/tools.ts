@@ -221,7 +221,6 @@ function pagedTrail(ctx: Ctx, raw: unknown) {
     node,
     rule: reading.rule,
     standing,
-    citations: reading.citations,
     page,
     isDone: next >= reading.records.length,
     continueCursor: next >= reading.records.length ? null : JSON.stringify({ node, revision, offset: next }),
