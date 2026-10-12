@@ -1,6 +1,6 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
 import { contentDigest } from "../../digest";
-import { CATALOG_PAGE_SIZE } from "./catalog-contract";
+import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
 import {
   effectiveObservations,
   isObservationId,
@@ -214,7 +214,7 @@ function pagedTrail(ctx: Ctx, raw: unknown) {
       throw new Error("Stale or invalid trail cursor; restart theory.trail without a cursor");
     offset = cursor.offset;
   }
-  const page = reading.records.slice(offset, offset + limit);
+  const page = reading.records.slice(offset, offset + Math.min(limit, CATALOG_MAX_PAGE_SIZE));
   const next = offset + page.length;
   const { records: _records, ...standing } = reading.state;
   return {

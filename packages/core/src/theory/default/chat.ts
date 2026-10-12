@@ -10,29 +10,14 @@ import {
 } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
-import type { SessionMode } from "../modes";
+import type { HostCapability, SessionMode } from "../modes";
+import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { modeProcedure, skillBody, skillInvocation, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
-import {
-  defaultBackgroundTools,
-  defaultInstrumentTools,
-  defaultRecordingTools,
-  recordSceneDemonstration,
-} from "./tools";
+import { defaultRecordingTools, recordSceneDemonstration } from "./tools";
 import { defaultCatalogTools } from "./catalog";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
-const READ_ONLY_INSTRUMENTS = new Set([
-  "frontier",
-  "route",
-  "interpretations",
-  "trail",
-  "coverage",
-  "probes",
-  "warnings",
-  "items",
-  "memory",
-  "mission",
-]);
+
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
 const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
 
@@ -224,24 +209,13 @@ function* setup(
     ].join("\n\n"),
     skills: chatSkills(mode, documents, recommendations),
     tools:
-      mode === "empty" || mode === "authoring"
+      mode === "scene"
         ? [
-            ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+            ...defaultCatalogTools.filter((tool) => tool.name === "theory"),
             ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
+            recordSceneDemonstration,
           ]
-        : mode === "charting"
-          ? [
-              ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
-              ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
-              ...defaultBackgroundTools.filter((tool) => tool.name === "attach_claim"),
-            ]
-          : mode === "scene"
-            ? [
-                ...defaultCatalogTools.filter((tool) => tool.name === "theory"),
-                ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
-                recordSceneDemonstration,
-              ]
-            : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
+        : defaultCatalogTools.filter((tool) => CATALOG_MODE_TOOLS[mode ?? "lesson"].some((name) => name === tool.name)),
   };
 }
 
@@ -252,17 +226,25 @@ function* setup(
  */
 export const chat = { open: setup, turn: setup };
 
-const emptyCapabilities = ["reads"] as const;
-const chartingCapabilities = ["reads", "graph-draft", "materials", "web"] as const;
-const lessonCapabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
+/** Host context follows the same roots that the default catalog admits. */
+function catalogCapabilities(mode: keyof typeof CATALOG_MODE_TOOLS): readonly HostCapability[] {
+  const roots: readonly string[] = CATALOG_MODE_TOOLS[mode];
+  return [
+    ...(roots.includes("read") ? ["reads" as const] : []),
+    ...(roots.includes("material") ? ["materials" as const, "applets" as const] : []),
+    ...(roots.includes("edit_graph_draft") ? ["graph-draft" as const] : []),
+    ...(roots.includes("web_search") ? ["web" as const] : []),
+    ...(roots.includes("bash") ? ["bash" as const] : []),
+  ];
+}
 
 /** The default theory’s Session choices; host capabilities are mounted separately. */
 export const modes = {
   empty: {
-    title: "Session",
+    title: CATALOG_MODE_TITLES.empty,
     frontTab: "map",
     entry: { required: false, kinds: [] },
-    capabilities: emptyCapabilities,
+    capabilities: catalogCapabilities("empty"),
     switches: [
       { mode: "charting", then: "here" },
       { mode: "lesson", then: "here" },
@@ -270,7 +252,7 @@ export const modes = {
     setup: (ctx) => setup(ctx, "empty"),
   },
   charting: {
-    title: "Charting",
+    title: CATALOG_MODE_TITLES.charting,
     frontTab: "map",
     noteTemplates: [
       { id: "default.charting.note.known", defaultMessage: "I already know this." },
@@ -279,23 +261,23 @@ export const modes = {
       { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
     ],
     entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint", "opening", "checkpoint0"] },
-    capabilities: chartingCapabilities,
+    capabilities: catalogCapabilities("charting"),
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),
   },
   authoring: {
-    title: "Authoring",
+    title: CATALOG_MODE_TITLES.authoring,
     frontTab: "map",
     entry: { required: false, kinds: ["goal"] },
-    capabilities: chartingCapabilities,
+    capabilities: catalogCapabilities("authoring"),
     switches: [],
     setup: (ctx) => setup(ctx, "authoring"),
   },
   lesson: {
-    title: "Lesson",
+    title: CATALOG_MODE_TITLES.lesson,
     frontTab: "document",
     entry: { required: true, kinds: ["lesson", "review"] },
-    capabilities: lessonCapabilities,
+    capabilities: catalogCapabilities("lesson"),
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
       { mode: "scene", then: "aside", carry: { kind: "full" } },

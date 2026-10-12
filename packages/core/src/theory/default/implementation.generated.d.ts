@@ -24,13 +24,13 @@ export declare const implementation: {
     };
     modes: {
         empty: {
-            title: string;
+            title: "Chat";
             frontTab: string;
             entry: {
                 required: false;
                 kinds: never[];
             };
-            capabilities: readonly ["reads"];
+            capabilities: readonly import("../modes").HostCapability[];
             switches: {
                 mode: string;
                 then: "here";
@@ -55,7 +55,7 @@ export declare const implementation: {
             }>>;
         };
         charting: {
-            title: string;
+            title: "Chart";
             frontTab: string;
             noteTemplates: {
                 id: string;
@@ -65,7 +65,7 @@ export declare const implementation: {
                 required: false;
                 kinds: ("opening" | "checkpoint0" | "goal" | "mission" | "target" | "checkpoint")[];
             };
-            capabilities: readonly ["reads", "graph-draft", "materials", "web"];
+            capabilities: readonly import("../modes").HostCapability[];
             switches: {
                 mode: string;
                 then: "next";
@@ -93,13 +93,13 @@ export declare const implementation: {
             }>>;
         };
         authoring: {
-            title: string;
+            title: "Author";
             frontTab: string;
             entry: {
                 required: false;
                 kinds: "goal"[];
             };
-            capabilities: readonly ["reads", "graph-draft", "materials", "web"];
+            capabilities: readonly import("../modes").HostCapability[];
             switches: never[];
             setup: (ctx: import("../theory").ChatContext<import("./state").DefaultState>) => import("../../observations").Program<Readonly<{
                 prompt: string;
@@ -121,13 +121,13 @@ export declare const implementation: {
             }>>;
         };
         lesson: {
-            title: string;
+            title: "Lesson";
             frontTab: string;
             entry: {
                 required: true;
                 kinds: ("lesson" | "review")[];
             };
-            capabilities: readonly ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"];
+            capabilities: readonly import("../modes").HostCapability[];
             switches: ({
                 mode: string;
                 then: "next";
