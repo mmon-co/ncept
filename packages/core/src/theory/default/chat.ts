@@ -12,7 +12,7 @@ import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
 import type { SessionMode } from "../modes";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { modeProcedure, skillBody, skillInvocation, skillsForMode, tutorSystemPrompt } from "./skills";
+import { modeProcedure, skillBody, skillInvocation, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
 import {
   defaultBackgroundTools,
   defaultInstrumentTools,
@@ -129,6 +129,7 @@ function chatSkills(
 ) {
   return skillsForMode(mode).map((meta) => ({
     ...meta,
+    resources: skillResources(meta.name),
     body:
       meta.name === "app-help"
         ? skillInvocation(meta.name, [
