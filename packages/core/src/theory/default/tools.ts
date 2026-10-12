@@ -202,13 +202,9 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
     const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
     if (ctx.mode !== "lesson" || !lesson || lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
       throw new Error("A milestone diagnosis requires a milestone Lesson");
+    const cone = route(ctx.graph, lesson.section.milestone);
     const allowed = new Set(
-      [lesson.section.milestone].flatMap((node) => {
-        const cone = route(ctx.graph, node);
-        return cone.kind === "found"
-          ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone)
-          : [];
-      }),
+      cone.kind === "found" ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone) : [],
     );
     for (const node of milestoneDiagnosis.regressedComponents)
       if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
