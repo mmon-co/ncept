@@ -19,6 +19,7 @@ import {
   defaultRecordingTools,
   recordSceneDemonstration,
 } from "./tools";
+import { defaultCatalogTools } from "./catalog";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 const READ_ONLY_INSTRUMENTS = new Set([
   "frontier",
@@ -236,7 +237,7 @@ function* setup(
             ]
           : mode === "scene"
             ? [
-                ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+                ...defaultCatalogTools.filter((tool) => tool.name === "theory"),
                 ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
                 recordSceneDemonstration,
               ]
