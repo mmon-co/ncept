@@ -8,7 +8,7 @@ When creating a Mission, or revising it because the learner's goal moved, set **
 
 If the learner asks to change a short name while a proposal is pending, re-propose the same Mission. For a new Mission, `propose {op:'mission',input}` replaces its pending card automatically. For an existing Mission, use `propose {op:'revision',input}` with **supersedes** naming its pending Confirmation; do not leave competing proposals.
 
-If content is missing, keep the outcome prospective until the learner accepts a switch into Chart. In Charting, edit the persisted graph draft with `edit_graph_draft`, including its targets and summary; `propose {op:'mission',input}` includes that draft to mint new targets in the same Confirmation. Never start an edit procedure from another mode.
+If content is missing, keep the outcome prospective until the learner accepts a switch into Chart. In Chart, edit the persisted graph draft with `edit_graph_draft`, including its targets and summary; `propose {op:'mission',input}` includes that draft to mint new targets in the same Confirmation. Never start an edit procedure from another mode.
 
 If the learner no longer wants the goal, use `propose {op:'revision',input}` with **retired: true** and the current Mission's fields and Change identity. Retirement needs learner approval; it hides the current Mission without deleting history or restoring an earlier goal. Do not retract the Mission or reuse its identity as a new one.
 
