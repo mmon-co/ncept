@@ -214,6 +214,17 @@ function pagedTrail(ctx: Ctx, raw: unknown) {
       throw new Error("Stale or invalid trail cursor; restart theory.trail without a cursor");
     offset = cursor.offset;
   }
+  return projectTrailPage(reading, revision, offset, limit);
+}
+
+/** Pure projection shared by live reads and the one-off historical catalog migration. */
+export function projectTrailPage<R, S extends { readonly records: readonly R[] }, N extends string>(
+  reading: { readonly node: N; readonly rule: string; readonly state: S; readonly records: readonly R[] },
+  revision: string,
+  offset: number,
+  limit: number,
+) {
+  const node = reading.node;
   const page = reading.records.slice(offset, offset + Math.min(limit, CATALOG_MAX_PAGE_SIZE));
   const next = offset + page.length;
   const { records: _records, ...standing } = reading.state;
