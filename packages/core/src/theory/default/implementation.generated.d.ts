@@ -48,6 +48,7 @@ export declare const implementation: {
                     name: string;
                     description: string;
                     body: string;
+                    resources?: readonly import("../skills").SkillResource[];
                     facet: "position" | "chart" | "advance";
                     entry: readonly ("learner" | "model" | "system")[];
                 }>[];
@@ -62,7 +63,7 @@ export declare const implementation: {
             }[];
             entry: {
                 required: false;
-                kinds: ("opening" | "checkpoint0" | "goal" | "mission" | "target" | "checkpoint")[];
+                kinds: ("goal" | "mission" | "target" | "checkpoint")[];
             };
             capabilities: readonly ["reads", "graph-draft", "materials", "web"];
             switches: {
@@ -85,6 +86,7 @@ export declare const implementation: {
                     name: string;
                     description: string;
                     body: string;
+                    resources?: readonly import("../skills").SkillResource[];
                     facet: "position" | "chart" | "advance";
                     entry: readonly ("learner" | "model" | "system")[];
                 }>[];
@@ -112,6 +114,7 @@ export declare const implementation: {
                     name: string;
                     description: string;
                     body: string;
+                    resources?: readonly import("../skills").SkillResource[];
                     facet: "position" | "chart" | "advance";
                     entry: readonly ("learner" | "model" | "system")[];
                 }>[];
@@ -160,6 +163,7 @@ export declare const implementation: {
                     name: string;
                     description: string;
                     body: string;
+                    resources?: readonly import("../skills").SkillResource[];
                     facet: "position" | "chart" | "advance";
                     entry: readonly ("learner" | "model" | "system")[];
                 }>[];
@@ -189,6 +193,7 @@ export declare const implementation: {
                     name: string;
                     description: string;
                     body: string;
+                    resources?: readonly import("../skills").SkillResource[];
                     facet: "position" | "chart" | "advance";
                     entry: readonly ("learner" | "model" | "system")[];
                 }>[];

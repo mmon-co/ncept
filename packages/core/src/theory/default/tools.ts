@@ -200,19 +200,11 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
     if (milestoneDiagnosis === undefined)
       throw new Error("Expected a milestone diagnosis with errors and regressed components");
     const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
-    if (
-      ctx.mode !== "lesson" ||
-      !lesson ||
-      (!lesson.milestone0 && (lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone))
-    )
+    if (ctx.mode !== "lesson" || !lesson || lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
       throw new Error("A milestone diagnosis requires a milestone Lesson");
+    const cone = route(ctx.graph, lesson.section.milestone);
     const allowed = new Set(
-      (lesson.milestone0 ? lesson.nodes : [lesson.section.milestone]).flatMap((node) => {
-        const cone = route(ctx.graph, node);
-        return cone.kind === "found"
-          ? cone.nodes.map(({ id }) => id).filter((id) => lesson.milestone0 || id !== lesson.section.milestone)
-          : [];
-      }),
+      cone.kind === "found" ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone) : [],
     );
     for (const node of milestoneDiagnosis.regressedComponents)
       if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
@@ -429,16 +421,13 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
         path: readMissionPath(
-          {
-            ...pathDefault(
-              ctx.graph,
-              mission.targets ??
-                mission.nodes.filter(
-                  (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
-                ),
-            ),
-            ...(mission.start === undefined ? {} : { start: mission.start }),
-          },
+          pathDefault(
+            ctx.graph,
+            mission.targets ??
+              mission.nodes.filter(
+                (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
+              ),
+          ),
           new Set(
             Object.entries(ctx.state.nodes)
               .filter(([, state]) => state !== undefined && isDefaultKnown(state))
