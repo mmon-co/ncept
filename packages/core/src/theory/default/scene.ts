@@ -16,8 +16,8 @@ function input(raw: unknown): Record<string, unknown> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Expected Scene arguments");
   return Object.fromEntries(Object.entries(raw));
 }
-export const poseScene: Tool<unknown, unknown, DefaultState> = {
-  name: "pose_scene",
+export const poseScene = {
+  name: "pose_scene" as const,
   description:
     "Pin this Scene's one check for its resolved target. Supply a nonempty Markdown scenario task. The target's effective criterion is pinned verbatim as the rubric, distinct from the learning item; deliver the returned task and rubric verbatim in scene_reply. A retry returns the original check.",
   schema: {
@@ -53,7 +53,7 @@ export const poseScene: Tool<unknown, unknown, DefaultState> = {
     const attempt = yield* write({ surface: ctx.surface, about: [...ctx.about], nodes: [ctx.entry.node], payload });
     return { attempt, opening: payload };
   },
-};
+} satisfies Tool<unknown, unknown, DefaultState>;
 
 /** The host resolves original Agent bounds before entering this default-theory Program. */
 export function* finishScene(
