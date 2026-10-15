@@ -258,19 +258,11 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
     if (milestoneDiagnosis === undefined)
       throw new Error("Expected a milestone diagnosis with errors and regressed components");
     const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
-    if (
-      ctx.mode !== "lesson" ||
-      !lesson ||
-      (!lesson.milestone0 && (lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone))
-    )
+    if (ctx.mode !== "lesson" || !lesson || lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
       throw new Error("A milestone diagnosis requires a milestone Lesson");
+    const cone = route(ctx.graph, lesson.section.milestone);
     const allowed = new Set(
-      (lesson.milestone0 ? lesson.nodes : [lesson.section.milestone]).flatMap((node) => {
-        const cone = route(ctx.graph, node);
-        return cone.kind === "found"
-          ? cone.nodes.map(({ id }) => id).filter((id) => lesson.milestone0 || id !== lesson.section.milestone)
-          : [];
-      }),
+      cone.kind === "found" ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone) : [],
     );
     for (const node of milestoneDiagnosis.regressedComponents)
       if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
@@ -332,7 +324,11 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
     ...(milestoneDiagnosis === undefined ? {} : { milestoneDiagnosis }),
   };
 }
-function nodeTool(name: string, description: string, run: (ctx: Ctx, node: NodeId) => unknown): DefaultTool {
+function nodeTool<const Name extends string>(
+  name: Name,
+  description: string,
+  run: (ctx: Ctx, node: NodeId) => unknown,
+): DefaultTool & { name: Name } {
   return {
     name,
     description,
@@ -344,11 +340,11 @@ function nodeTool(name: string, description: string, run: (ctx: Ctx, node: NodeI
     },
   };
 }
-function scopedTool(
-  name: string,
+function scopedTool<const Name extends string>(
+  name: Name,
   description: string,
   run: (ctx: Ctx, scope?: readonly NodeId[]) => unknown,
-): DefaultTool {
+): DefaultTool & { name: Name } {
   return {
     name,
     description,
@@ -363,7 +359,7 @@ function scopedTool(
 }
 
 /** Evidence readings, retrieval context and the Session's closing diagnosis. */
-export const defaultInstrumentTools: readonly DefaultTool[] = [
+export const defaultInstrumentTools = [
   scopedTool("frontier", "Reachable not-known Nodes, facts and citations; no ranking.", (ctx, scope) => {
     const frontier = defaultQueryTokens.frontier(ctx.state, ctx.graph);
     return readingNodes(ctx, scope)
@@ -380,7 +376,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       }));
   }),
   {
-    name: "route",
+    name: "route" as const,
     description: "Not-known prerequisite cone in dependency order.",
     schema: schema({ target: nodeProperty }, ["target"]),
     *run(raw, ctx) {
@@ -393,7 +389,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "interpretations",
+    name: "interpretations" as const,
     description:
       "Retrieve current supported interpretations by optional tag, Node scope and originating surface. Defaults to this Session's attached Nodes; returns identity and source handles, never transcript text. Retrieve before reusing or correcting one.",
     schema: schema({
@@ -492,16 +488,13 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
         path: readMissionPath(
-          {
-            ...pathDefault(
-              ctx.graph,
-              mission.targets ??
-                mission.nodes.filter(
-                  (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
-                ),
-            ),
-            ...(mission.start === undefined ? {} : { start: mission.start }),
-          },
+          pathDefault(
+            ctx.graph,
+            mission.targets ??
+              mission.nodes.filter(
+                (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
+              ),
+          ),
           new Set(
             Object.entries(ctx.state.nodes)
               .filter(([, state]) => state !== undefined && isDefaultKnown(state))
@@ -512,7 +505,7 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       })),
   ),
   {
-    name: "close_recount",
+    name: "close_recount" as const,
     description:
       "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis and records component lapses for Review without changing acquisition standing.",
     schema: schema({
@@ -558,11 +551,11 @@ export const defaultInstrumentTools: readonly DefaultTool[] = [
       return recount;
     },
   },
-];
+] satisfies readonly DefaultTool[];
 
 /** Only theory evidence is written. The host assigns identity and attribution, not pedagogy. */
-const recordDemonstration: DefaultTool = {
-  name: "record_demonstration",
+const recordDemonstration = {
+  name: "record_demonstration" as const,
   description: [
     "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
     "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
@@ -595,11 +588,11 @@ const recordDemonstration: DefaultTool = {
     const id = yield* write(observation);
     return { observation: { ...observation, id }, citations: [id] };
   },
-};
+} satisfies DefaultTool;
 
 /** A Scene separates performance against its pin from assistance over the whole attempt. */
-export const recordSceneDemonstration: DefaultTool = {
-  name: "record_demonstration",
+export const recordSceneDemonstration = {
+  name: "record_demonstration" as const,
   description:
     "Record this sealed Scene once. Assess the pinned rubric using only the learner's actual responses, not corrected tutor dialogue. Do not add success requirements from the correction item. Assess assistance independently of success/failure across the entire source, including opening and all tutor asides. Help on the checked capability makes even a failed attempt aided; help alone is not a reason to mark failure. The host supplies the target, task, response and tutor grader, and derives unaided from assistance and the opening.",
   schema: schema(
@@ -682,12 +675,12 @@ export const recordSceneDemonstration: DefaultTool = {
     const id = yield* write(observation);
     return { observation: { ...observation, id }, citations: [id] };
   },
-};
+} satisfies DefaultTool;
 
-export const defaultRecordingTools: readonly DefaultTool[] = [
+export const defaultRecordingTools = [
   recordDemonstration,
   {
-    name: "record_retrieval_opener",
+    name: "record_retrieval_opener" as const,
     description:
       "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Quiz, Review, Material outcome, or generic demonstration.",
     schema: schema(
@@ -722,7 +715,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "record_teaching",
+    name: "record_teaching" as const,
     description: [
       "Record one explicit teaching act for a scoped Node after you have actually explained its content to the learner, with a worked example or equivalent reasoning.",
       "Do not call on Skill entry, scope, reading, practice, an unrelated explanation, or merely creating/opening a Material. For a Document, accepted presentation of its opened surface records the occurrence instead.",
@@ -751,7 +744,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "record_claim",
+    name: "record_claim" as const,
     description:
       "Record a competence self-report: the learner's verbatim statement, optional eliciting prompt, and knows, forgotten, or unfamiliar. It names no Node at write; claims are attached by content, not Edges. Preferences are not claims.",
     schema: schema(
@@ -762,7 +755,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
       },
       ["statement", "stance"],
     ),
-    *run(raw, ctx) {
+    *run(this: void, raw, ctx) {
       const input = args(raw, ["statement", "prompt", "stance"], ["statement", "stance"]);
       const payload = { ...input, kind: "claim" };
       if (!isClaim(payload)) throw new Error("Invalid claim");
@@ -772,7 +765,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "record_retraction",
+    name: "record_retraction" as const,
     description:
       "Correct evidence by retracting an existing demonstration or claim; never rewrite a Record. Pass either of (an exact Record id) or node (the latest active Record on that Node in this Session). Never retract a retraction or platform record.",
     schema: schema({ of: { type: "string", pattern: "^obs-.+" }, node: nodeProperty }),
@@ -809,7 +802,7 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "correct_interpretation",
+    name: "correct_interpretation" as const,
     description:
       "Correct one current interpretation in the Session's attached Nodes (or explicit scope) by writing a replacement with fresh current support. Its predecessor remains in history; this does not change learner labels or Records.",
     schema: schema(
@@ -865,12 +858,12 @@ export const defaultRecordingTools: readonly DefaultTool[] = [
       return { observation: { ...observation, id }, citations: [id, ...support] };
     },
   },
-];
+] satisfies readonly DefaultTool[];
 
 /** Claim-homing and system-revision tools: no revision fences, cache saves, journals or retry contracts in Core. */
-export const defaultBackgroundTools: readonly DefaultTool[] = [
+export const defaultBackgroundTools = [
   {
-    name: "attach_claim",
+    name: "attach_claim" as const,
     description: [
       "Attach an active claim to current Nodes by their capability statements, never by topic or Edges. An empty nodes list explicitly leaves it homeless.",
       "After a charting Confirmation that adds Nodes, and at close before close_recount: call warnings and inspect its homeless citations; re-home each current-Session claim you can identify from its citation and conversation to the Node(s) whose capability statements match, and leave unmatched existing claims as they are.",
@@ -883,7 +876,7 @@ export const defaultBackgroundTools: readonly DefaultTool[] = [
       },
       ["record", "nodes"],
     ),
-    *run(raw, ctx) {
+    *run(this: void, raw, ctx) {
       const input = args(raw, ["record", "nodes"], ["record", "nodes"]);
       const of = observationId(input.record);
       const homes = nodes(input.nodes);
@@ -905,7 +898,7 @@ export const defaultBackgroundTools: readonly DefaultTool[] = [
     },
   },
   {
-    name: "refine_records",
+    name: "refine_records" as const,
     description:
       "Re-home pending demonstrations by verbatim task text after a Patch edit, preserve claim homes, and attach all current Record strings to Node memory. No new evidence is inferred.",
     schema: schema({}),
@@ -915,7 +908,7 @@ export const defaultBackgroundTools: readonly DefaultTool[] = [
       yield* refinePendingHomes({ ...ctx, state: stateDefault(ctx.graph, observations, ctx.now) });
     },
   },
-];
+] satisfies readonly DefaultTool[];
 
 /** Keyed scoring retains the selected option's error verbatim; skips never call this. */
 export function keyedDemonstration(

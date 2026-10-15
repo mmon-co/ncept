@@ -262,7 +262,7 @@ export const modes = {
       { id: "default.charting.note.why", defaultMessage: "Why is this needed?" },
       { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
     ],
-    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint", "opening", "checkpoint0"] },
+    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint"] },
     capabilities: catalogCapabilities("charting"),
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),

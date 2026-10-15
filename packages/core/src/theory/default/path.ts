@@ -166,5 +166,13 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       ) ?? false;
     section.lessons.push({ nodes: [section.milestone], checkpoint: { milestone: section.milestone, required } });
   }
+  // Nothing precedes the first span, so its check-in has no milestone and is due only while the span is coarse.
+  const first = sections[0];
+  if (
+    first?.lessons.some((lesson) =>
+      lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
+    )
+  )
+    first.lessons.unshift({ nodes: [], checkpoint: { required: true } });
   return { sections, warnings: [...warnings.values()] };
 }

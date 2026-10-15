@@ -63,7 +63,7 @@ export declare const implementation: {
             }[];
             entry: {
                 required: false;
-                kinds: ("opening" | "checkpoint0" | "goal" | "mission" | "target" | "checkpoint")[];
+                kinds: ("goal" | "mission" | "target" | "checkpoint")[];
             };
             capabilities: readonly import("../modes").HostCapability[];
             switches: {
