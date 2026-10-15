@@ -4,6 +4,7 @@ import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
 import { stateDefault, isCompletionOutcome } from "./state";
 import { projectDefault } from "./tags";
 import { pathDefault } from "./path";
+import { isRoleplayAttemptOutcome } from "./roleplay";
 /** The single default implementation assembly, before executable generation and identity. */
 export declare const implementation: {
     id: "default";
@@ -17,6 +18,7 @@ export declare const implementation: {
         recall: typeof isRecallOutcome;
         quiz: typeof isQuizOutcome;
         attempt: typeof isAttemptOutcome;
+        "roleplay-attempt": typeof isRoleplayAttemptOutcome;
     };
     chat: {
         open: (ctx: import("../theory").ChatContext<import("./state").DefaultState>, mode?: "empty" | "charting" | "authoring" | "lesson" | "scene") => import("../../observations").Program<import("../theory").ChatSetup<import("./state").DefaultState>>;

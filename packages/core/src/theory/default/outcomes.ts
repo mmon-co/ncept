@@ -336,6 +336,39 @@ function checkNote(
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
 }
 
+/** Shared check-to-Record projection; callers supply their own captured task and response. */
+export function checkAttempts(
+  check: {
+    about: readonly NodeId[];
+    ask: string;
+    shown: string;
+    absent: string;
+    mistaken?: Readonly<Record<string, string>>;
+  },
+  result: CheckResult,
+  context: {
+    at: string;
+    revision: ExactPatchRef;
+    prompt: string;
+    response: string;
+    unaided: boolean;
+    grader: Demonstration["grader"];
+  },
+): readonly OriginalAttempt[] {
+  return check.about.map((node) => ({
+    at: context.at,
+    payload: {
+      kind: "demonstration",
+      node: { node, provenance: { ...context.revision } },
+      outcome: result.outcome === "shown" ? "success" : result.outcome === "skipped" ? "dont-know" : "failure",
+      unaided: context.unaided,
+      grader: result.outcome === "skipped" ? "learner" : context.grader,
+      task: `${context.prompt}\nCheck: ${check.ask}`,
+      response: `${context.response}\n${checkNote(check, result)}`,
+    },
+  }));
+}
+
 /** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
   const { problem, response, assessment } = outcome;
@@ -366,23 +399,14 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
               { result: final, unaided: false },
             ];
       return states.flatMap(({ result, unaided }) =>
-        check.about.map((node) => ({
+        checkAttempts(check, result, {
           at,
-          payload: {
-            kind: "demonstration" as const,
-            node: { node, provenance: { ...outcome.revision } },
-            outcome:
-              result.outcome === "shown"
-                ? ("success" as const)
-                : result.outcome === "skipped"
-                  ? ("dont-know" as const)
-                  : ("failure" as const),
-            unaided,
-            grader: result.outcome === "skipped" ? ("learner" as const) : assessment.grader,
-            task: `${problem.prompt}\nCheck: ${check.ask}`,
-            response: `${response}\n${checkNote(check, result)}`,
-          },
-        })),
+          revision: outcome.revision,
+          prompt: problem.prompt,
+          response,
+          unaided,
+          grader: assessment.grader,
+        }),
       );
     });
   const choice = problem.answer.kind === "choice" ? problem.answer.options : undefined;
