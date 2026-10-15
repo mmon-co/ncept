@@ -137,9 +137,14 @@ export function evaluationContext(ctx: Ctx): string[] {
                 id,
                 ...payload,
                 results: payload.results.map((result) => {
-                  const replacement = ctx.state.records.find(
-                    ({ payload }) => isDemonstration(payload) && payload.evaluation?.override?.of === result.record,
-                  );
+                  // An unrecorded result has no Record to correct; undefined must not match every non-override.
+                  const replacement =
+                    result.record === undefined
+                      ? undefined
+                      : ctx.state.records.find(
+                          ({ payload }) =>
+                            isDemonstration(payload) && payload.evaluation?.override?.of === result.record,
+                        );
                   return replacement !== undefined && isDemonstration(replacement.payload)
                     ? {
                         ...result,
