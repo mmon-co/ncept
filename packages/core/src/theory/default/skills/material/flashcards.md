@@ -2,7 +2,7 @@
 
 Kind: `srs`.
 
-Add review cards as an ordinary flashcards Material (kind srs), from front/back text and optional srs:confusable metadata. Supply node or about and either body or both front and back. Set input.show:true to open on add; otherwise it is only listed.
+Add review cards as an ordinary flashcards Material (kind srs), from front/back text and optional srs:confusable metadata. Supply node or about and either body or both front and back. Adding lists the cards; open them when the learner wants to review.
 
 Markdown with front and back separated by a line containing ---
 
