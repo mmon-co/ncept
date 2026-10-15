@@ -48,10 +48,12 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
       return malformed(`${label}.${operation} must contain only targets`);
     if (!isArray(term.targets) || !term.targets.every(isNodeId))
       return malformed(`${label}.${operation}.targets must contain Node ids`);
+    // An uncharted Mission saves the empty dependency cone before it has targets.
+    if (operation === "cone") return { cone: { targets: term.targets } };
     const [first, ...rest] = term.targets;
     if (first === undefined) return malformed(`${label}.${operation}.targets must contain at least one Node id`);
     const targets: [NodeId, ...NodeId[]] = [first, ...rest];
-    return operation === "cone" ? { cone: { targets } } : { dependents: { targets } };
+    return { dependents: { targets } };
   }
   if (keys[0] === "provenance") {
     if (!isRecord(raw.provenance)) return malformed(`${label}.provenance must be an exact Patch reference`);

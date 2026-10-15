@@ -2,7 +2,7 @@
 
 Kind: `quizzes`.
 
-Create a quizzes Material; supply node or about, and list it without opening or focusing it.
+Add a Quiz Material with node or about. Set input.show:true to open and present it on add; otherwise it is only listed.
 
 Prepared prompt clip, separate from the private Problem body. Omit on edit to preserve; null removes.
 

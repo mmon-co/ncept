@@ -220,7 +220,7 @@ export interface ResolvedGraph {
 
 export type GraphQuery =
   | { readonly tag: string }
-  | { readonly cone: { readonly targets: readonly [NodeId, ...NodeId[]] } }
+  | { readonly cone: { readonly targets: readonly NodeId[] } }
   | { readonly dependents: { readonly targets: readonly [NodeId, ...NodeId[]] } }
   | { readonly provenance: ExactPatchRef }
   | { readonly union: readonly [GraphQuery, GraphQuery, ...GraphQuery[]] }

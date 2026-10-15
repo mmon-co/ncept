@@ -2,7 +2,7 @@
 
 Kind: `srs`.
 
-Create an SRS card from front/back text and optional srs:confusable metadata; list it without opening it. Supply node or about and either body or both front and back.
+Add review cards as an ordinary flashcards Material (kind srs), from front/back text and optional srs:confusable metadata. Supply node or about and either body or both front and back. Adding lists the cards; open them when the learner wants to review.
 
 Markdown with front and back separated by a line containing ---
 

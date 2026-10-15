@@ -2,7 +2,7 @@
 
 Kind: `document`.
 
-Create a document Material; supply node or about, and list it without opening or focusing it.
+Add a Document Material with node or about. Set input.show:true to open and present it on add; otherwise it is only listed.
 
 Markdown source.
 

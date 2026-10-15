@@ -8,7 +8,7 @@ import {
   type MilestoneDiagnosis,
 } from "../../../src/theory/default";
 
-test("a milestone's close diagnosis reaches the check-in opening without changing acquisition", () => {
+test("historical milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
   const revision: PatchRevision = {
     ref: { identity: "patch-milestone-diagnosis", digest: `sha256:${"a".repeat(64)}` },
     bases: [],
@@ -69,12 +69,9 @@ test("a milestone's close diagnosis reaches the check-in opening without changin
     regressedComponents: ["node-component"],
   };
   const program = close.run({ op: "record", kind: "close-recount", input: { milestoneDiagnosis: diagnosis } }, ctx);
-  const lapse = program.next();
-  if (lapse.done || lapse.value.kind !== "write") throw new Error("Missing component lapse");
-  const result = program.next("obs-component-lapse");
-  if (!result.done) throw new Error("Unexpected diagnosis effect");
-  const recount = JSON.parse(JSON.stringify(result.value));
-  const acceptedDiagnosis = readMilestoneDiagnosis(recount.milestoneDiagnosis);
+  expect(() => program.next()).toThrow("The host closes Lessons from their own Material records");
+  // Historical checkpoints retain their accepted diagnosis; live Lessons no longer mint recounts.
+  const acceptedDiagnosis = readMilestoneDiagnosis(diagnosis);
   expect(acceptedDiagnosis).toEqual(diagnosis);
   const opening = {
     kind: "checkpoint" as const,
