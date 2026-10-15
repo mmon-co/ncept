@@ -1,5 +1,4 @@
 import { dependentCones } from "./dependent-cone";
-import { canonicalJson } from "../../digest";
 import { nodePriority, pathDefault, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
@@ -193,16 +192,39 @@ function indicatorTag(indicator: Indicator): Tag {
 }
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
   if (node.completion !== undefined) {
-    const { binding, status } = node.completion;
+    const { binding, status, report } = node.completion;
+    const aboutNode =
+      binding.playground === "srs" &&
+      typeof binding.scope === "object" &&
+      binding.scope !== null &&
+      !Array.isArray(binding.scope) &&
+      "kind" in binding.scope &&
+      binding.scope.kind === "about-node";
+    const validUntil = report?.payload.validUntil;
     return {
       id: `default.node-progress.completion.${status}`,
-      defaultMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}; valid until {validUntil}`,
-      remainderMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}; valid until {validUntil}`,
+      defaultMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}{expiry}`,
       values: {
         playground: binding.playground,
-        scope: canonicalJson(binding.scope),
-        report: node.completion.report?.id ?? "—",
-        validUntil: node.completion.report?.payload.validUntil ?? "—",
+        scope: {
+          type: "message",
+          message: {
+            id: aboutNode ? "default.completion.scope.srs-about-node" : "default.completion.scope.bound",
+            defaultMessage: aboutNode ? "every card on this Node" : "the activity assigned to this Node",
+          },
+        },
+        report: report === undefined ? "—" : { type: "citation", value: report.id, label: "[1]" },
+        expiry:
+          validUntil === undefined
+            ? ""
+            : {
+                type: "message",
+                message: {
+                  id: "default.completion.expiry",
+                  defaultMessage: "; valid until {date}",
+                  values: { date: { type: "date", value: validUntil } },
+                },
+              },
       },
     };
   }

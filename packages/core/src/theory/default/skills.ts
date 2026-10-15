@@ -1,9 +1,10 @@
 /** Pure default Skill catalog; build-time Markdown embedding lives in scripts/build-skills.ts. */
 import YAML from "yaml";
-import type { BuiltSkillBundle } from "../skills";
+import type { BuiltSkillBundle, SkillResource } from "../skills";
 import { sources } from "./skills/sources";
 
 const SKILL_SOURCES: Readonly<Record<string, string>> = {
+  material: sources["material/SKILL.md"],
   charting: sources["charting/SKILL.md"],
   authoring: sources["authoring/SKILL.md"],
   "evaluator-sweep": sources["evaluator-sweep/SKILL.md"],
@@ -105,15 +106,17 @@ export function modeProcedure(name: "charting" | "authoring" | "lesson" | "scene
 export function skillsForMode(mode?: string): SkillMeta[] {
   const all = listSkills();
   const names =
-    mode === "empty" || mode === "authoring" || mode === "scene"
-      ? new Set(["app-help"])
-      : mode === "charting"
-        ? new Set(["mission", "app-help"])
-        : mode === "lesson"
-          ? new Set(all.map(({ name }) => name))
-          : mode === undefined || mode === ""
+    mode === "authoring"
+      ? new Set(["app-help", "material"])
+      : mode === "empty" || mode === "scene"
+        ? new Set(["app-help"])
+        : mode === "charting"
+          ? new Set(["mission", "app-help"])
+          : mode === "lesson"
             ? new Set(all.map(({ name }) => name))
-            : undefined;
+            : mode === undefined || mode === ""
+              ? new Set(all.map(({ name }) => name))
+              : undefined;
   if (names === undefined) throw new Error(`Unknown default Session mode ${mode}`);
   return all.filter(({ name }) => names.has(name));
 }
@@ -123,6 +126,17 @@ export function skillBody(name: string): string {
   const skill = skillFiles().find(({ meta }) => meta.name === name);
   if (skill === undefined) throw new Error(`unknown Skill: ${name}`);
   return inlineIncludes(skill.body).trim();
+}
+
+/** Declared relative resources; never includes arbitrary files or procedure bodies. */
+export function skillResources(name: string): readonly SkillResource[] {
+  if (name !== "material") return [];
+  return (["document.md", "quiz.md", "flashcards.md", "applet.md", "references.md", "audio.md"] as const).map(
+    (path) => ({
+      path,
+      content: sources[`material/${path}`],
+    }),
+  );
 }
 
 function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {
@@ -138,6 +152,7 @@ function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {
   };
   return {
     name: skill.meta.name,
+    resources: skillResources(skill.meta.name),
     content: `---\n${YAML.stringify(frontmatter).trimEnd()}\n---\n\n${skillBody(skill.meta.name)}\n`,
   };
 }

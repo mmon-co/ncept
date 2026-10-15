@@ -1,11 +1,12 @@
 import type { NodeId } from "../patch";
-import type { Lesson, LessonTiming, MissionPath, MissionStartReading } from "./theory";
+import type { Lesson, LessonTiming, MissionPath } from "./theory";
 
 /** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
-  start?: MissionStartReading;
   sections: readonly {
+    /** Displayed milestone number: 0 for a first milestone no unclaimed Lesson precedes, else counting from 1. */
+    readonly number: number;
     readonly milestone: NodeId;
     readonly lessons: readonly LessonReading[];
     readonly minutesLeft: number;
@@ -39,8 +40,8 @@ export function readMissionPath(
       .filter((lesson) => lesson.review)
       .reduce((sum, lesson) => sum + lesson.nodes.length * reviewTiming.minutesPerNode, 0);
   return {
-    ...(path.start === undefined ? {} : { start: path.start }),
-    sections: path.sections.map((section) => ({
+    sections: path.sections.map((section, index) => ({
+      number: index + (path.zeroBased ? 0 : 1),
       milestone: section.milestone,
       lessons: section.lessons.map((lesson) => ({
         ...lesson,

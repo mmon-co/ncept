@@ -7,7 +7,7 @@ entry: [system]
 
 # Evaluator sweep
 
-The host supplies the unswept transcript segment, its stable attempt identities, existing Records, the complete current capability catalog, exact graph revision, and effective homing observations. The host owns persistence, execution and its segment cursor. Deduplicate by attempt identity, not by Node: two distinct attempts on one Node are both evidence. Never duplicate a task component's Record.
+The host supplies the unswept transcript segment, its stable attempt identities, existing Records, the complete current capability catalog, exact graph revision, and effective homing observations. The host owns persistence, execution and its segment cursor. The named Programs below are this system-only pass's internal contract, not interactive catalog tools. Deduplicate by attempt identity, not by Node: two distinct attempts on one Node are both evidence. Never duplicate a task component's Record.
 
 1. Read existing `trail(node)` and `memory(node)` as needed. Inspect the segment for posed steps attempted but missed inline, including out-of-scope Nodes. Mere mention or spontaneous correct remarks are not tasks. For each missing attempt use `record_demonstration` with `grader: tutor`; quote task/response verbatim and preserve help received. No structural inference of failures.
 2. Use `record_claim` only for unrecorded self-reports. For each active claim needing attachment, compare its text with current capability statements; call `attach_claim({record, nodes})`. Attach by content, never by Edges. `nodes: []` is an explicit judgment that it currently has no home.

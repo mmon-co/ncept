@@ -5,21 +5,8 @@ import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
 export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" | "web" | "preferences" | "bash";
 
-/** Mission-owned Charting stops; neither manufactures a graph milestone Node. */
-export type MissionStartEntry =
-  | Readonly<{ kind: "opening"; missionId: string }>
-  | Readonly<{
-      kind: "checkpoint0";
-      missionId: string;
-      sessionId: string;
-      closedAt: string;
-      outcome: unknown;
-      closingNote?: string;
-    }>;
-
 /** @public Resolved entry facts; the host resolves Lesson selectors before calling the theory. */
 export type ModeEntry =
-  | MissionStartEntry
   | Readonly<{ kind: "goal"; text: string }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>
@@ -28,7 +15,8 @@ export type ModeEntry =
   | Readonly<{
       kind: "checkpoint";
       missionId: string;
-      milestone: NodeId;
+      /** Absent for the check-in before the first span, which has no milestone behind it. */
+      milestone?: NodeId;
       /** Absent when evidence cleared the milestone without a closed Lesson. */
       sessionId?: string;
       closedAt?: string;

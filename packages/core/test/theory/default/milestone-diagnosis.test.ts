@@ -58,8 +58,8 @@ test("a milestone's close diagnosis reaches the check-in opening without changin
   };
   const tool = defaultTheory.modes.lesson.setup(ctx).next();
   if (!tool.done) throw new Error("Lesson setup unexpectedly requested an effect");
-  const close = tool.value.tools.find(({ name }) => name === "close_recount");
-  if (close === undefined) throw new Error("Missing close_recount");
+  const close = tool.value.tools.find(({ name }) => name === "evaluation");
+  if (close === undefined) throw new Error("Missing evaluation");
   const diagnosis: MilestoneDiagnosis = {
     errors: [
       { error: "Components work alone but the combined task plateaus.", cause: "integration" },
@@ -68,7 +68,7 @@ test("a milestone's close diagnosis reaches the check-in opening without changin
     ],
     regressedComponents: ["node-component"],
   };
-  const program = close.run({ milestoneDiagnosis: diagnosis }, ctx);
+  const program = close.run({ op: "record", kind: "close-recount", input: { milestoneDiagnosis: diagnosis } }, ctx);
   const lapse = program.next();
   if (lapse.done || lapse.value.kind !== "write") throw new Error("Missing component lapse");
   const result = program.next("obs-component-lapse");

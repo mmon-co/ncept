@@ -10,28 +10,14 @@ import {
 } from "../../patch";
 import type { Program } from "../../observations";
 import type { ChatContext, ChatSetup } from "../theory";
-import type { SessionMode } from "../modes";
+import type { HostCapability, SessionMode } from "../modes";
+import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { modeProcedure, skillBody, skillInvocation, skillsForMode, tutorSystemPrompt } from "./skills";
-import {
-  defaultBackgroundTools,
-  defaultInstrumentTools,
-  defaultRecordingTools,
-  recordSceneDemonstration,
-} from "./tools";
+import { modeProcedure, skillBody, skillInvocation, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
+import { defaultRecordingTools, recordSceneDemonstration } from "./tools";
+import { defaultCatalogTools } from "./catalog";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
-const READ_ONLY_INSTRUMENTS = new Set([
-  "frontier",
-  "route",
-  "interpretations",
-  "trail",
-  "coverage",
-  "probes",
-  "warnings",
-  "items",
-  "memory",
-  "mission",
-]);
+
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
 const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
 
@@ -129,6 +115,7 @@ function chatSkills(
 ) {
   return skillsForMode(mode).map((meta) => ({
     ...meta,
+    resources: skillResources(meta.name),
     body:
       meta.name === "app-help"
         ? skillInvocation(meta.name, [
@@ -157,7 +144,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
   });
   const text = lines.join("\n");
   return text.length > MEMORY_PREFETCH_LIMIT
-    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; read memory(node) for the rest)`
+    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; use theory {name:'memory',input:{node}} for the rest)`
     : text;
 }
 
@@ -171,13 +158,15 @@ function* setup(
   const recommendations = recommendableAffordances(ctx, documents);
   const prompt = [
     tutorSystemPrompt(mode),
-    "Interpretations are retrieved on demand, not prefetched with Node memory: use `interpretations` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `memory(node)` and original Record access remain available for their existing purposes.",
+    "Interpretations are retrieved on demand, not prefetched with Node memory: use `theory {name:'interpretations',input}` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `theory {name:'memory',input:{node}}` and paginated original Record access remain available for their existing purposes.",
     ...(mode === "lesson" || mode === undefined
-      ? ["Before correcting an interpretation, retrieve its current source handles and support with `interpretations`."]
+      ? [
+          "Before correcting an interpretation, retrieve its current source handles and support with `theory {name:'interpretations',input}`.",
+        ]
       : []),
     mode === "empty" || mode === "charting" || mode === "authoring"
       ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
-      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a closing recount from `close_recount`, which intentionally has no internal citations.",
+      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except in Lesson for a closing recount from `evaluation {op:'record',kind:'close-recount',input}`, which intentionally has no internal citations.",
     ...(mode === "empty" || mode === "charting" || mode === "authoring"
       ? []
       : [
@@ -192,9 +181,9 @@ function* setup(
     prompt,
     context: [
       ctx.about.length
-        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; read memory(node) for more):\n\n${scopedMemory(ctx) || "(none)"}`
+        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : mode === "empty"
-          ? "This Session is attached to no Nodes; clarify the goal, then use an allowed mode switch into Charting if its content is missing."
+          ? "This Session is attached to no Nodes; clarify the goal, then direct the learner to the existing Chart mode choice if its content is missing; Chat has no proposal tool."
           : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
@@ -222,24 +211,13 @@ function* setup(
     ].join("\n\n"),
     skills: chatSkills(mode, documents, recommendations),
     tools:
-      mode === "empty" || mode === "authoring"
+      mode === "scene"
         ? [
-            ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
+            ...defaultCatalogTools.filter((tool) => tool.name === "theory"),
             ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
+            recordSceneDemonstration,
           ]
-        : mode === "charting"
-          ? [
-              ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
-              ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
-              ...defaultBackgroundTools.filter((tool) => tool.name === "attach_claim"),
-            ]
-          : mode === "scene"
-            ? [
-                ...defaultInstrumentTools.filter((tool) => READ_ONLY_INSTRUMENTS.has(tool.name)),
-                ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
-                recordSceneDemonstration,
-              ]
-            : [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools],
+        : defaultCatalogTools.filter((tool) => CATALOG_MODE_TOOLS[mode ?? "lesson"].some((name) => name === tool.name)),
   };
 }
 
@@ -250,17 +228,25 @@ function* setup(
  */
 export const chat = { open: setup, turn: setup };
 
-const emptyCapabilities = ["reads"] as const;
-const chartingCapabilities = ["reads", "graph-draft", "materials", "web"] as const;
-const lessonCapabilities = ["reads", "materials", "graph-draft", "applets", "web", "preferences", "bash"] as const;
+/** Host context follows the same roots that the default catalog admits. */
+function catalogCapabilities(mode: keyof typeof CATALOG_MODE_TOOLS): readonly HostCapability[] {
+  const roots: readonly string[] = CATALOG_MODE_TOOLS[mode];
+  return [
+    ...(roots.includes("read") ? ["reads" as const] : []),
+    ...(roots.includes("material") ? ["materials" as const, "applets" as const] : []),
+    ...(roots.includes("edit_graph_draft") ? ["graph-draft" as const] : []),
+    ...(roots.includes("web_search") ? ["web" as const] : []),
+    ...(roots.includes("bash") ? ["bash" as const] : []),
+  ];
+}
 
 /** The default theory’s Session choices; host capabilities are mounted separately. */
 export const modes = {
   empty: {
-    title: "Session",
+    title: CATALOG_MODE_TITLES.empty,
     frontTab: "map",
     entry: { required: false, kinds: [] },
-    capabilities: emptyCapabilities,
+    capabilities: catalogCapabilities("empty"),
     switches: [
       { mode: "charting", then: "here" },
       { mode: "lesson", then: "here" },
@@ -268,7 +254,7 @@ export const modes = {
     setup: (ctx) => setup(ctx, "empty"),
   },
   charting: {
-    title: "Charting",
+    title: CATALOG_MODE_TITLES.charting,
     frontTab: "map",
     noteTemplates: [
       { id: "default.charting.note.known", defaultMessage: "I already know this." },
@@ -276,24 +262,24 @@ export const modes = {
       { id: "default.charting.note.why", defaultMessage: "Why is this needed?" },
       { id: "default.charting.note.merge", defaultMessage: "These are one thing for me." },
     ],
-    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint", "opening", "checkpoint0"] },
-    capabilities: chartingCapabilities,
+    entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint"] },
+    capabilities: catalogCapabilities("charting"),
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),
   },
   authoring: {
-    title: "Authoring",
+    title: CATALOG_MODE_TITLES.authoring,
     frontTab: "map",
     entry: { required: false, kinds: ["goal"] },
-    capabilities: chartingCapabilities,
+    capabilities: catalogCapabilities("authoring"),
     switches: [],
     setup: (ctx) => setup(ctx, "authoring"),
   },
   lesson: {
-    title: "Lesson",
+    title: CATALOG_MODE_TITLES.lesson,
     frontTab: "document",
     entry: { required: true, kinds: ["lesson", "review"] },
-    capabilities: lessonCapabilities,
+    capabilities: catalogCapabilities("lesson"),
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
       { mode: "scene", then: "aside", carry: { kind: "full" } },
