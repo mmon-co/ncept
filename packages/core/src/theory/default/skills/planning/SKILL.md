@@ -1,8 +1,6 @@
 ---
 name: planning
 description: We do not know what to do next. Match intent to a Mission and choose a target with a reason. No fitting Mission needs a goal conversation; missing evidence calls for an offered probe, not a fabricated estimate.
-facet: advance
-entry: [learner, model]
 ---
 
 # Planning
@@ -11,8 +9,8 @@ entry: [learner, model]
 2. Read `theory {name:'coverage',input:{scope}}`, `theory {name:'frontier',input:{scope}}`, and `theory {name:'warnings',input:{scope}}` even on an empty trail. They need no prior close event. Coverage lists Nodes with no Records; frontier lists reachable not-known Nodes, not an ordering.
 3. Choose by goal membership, last success, label, available time and open Session membership. Read `theory {name:'trail',input:{node}}` for the rationale. Known content may still merit a check; `theory {name:'probes',input:{scope}}` lists claimed or due Nodes. When uncertainty matters, offer the matching milestone or Lesson through the allowed `propose {op:'mode',input}` route; optional milestone 0 checks the Mission opening's assumed/claimed-known scope. A focused check belongs in the Lesson.
 4. Read `theory {name:'route',input:{target}}` for the chosen target's not-known prerequisite cone in dependency order. Find the Mission-path Lesson containing the selected target, including a known target omitted by the route, and propose its Lesson opening with the current mode's allowed `propose {op:'mode',input}` route and default carry. The fixed Lesson snapshot, not the route, determines Session scope. A route Node that `theory {name:'warnings',input}` reports as `coarse` is not lesson-sized: offer a check on its whole task first (the learner may already pass it), and if that fails, offer the registry-permitted `propose {op:'mode',input}` to Chart for its prerequisites instead of a lesson.
-5. Explain the choice and propose the matching Lesson through `propose {op:'mode',input}` when the registry allows it; do not invent a movement or carry. Warnings are facts: inspect citations before judging content. Recommend `/realignment` only if that learner-only Skill appears in the current catalog; otherwise use an allowed mode switch to reach the mode that mounts the needed edit tools. Nothing automatically starts an edit activity.
+5. Explain the choice and propose the matching Lesson through `propose {op:'mode',input}` when the registry allows it; do not invent a movement or carry. Warnings are facts: inspect citations before judging content. Load `realignment` when it is listed for this mode; otherwise use an allowed mode switch to reach the mode that mounts the needed edit tools. Nothing automatically starts an edit activity.
 
 ## Mission conversation
 
-When missing content requires Chart or work belongs to another Lesson, use `propose {op:'mode',input}` only along a route listed for this mode, with its declared default carry. A learner-only non-mode Skill is started by its slash command when it appears in the current catalog; do not promise a Skill Confirmation. @procedures/mission-conversation.md
+When missing content requires Chart or work belongs to another Lesson, use `propose {op:'mode',input}` only along a route listed for this mode, with its declared default carry. @procedures/mission-conversation.md

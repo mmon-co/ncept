@@ -1,8 +1,6 @@
 ---
 name: scene
 description: Run one bounded holistic check on the target Node, with in-character dialogue and learning-item asides. Loaded automatically in Scene mode.
-facet: advance
-entry: [learner, model]
 ---
 
 # Scene

@@ -7,7 +7,6 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   material: sources["material/SKILL.md"],
   charting: sources["charting/SKILL.md"],
   authoring: sources["authoring/SKILL.md"],
-  "evaluator-sweep": sources["evaluator-sweep/SKILL.md"],
   lesson: sources["lesson/SKILL.md"],
   scene: sources["scene/SKILL.md"],
   mission: sources["mission/SKILL.md"],
@@ -26,27 +25,14 @@ const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
 };
 
 const MODE_PROCEDURES = new Set(["charting", "authoring", "lesson", "scene"]);
-const FACETS = ["position", "chart", "advance"] as const;
-type Facet = (typeof FACETS)[number];
-
-const ENTRIES = ["learner", "model", "system"] as const;
-/** Who may start a Skill's body. */
-type Entry = (typeof ENTRIES)[number];
-
 export interface SkillMeta {
   readonly name: string;
   readonly description: string;
-  readonly facet: Facet;
-  readonly entry: readonly Entry[];
 }
 
 interface SkillFile {
   readonly meta: SkillMeta;
   readonly body: string;
-}
-
-function isOneOf<const Choices extends readonly string[]>(choices: Choices, value: unknown): value is Choices[number] {
-  return typeof value === "string" && choices.some((choice) => choice === value);
 }
 
 function parseSkillFile(dir: string, raw: string): SkillFile {
@@ -57,19 +43,12 @@ function parseSkillFile(dir: string, raw: string): SkillFile {
   if (typeof front !== "object" || front === null) throw new Error(`${description} frontmatter must be a mapping`);
   const name: unknown = Reflect.get(front, "name");
   const skillDescription: unknown = Reflect.get(front, "description");
-  const facet: unknown = Reflect.get(front, "facet");
-  const entry: unknown = Reflect.get(front, "entry");
   if (typeof name !== "string" || name !== dir || name.length > 64 || !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name))
     throw new Error(`${description} name must equal its directory name and follow Agent Skills naming`);
   if (typeof skillDescription !== "string" || skillDescription.trim() === "" || skillDescription.length > 1024)
     throw new Error(`${description} needs an Agent Skills description of at most 1024 characters`);
-  if (!isOneOf(FACETS, facet)) throw new Error(`${description} facet must be one of ${FACETS.join(", ")}`);
-  const who: Entry[] = [];
-  if (Array.isArray(entry)) for (const item of entry) if (isOneOf(ENTRIES, item)) who.push(item);
-  if (!Array.isArray(entry) || who.length === 0 || who.length !== entry.length)
-    throw new Error(`${description} entry must be a non-empty list from ${ENTRIES.join(", ")}`);
   return {
-    meta: { name, description: skillDescription, facet, entry: who },
+    meta: { name, description: skillDescription },
     body: raw.slice(match[0].length),
   };
 }
@@ -140,16 +119,7 @@ export function skillResources(name: string): readonly SkillResource[] {
 }
 
 function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {
-  const metadata = {
-    "concept-facet": skill.meta.facet,
-    "concept-entry": skill.meta.entry.join(","),
-  };
-  const frontmatter = {
-    name: skill.meta.name,
-    description: skill.meta.description,
-    metadata,
-    ...(skill.meta.entry.includes("model") ? {} : { "disable-model-invocation": true }),
-  };
+  const frontmatter = { name: skill.meta.name, description: skill.meta.description };
   return {
     name: skill.meta.name,
     resources: skillResources(skill.meta.name),
@@ -167,32 +137,9 @@ export function skillInvocation(name: string, facts: readonly string[]): string 
   return [skillBody(name), ...facts].join("\n\n");
 }
 
-function skillEntry(name: string, entry: readonly Entry[]): string {
-  const descriptions: string[] = [];
-  if (entry.includes("model")) descriptions.push("the tutor may start it");
-  if (entry.includes("learner")) {
-    descriptions.push(
-      entry.includes("model")
-        ? "the learner may also start it"
-        : `the learner starts it with /${name} (do not start it yourself)`,
-    );
-  }
-  if (entry.includes("system")) descriptions.push("the host starts it");
-  return descriptions.join("; ");
-}
-
-/**
- * The always-loaded tier: the base unit and the current mode's Skill index,
- * grouped by facet, with each entry stated explicitly.
- */
+/** The always-loaded tier: the base unit and the current mode's flat Skill index. */
 export function tutorSystemPrompt(mode?: string): string {
   const base = sources["base.md"].trim();
-  const available = skillsForMode(mode).filter(({ entry }) => entry.some((value) => value !== "system"));
-  const index = FACETS.map((facet) => {
-    const rows = available
-      .filter((meta) => meta.facet === facet)
-      .map((meta) => `- **${meta.name}**: ${meta.description} (Entry: ${skillEntry(meta.name, meta.entry)}.)`);
-    return `### ${facet[0]?.toUpperCase()}${facet.slice(1)}\n\n${rows.join("\n")}`;
-  });
-  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: after a tutor- or learner-started Skill's entry requirement is met, load its body with the \`skill\` tool. The host starts host-started Skills.\n\n${index.join("\n\n")}`;
+  const index = skillsForMode(mode).map((meta) => `- **${meta.name}**: ${meta.description}`);
+  return `${base}\n\n## Skills\n\nEach Skill is the antidote to one poison; its description says when that poison is present and how to tell it from its neighbors. Skill names are not tools: load a Skill's body with the \`skill\` tool when its description fits.\n\n${index.join("\n")}`;
 }

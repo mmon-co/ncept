@@ -1,8 +1,6 @@
 ---
 name: app-help
 description: The learner asks about Common Concept's appearance or behavior, how to use the application, or suspects a site problem. Read the relevant official Document before diagnosing a defect or suggesting a report.
-facet: position
-entry: [learner, model]
 ---
 
 # Application help

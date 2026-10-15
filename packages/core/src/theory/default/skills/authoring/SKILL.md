@@ -1,8 +1,6 @@
 ---
 name: authoring
 description: Design a Patch for other people to adopt, working backward from its audience and outcomes rather than the author's learner state. This procedure is loaded automatically in Author mode.
-facet: chart
-entry: [learner]
 ---
 
 # Author

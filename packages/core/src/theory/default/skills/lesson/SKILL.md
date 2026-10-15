@@ -1,8 +1,6 @@
 ---
 name: lesson
 description: Teach and assess a Lesson through Materials; use conversation for questions and Material-event exceptions. A Review checks its frozen batch, then corrects misses. Loaded automatically in Lesson mode.
-facet: advance
-entry: [learner, model]
 ---
 
 # Lesson

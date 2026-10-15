@@ -1,8 +1,6 @@
 ---
 name: material
 description: Material content needs a kind-specific format. Load only the resource for the kind being authored or corrected.
-facet: advance
-entry: [model]
 ---
 
 # Material formats

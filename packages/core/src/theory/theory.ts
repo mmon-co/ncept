@@ -171,8 +171,6 @@ export type Skill = Readonly<{
   description: string;
   body: string;
   resources?: readonly import("./skills").SkillResource[];
-  facet: "position" | "chart" | "advance";
-  entry: readonly ("learner" | "model" | "system")[];
 }>;
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
