@@ -11,6 +11,7 @@ Use `material {op,kind,input,command?}`. Existing inputs go in `input`; type IDs
 
 - `document`, type `markdown`: [document.md](document.md)
 - `quizzes`, types `problem` and `set`: [quiz.md](quiz.md)
+- `roleplay`, type `encounter`: [roleplay.md](roleplay.md)
 - `srs`, type `card`: [flashcards.md](flashcards.md)
 - `applet`, type `applet`: [applet.md](applet.md)
 - `references`, type `reference`: [references.md](references.md)
