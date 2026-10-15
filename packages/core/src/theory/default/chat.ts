@@ -16,6 +16,7 @@ import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from
 import { modeProcedure, skillBody, skillInvocation, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
 import { defaultRecordingTools, recordSceneDemonstration } from "./tools";
 import { defaultCatalogTools } from "./catalog";
+import { evaluationContext } from "./evaluation";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
@@ -180,6 +181,7 @@ function* setup(
   return {
     prompt,
     context: [
+      ...evaluationContext(ctx),
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : mode === "empty"

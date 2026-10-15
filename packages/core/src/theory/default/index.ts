@@ -22,3 +22,4 @@ export * from "./scene";
 export * from "./skills";
 export * from "./catalog-contract";
 export * from "./catalog";
+export * from "./evaluation";

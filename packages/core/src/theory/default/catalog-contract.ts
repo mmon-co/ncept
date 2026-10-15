@@ -38,7 +38,7 @@ export interface TheoryToolInput {
 }
 
 export interface EvaluationToolInput {
-  readonly op: "record" | "retract" | "claim";
+  readonly op: "watch" | "stop" | "judge" | "override" | "record" | "retract" | "claim";
   /** Required for record; artifact filing is a host operation, not theory evidence. */
   readonly kind?:
     | "demonstration"
@@ -112,6 +112,7 @@ export const CATALOG_MODE_TITLES = {
 export const CATALOG_MODE_TOOLS = {
   empty: ["query", "read", "theory", "skill", "report_friction"],
   charting: [
+    "evaluation",
     "query",
     "read",
     "theory",

@@ -1,3 +1,4 @@
+import { evaluationTools } from "./evaluation";
 import type { Tool } from "../theory";
 import type { DefaultState } from "./state";
 import { defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools } from "./tools";
@@ -51,11 +52,15 @@ export function resolveDefaultCatalogProgram(
   } else if (envelope.kind === undefined) {
     if (envelope.op === "claim") target = "record_claim";
     if (envelope.op === "retract") target = "record_retraction";
+    if (["watch", "stop", "judge", "override"].includes(String(envelope.op))) target = "evaluation_" + envelope.op;
   }
   if (target === undefined) throw new Error("Unsupported catalog operation or kind");
-  const tool = [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools].find(
-    (candidate) => candidate.name === target,
-  );
+  const tool = [
+    ...defaultInstrumentTools,
+    ...defaultRecordingTools,
+    ...defaultBackgroundTools,
+    ...evaluationTools,
+  ].find((candidate) => candidate.name === target);
   if (tool === undefined) throw new Error("Missing catalog Program");
   return { tool, input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input) };
 }
@@ -80,11 +85,11 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "evaluation",
     description:
-      "Write manual evidence using its existing arguments: record with kind demonstration, retrieval-opener, teaching, claim-attachment, interpretation-correction or close-recount; claim records a self-report; retract corrects evidence. Artifact filing is host-owned.",
+      "Delegate chat checks: watch {task,rubric:[{node,criteria:[string]}],unaided,grader} grades subsequent learner replies; stop {} ends it; judge adds response (text) or message (selected learner message id, including original media) to the same inputs for one response. Grader is decision (Account decision model) or {model:provider/model}. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Override {of,outcome,reason} corrects one delegated Record. Usually delegate rather than manually record. Manual record kinds: demonstration, retrieval-opener, teaching, claim-attachment, interpretation-correction, close-recount; claim records self-report; retract corrects evidence. Artifact filing is host-owned.",
     schema: {
       type: "object",
       properties: {
-        op: { enum: ["record", "claim", "retract"] },
+        op: { enum: ["watch", "stop", "judge", "override", "record", "claim", "retract"] },
         kind: { enum: Object.keys(records) },
         input: { type: "object" },
       },
