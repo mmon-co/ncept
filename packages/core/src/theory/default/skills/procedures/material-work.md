@@ -30,7 +30,7 @@ If "the fact that" fits, it is the other 之.
 
 A try-it is local reading practice: the choice and feedback stay in the reader, not the learner model. Use the Quiz Playground for assessed Problems. The island names match the mmon essay template's `pull` vocabulary; these five names are the Document subset.
 
-Load the required format with `skill {name:'material',resource}` before using `material {kind,op,input}`. Open a draft with `op:'open'`; keeping or revising a Document uses `kind:'document'` with `op:'add'` or `op:'edit'`, not a graph edit. Without it, present a suggestion; never claim a Document was saved. Publication is outside this procedure.
+Load the required format with `skill {name:'material',resource}` before using `material {kind,op,input}`. Add the Lesson's teaching and assessment Materials in its first turn, with `input.show:true` on the teaching Material. One Material may serve both roles. Open an unsaved draft with `op:'open'`; keeping or revising a Document uses `kind:'document'` with `op:'add'` or `op:'edit'`, not a graph edit. Without it, present a suggestion; never claim a Document was saved. Publication is outside this procedure.
 
 ## Applet authoring
 

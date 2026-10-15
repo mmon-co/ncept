@@ -166,7 +166,7 @@ function* setup(
       : []),
     mode === "empty" || mode === "charting" || mode === "authoring"
       ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
-      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except in Lesson for a closing recount from `evaluation {op:'record',kind:'close-recount',input}`, which intentionally has no internal citations.",
+      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a Review closing recount from `evaluation {op:'record',kind:'close-recount',input}`, which intentionally has no internal citations.",
     ...(mode === "empty" || mode === "charting" || mode === "authoring"
       ? []
       : [
