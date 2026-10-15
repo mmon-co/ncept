@@ -16,6 +16,7 @@ export * from "./messages";
 export * from "./state";
 export * from "./tags";
 export * from "./outcomes";
+export * from "./roleplay";
 export * from "./chat";
 export * from "./tools";
 export * from "./scene";
