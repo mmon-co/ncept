@@ -98,6 +98,17 @@ function own(ctx: Ctx): readonly Observation[] {
     (observation) => isDefaultObservation(observation) && observation.surface === ctx.surface,
   );
 }
+/** Control projection for host admission; non-controls are undefined, stop is null. */
+export function evaluationControl(observation: Observation): Grader | null | undefined {
+  if (!isDefaultObservation(observation) || !object(observation.payload)) return undefined;
+  if (observation.payload.kind === "evaluation-stop") return null;
+  if (observation.payload.kind === "evaluation-watch" && object(observation.payload.specification)) {
+    const grader = observation.payload.specification.grader;
+    if (grader === "decision") return grader;
+    if (object(grader) && typeof grader.model === "string") return { model: grader.model };
+  }
+  return undefined;
+}
 export function evaluationWatch(ctx: Ctx): Observation<Watch> | undefined {
   return own(ctx).findLast(
     (observation): observation is Observation<Watch> =>
@@ -121,7 +132,27 @@ export function evaluationContext(ctx: Ctx): string[] {
       ? []
       : [
           "Delegated verdicts (already recorded by the host; use these criterion probabilities, not another judgment or record; override only a clearly wrong specific Record with a reason):\n" +
-            JSON.stringify(latest.map(({ id, payload }) => ({ id, ...payload }))),
+            JSON.stringify(
+              latest.map(({ id, payload }) => ({
+                id,
+                ...payload,
+                results: payload.results.map((result) => {
+                  const replacement = ctx.state.records.find(
+                    ({ payload }) => isDemonstration(payload) && payload.evaluation?.override?.of === result.record,
+                  );
+                  return replacement !== undefined && isDemonstration(replacement.payload)
+                    ? {
+                        ...result,
+                        correction: {
+                          record: replacement.id,
+                          outcome: replacement.payload.outcome,
+                          reason: replacement.payload.evaluation?.override?.reason,
+                        },
+                      }
+                    : result;
+                }),
+              })),
+            ),
         ]),
   ];
 }
@@ -316,7 +347,6 @@ export const evaluationTools: readonly Tool<unknown, unknown, DefaultState>[] = 
       additionalProperties: false,
       required: specKeys,
       properties: { ...specProperties, response: { type: "string" }, message: { type: "string", minLength: 1 } },
-      oneOf: [{ required: ["response"] }, { required: ["message"] }],
     },
     *run(raw, ctx) {
       const input = args(raw, [...specKeys, "response", "message"]);
