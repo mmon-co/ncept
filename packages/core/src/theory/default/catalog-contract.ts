@@ -25,6 +25,8 @@ export interface QueryToolInput {
 }
 
 export interface ReadToolInput {
+  /** Bypass context-relative deltas and return the complete result. */
+  readonly full?: boolean;
   /** Omitted resource means this Session's graph. */
   readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch";
   readonly input?: CatalogArguments;
@@ -33,6 +35,7 @@ export interface ReadToolInput {
 }
 
 export interface TheoryToolInput {
+  readonly full?: boolean;
   readonly name: string;
   readonly input?: CatalogArguments;
 }

@@ -40,9 +40,11 @@ export function resolveDefaultCatalogProgram(
   input: Record<string, unknown>;
 } {
   const envelope = object(raw);
-  const allowed = name === "theory" ? ["name", "input"] : ["op", "kind", "input"];
+  const allowed = name === "theory" ? ["name", "input", "full"] : ["op", "kind", "input"];
   if (name !== "theory" && name !== "evaluation") throw new Error("Unsupported catalog");
   if (Object.keys(envelope).some((key) => !allowed.includes(key))) throw new Error("Unknown catalog argument");
+  if (name === "theory" && envelope.full !== undefined && typeof envelope.full !== "boolean")
+    throw new Error("Invalid full flag");
   let target: string | undefined;
   if (name === "theory") {
     if (typeof envelope.name === "string" && theoryNames.includes(envelope.name)) target = envelope.name;
@@ -68,7 +70,7 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       "Read theory facts: frontier, route, interpretations, trail, coverage, probes, warnings, items, memory or mission. Input defaults to {}. Trail takes node, optional cursor and positive limit (default 20); follow continueCursor, restart on stale cursor.",
     schema: {
       type: "object",
-      properties: { name: { enum: theoryNames }, input: { type: "object" } },
+      properties: { name: { enum: theoryNames }, input: { type: "object" }, full: { type: "boolean" } },
       required: ["name"],
       additionalProperties: false,
     },
