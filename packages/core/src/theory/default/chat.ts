@@ -3,7 +3,7 @@ import { renderSpeech } from "../speaker";
 import {
   lastMetadataContribution,
   metadataSetsForEntity,
-  nodeGuidance,
+  nodeTutorGuidance,
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
@@ -193,7 +193,7 @@ function* setup(
               node: ctx.entry.node,
               label: metadataValue(ctx, ctx.entry.node, NODE_LABEL_PROPERTY),
               criterion: metadataValue(ctx, ctx.entry.node, NODE_CRITERION_PROPERTY),
-              effectiveGuidance: nodeGuidance(ctx.graph, ctx.entry.node),
+              effectiveGuidance: nodeTutorGuidance(ctx.graph, ctx.entry.node),
             })}`,
           ]
         : []),

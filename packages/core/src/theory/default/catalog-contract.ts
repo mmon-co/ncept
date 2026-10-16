@@ -1,4 +1,4 @@
-import type { NodeId, ResolvedGuidanceEntry } from "../../patch";
+import type { NodeId, TutorGuidanceEntry } from "../../patch";
 
 /**
  * Transport contracts for the catalog consolidation. These declarations mount nothing:
@@ -93,10 +93,10 @@ export interface GraphReadOptions {
 
 /**
  * A compact graph stores every surviving origin entry once. Expanding a Node's ordered
- * references must equal nodeGuidance(graph, node), including keep/replace behavior.
+ * references must equal nodeTutorGuidance(graph, node), with independent keep/replace per kind.
  */
 export interface CompactGuidance {
-  readonly guidance: Readonly<Record<string, ResolvedGuidanceEntry>>;
+  readonly guidance: Readonly<Record<string, TutorGuidanceEntry>>;
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 

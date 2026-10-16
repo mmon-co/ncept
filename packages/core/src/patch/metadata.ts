@@ -1,6 +1,6 @@
 import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
-import { isGuidanceEntries, PEDAGOGY_GUIDANCE_PROPERTY } from "./guidance";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -140,7 +140,10 @@ export function isMetadataValue(value: unknown): value is MetadataValue {
 
 export function validateMetadataProperties(properties: Readonly<Record<string, MetadataValue>>): void {
   for (const [key, value] of Object.entries(properties))
-    if (!isMetadataValue(value) && !(key === PEDAGOGY_GUIDANCE_PROPERTY && isGuidanceEntries(value)))
+    if (
+      !isMetadataValue(value) &&
+      !(GUIDANCE_PROPERTIES.some((property) => property === key) && isGuidanceEntries(value))
+    )
       throw new PatchCompileError(
         "invalid-metadata-value",
         `metadata property '${key}' is not a scalar, string list, bounded JSON object/object list or Attachment`,
@@ -160,11 +163,12 @@ export function validateAuthoredContent(content: PatchContent): void {
     ),
   ];
   for (const properties of sets)
-    if (PEDAGOGY_GUIDANCE_PROPERTY in properties && !isGuidanceEntries(properties[PEDAGOGY_GUIDANCE_PROPERTY]))
-      throw new PatchCompileError(
-        "invalid-metadata-value",
-        `metadata property '${PEDAGOGY_GUIDANCE_PROPERTY}' must be an ordered guidance entry list`,
-      );
+    for (const property of GUIDANCE_PROPERTIES)
+      if (property in properties && !isGuidanceEntries(properties[property]))
+        throw new PatchCompileError(
+          "invalid-metadata-value",
+          `metadata property '${property}' must be an ordered guidance entry list`,
+        );
 }
 
 /** The discovery tags a revision's metadata declares: the open `patch:<tag>: true` convention

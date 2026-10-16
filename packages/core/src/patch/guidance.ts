@@ -31,6 +31,11 @@ export type ResolvedGuidanceEntry = GuidanceEntry & {
   };
 };
 export const PEDAGOGY_GUIDANCE_PROPERTY = "pedagogy:guidance";
+export const PEDAGOGY_ASSESSMENT_PROPERTY = "pedagogy:assessment";
+export const GUIDANCE_PROPERTIES = [PEDAGOGY_GUIDANCE_PROPERTY, PEDAGOGY_ASSESSMENT_PROPERTY] as const;
+export const ASSESSMENT_GUIDANCE_INSTRUCTIONS =
+  "Apply each Node's assessmentGuidance in order. It overrides the generic criterion and task rubric where they conflict.";
+export type TutorGuidanceEntry = ResolvedGuidanceEntry & { readonly kind: "teaching" | "assessment" };
 
 function compareKey(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -115,11 +120,9 @@ export function nodeCascadedProperty(graph: ResolvedGraph, node: NodeId, key: st
   return nodeMetadataCascade(graph, node, key, (value) => (value === undefined ? [] : [value])).at(-1)?.value;
 }
 
-/** Cascade effective set values, not historical contributions or tag-name priority. */
-export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
-  const entries = nodeMetadataCascade(graph, node, PEDAGOGY_GUIDANCE_PROPERTY, (value) =>
-    isGuidanceEntries(value) ? value : [],
-  )
+/** Cascade each kind independently, over effective set values rather than historical contributions. */
+function cascadedGuidance(graph: ResolvedGraph, node: NodeId, property: string): readonly ResolvedGuidanceEntry[] {
+  const entries = nodeMetadataCascade(graph, node, property, (value) => (isGuidanceEntries(value) ? value : []))
     .filter(({ value }) => value.nodes === undefined || value.nodes.includes(node))
     // A Mission Node override follows even the terminal Patch's own Node guidance.
     .sort((a, b) => Number(a.value.nodes !== undefined) - Number(b.value.nodes !== undefined))
@@ -143,4 +146,20 @@ export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly Resol
     surviving.push(entry);
   }
   return surviving;
+}
+
+export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+  return cascadedGuidance(graph, node, PEDAGOGY_GUIDANCE_PROPERTY);
+}
+
+export function nodeAssessmentGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+  return cascadedGuidance(graph, node, PEDAGOGY_ASSESSMENT_PROPERTY);
+}
+
+/** The tutor designs both teaching Materials and the rubrics checked by separate graders. */
+export function nodeTutorGuidance(graph: ResolvedGraph, node: NodeId): readonly TutorGuidanceEntry[] {
+  return [
+    ...nodeGuidance(graph, node).map((entry) => ({ ...entry, kind: "teaching" as const })),
+    ...nodeAssessmentGuidance(graph, node).map((entry) => ({ ...entry, kind: "assessment" as const })),
+  ];
 }

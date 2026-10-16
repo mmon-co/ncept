@@ -1,7 +1,7 @@
 import { canonicalJson } from "../digest";
 import { PatchCompileError } from "./errors";
 import { discoveryTags, sameMetadataSubjects } from "./metadata";
-import { isGuidanceEntries, PEDAGOGY_GUIDANCE_PROPERTY } from "./guidance";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance";
 import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 import type {
   ClosedPatchBundle,
@@ -199,7 +199,12 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       for (const [key, value] of Object.entries(metadataSet.properties)) {
         // Reauthor guidance even from retained bases: flattened sources can precede them,
         // while every captured operation resolves after all retained contributions.
-        if (key !== PEDAGOGY_GUIDANCE_PROPERTY && inheritedEntity && inheritsProperty(metadataSet.id, key)) continue;
+        if (
+          !GUIDANCE_PROPERTIES.some((property) => property === key) &&
+          inheritedEntity &&
+          inheritsProperty(metadataSet.id, key)
+        )
+          continue;
         const source = view.provenance.metadataProperties[metadataSet.id]?.[key]?.at(-1);
         if (source === undefined)
           throw new PatchCompileError("invalid-bundle", `missing provenance for '${key}' on '${metadataSet.id}'`);
@@ -229,13 +234,16 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
   const referencedTags = new Set(
     view.metadataSets.flatMap((set) => [
       ...set.subjects.flatMap((subject) => (subject.kind === "tag" ? [subject.name] : [])),
-      ...(isGuidanceEntries(set.properties[PEDAGOGY_GUIDANCE_PROPERTY])
-        ? set.properties[PEDAGOGY_GUIDANCE_PROPERTY].flatMap(({ mode }) =>
-            mode === "append"
-              ? []
-              : ("replace" in mode ? mode.replace : mode.keep).flatMap((ref) => ("name" in ref ? [ref.name] : [])),
-          )
-        : []),
+      ...GUIDANCE_PROPERTIES.flatMap((property) => {
+        const entries = set.properties[property];
+        return isGuidanceEntries(entries)
+          ? entries.flatMap(({ mode }) =>
+              mode === "append"
+                ? []
+                : ("replace" in mode ? mode.replace : mode.keep).flatMap((ref) => ("name" in ref ? [ref.name] : [])),
+            )
+          : [];
+      }),
     ]),
   );
   const generatedPatchTags = new Set(
