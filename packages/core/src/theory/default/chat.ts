@@ -3,7 +3,6 @@ import { renderSpeech } from "../speaker";
 import {
   lastMetadataContribution,
   metadataSetsForEntity,
-  nodeTutorGuidance,
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
@@ -14,7 +13,6 @@ import type { HostCapability, SessionMode } from "../modes";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { modeProcedure, skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
-import { defaultRecordingTools, recordSceneDemonstration } from "./tools";
 import { defaultCatalogTools } from "./catalog";
 import { evaluationContext } from "./evaluation";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
@@ -146,7 +144,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 
 function* setup(
   ctx: ChatContext<DefaultState>,
-  mode?: "empty" | "charting" | "authoring" | "lesson" | "scene",
+  mode?: "empty" | "charting" | "authoring" | "lesson",
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
@@ -166,9 +164,7 @@ function* setup(
       : [
           "Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
         ]),
-    ...(mode === "charting" || mode === "authoring" || mode === "lesson" || mode === "scene"
-      ? [modeProcedure(mode)]
-      : []),
+    ...(mode === "charting" || mode === "authoring" || mode === "lesson" ? [modeProcedure(mode)] : []),
     "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
   ].join("\n\n");
   return {
@@ -187,32 +183,14 @@ function* setup(
             `Current Review (frozen batch; use the Review opening, not the teaching Lesson steps):\n${JSON.stringify(ctx.entry)}`,
           ]
         : []),
-      ...(mode === "scene" && ctx.entry?.kind === "target"
-        ? [
-            `Current Scene target (criterion and effective guidance):\n${JSON.stringify({
-              node: ctx.entry.node,
-              label: metadataValue(ctx, ctx.entry.node, NODE_LABEL_PROPERTY),
-              criterion: metadataValue(ctx, ctx.entry.node, NODE_CRITERION_PROPERTY),
-              effectiveGuidance: nodeTutorGuidance(ctx.graph, ctx.entry.node),
-            })}`,
-          ]
-        : []),
-      ...(ctx.scene === undefined
-        ? []
-        : [`Current Scene attempt (accepted facts; posed task and rubric):\n${JSON.stringify(ctx.scene)}`]),
       ...(ctx.lesson === undefined
         ? []
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
     ].join("\n\n"),
     skills: chatSkills(mode),
-    tools:
-      mode === "scene"
-        ? [
-            ...defaultCatalogTools.filter((tool) => tool.name === "theory"),
-            ...defaultRecordingTools.filter((tool) => tool.name === "record_claim"),
-            recordSceneDemonstration,
-          ]
-        : defaultCatalogTools.filter((tool) => CATALOG_MODE_TOOLS[mode ?? "lesson"].some((name) => name === tool.name)),
+    tools: defaultCatalogTools.filter((tool) =>
+      CATALOG_MODE_TOOLS[mode ?? "lesson"].some((name) => name === tool.name),
+    ),
   };
 }
 
@@ -277,7 +255,6 @@ export const modes = {
     capabilities: catalogCapabilities("lesson"),
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
-      { mode: "scene", then: "aside", carry: { kind: "full" } },
       {
         mode: "charting",
         then: "aside",
@@ -285,15 +262,5 @@ export const modes = {
       },
     ],
     setup: (ctx) => setup(ctx, "lesson"),
-  },
-  scene: {
-    title: "Scene",
-    reply: "in-character-and-aside",
-    assessment: "bounded-scene",
-    entry: { kinds: ["target"], required: true },
-    frontTab: "map",
-    capabilities: ["reads"],
-    switches: [],
-    setup: (ctx) => setup(ctx, "scene"),
   },
 } satisfies Readonly<Record<string, SessionMode<DefaultState>>>;

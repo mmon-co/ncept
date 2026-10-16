@@ -8,7 +8,6 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   charting: sources["charting/SKILL.md"],
   authoring: sources["authoring/SKILL.md"],
   lesson: sources["lesson/SKILL.md"],
-  scene: sources["scene/SKILL.md"],
   mission: sources["mission/SKILL.md"],
   planning: sources["planning/SKILL.md"],
   realignment: sources["realignment/SKILL.md"],
@@ -24,7 +23,7 @@ const PROCEDURE_SOURCES: Readonly<Record<string, string>> = {
   "procedures/quiz-authoring.md": sources["procedures/quiz-authoring.md"],
 };
 
-const MODE_PROCEDURES = new Set(["charting", "authoring", "lesson", "scene"]);
+const MODE_PROCEDURES = new Set(["charting", "authoring", "lesson"]);
 export interface SkillMeta {
   readonly name: string;
   readonly description: string;
@@ -75,7 +74,7 @@ export function listSkills(): SkillMeta[] {
 }
 
 /** The automatically loaded body of a Session mode, not a separately loadable Skill. */
-export function modeProcedure(name: "charting" | "authoring" | "lesson" | "scene"): string {
+export function modeProcedure(name: "charting" | "authoring" | "lesson"): string {
   const source = SKILL_SOURCES[name];
   if (source === undefined) throw new Error(`unknown mode procedure: ${name}`);
   return inlineIncludes(parseSkillFile(name, source).body).trim();
@@ -87,7 +86,7 @@ export function skillsForMode(mode?: string): SkillMeta[] {
   const names =
     mode === "authoring"
       ? new Set(["app-help", "material"])
-      : mode === "empty" || mode === "scene"
+      : mode === "empty"
         ? new Set(["app-help"])
         : mode === "charting"
           ? new Set(["mission", "app-help"])
@@ -110,12 +109,12 @@ export function skillBody(name: string): string {
 /** Declared relative resources; never includes arbitrary files or procedure bodies. */
 export function skillResources(name: string): readonly SkillResource[] {
   if (name !== "material") return [];
-  return (["document.md", "quiz.md", "flashcards.md", "applet.md", "references.md", "audio.md"] as const).map(
-    (path) => ({
-      path,
-      content: sources[`material/${path}`],
-    }),
-  );
+  return (
+    ["document.md", "quiz.md", "flashcards.md", "roleplay.md", "applet.md", "references.md", "audio.md"] as const
+  ).map((path) => ({
+    path,
+    content: sources[`material/${path}`],
+  }));
 }
 
 function builtSkillBundle(skill: SkillFile): BuiltSkillBundle {

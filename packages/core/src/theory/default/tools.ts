@@ -17,7 +17,6 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch
 import type { ChatContext, Tool } from "../theory";
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
-import { sceneTask, sceneResponse } from "./scene";
 import { milestoneDiagnosisSchema, readMilestoneDiagnosis } from "./diagnosis";
 import { refinePendingHomes } from "./event";
 import {
@@ -587,93 +586,6 @@ const recordDemonstration = {
     const payload = { ...input, kind: "demonstration", node: { node, provenance: ctx.graph.terminal } };
     if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
     const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
-    const id = yield* write(observation);
-    return { observation: { ...observation, id }, citations: [id] };
-  },
-} satisfies DefaultTool;
-
-/** A Scene separates performance against its pin from assistance over the whole attempt. */
-export const recordSceneDemonstration = {
-  name: "record_demonstration" as const,
-  description:
-    "Record this sealed Scene once. Assess the pinned rubric using only the learner's actual responses, not corrected tutor dialogue. Do not add success requirements from the correction item. Assess assistance independently of success/failure across the entire source, including opening and all tutor asides. Help on the checked capability makes even a failed attempt aided; help alone is not a reason to mark failure. The host supplies the target, task, response and tutor grader, and derives unaided from assistance and the opening.",
-  schema: schema(
-    {
-      attempt: { type: "string", pattern: "^obs-.+" },
-      outcome: { enum: ["success", "failure", "dont-know"] },
-      rubricAssessment: {
-        type: "string",
-        minLength: 1,
-        description:
-          "Which pinned requirements the learner's actual responses met or missed; cite their words or original media. Do not impose unstated correctness requirements.",
-      },
-      assistance: schema(
-        {
-          kind: {
-            enum: ["none", "outside-capability", "checked-capability"],
-            description:
-              "Any hint, correction, example or suggested response on the checked capability anywhere in the attempt means checked-capability, regardless of outcome. Only glosses/context outside it mean outside-capability. No such help means none.",
-          },
-          evidence: {
-            type: "string",
-            minLength: 1,
-            description:
-              "Identify the tutor help and its relation to the checked capability across the whole source, or explain its absence. Later independent responses do not erase earlier help.",
-          },
-        },
-        ["kind", "evidence"],
-      ),
-    },
-    ["attempt", "outcome", "rubricAssessment", "assistance"],
-  ),
-  *run(raw, ctx) {
-    const input = args(
-      raw,
-      ["attempt", "outcome", "rubricAssessment", "assistance"],
-      ["attempt", "outcome", "rubricAssessment", "assistance"],
-    );
-    const assistance = args(input.assistance, ["kind", "evidence"], ["kind", "evidence"]);
-    if (
-      !string(input.rubricAssessment).trim() ||
-      !string(assistance.evidence).trim() ||
-      !["none", "outside-capability", "checked-capability"].includes(string(assistance.kind))
-    )
-      throw new Error("Scene grading needs a pinned-rubric assessment and whole-attempt assistance evidence");
-    const scene = ctx.scene;
-    if (scene === undefined) throw new Error("Scene grading needs its pinned check");
-    const attempt = observationId(input.attempt);
-    if (scene.attempt !== attempt) throw new Error("Attempt is not this Scene's selected check");
-    if (scene.state === "recorded") {
-      const observations = yield* read.observations({ surface: ctx.surface });
-      const observation = observations.find(({ id }) => id === scene.record);
-      if (observation === undefined) throw new Error("Recorded Scene source is unavailable; retry");
-      return { observation, citations: [scene.record] };
-    }
-    if (scene.state !== "finished") throw new Error("Seal an attempted Scene before recording it");
-    const transcript = yield* read.transcript(ctx.surface, {
-      from: scene.source.from.messageId,
-      to: scene.source.to.messageId,
-    });
-    if (transcript.turns.length === 0) throw new Error("Original Scene source is unavailable; retry");
-    const payload = {
-      kind: "demonstration",
-      node: scene.opening.node,
-      outcome: input.outcome,
-      unaided: scene.opening.unaided && assistance.kind !== "checked-capability",
-      grader: "tutor",
-      task: sceneTask(scene.opening),
-      response: sceneResponse(transcript),
-      scene: { attempt, source: scene.source },
-    };
-    if (!isDemonstration(payload)) throw new Error("Invalid Scene demonstration");
-    const observation = {
-      at: ctx.now,
-      about: [...ctx.about],
-      nodes: [scene.opening.node.node],
-      surface: ctx.surface,
-      cites: [attempt],
-      payload,
-    };
     const id = yield* write(observation);
     return { observation: { ...observation, id }, citations: [id] };
   },

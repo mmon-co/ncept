@@ -106,7 +106,7 @@ export const CATALOG_READ_ONLY_TOOLS = ["theory", "query", "read"] as const;
 /** Harness excludes only these host generics, never a second domain-tool catalog. */
 export const CATALOG_WEB_ONLY_TOOLS = ["web_search", "fetch_page", "bash"] as const;
 
-/** Titles change; existing stored mode identities do not. Scene belongs to its own ticket. */
+/** Titles change; existing stored mode identities do not. */
 export const CATALOG_MODE_TITLES = {
   empty: "Chat",
   charting: "Chart",

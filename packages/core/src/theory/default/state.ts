@@ -1,11 +1,5 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "../speaker";
-import type {
-  SceneOpeningPayload,
-  SceneFinishPayload,
-  SceneDemonstrationEvidence,
-  SceneTranscriptSource,
-} from "../scene-attempt";
 import { canonicalJson } from "../../digest";
 import { dependentCones } from "./dependent-cone";
 import {
@@ -58,7 +52,6 @@ export interface Demonstration {
   readonly grader: "mechanical" | "tutor" | "learner" | "decision";
   readonly task: string;
   readonly response: string;
-  readonly scene?: SceneDemonstrationEvidence;
   readonly evaluation?: {
     readonly grader: import("../../observations").Grader;
     readonly criteria: readonly { readonly criterion: string; readonly probability: number }[];
@@ -135,8 +128,6 @@ export interface Interpretation {
   readonly tags: readonly string[];
 }
 export type DefaultPayload =
-  | SceneOpeningPayload
-  | SceneFinishPayload
   | CompletionOutcome
   | Demonstration
   | Lapse
@@ -202,50 +193,6 @@ function isExactReference(value: unknown): value is ExactPatchRef {
     /^sha256:[a-f0-9]{64}$/.test(value.digest)
   );
 }
-export function isSceneSource(value: unknown): value is SceneTranscriptSource {
-  const point = (entry: unknown) =>
-    object(entry) &&
-    typeof entry.turnId === "string" &&
-    entry.turnId.length > 0 &&
-    typeof entry.messageId === "string" &&
-    entry.messageId.length > 0;
-  return (
-    object(value) &&
-    typeof value.surface === "string" &&
-    /^surface-.+/.test(value.surface) &&
-    point(value.from) &&
-    point(value.to) &&
-    Array.isArray(value.turnIds) &&
-    value.turnIds.length > 0 &&
-    value.turnIds.every((id) => typeof id === "string" && id.length > 0) &&
-    new Set(value.turnIds).size === value.turnIds.length &&
-    object(value.from) &&
-    object(value.to) &&
-    value.turnIds.includes(value.from.turnId) &&
-    value.turnIds.includes(value.to.turnId)
-  );
-}
-export function isSceneOpening(value: unknown): value is SceneOpeningPayload {
-  return (
-    object(value) &&
-    value.kind === "scene-opening" &&
-    isNodeRef(value.node) &&
-    typeof value.task === "string" &&
-    value.task.trim().length > 0 &&
-    typeof value.rubric === "string" &&
-    value.rubric.trim().length > 0 &&
-    typeof value.unaided === "boolean"
-  );
-}
-export function isSceneFinish(value: unknown): value is SceneFinishPayload {
-  return (
-    object(value) &&
-    value.kind === "scene-finish" &&
-    isObservationId(value.attempt) &&
-    isSceneSource(value.source) &&
-    (value.unattempted === undefined || value.unattempted === true)
-  );
-}
 function isCompletionScope(value: unknown): value is CompletionScope {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value);
@@ -284,9 +231,7 @@ export function isDemonstration(value: unknown): value is Demonstration {
       value.grader === "decision") &&
     typeof value.task === "string" &&
     typeof value.response === "string" &&
-    (value.recording === undefined || value.recording === "retrieval-opener") &&
-    (value.scene === undefined ||
-      (object(value.scene) && isObservationId(value.scene.attempt) && isSceneSource(value.scene.source)))
+    (value.recording === undefined || value.recording === "retrieval-opener")
   );
 }
 export function isLapse(value: unknown): value is Lapse {
@@ -403,12 +348,6 @@ function assertDefaultPayload(payload: unknown): void {
   if (!object(payload)) return;
   let valid = true;
   switch (payload.kind) {
-    case "scene-opening":
-      valid = isSceneOpening(payload);
-      break;
-    case "scene-finish":
-      valid = isSceneFinish(payload);
-      break;
     case "completion":
       valid = isCompletionOutcome(payload);
       break;
