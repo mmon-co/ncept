@@ -265,7 +265,7 @@ export const modes = {
   authoring: {
     title: CATALOG_MODE_TITLES.authoring,
     frontTab: "map",
-    entry: { required: false, kinds: ["goal"] },
+    entry: { required: false, kinds: ["goal", "mission"] },
     capabilities: catalogCapabilities("authoring"),
     switches: [],
     setup: (ctx) => setup(ctx, "authoring"),
