@@ -1,4 +1,5 @@
 import { PatchCompileError } from "./errors";
+import { isNodeId } from "./release";
 import { isMaterialMeta, metadataSetsForEntity, metadataSubjectAppliesToEntity, metadataSubjectKey } from "./metadata";
 import {
   exactPatchRefKey,
@@ -10,8 +11,16 @@ import {
 } from "./model";
 
 export type TagRef = { readonly name: string };
-export type GuidanceMode = "append" | { readonly replace: readonly TagRef[] } | { readonly keep: readonly TagRef[] };
-export type GuidanceEntry = { readonly text: string; readonly mode: GuidanceMode };
+export type GuidanceRef = TagRef | { readonly node: NodeId };
+export type GuidanceMode =
+  | "append"
+  | { readonly replace: readonly GuidanceRef[] }
+  | { readonly keep: readonly GuidanceRef[] };
+export type GuidanceEntry = {
+  readonly text: string;
+  readonly mode: GuidanceMode;
+  readonly nodes?: readonly NodeId[];
+};
 export type GuidanceSubject = Exclude<MetadataSubject, { readonly kind: "edge" }>;
 export type ResolvedGuidanceEntry = GuidanceEntry & {
   readonly origin: {
@@ -32,9 +41,10 @@ function object(value: unknown): value is Record<string, unknown> {
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
-function targets(value: unknown): value is readonly TagRef[] {
+function targets(value: unknown): value is readonly GuidanceRef[] {
   return (
-    Array.isArray(value) && value.every((ref) => object(ref) && Object.keys(ref).length === 1 && nonempty(ref.name))
+    Array.isArray(value) &&
+    value.every((ref) => object(ref) && Object.keys(ref).length === 1 && (nonempty(ref.name) || isNodeId(ref.node)))
   );
 }
 
@@ -44,7 +54,13 @@ export function isGuidanceEntries(value: unknown): value is readonly GuidanceEnt
     Array.isArray(value) &&
     isMaterialMeta({ entries: value }) &&
     value.every((entry) => {
-      if (!object(entry) || Object.keys(entry).length !== 2 || !nonempty(entry.text)) return false;
+      if (
+        !object(entry) ||
+        !nonempty(entry.text) ||
+        Object.keys(entry).some((key) => !["text", "mode", "nodes"].includes(key))
+      )
+        return false;
+      if ("nodes" in entry && (!Array.isArray(entry.nodes) || !entry.nodes.every(isNodeId))) return false;
       const mode = entry.mode;
       return (
         mode === "append" ||
@@ -103,14 +119,24 @@ export function nodeCascadedProperty(graph: ResolvedGraph, node: NodeId, key: st
 export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
   const entries = nodeMetadataCascade(graph, node, PEDAGOGY_GUIDANCE_PROPERTY, (value) =>
     isGuidanceEntries(value) ? value : [],
-  ).map(({ value, origin }) => ({ ...value, origin }));
+  )
+    .filter(({ value }) => value.nodes === undefined || value.nodes.includes(node))
+    // A Mission Node override follows even the terminal Patch's own Node guidance.
+    .sort((a, b) => Number(a.value.nodes !== undefined) - Number(b.value.nodes !== undefined))
+    .map(({ value, origin }) => ({ ...value, origin }));
   let surviving: ResolvedGuidanceEntry[] = [];
   for (const entry of entries) {
     if (entry.mode !== "append") {
       const mode = entry.mode;
-      const names = new Set(("replace" in mode ? mode.replace : mode.keep).map(({ name }) => name));
+      const refs = "replace" in mode ? mode.replace : mode.keep;
       surviving = surviving.filter((prior) => {
-        const intersects = prior.origin.subjects.some((subject) => subject.kind === "tag" && names.has(subject.name));
+        const intersects = prior.origin.subjects.some((subject) =>
+          refs.some((ref) =>
+            "name" in ref
+              ? subject.kind === "tag" && ref.name === subject.name
+              : subject.kind === "node" && ref.node === subject.id,
+          ),
+        );
         return "replace" in mode ? !intersects : intersects;
       });
     }

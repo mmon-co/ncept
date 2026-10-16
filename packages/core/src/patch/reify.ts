@@ -231,7 +231,9 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       ...set.subjects.flatMap((subject) => (subject.kind === "tag" ? [subject.name] : [])),
       ...(isGuidanceEntries(set.properties[PEDAGOGY_GUIDANCE_PROPERTY])
         ? set.properties[PEDAGOGY_GUIDANCE_PROPERTY].flatMap(({ mode }) =>
-            mode === "append" ? [] : ("replace" in mode ? mode.replace : mode.keep).map(({ name }) => name),
+            mode === "append"
+              ? []
+              : ("replace" in mode ? mode.replace : mode.keep).flatMap((ref) => ("name" in ref ? [ref.name] : [])),
           )
         : []),
     ]),

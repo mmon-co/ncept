@@ -90,14 +90,23 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
               ...set.properties,
               ...(isGuidanceEntries(guidance)
                 ? {
-                    [PEDAGOGY_GUIDANCE_PROPERTY]: guidance.map(({ text, mode }): GuidanceEntry => ({
+                    [PEDAGOGY_GUIDANCE_PROPERTY]: guidance.map(({ text, mode, nodes }): GuidanceEntry => ({
                       text,
+                      ...(nodes === undefined ? {} : { nodes: nodes.map(node) }),
                       mode:
                         mode === "append"
                           ? mode
                           : "replace" in mode
-                            ? { replace: mode.replace.map(({ name }) => ({ name: tagName(name) })) }
-                            : { keep: mode.keep.map(({ name }) => ({ name: tagName(name) })) },
+                            ? {
+                                replace: mode.replace.map((ref) =>
+                                  "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
+                                ),
+                              }
+                            : {
+                                keep: mode.keep.map((ref) =>
+                                  "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
+                                ),
+                              },
                     })),
                   }
                 : {}),
