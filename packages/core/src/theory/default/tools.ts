@@ -253,6 +253,8 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
     }));
 }
 function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown) {
+  if (ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson"))
+    throw new Error("The host closes Lessons from their own Material records; close-recount is for Review.");
   const milestoneDiagnosis = rawDiagnosis === undefined ? undefined : readMilestoneDiagnosis(rawDiagnosis);
   if (rawDiagnosis !== undefined) {
     if (milestoneDiagnosis === undefined)

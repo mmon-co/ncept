@@ -173,7 +173,10 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       return false;
     const chosen = options.find(({ id }) => id === response);
     return (
-      dontKnow || (assessment.grader === "mechanical" && chosen !== undefined && chosen.correct === assessment.correct)
+      dontKnow ||
+      (chosen !== undefined &&
+        (assessment.grader === "tutor" ||
+          (assessment.grader === "mechanical" && chosen.correct === assessment.correct)))
     );
   }
   if (answer.kind === "short")
@@ -182,7 +185,8 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       Array.isArray(grader.accepted) &&
       grader.accepted.length > 0 &&
       grader.accepted.every(text) &&
-      (dontKnow || assessment.grader === "mechanical")
+      // Natural-language assessment standards can require adjudicating the authored answer key.
+      (dontKnow || assessment.grader === "mechanical" || assessment.grader === "tutor")
     );
   if (answer.kind === "applet") {
     if (

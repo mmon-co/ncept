@@ -1,4 +1,5 @@
 import { PatchCompileError } from "./errors";
+import { isNodeId } from "./release";
 import { isMaterialMeta, metadataSetsForEntity, metadataSubjectAppliesToEntity, metadataSubjectKey } from "./metadata";
 import {
   exactPatchRefKey,
@@ -10,8 +11,16 @@ import {
 } from "./model";
 
 export type TagRef = { readonly name: string };
-export type GuidanceMode = "append" | { readonly replace: readonly TagRef[] } | { readonly keep: readonly TagRef[] };
-export type GuidanceEntry = { readonly text: string; readonly mode: GuidanceMode };
+export type GuidanceRef = TagRef | { readonly node: NodeId };
+export type GuidanceMode =
+  | "append"
+  | { readonly replace: readonly GuidanceRef[] }
+  | { readonly keep: readonly GuidanceRef[] };
+export type GuidanceEntry = {
+  readonly text: string;
+  readonly mode: GuidanceMode;
+  readonly nodes?: readonly NodeId[];
+};
 export type GuidanceSubject = Exclude<MetadataSubject, { readonly kind: "edge" }>;
 export type ResolvedGuidanceEntry = GuidanceEntry & {
   readonly origin: {
@@ -22,6 +31,11 @@ export type ResolvedGuidanceEntry = GuidanceEntry & {
   };
 };
 export const PEDAGOGY_GUIDANCE_PROPERTY = "pedagogy:guidance";
+export const PEDAGOGY_ASSESSMENT_PROPERTY = "pedagogy:assessment";
+export const GUIDANCE_PROPERTIES = [PEDAGOGY_GUIDANCE_PROPERTY, PEDAGOGY_ASSESSMENT_PROPERTY] as const;
+export const ASSESSMENT_GUIDANCE_INSTRUCTIONS =
+  "Apply each Node's assessmentGuidance in order. It overrides the generic criterion and task rubric where they conflict.";
+export type TutorGuidanceEntry = ResolvedGuidanceEntry & { readonly kind: "teaching" | "assessment" };
 
 function compareKey(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -32,9 +46,10 @@ function object(value: unknown): value is Record<string, unknown> {
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
-function targets(value: unknown): value is readonly TagRef[] {
+function targets(value: unknown): value is readonly GuidanceRef[] {
   return (
-    Array.isArray(value) && value.every((ref) => object(ref) && Object.keys(ref).length === 1 && nonempty(ref.name))
+    Array.isArray(value) &&
+    value.every((ref) => object(ref) && Object.keys(ref).length === 1 && (nonempty(ref.name) || isNodeId(ref.node)))
   );
 }
 
@@ -44,7 +59,13 @@ export function isGuidanceEntries(value: unknown): value is readonly GuidanceEnt
     Array.isArray(value) &&
     isMaterialMeta({ entries: value }) &&
     value.every((entry) => {
-      if (!object(entry) || Object.keys(entry).length !== 2 || !nonempty(entry.text)) return false;
+      if (
+        !object(entry) ||
+        !nonempty(entry.text) ||
+        Object.keys(entry).some((key) => !["text", "mode", "nodes"].includes(key))
+      )
+        return false;
+      if ("nodes" in entry && (!Array.isArray(entry.nodes) || !entry.nodes.every(isNodeId))) return false;
       const mode = entry.mode;
       return (
         mode === "append" ||
@@ -99,22 +120,46 @@ export function nodeCascadedProperty(graph: ResolvedGraph, node: NodeId, key: st
   return nodeMetadataCascade(graph, node, key, (value) => (value === undefined ? [] : [value])).at(-1)?.value;
 }
 
-/** Cascade effective set values, not historical contributions or tag-name priority. */
-export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
-  const entries = nodeMetadataCascade(graph, node, PEDAGOGY_GUIDANCE_PROPERTY, (value) =>
-    isGuidanceEntries(value) ? value : [],
-  ).map(({ value, origin }) => ({ ...value, origin }));
+/** Cascade each kind independently, over effective set values rather than historical contributions. */
+function cascadedGuidance(graph: ResolvedGraph, node: NodeId, property: string): readonly ResolvedGuidanceEntry[] {
+  const entries = nodeMetadataCascade(graph, node, property, (value) => (isGuidanceEntries(value) ? value : []))
+    .filter(({ value }) => value.nodes === undefined || value.nodes.includes(node))
+    // A Mission Node override follows even the terminal Patch's own Node guidance.
+    .sort((a, b) => Number(a.value.nodes !== undefined) - Number(b.value.nodes !== undefined))
+    .map(({ value, origin }) => ({ ...value, origin }));
   let surviving: ResolvedGuidanceEntry[] = [];
   for (const entry of entries) {
     if (entry.mode !== "append") {
       const mode = entry.mode;
-      const names = new Set(("replace" in mode ? mode.replace : mode.keep).map(({ name }) => name));
+      const refs = "replace" in mode ? mode.replace : mode.keep;
       surviving = surviving.filter((prior) => {
-        const intersects = prior.origin.subjects.some((subject) => subject.kind === "tag" && names.has(subject.name));
+        const intersects = prior.origin.subjects.some((subject) =>
+          refs.some((ref) =>
+            "name" in ref
+              ? subject.kind === "tag" && ref.name === subject.name
+              : subject.kind === "node" && ref.node === subject.id,
+          ),
+        );
         return "replace" in mode ? !intersects : intersects;
       });
     }
     surviving.push(entry);
   }
   return surviving;
+}
+
+export function nodeGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+  return cascadedGuidance(graph, node, PEDAGOGY_GUIDANCE_PROPERTY);
+}
+
+export function nodeAssessmentGuidance(graph: ResolvedGraph, node: NodeId): readonly ResolvedGuidanceEntry[] {
+  return cascadedGuidance(graph, node, PEDAGOGY_ASSESSMENT_PROPERTY);
+}
+
+/** The tutor designs both teaching Materials and the rubrics checked by separate graders. */
+export function nodeTutorGuidance(graph: ResolvedGraph, node: NodeId): readonly TutorGuidanceEntry[] {
+  return [
+    ...nodeGuidance(graph, node).map((entry) => ({ ...entry, kind: "teaching" as const })),
+    ...nodeAssessmentGuidance(graph, node).map((entry) => ({ ...entry, kind: "assessment" as const })),
+  ];
 }

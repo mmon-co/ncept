@@ -91,7 +91,17 @@ export type Selector =
   | { readonly kind: "object"; readonly object: ObjectId }
   | { readonly kind: "objects" };
 export type JsonSchema = Readonly<Record<string, unknown>>;
+/** A grader judges independent criteria; native evidence is addressed by a selected learner message. */
+export type Grader = "decision" | { readonly model: string };
+export interface AssessmentRequest {
+  readonly kind: "assess";
+  readonly grader: Grader;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly criteria: Readonly<Record<string, string>>;
+  readonly message?: string;
+}
 export type Request =
+  | AssessmentRequest
   | { readonly kind: "read"; readonly select: Selector }
   | { readonly kind: "judge"; readonly instruction: string; readonly input: unknown; readonly schema: JsonSchema }
   | { readonly kind: "write"; readonly observation: ObservationWrite };

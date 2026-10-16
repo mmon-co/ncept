@@ -1,8 +1,6 @@
 ---
 name: charting
 description: A pursuit has no adequate graph content. Design the learning backward from the learner's goal, choosing how to teach before what to chart, then write the missing content, reusing what fits. Existing content that misfits needs realignment instead. This procedure is loaded automatically in Chart mode.
-facet: chart
-entry: [learner]
 ---
 
 # Chart

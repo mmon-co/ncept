@@ -1,4 +1,4 @@
-import type { NodeId, ResolvedGuidanceEntry } from "../../patch";
+import type { NodeId, TutorGuidanceEntry } from "../../patch";
 
 /**
  * Transport contracts for the catalog consolidation. These declarations mount nothing:
@@ -17,7 +17,9 @@ export interface CatalogPage<T> {
 export type CatalogArguments = Readonly<Record<string, unknown>>;
 
 export interface QueryToolInput {
-  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub";
+  /** Bypass context-relative deltas for document/list. */
+  readonly full?: boolean;
+  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub" | "document";
   readonly op: "search" | "list" | "find" | "voices";
   readonly input?: CatalogArguments;
   readonly cursor?: string;
@@ -25,6 +27,8 @@ export interface QueryToolInput {
 }
 
 export interface ReadToolInput {
+  /** Bypass context-relative deltas and return the complete result. */
+  readonly full?: boolean;
   /** Omitted resource means this Session's graph. */
   readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch";
   readonly input?: CatalogArguments;
@@ -33,12 +37,13 @@ export interface ReadToolInput {
 }
 
 export interface TheoryToolInput {
+  readonly full?: boolean;
   readonly name: string;
   readonly input?: CatalogArguments;
 }
 
 export interface EvaluationToolInput {
-  readonly op: "record" | "retract" | "claim";
+  readonly op: "watch" | "stop" | "judge" | "override" | "record" | "retract" | "claim";
   /** Required for record; artifact filing is a host operation, not theory evidence. */
   readonly kind?:
     | "demonstration"
@@ -88,10 +93,10 @@ export interface GraphReadOptions {
 
 /**
  * A compact graph stores every surviving origin entry once. Expanding a Node's ordered
- * references must equal nodeGuidance(graph, node), including keep/replace behavior.
+ * references must equal nodeTutorGuidance(graph, node), with independent keep/replace per kind.
  */
 export interface CompactGuidance {
-  readonly guidance: Readonly<Record<string, ResolvedGuidanceEntry>>;
+  readonly guidance: Readonly<Record<string, TutorGuidanceEntry>>;
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 
@@ -112,6 +117,7 @@ export const CATALOG_MODE_TITLES = {
 export const CATALOG_MODE_TOOLS = {
   empty: ["query", "read", "theory", "skill", "report_friction"],
   charting: [
+    "evaluation",
     "query",
     "read",
     "theory",
@@ -123,6 +129,7 @@ export const CATALOG_MODE_TOOLS = {
     "fetch_page",
     "bash",
   ],
+  // Author proposes Missions and revisions that the captured Patch ships.
   authoring: [
     "query",
     "read",

@@ -59,6 +59,13 @@ export interface Demonstration {
   readonly task: string;
   readonly response: string;
   readonly scene?: SceneDemonstrationEvidence;
+  readonly evaluation?: {
+    readonly grader: import("../../observations").Grader;
+    readonly criteria: readonly { readonly criterion: string; readonly probability: number }[];
+    readonly message?: string;
+    readonly watch?: ObservationId;
+    readonly override?: { readonly of: ObservationId; readonly reason: string };
+  };
   /** Set only by the explicit lesson-opening retrieval recording tool. */
   readonly recording?: "retrieval-opener";
 }
