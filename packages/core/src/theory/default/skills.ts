@@ -132,11 +132,6 @@ export function builtSkillBundles(): readonly BuiltSkillBundle[] {
   return skillFiles().map(builtSkillBundle);
 }
 
-/** An invocation message: the Skill's body followed by the request-time facts. */
-export function skillInvocation(name: string, facts: readonly string[]): string {
-  return [skillBody(name), ...facts].join("\n\n");
-}
-
 /** The always-loaded tier: the base unit and the current mode's flat Skill index. */
 export function tutorSystemPrompt(mode?: string): string {
   const base = sources["base.md"].trim();

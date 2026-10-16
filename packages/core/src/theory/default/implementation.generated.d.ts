@@ -93,7 +93,7 @@ export declare const implementation: {
             frontTab: string;
             entry: {
                 required: false;
-                kinds: "goal"[];
+                kinds: ("goal" | "mission")[];
             };
             capabilities: readonly import("../modes").HostCapability[];
             switches: never[];

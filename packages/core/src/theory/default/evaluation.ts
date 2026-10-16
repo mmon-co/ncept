@@ -9,7 +9,15 @@ import {
   type ObservationId,
   type Program,
 } from "../../observations";
-import { isNodeId, NODE_CRITERION_PROPERTY, metadataSetsForEntity, type NodeId } from "../../patch";
+import {
+  ASSESSMENT_GUIDANCE_INSTRUCTIONS,
+  isNodeId,
+  nodeAssessmentGuidance,
+  NODE_CRITERION_PROPERTY,
+  metadataSetsForEntity,
+  type NodeId,
+  type ResolvedGraph,
+} from "../../patch";
 import type { ChatContext, Tool } from "../theory";
 import {
   electedObservations,
@@ -167,6 +175,17 @@ function probability(value: unknown): number {
   return value;
 }
 
+/** Only the graded Nodes' standards, never their teaching guidance or conversation. */
+export function assessmentCapabilities(graph: ResolvedGraph, nodes: readonly NodeId[]) {
+  return nodes.map((node) => ({
+    node,
+    criterion: metadataSetsForEntity(graph, { kind: "node", id: node })
+      .map((set) => set.properties[NODE_CRITERION_PROPERTY])
+      .filter((value) => value !== undefined),
+    assessmentGuidance: nodeAssessmentGuidance(graph, node).map(({ text }) => text),
+  }));
+}
+
 function* assess(
   ctx: Ctx,
   spec: Specification,
@@ -188,7 +207,12 @@ function* assess(
     ...check,
     questions: check.criteria.map((criterion) => {
       const key = "criterion-" + index++;
-      criteria[key] = "Does the learner's response satisfy this criterion of the posed task? " + criterion;
+      criteria[key] =
+        ASSESSMENT_GUIDANCE_INSTRUCTIONS +
+        " For Node " +
+        check.node +
+        ": Does the learner's response satisfy this criterion of the posed task? " +
+        criterion;
       return key;
     }),
   }));
@@ -198,12 +222,10 @@ function* assess(
     input: {
       task: spec.task,
       ...(source.response === undefined ? {} : { response: source.response }),
-      capabilities: spec.rubric.map(({ node }) => ({
-        node,
-        criterion: metadataSetsForEntity(ctx.graph, { kind: "node", id: node })
-          .map((set) => set.properties[NODE_CRITERION_PROPERTY])
-          .filter((value) => value !== undefined),
-      })),
+      capabilities: assessmentCapabilities(
+        ctx.graph,
+        spec.rubric.map(({ node }) => node),
+      ),
     },
     criteria,
     ...(source.message === undefined ? {} : { message: source.message }),

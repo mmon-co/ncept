@@ -1,4 +1,4 @@
-import type { NodeId, ResolvedGuidanceEntry } from "../../patch";
+import type { NodeId, TutorGuidanceEntry } from "../../patch";
 
 /**
  * Transport contracts for the catalog consolidation. These declarations mount nothing:
@@ -17,7 +17,9 @@ export interface CatalogPage<T> {
 export type CatalogArguments = Readonly<Record<string, unknown>>;
 
 export interface QueryToolInput {
-  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub";
+  /** Bypass context-relative deltas for document/list. */
+  readonly full?: boolean;
+  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub" | "document";
   readonly op: "search" | "list" | "find" | "voices";
   readonly input?: CatalogArguments;
   readonly cursor?: string;
@@ -91,10 +93,10 @@ export interface GraphReadOptions {
 
 /**
  * A compact graph stores every surviving origin entry once. Expanding a Node's ordered
- * references must equal nodeGuidance(graph, node), including keep/replace behavior.
+ * references must equal nodeTutorGuidance(graph, node), with independent keep/replace per kind.
  */
 export interface CompactGuidance {
-  readonly guidance: Readonly<Record<string, ResolvedGuidanceEntry>>;
+  readonly guidance: Readonly<Record<string, TutorGuidanceEntry>>;
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 
@@ -127,6 +129,7 @@ export const CATALOG_MODE_TOOLS = {
     "fetch_page",
     "bash",
   ],
+  // Author proposes Missions and revisions that the captured Patch ships.
   authoring: [
     "query",
     "read",

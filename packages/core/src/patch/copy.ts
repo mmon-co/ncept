@@ -1,4 +1,4 @@
-import { isGuidanceEntries, PEDAGOGY_GUIDANCE_PROPERTY, type GuidanceEntry } from "./guidance";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES, type GuidanceEntry } from "./guidance";
 import {
   materialKey,
   type EdgeId,
@@ -73,7 +73,6 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
         };
       case "add-metadata-set": {
         const set = operation.metadataSet;
-        const guidance = set.properties[PEDAGOGY_GUIDANCE_PROPERTY];
         return {
           kind: operation.kind,
           metadataSet: {
@@ -88,19 +87,36 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
             ),
             properties: {
               ...set.properties,
-              ...(isGuidanceEntries(guidance)
-                ? {
-                    [PEDAGOGY_GUIDANCE_PROPERTY]: guidance.map(({ text, mode }): GuidanceEntry => ({
-                      text,
-                      mode:
-                        mode === "append"
-                          ? mode
-                          : "replace" in mode
-                            ? { replace: mode.replace.map(({ name }) => ({ name: tagName(name) })) }
-                            : { keep: mode.keep.map(({ name }) => ({ name: tagName(name) })) },
-                    })),
-                  }
-                : {}),
+              ...Object.fromEntries(
+                GUIDANCE_PROPERTIES.flatMap((property) => {
+                  const guidance = set.properties[property];
+                  return isGuidanceEntries(guidance)
+                    ? [
+                        [
+                          property,
+                          guidance.map(({ text, mode, nodes }): GuidanceEntry => ({
+                            text,
+                            ...(nodes === undefined ? {} : { nodes: nodes.map(node) }),
+                            mode:
+                              mode === "append"
+                                ? mode
+                                : "replace" in mode
+                                  ? {
+                                      replace: mode.replace.map((ref) =>
+                                        "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
+                                      ),
+                                    }
+                                  : {
+                                      keep: mode.keep.map((ref) =>
+                                        "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
+                                      ),
+                                    },
+                          })),
+                        ],
+                      ]
+                    : [];
+                }),
+              ),
             },
           },
         };

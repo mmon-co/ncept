@@ -3,7 +3,7 @@ import { renderSpeech } from "../speaker";
 import {
   lastMetadataContribution,
   metadataSetsForEntity,
-  nodeGuidance,
+  nodeTutorGuidance,
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
@@ -13,7 +13,7 @@ import type { ChatContext, ChatSetup } from "../theory";
 import type { HostCapability, SessionMode } from "../modes";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { modeProcedure, skillBody, skillInvocation, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
+import { modeProcedure, skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
 import { defaultRecordingTools, recordSceneDemonstration } from "./tools";
 import { defaultCatalogTools } from "./catalog";
 import { evaluationContext } from "./evaluation";
@@ -109,21 +109,16 @@ function recommendableAffordances(
   });
 }
 
-function chatSkills(
-  mode: string | undefined,
-  documents: readonly ProductDocument[],
-  recommendations: readonly Recommendation[],
-) {
+export function documentListing(ctx: ChatContext<DefaultState>) {
+  const documents = officialDocuments(ctx);
+  return { documents, candidates: recommendableAffordances(ctx, documents) };
+}
+
+function chatSkills(mode: string | undefined) {
   return skillsForMode(mode).map((meta) => ({
     ...meta,
     resources: skillResources(meta.name),
-    body:
-      meta.name === "app-help"
-        ? skillInvocation(meta.name, [
-            `Official Common Concept Document index (reference mode; includes used and previously mentioned Nodes):\n${JSON.stringify(documents)}`,
-            `Eligible recommendation candidates (recommendation mode only; filtered by Profile-wide feature use and tutor mentions on this branch and closed Sessions):\n${JSON.stringify(recommendations)}`,
-          ])
-        : skillBody(meta.name),
+    body: skillBody(meta.name),
   }));
 }
 
@@ -155,8 +150,6 @@ function* setup(
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
-  const documents = officialDocuments(ctx);
-  const recommendations = recommendableAffordances(ctx, documents);
   const prompt = [
     tutorSystemPrompt(mode),
     "Interpretations are retrieved on demand, not prefetched with Node memory: use `theory {name:'interpretations',input}` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `theory {name:'memory',input:{node}}` and paginated original Record access remain available for their existing purposes.",
@@ -200,7 +193,7 @@ function* setup(
               node: ctx.entry.node,
               label: metadataValue(ctx, ctx.entry.node, NODE_LABEL_PROPERTY),
               criterion: metadataValue(ctx, ctx.entry.node, NODE_CRITERION_PROPERTY),
-              effectiveGuidance: nodeGuidance(ctx.graph, ctx.entry.node),
+              effectiveGuidance: nodeTutorGuidance(ctx.graph, ctx.entry.node),
             })}`,
           ]
         : []),
@@ -211,7 +204,7 @@ function* setup(
         ? []
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
     ].join("\n\n"),
-    skills: chatSkills(mode, documents, recommendations),
+    skills: chatSkills(mode),
     tools:
       mode === "scene"
         ? [
@@ -272,7 +265,7 @@ export const modes = {
   authoring: {
     title: CATALOG_MODE_TITLES.authoring,
     frontTab: "map",
-    entry: { required: false, kinds: ["goal"] },
+    entry: { required: false, kinds: ["goal", "mission"] },
     capabilities: catalogCapabilities("authoring"),
     switches: [],
     setup: (ctx) => setup(ctx, "authoring"),
