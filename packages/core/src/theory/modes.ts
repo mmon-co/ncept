@@ -15,6 +15,8 @@ export type ModeEntry =
   | Readonly<{
       kind: "checkpoint";
       missionId: string;
+      /** The retrospective after the last section; finishing it retires the Mission. */
+      final?: true;
       /** Absent for the check-in before the first span, which has no milestone behind it. */
       milestone?: NodeId;
       /** Absent when evidence cleared the milestone without a closed Lesson. */

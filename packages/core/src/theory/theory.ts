@@ -76,7 +76,7 @@ export type Lesson = Readonly<{
   nodes: readonly NodeId[];
   review?: true;
   /** The check-in after `milestone`; absent for the check-in before the first span. */
-  checkpoint?: Readonly<{ milestone?: NodeId; required: boolean }>;
+  checkpoint?: Readonly<{ milestone?: NodeId; required: boolean; final?: true }>;
 }>;
 export type MissionPath = Readonly<{
   /** The first section's milestone is shown as 0 when no unclaimed Lesson precedes it, else 1. */
