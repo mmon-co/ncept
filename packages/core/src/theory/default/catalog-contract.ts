@@ -127,6 +127,7 @@ export const CATALOG_MODE_TOOLS = {
     "fetch_page",
     "bash",
   ],
+  // Author proposes Missions and revisions that the captured Patch ships.
   authoring: [
     "query",
     "read",
