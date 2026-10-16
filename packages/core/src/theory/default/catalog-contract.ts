@@ -17,7 +17,9 @@ export interface CatalogPage<T> {
 export type CatalogArguments = Readonly<Record<string, unknown>>;
 
 export interface QueryToolInput {
-  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub";
+  /** Bypass context-relative deltas for document/list. */
+  readonly full?: boolean;
+  readonly resource: "profile" | "view" | "session" | "artifact" | "material" | "applet" | "audio" | "hub" | "document";
   readonly op: "search" | "list" | "find" | "voices";
   readonly input?: CatalogArguments;
   readonly cursor?: string;
