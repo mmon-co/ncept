@@ -1,21 +1,5 @@
 # flashcards
 
-Kind: `srs`.
+Kind: `srs`, type `card`. Make one card per item, attached with `node` or `about`. Give `front` (the prompt) and `back` (the answer or explanation), or a Markdown `body` with the two separated by a line containing `---`. `frontAudio` and `backAudio` attach a clip from `audio` generate; on edit, omit one to keep it or pass null to remove it. `meta: {"srs:confusable": true}` interleaves cards the learner may mix up.
 
-Add review cards as an ordinary flashcards Material (kind srs), from front/back text and optional srs:confusable metadata. Supply node or about and either body or both front and back. Adding lists the cards; open them when the learner wants to review.
-
-Markdown with front and back separated by a line containing ---
-
-Text to prompt the learner with
-
-Expected answer or explanation
-
-Immutable audio/mpeg Attachment from material {kind:'audio',op:'command',command:'generate'} or an existing clip; omit to preserve, null to remove on edit.
-
-Use {"srs:confusable": true} to interleave cards the learner may mix up.
-
-Edit an owned SRS card's front/back, optional interleave category, or attached Nodes. Supply body or both front and back.
-
-Remove an SRS card without deleting its grades.
-
-Explicitly open an SRS card in this Session using a new Playground surface.
+Added cards join the learner's spaced review; open one to practise it now. Removing a card keeps its grades.

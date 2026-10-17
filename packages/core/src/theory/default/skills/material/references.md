@@ -1,15 +1,3 @@
 # references
 
-Kind: `references`.
-
-Create a references Material; supply node or about, and list it without opening or focusing it. Supply reference title, kind, why and locators; associate Nodes through those locators. A URL is optional: omit it for an unverified source, and never invent a placeholder URL. The server checks each new or changed URL and records checkedAt and check; a failed check is returned and saved without refusing the Reference; omitting url means the reference has no link.
-
-Optional; omit it for an unverified source. Never invent a placeholder URL.
-
-Edit a listed references Material without changing focus. Supply reference title, kind, why and locators; associate Nodes through those locators. A URL is optional: omit it for an unverified source, and never invent a placeholder URL. The server checks each new or changed URL and records checkedAt and check; a failed check is returned and saved without refusing the Reference; omitting url means the reference has no link.
-
-Remove a local references Material.
-
-Text body for a references Material.
-
-Explicitly open a listed references Material for the learner.
+Kind: `references`, type `reference`. Each entry is `reference: {title, kind, why, url?, locators}`: `kind` is `book`, `video`, `course`, `site` or `other`; `why` says what it's good for; each locator `{node, at}` says where in the source a Node is taught, and is how the entry attaches to Nodes. Give `url` only for a source you've found; the server checks it and saves the result with the entry. Adding lists the entry; open it to show the learner.

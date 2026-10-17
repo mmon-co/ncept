@@ -12,7 +12,7 @@ import type { ChatContext, ChatSetup } from "../theory";
 import type { HostCapability, SessionMode } from "../modes";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { modeProcedure, skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
+import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
 import { defaultCatalogTools } from "./catalog";
 import { evaluationContext } from "./evaluation";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
@@ -148,40 +148,18 @@ function* setup(
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
-  const prompt = [
-    tutorSystemPrompt(mode),
-    "Interpretations are retrieved on demand, not prefetched with Node memory: use `theory {name:'interpretations',input}` by tag, Node scope (defaults to attached Nodes) and/or originating surface; it returns source handles, not transcript text. Interpretations are retrieval context, never learner labels or demonstration evidence; `theory {name:'memory',input:{node}}` and paginated original Record access remain available for their existing purposes.",
-    ...(mode === "lesson" || mode === undefined
-      ? [
-          "Before correcting an interpretation, retrieve its current source handles and support with `theory {name:'interpretations',input}`.",
-        ]
-      : []),
-    mode === "empty" || mode === "charting" || mode === "authoring"
-      ? "Every factual Instrument claim must cite its Record identity or Patch provenance."
-      : "Every factual Instrument claim must cite its Record identity or Patch provenance, except a Review closing recount from `evaluation {op:'record',kind:'close-recount',input}`, which intentionally has no internal citations.",
-    ...(mode === "empty" || mode === "charting" || mode === "authoring"
-      ? []
-      : [
-          "Use the learner's saved preferences, supplied with this conversation, before selecting or generating Material.",
-        ]),
-    ...(mode === "charting" || mode === "authoring" || mode === "lesson" ? [modeProcedure(mode)] : []),
-    "For every turn about Common Concept's appearance or behavior, how to use the application, or a suspected application problem, load `app-help` again; its recommendation candidates are recomputed for this turn, so a body loaded on an earlier turn is stale. Read the relevant Document before diagnosing application behavior. The fresh app-help recommendation candidates are the sole authority for unsolicited affordance advice: never suggest an action absent from that list, even if it appears in the reference index or Document. If no candidate fits, give the needed explanation without recommending a workaround or repeating earlier advice. When recommending an eligible candidate, include its Document as an exact Markdown link `[label](documentUrl)`, not a bare URL. Do not call application behavior a defect or suggest **Report a problem** before reading the relevant Document through app-help.",
-  ].join("\n\n");
+  const prompt = tutorSystemPrompt(mode);
   return {
     prompt,
     context: [
       ...evaluationContext(ctx),
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
-        : mode === "empty"
-          ? "This Session is attached to no Nodes; clarify the goal, then direct the learner to the existing Chart mode choice if its content is missing; Chat has no proposal tool."
-          : "This Session is attached to no Nodes; use the available explicit Node scopes where needed.",
+        : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
       ...(ctx.entry?.kind === "review"
-        ? [
-            `Current Review (frozen batch; use the Review opening, not the teaching Lesson steps):\n${JSON.stringify(ctx.entry)}`,
-          ]
+        ? [`Current Review (frozen batch; check retention, not teach):\n${JSON.stringify(ctx.entry)}`]
         : []),
       ...(ctx.lesson === undefined
         ? []
