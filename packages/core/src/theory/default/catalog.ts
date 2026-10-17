@@ -72,7 +72,7 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "theory",
     description:
-      "Read theory facts: frontier, route, interpretations, trail, coverage, probes, warnings, items, memory or mission. Input defaults to {}. Trail takes node, optional cursor and positive limit (default 20); follow continueCursor, restart on stale cursor.",
+      "Read theory facts: frontier, route, interpretations, trail, coverage, probes, warnings, items, memory or mission. Input defaults to {}. Interpretations take tag, Node scope (default: attached Nodes) and/or originating surface, and return source handles: retrieval context, never labels or evidence. Trail takes node, optional cursor and positive limit (default 20); follow continueCursor, restart on stale cursor.",
     schema: {
       type: "object",
       properties: { name: { enum: theoryNames }, input: { type: "object" }, full: { type: "boolean" } },
@@ -87,7 +87,7 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "evaluation",
     description:
-      "Delegate chat checks: watch {task,rubric:[{node,criteria:[string]}],unaided,grader} grades subsequent learner replies; stop {} ends it; judge adds response (text) or message (selected learner message id, including original media) to the same inputs for one response. Grader is decision (Account decision model) or {model:provider/model}. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Override {of,outcome,reason} corrects one delegated Record. Usually delegate rather than manually record. Manual record kinds: demonstration, retrieval-opener, teaching, claim-attachment, interpretation-correction, close-recount; claim records self-report; retract corrects evidence. Artifact filing is host-owned.",
+      "Delegate chat checks: watch {task,rubric:[{node,criteria:[string]}],unaided,grader} grades subsequent learner replies; stop {} ends it; judge adds response (text) or message (selected learner message id, including original media) to the same inputs for one response. Grader is decision (Account decision model) or {model:provider/model}. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Override {of,outcome,reason} corrects one delegated Record. Usually delegate rather than manually record. Manual record kinds: demonstration, retrieval-opener, teaching, claim-attachment, interpretation-correction, close-recount; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned.",
     schema: {
       type: "object",
       properties: {

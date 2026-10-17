@@ -1,6 +1,6 @@
 # roleplay
 
-Kind: `roleplay`, type: `encounter`.
+Kind: `roleplay`, type `encounter`. Write the character's private `script` and the `scene` the learner sees. The learner talks with the character and finishes the encounter, and the transcript is graded against the checks.
 
 JSON text in a string, not Markdown:
 
@@ -24,5 +24,3 @@ JSON text in a string, not Markdown:
 ```
 
 Text is nonblank. About lists and check ids are unique; checks together cover exactly the Material about. `mistaken` is optional; names use lowercase letters, digits and hyphens. Optional `model` uses an existing model spec (`provider/model-id[:effort]`); omission pins the default model when opened. Text only; no extra keys, audio, pumps, hints or corrections.
-
-The learner selects **Finish encounter** to request the captured transcript's per-check assessment. Finishing alone is not evidence.
