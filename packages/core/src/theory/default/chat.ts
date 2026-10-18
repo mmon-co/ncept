@@ -233,6 +233,7 @@ export const modes = {
     capabilities: catalogCapabilities("lesson"),
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
+      { mode: "charting", then: "next", carry: { kind: "brief" } },
       {
         mode: "charting",
         then: "aside",
