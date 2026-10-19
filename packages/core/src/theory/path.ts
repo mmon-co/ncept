@@ -1,11 +1,10 @@
+import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory";
 import type { NodeId } from "../patch";
-import type { Lesson, LessonTiming, MissionPath } from "./theory";
 
-/** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
+/** A Review borrows the following Lesson's number, not a numbered stop. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
   sections: readonly {
-    /** Displayed milestone number: 0 for a first milestone no unclaimed Lesson precedes, else counting from 1. */
     readonly number: number;
     readonly milestone: NodeId;
     readonly lessons: readonly LessonReading[];
@@ -16,29 +15,21 @@ export type MissionPathReading = Readonly<{
   minutesLeft: number;
   rough: boolean;
 }>;
-
-/** A numbered stop: a teaching Lesson, neither a Review nor a Checkpoint. */
 export const isNumberedLesson = (stop: Pick<Lesson, "review" | "checkpoint">) => !stop.review && !stop.checkpoint;
+export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate">;
 
-/** Numbers count cleared lessons too. Repeated Nodes count only once toward time. */
-export function readMissionPath(
-  path: MissionPath,
-  known: ReadonlySet<string>,
-  timing: LessonTiming,
-  reviewTiming: LessonTiming = timing,
-): MissionPathReading {
+/** Numbering is structural; progress, whole-scope costs and deduplication belong to the theory. */
+export function readMissionPath(path: MissionPath, theory: PathTheory, context: EstimateContext): MissionPathReading {
   let number = 0;
-  const remaining = (lessons: readonly Lesson[]) =>
-    new Set(
-      lessons
-        .filter(isNumberedLesson)
-        .flatMap(({ nodes }) => nodes)
-        .filter((id) => !known.has(id)),
-    ).size *
-      timing.minutesPerNode +
-    lessons
-      .filter((lesson) => lesson.review)
-      .reduce((sum, lesson) => sum + lesson.nodes.length * reviewTiming.minutesPerNode, 0);
+  const progress = theory.progress(
+    context.graph,
+    context.projection,
+    path.sections.flatMap(({ lessons }) => lessons.flatMap(({ nodes }) => nodes)),
+  );
+  const estimate = theory.estimate(
+    context,
+    path.sections.flatMap(({ lessons }) => lessons),
+  );
   return {
     sections: path.sections.map((section, index) => ({
       number: index + (path.zeroBased ? 0 : 1),
@@ -46,16 +37,16 @@ export function readMissionPath(
       lessons: section.lessons.map((lesson) => ({
         ...lesson,
         number: lesson.checkpoint ? number : lesson.review ? number + 1 : ++number,
-        cleared: isNumberedLesson(lesson) && lesson.nodes.every((id) => known.has(id)),
-        ...(lesson.review ? { minutes: lesson.nodes.length * reviewTiming.minutesPerNode } : {}),
+        cleared:
+          isNumberedLesson(lesson) &&
+          lesson.nodes.every((id) => progress[id]?.status !== "open" && progress[id] !== undefined),
+        ...(lesson.review ? { minutes: theory.estimate(context, [lesson]).minutes } : {}),
       })),
-      minutesLeft: remaining(section.lessons),
+      minutesLeft: theory.estimate(context, section.lessons).minutes,
     })),
     warnings: path.warnings,
     lessonCount: path.sections.reduce((total, section) => total + section.lessons.filter(isNumberedLesson).length, 0),
-    minutesLeft: remaining(path.sections.flatMap(({ lessons }) => lessons)),
-    rough:
-      timing.rough ||
-      (path.sections.some((section) => section.lessons.some((lesson) => lesson.review)) && reviewTiming.rough),
+    minutesLeft: estimate.minutes,
+    rough: estimate.rough,
   };
 }

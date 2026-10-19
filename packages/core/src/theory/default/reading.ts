@@ -3,6 +3,23 @@ import { isNumberedLesson } from "../path";
 import type { Estimate, EstimateContext, Lesson, Progress, TheoryProjection } from "../theory";
 import { defaultTheoryMessages } from "./messages";
 import { measuredLessonTiming, measuredReviewTiming } from "./timing";
+import { stateDefault } from "./state";
+import type { Observation } from "../../observations";
+
+/** Latest active claim, not a claim inferred from an assessment label. */
+export function claimsDefault(
+  graph: ResolvedGraph,
+  observations: readonly Observation[],
+  now: string,
+): Readonly<Record<NodeId, boolean>> {
+  const state = stateDefault(graph, observations, now);
+  return Object.fromEntries(
+    graph.nodes.flatMap(({ id }) => {
+      const latest = state.nodes[id]?.records.findLast(({ payload }) => payload.kind === "claim");
+      return latest?.payload.kind === "claim" ? [[id, latest.payload.stance === "knows"]] : [];
+    }),
+  );
+}
 
 /** Interpret only the theory vocabulary. Names survive bounded projection publication; the
  * assessment tag is first in projectDefault, so its explanatory display survives there too. */

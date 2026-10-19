@@ -1,5 +1,6 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
-import { UNMEASURED_LESSON_TIMING } from "./timing";
+import { progressDefault, estimateDefault } from "./reading";
+import { projectDefault } from "./tags";
 import { contentDigest } from "../../digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
 import {
@@ -497,12 +498,13 @@ export const defaultInstrumentTools = [
                 (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
               ),
           ),
-          new Set(
-            Object.entries(ctx.state.nodes)
-              .filter(([, state]) => state !== undefined && isDefaultKnown(state))
-              .map(([id]) => id),
-          ),
-          ctx.lessonTiming ?? UNMEASURED_LESSON_TIMING,
+          { progress: progressDefault, estimate: estimateDefault },
+          {
+            graph: ctx.graph,
+            projection: projectDefault(ctx.graph, ctx.state),
+            observations: ctx.state.observations,
+            activities: ctx.lessonActivities ?? [],
+          },
         ),
       })),
   ),

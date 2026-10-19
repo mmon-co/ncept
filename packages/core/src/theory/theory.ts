@@ -83,9 +83,6 @@ export type MissionPath = Readonly<{
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
   warnings: readonly { readonly kind: "lesson-split"; readonly name: string; readonly nodes: readonly NodeId[] }[];
 }>;
-/** Temporary public alias while Application timing consumers move to Theory.estimate. */
-export type { LessonTiming } from "./default/timing";
-import type { LessonTiming } from "./default/timing";
 
 /** Host measurement, without a Session or a store reference. */
 export interface LessonActivity {
@@ -125,9 +122,8 @@ export type LessonNodeReading = Readonly<{
   id: NodeId;
   label: string;
   criterion: string;
-  demonstrated: boolean;
-  /** Tentatively ticked, still needs a real Lesson check. */
-  probablyKnown?: true;
+  status: NodeProgress["status"];
+  caption?: MessageDescriptor;
   /** A removed captured member stays visible and unticked. */
   unavailable?: boolean;
   /** The projection's existing score caption/message, not a new assessment. */
@@ -139,7 +135,7 @@ export type LessonProgress = Readonly<{
   nodes: readonly LessonNodeReading[];
   edges: readonly Readonly<{ from: NodeId; to: NodeId }>[];
   alsoShown: readonly LessonNodeReading[];
-  demonstratedCount: number;
+  doneCount: number;
   complete: boolean;
   minutesLeft: number;
   rough: boolean;
@@ -171,7 +167,7 @@ export type ChatContext<S> = Context<S> &
     sessionObservations?: readonly ObservationId[];
     missions?: readonly MissionContext[];
     /** Measured by the host from lesson Session activity, never by the theory. */
-    lessonTiming?: LessonTiming;
+    lessonActivities?: readonly LessonActivity[];
     /** The fixed Lesson's current checklist, from the host's same reading as the header. */
     lesson?: LessonProgress;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
@@ -204,6 +200,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
   progress(graph: ResolvedGraph, projection: TheoryProjection, nodes: readonly NodeId[]): Progress;
+  /** Latest effective self-report per Node, independently of current progress. */
+  claims(graph: ResolvedGraph, observations: readonly Observation[], now: string): Readonly<Record<NodeId, boolean>>;
   /** One Lesson, a section's lessons, or all path lessons. The theory owns costs and deduplication. */
   estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
   /** Stable graph-only stops. A theory without this method has no Lessons. */
