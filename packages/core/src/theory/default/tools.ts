@@ -1,4 +1,5 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
+import { UNMEASURED_LESSON_TIMING } from "./timing";
 import { contentDigest } from "../../digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
 import {
@@ -501,7 +502,7 @@ export const defaultInstrumentTools = [
               .filter(([, state]) => state !== undefined && isDefaultKnown(state))
               .map(([id]) => id),
           ),
-          ctx.lessonTiming ?? { minutesPerNode: 20, rough: true },
+          ctx.lessonTiming ?? UNMEASURED_LESSON_TIMING,
         ),
       })),
   ),

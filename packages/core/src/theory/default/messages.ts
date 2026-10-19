@@ -1,5 +1,8 @@
 /** Locale resources owned by the default Pedagogy package, resolved by the Application. */
 export const defaultTheoryMessages = {
+  "default.state.done": { en: "Demonstrated", "zh-CN": "已掌握" },
+  "default.state.tentative": { en: "Probably known", "zh-CN": "可能已掌握" },
+  "default.state.open": { en: "Unknown", "zh-CN": "未知" },
   "default.completion.scope.srs-about-node": { en: "every card on this Node", "zh-CN": "此节点上的每张卡片" },
   "default.completion.scope.bound": { en: "the activity assigned to this Node", "zh-CN": "此节点指定的活动" },
   "default.completion.expiry": { en: "; valid until {date}", "zh-CN": "；有效期至 {date}" },

@@ -4,6 +4,7 @@ import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
 import { stateDefault, isCompletionOutcome } from "./state";
 import { projectDefault } from "./tags";
 import { pathDefault } from "./path";
+import { progressDefault, estimateDefault } from "./reading";
 import { isRoleplayAttemptOutcome } from "./roleplay";
 /** The single default implementation assembly, before executable generation and identity. */
 export declare const implementation: {
@@ -11,6 +12,8 @@ export declare const implementation: {
     version: "1.0.0";
     state: typeof stateDefault;
     project: typeof projectDefault;
+    progress: typeof progressDefault;
+    estimate: typeof estimateDefault;
     path: typeof pathDefault;
     tags: readonly [...string[], "item-outcomes", "instability", "unused", "coarse", "lesson-split", "self-report", "edge-contradiction", "homeless"];
     outcomes: {

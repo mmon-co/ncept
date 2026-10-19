@@ -4,6 +4,7 @@ import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
 import { DEFAULT_THEORY_REF, stateDefault, isCompletionOutcome } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
+import { progressDefault, estimateDefault } from "./reading";
 import { isRoleplayAttemptOutcome } from "./roleplay";
 
 /** The single default implementation assembly, before executable generation and identity. */
@@ -12,6 +13,8 @@ export const implementation = {
   version: DEFAULT_THEORY_REF.version,
   state: stateDefault,
   project: projectDefault,
+  progress: progressDefault,
+  estimate: estimateDefault,
   path: pathDefault,
   tags: defaultTags,
   outcomes: {

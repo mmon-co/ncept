@@ -83,7 +83,34 @@ export type MissionPath = Readonly<{
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
   warnings: readonly { readonly kind: "lesson-split"; readonly name: string; readonly nodes: readonly NodeId[] }[];
 }>;
-export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
+/** Temporary public alias while Application timing consumers move to Theory.estimate. */
+export type { LessonTiming } from "./default/timing";
+import type { LessonTiming } from "./default/timing";
+
+/** Host measurement, without a Session or a store reference. */
+export interface LessonActivity {
+  readonly surface: string;
+  readonly activeMs: number;
+  readonly startedAt: string;
+  readonly reviewNodes?: readonly NodeId[];
+  readonly reviewSurfaces?: readonly string[];
+}
+export type NodeProgress = Readonly<{
+  status: "done" | "tentative" | "open";
+  /** The existing score/annotation to display, not a host interpretation of its tag id. */
+  display?: Tag;
+  /** Localized state name, separate from the score's explanatory message. */
+  caption?: MessageDescriptor;
+  unavailable?: true;
+}>;
+export type Progress = Readonly<Record<NodeId, NodeProgress>>;
+export type Estimate = Readonly<{ minutes: number; rough: boolean }>;
+export type EstimateContext = Readonly<{
+  graph: ResolvedGraph;
+  projection: TheoryProjection;
+  observations: readonly Observation[];
+  activities: readonly LessonActivity[];
+}>;
 
 /** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
 export type LessonSnapshot = Readonly<{
@@ -175,6 +202,10 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly digest: ContentDigest;
   state(graph: ResolvedGraph, observations: readonly Observation[], now: string): S;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
+  /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
+  progress(graph: ResolvedGraph, projection: TheoryProjection, nodes: readonly NodeId[]): Progress;
+  /** One Lesson, a section's lessons, or all path lessons. The theory owns costs and deduplication. */
+  estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
   /** Stable graph-only stops. A theory without this method has no Lessons. */
   path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
   readonly tags: readonly string[];

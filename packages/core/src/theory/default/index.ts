@@ -11,6 +11,8 @@ export const defaultTheory = {
 };
 export const DEFAULT_THEORY_RELEASE = theoryRelease(defaultTheory);
 export * from "./path";
+export * from "./reading";
+export * from "./timing";
 export * from "./diagnosis";
 export * from "./messages";
 export * from "./state";
