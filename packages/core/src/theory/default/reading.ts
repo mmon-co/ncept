@@ -42,6 +42,10 @@ export function progressDefault(
           status,
           ...(display === undefined ? {} : { display }),
           caption: { id: key, defaultMessage: defaultTheoryMessages[key].en },
+          checklistCaption: {
+            id: `default.checklist.${status}`,
+            defaultMessage: defaultTheoryMessages[`default.checklist.${status}`].en,
+          },
           ...(available.has(id) ? {} : { unavailable: true as const }),
         },
       ];

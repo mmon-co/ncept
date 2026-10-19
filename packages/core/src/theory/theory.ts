@@ -98,6 +98,8 @@ export type NodeProgress = Readonly<{
   display?: Tag;
   /** Localized state name, separate from the score's explanatory message. */
   caption?: MessageDescriptor;
+  /** Optional task-facing wording for a captured checklist, distinct from a general map state. */
+  checklistCaption?: MessageDescriptor;
   unavailable?: true;
 }>;
 export type Progress = Readonly<Record<NodeId, NodeProgress>>;
