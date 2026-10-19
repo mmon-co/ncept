@@ -1,6 +1,6 @@
 import type { NodeId, ResolvedGraph } from "../../patch";
 import { isNumberedLesson } from "../path";
-import type { Estimate, EstimateContext, Lesson, Progress, TheoryProjection } from "../theory";
+import type { Estimate, EstimateContext, Lesson, NodeProgress, Progress, Tag, TheoryProjection } from "../theory";
 import { defaultTheoryMessages } from "./messages";
 import { measuredLessonTiming, measuredReviewTiming } from "./timing";
 import { stateDefault } from "./state";
@@ -21,6 +21,22 @@ export function claimsDefault(
   );
 }
 
+/** Read a frozen default assessment through the same boundary as a live projection. */
+export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
+  const display = tags.find(({ tag }) => tag === "demonstrated" || tag === "probably-known" || tag === "unknown");
+  const status = display?.tag === "demonstrated" ? "done" : display?.tag === "probably-known" ? "tentative" : "open";
+  const key = `default.state.${status}` as const;
+  return {
+    status,
+    ...(display === undefined ? {} : { display }),
+    caption: { id: key, defaultMessage: defaultTheoryMessages[key].en },
+    checklistCaption: {
+      id: `default.checklist.${status}`,
+      defaultMessage: defaultTheoryMessages[`default.checklist.${status}`].en,
+    },
+  };
+}
+
 /** Interpret only the theory vocabulary. Names survive bounded projection publication; the
  * assessment tag is first in projectDefault, so its explanatory display survives there too. */
 export function progressDefault(
@@ -32,20 +48,10 @@ export function progressDefault(
   return Object.fromEntries(
     nodes.map((id) => {
       const tags = available.has(id) ? (projection.nodes[id] ?? []) : [];
-      const display = tags.find(({ tag }) => tag === "demonstrated" || tag === "probably-known" || tag === "unknown");
-      const status =
-        display?.tag === "demonstrated" ? "done" : display?.tag === "probably-known" ? "tentative" : "open";
-      const key = `default.state.${status}` as const;
       return [
         id,
         {
-          status,
-          ...(display === undefined ? {} : { display }),
-          caption: { id: key, defaultMessage: defaultTheoryMessages[key].en },
-          checklistCaption: {
-            id: `default.checklist.${status}`,
-            defaultMessage: defaultTheoryMessages[`default.checklist.${status}`].en,
-          },
+          ...defaultTagProgress(tags),
           ...(available.has(id) ? {} : { unavailable: true as const }),
         },
       ];
