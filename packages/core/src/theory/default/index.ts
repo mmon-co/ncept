@@ -14,6 +14,7 @@ export * from "./path";
 export * from "./reading";
 export * from "./timing";
 export * from "./diagnosis";
+export * from "./diagnostics";
 export * from "./messages";
 export * from "./state";
 export * from "./tags";
