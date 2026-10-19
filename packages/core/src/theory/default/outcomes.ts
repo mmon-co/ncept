@@ -87,6 +87,7 @@ export interface AttemptOutcome {
         }
       | { readonly kind: "short" }
       | { readonly kind: "text" }
+      | { readonly kind: "roleplay"; readonly material: { readonly id: string; readonly revision: ExactPatchRef } }
       | {
           readonly kind: "applet";
           readonly material: { readonly id: string; readonly revision: ExactPatchRef };
@@ -112,7 +113,7 @@ export interface AttemptOutcome {
           readonly pumps: readonly { text: string; checks: readonly string[] }[];
         };
   };
-  /** A choice option id, a literal short/text answer, or the applet query value serialized as JSON. */
+  /** A choice option id, a literal short/text answer, the applet query value as JSON, or a speaker-labelled roleplay transcript. */
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
@@ -199,6 +200,8 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
           !answer.setup.every((step: unknown) => object(step) && text(step.command) && Object.hasOwn(step, "input"))))
     )
       return false;
+  } else if (answer.kind === "roleplay") {
+    if (!object(answer.material) || !text(answer.material.id) || !exactRef(answer.material.revision)) return false;
   } else if (answer.kind !== "text") return false;
   if (grader.by === "tutor" || grader.by === "learner")
     return optional(grader.rubric) && (dontKnow || assessment.grader === grader.by);

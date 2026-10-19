@@ -1,5 +1,4 @@
 import { renderSpeech } from "../speaker";
-import { isRoleplayAttemptOutcome, roleplayAttempts } from "./roleplay";
 import {
   judge,
   isObservationId,
@@ -298,17 +297,12 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
       return;
     }
     if (object(payload) && payload.kind === "completion") throw new Error("Invalid completion outcome");
-    if (
-      !isRecallOutcome(payload) &&
-      !isQuizOutcome(payload) &&
-      !isAttemptOutcome(payload) &&
-      !isRoleplayAttemptOutcome(payload)
-    ) {
+    if (!isRecallOutcome(payload) && !isQuizOutcome(payload) && !isAttemptOutcome(payload)) {
       if (
         typeof input.payload === "object" &&
         input.payload !== null &&
         "kind" in input.payload &&
-        ["recall", "quiz", "attempt", "roleplay-attempt"].includes(String(input.payload.kind))
+        ["recall", "quiz", "attempt"].includes(String(input.payload.kind))
       )
         throw new Error("Invalid practice outcome");
       return;
@@ -321,30 +315,14 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
         !input.about.every((node) => payload.problem.about.includes(node)))
     )
       throw new Error("Invalid practice outcome");
-    if (
-      isRoleplayAttemptOutcome(payload) &&
-      input.about !== undefined &&
-      (new Set(input.about).size !== input.about.length ||
-        input.about.length !== payload.material.about.length ||
-        !input.about.every((node) => payload.material.about.includes(node)))
-    )
-      throw new Error("Invalid roleplay outcome scope");
     // Capture every attempt before the first yield: the host must not be able to edit later cards
     // or questions between writes and silently change the evidence in this outcome.
-    const attempts = isRoleplayAttemptOutcome(payload)
-      ? roleplayAttempts(payload, input.at)
-      : isAttemptOutcome(payload)
-        ? problemAttempts(payload, input.at)
-        : practiceAttempts(payload);
+    const attempts = isAttemptOutcome(payload) ? problemAttempts(payload, input.at) : practiceAttempts(payload);
     for (const attempt of attempts) {
       yield* write({
         at: attempt.at,
         surface: input.surface,
-        about:
-          input.about ??
-          (isRoleplayAttemptOutcome(payload)
-            ? payload.material.about
-            : attempts.map(({ payload }) => payload.node.node)),
+        about: input.about ?? attempts.map(({ payload }) => payload.node.node),
         nodes: [attempt.payload.node.node],
         ...(input.cites === undefined ? {} : { cites: [...input.cites] }),
         payload: attempt.payload,

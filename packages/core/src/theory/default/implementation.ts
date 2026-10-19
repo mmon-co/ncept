@@ -5,7 +5,6 @@ import { DEFAULT_THEORY_REF, stateDefault, isCompletionOutcome } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
 import { progressDefault, estimateDefault, claimsDefault } from "./reading";
-import { isRoleplayAttemptOutcome } from "./roleplay";
 
 /** The single default implementation assembly, before executable generation and identity. */
 export const implementation = {
@@ -23,7 +22,6 @@ export const implementation = {
     recall: isRecallOutcome,
     quiz: isQuizOutcome,
     attempt: isAttemptOutcome,
-    "roleplay-attempt": isRoleplayAttemptOutcome,
   },
   chat,
   modes,
@@ -36,7 +34,6 @@ export const implementation = {
       recall: import("./outcomes").RecallOutcome;
       quiz: import("./outcomes").QuizOutcome;
       attempt: import("./outcomes").AttemptOutcome;
-      "roleplay-attempt": import("./roleplay").RoleplayAttemptOutcome;
     }
   >,
   "digest"
