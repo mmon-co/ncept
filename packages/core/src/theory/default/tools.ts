@@ -1,5 +1,5 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
-import { progressDefault, estimateDefault } from "./reading";
+import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading";
 import { projectDefault } from "./tags";
 import { contentDigest } from "../../digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
@@ -498,7 +498,7 @@ export const defaultInstrumentTools = [
                 (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
               ),
           ),
-          { progress: progressDefault, estimate: estimateDefault },
+          { progress: progressDefault, estimate: estimateDefault, prepareEstimate: prepareEstimateDefault },
           {
             graph: ctx.graph,
             projection: projectDefault(ctx.graph, ctx.state),

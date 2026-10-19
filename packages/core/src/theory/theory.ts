@@ -209,6 +209,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   claims(graph: ResolvedGraph, observations: readonly Observation[], now: string): Readonly<Record<NodeId, boolean>>;
   /** One Lesson, a section's lessons, or all path lessons. The theory owns costs and deduplication. */
   estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
+  /** Reading-owned reuse, valid only for this immutable context snapshot. */
+  prepareEstimate?(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate;
   /** Stable graph-only stops. A theory without this method has no Lessons. */
   path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
   readonly tags: readonly string[];
