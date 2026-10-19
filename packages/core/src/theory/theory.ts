@@ -124,6 +124,7 @@ export type LessonNodeReading = Readonly<{
   id: NodeId;
   label: string;
   criterion: string;
+  /** Tentative ticks the row but is not done: it still needs a real Lesson check. */
   status: NodeProgress["status"];
   caption?: MessageDescriptor;
   /** A removed captured member stays visible and unticked. */

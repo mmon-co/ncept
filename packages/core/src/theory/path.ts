@@ -1,10 +1,11 @@
 import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory";
 import type { NodeId } from "../patch";
 
-/** A Review borrows the following Lesson's number, not a numbered stop. */
+/** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
   sections: readonly {
+    /** Displayed milestone number: 0 for a first milestone no unclaimed Lesson precedes, else counting from 1. */
     readonly number: number;
     readonly milestone: NodeId;
     readonly lessons: readonly LessonReading[];
@@ -15,10 +16,12 @@ export type MissionPathReading = Readonly<{
   minutesLeft: number;
   rough: boolean;
 }>;
+/** A numbered stop: a teaching Lesson, neither a Review nor a Checkpoint. */
 export const isNumberedLesson = (stop: Pick<Lesson, "review" | "checkpoint">) => !stop.review && !stop.checkpoint;
 export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate">;
 
-/** Numbering is structural; progress, whole-scope costs and deduplication belong to the theory. */
+/** Numbers count cleared lessons too. Numbering is structural; progress, whole-scope costs and
+ * repeated-Node deduplication belong to the theory. */
 export function readMissionPath(path: MissionPath, theory: PathTheory, context: EstimateContext): MissionPathReading {
   let number = 0;
   const progress = theory.progress(
