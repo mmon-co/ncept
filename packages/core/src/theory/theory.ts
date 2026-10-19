@@ -98,6 +98,8 @@ export type NodeProgress = Readonly<{
   display?: Tag;
   /** Localized state name, separate from the score's explanatory message. */
   caption?: MessageDescriptor;
+  /** Optional compact evidence summary, suitable beside a frontier or other host heading. */
+  summary?: MessageDescriptor;
   /** Optional task-facing wording for a captured checklist, distinct from a general map state. */
   checklistCaption?: MessageDescriptor;
   unavailable?: true;

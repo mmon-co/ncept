@@ -26,10 +26,20 @@ export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
   const display = tags.find(({ tag }) => tag === "demonstrated" || tag === "probably-known" || tag === "unknown");
   const status = display?.tag === "demonstrated" ? "done" : display?.tag === "probably-known" ? "tentative" : "open";
   const key = `default.state.${status}` as const;
+  const values = display?.message?.values;
+  const summary =
+    typeof values?.demonstrated === "number" && typeof values.window === "number"
+      ? {
+          id: "default.progress.summary",
+          defaultMessage: "{done}/{window}",
+          values: { done: values.demonstrated, window: values.window },
+        }
+      : undefined;
   return {
     status,
     ...(display === undefined ? {} : { display }),
     caption: { id: key, defaultMessage: defaultTheoryMessages[key].en },
+    ...(summary === undefined ? {} : { summary }),
     checklistCaption: {
       id: `default.checklist.${status}`,
       defaultMessage: defaultTheoryMessages[`default.checklist.${status}`].en,
