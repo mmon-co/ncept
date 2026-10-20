@@ -40,20 +40,50 @@ export function measuredLessonTiming(
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ): LessonTiming {
+  return prepareLessonTiming(graph, observations, activities).measure();
+}
+
+/** One reading's resumable recording-time scan. Roughness needs only its first transition;
+ * acquisition timing needs the complete unique (teaching surface, Node) denominator. */
+export function prepareLessonTiming(
+  graph: ResolvedGraph,
+  observations: readonly Observation[],
+  activities: readonly LessonActivity[],
+) {
   const teaching = activities.filter((activity) => activity.reviewNodes === undefined);
   const lessonSurfaces = new Map(teaching.map((activity) => [activity.surface, activity]));
   const demonstrated = new Set<string>();
-  for (const [index, observation] of observations.entries()) {
-    const activity = observation.surface === undefined ? undefined : lessonSurfaces.get(observation.surface);
-    if (activity === undefined || observation.at < activity.startedAt || observation.standing === "abandoned") continue;
-    const before = stateDefault(graph, observations.slice(0, index), observation.at);
-    const after = stateDefault(graph, observations.slice(0, index + 1), observation.at);
-    for (const [id, node] of Object.entries(after.nodes))
-      if (isNodeId(id) && node?.label === "demonstrated" && before.nodes[id]?.label !== "demonstrated")
-        demonstrated.add(activity.surface + "/" + id);
+  function* transitions() {
+    for (const [index, observation] of observations.entries()) {
+      const activity = observation.surface === undefined ? undefined : lessonSurfaces.get(observation.surface);
+      if (activity === undefined || observation.at < activity.startedAt || observation.standing === "abandoned")
+        continue;
+      const before = stateDefault(graph, observations.slice(0, index), observation.at);
+      const after = stateDefault(graph, observations.slice(0, index + 1), observation.at);
+      for (const [id, node] of Object.entries(after.nodes))
+        if (isNodeId(id) && node?.label === "demonstrated" && before.nodes[id]?.label !== "demonstrated")
+          demonstrated.add(activity.surface + "/" + id);
+      if (demonstrated.size) yield;
+    }
   }
+  const scan = transitions();
   const activeMs = teaching.reduce((sum, activity) => sum + activity.activeMs, 0);
-  // Single-turn lessons have no gaps; a zero average would claim the rest takes no time.
-  if (!demonstrated.size || activeMs <= 0) return UNMEASURED_LESSON_TIMING;
-  return { minutesPerNode: activeMs / 60_000 / demonstrated.size, rough: false };
+  const rough = () => {
+    // Single-turn lessons have no gaps; zero active time is already unmeasured.
+    if (activeMs <= 0) return true;
+    if (!demonstrated.size) scan.next();
+    return !demonstrated.size;
+  };
+  return {
+    rough,
+    measure(): LessonTiming {
+      if (activeMs <= 0) return UNMEASURED_LESSON_TIMING;
+      while (!scan.next().done) {
+        /* Finish or resume the same scan. */
+      }
+      return demonstrated.size
+        ? { minutesPerNode: activeMs / 60_000 / demonstrated.size, rough: false }
+        : UNMEASURED_LESSON_TIMING;
+    },
+  };
 }

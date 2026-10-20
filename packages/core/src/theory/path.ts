@@ -18,7 +18,15 @@ export type MissionPathReading = Readonly<{
 }>;
 /** A numbered stop: a teaching Lesson, neither a Review nor a Checkpoint. */
 export const isNumberedLesson = (stop: Pick<Lesson, "review" | "checkpoint">) => !stop.review && !stop.checkpoint;
-export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate">;
+export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate" | "prepareEstimate">;
+
+/** Keep each scope independent, including for custom theories without preparation. */
+export function prepareEstimate(
+  theory: Pick<Theory<unknown>, "estimate" | "prepareEstimate">,
+  context: EstimateContext,
+) {
+  return theory.prepareEstimate?.(context) ?? ((lessons: readonly Lesson[]) => theory.estimate(context, lessons));
+}
 
 /** Numbers count cleared lessons too. Numbering is structural; progress, whole-scope costs and
  * repeated-Node deduplication belong to the theory. */
@@ -29,10 +37,8 @@ export function readMissionPath(path: MissionPath, theory: PathTheory, context: 
     context.projection,
     path.sections.flatMap(({ lessons }) => lessons.flatMap(({ nodes }) => nodes)),
   );
-  const estimate = theory.estimate(
-    context,
-    path.sections.flatMap(({ lessons }) => lessons),
-  );
+  const estimateScope = prepareEstimate(theory, context);
+  const estimate = estimateScope(path.sections.flatMap(({ lessons }) => lessons));
   return {
     sections: path.sections.map((section, index) => ({
       number: index + (path.zeroBased ? 0 : 1),
@@ -43,9 +49,9 @@ export function readMissionPath(path: MissionPath, theory: PathTheory, context: 
         cleared:
           isNumberedLesson(lesson) &&
           lesson.nodes.every((id) => progress[id]?.status !== "open" && progress[id] !== undefined),
-        ...(lesson.review ? { minutes: theory.estimate(context, [lesson]).minutes } : {}),
+        ...(lesson.review ? { minutes: estimateScope([lesson]).minutes } : {}),
       })),
-      minutesLeft: theory.estimate(context, section.lessons).minutes,
+      minutesLeft: estimateScope(section.lessons).minutes,
     })),
     warnings: path.warnings,
     lessonCount: path.sections.reduce((total, section) => total + section.lessons.filter(isNumberedLesson).length, 0),

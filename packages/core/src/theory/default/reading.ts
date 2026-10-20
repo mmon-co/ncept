@@ -2,7 +2,7 @@ import type { NodeId, ResolvedGraph } from "../../patch";
 import { isNumberedLesson } from "../path";
 import type { Estimate, EstimateContext, Lesson, NodeProgress, Progress, Tag, TheoryProjection } from "../theory";
 import { defaultTheoryMessages } from "./messages";
-import { measuredLessonTiming, measuredReviewTiming } from "./timing";
+import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing";
 import { stateDefault } from "./state";
 import type { Observation } from "../../observations";
 
@@ -72,14 +72,25 @@ export function progressDefault(
 /** Teaching is unique across the requested scope. Review is a separate activity at each stop,
  * including review of already-acquired Nodes; checkpoints carry no acquisition cost. */
 export function estimateDefault(context: EstimateContext, lessons: readonly Lesson[]): Estimate {
-  const teaching = new Set(lessons.filter(isNumberedLesson).flatMap(({ nodes }) => nodes));
-  const progress = progressDefault(context.graph, context.projection, [...teaching]);
-  const open = [...teaching].filter((id) => progress[id]?.status === "open").length;
-  const reviews = lessons.filter(({ review }) => review).reduce((sum, { nodes }) => sum + nodes.length, 0);
-  const timing = measuredLessonTiming(context.graph, context.observations, context.activities);
-  const reviewTiming = measuredReviewTiming(context.observations, context.activities);
-  return {
-    minutes: open * timing.minutesPerNode + reviews * reviewTiming.minutesPerNode,
-    rough: timing.rough || (reviews > 0 && reviewTiming.rough),
+  return prepareEstimateDefault(context)(lessons);
+}
+
+/** Historical inputs belong to this immutable reading, never to a module or a scope cache. */
+export function prepareEstimateDefault(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate {
+  let teachingTiming: ReturnType<typeof prepareLessonTiming> | undefined;
+  let timing: LessonTiming | undefined;
+  let reviewTiming: LessonTiming | undefined;
+  return (lessons) => {
+    const teaching = new Set(lessons.filter(isNumberedLesson).flatMap(({ nodes }) => nodes));
+    const progress = progressDefault(context.graph, context.projection, [...teaching]);
+    const open = [...teaching].filter((id) => progress[id]?.status === "open").length;
+    const reviews = lessons.filter(({ review }) => review).reduce((sum, { nodes }) => sum + nodes.length, 0);
+    teachingTiming ??= prepareLessonTiming(context.graph, context.observations, context.activities);
+    if (open > 0) timing ??= teachingTiming.measure();
+    if (reviews > 0) reviewTiming ??= measuredReviewTiming(context.observations, context.activities);
+    return {
+      minutes: open * (timing?.minutesPerNode ?? 0) + reviews * (reviewTiming?.minutesPerNode ?? 0),
+      rough: (timing?.rough ?? teachingTiming.rough()) || (reviews > 0 && (reviewTiming?.rough ?? false)),
+    };
   };
 }
