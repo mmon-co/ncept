@@ -65,6 +65,12 @@ export function resolveDefaultCatalogProgram(
     name === "theory"
       ? theoryReadings.find((reading) => reading.name === envelope.name)
       : evaluationOperations.find((entry) => entry.op === envelope.op && entry.kind === envelope.kind)?.tool;
+  if (tool === undefined && name === "evaluation" && envelope.kind !== undefined && envelope.op !== "record")
+    throw new Error(
+      `kind applies only to op record (kinds: ${Object.keys(records).join(", ")}); ${String(envelope.op)} takes no kind`,
+    );
+  if (tool === undefined && name === "evaluation" && envelope.op === "record")
+    throw new Error("op record needs kind: " + Object.keys(records).join(", "));
   if (tool === undefined)
     throw new Error(
       name === "theory"
@@ -129,7 +135,7 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       type: "object",
       properties: {
         op: { enum: [...new Set(evaluationOperations.map(({ op }) => op))] },
-        kind: { enum: Object.keys(records) },
+        kind: { enum: Object.keys(records), description: "Only with op record" },
         input: { type: "object" },
       },
       required: ["op", "input"],
