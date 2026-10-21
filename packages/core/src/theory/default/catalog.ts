@@ -103,6 +103,9 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       "Read theory facts. Node inputs name existing Nodes from the graph, never Session identities. Interpretations return source handles: retrieval context, never labels or evidence. Trail defaults to limit 20; follow continueCursor, restart on stale cursor.",
     schema: {
       type: "object",
+      // Top-level properties beside the variants: without them DeepSeek sent input as a JSON string.
+      properties: { name: { enum: theoryNames }, input: { type: "object" }, full: { type: "boolean" } },
+      required: ["name"],
       oneOf: theoryReadings.map((reading) => ({
         type: "object",
         properties: { name: { const: reading.name }, input: reading.schema, full: { type: "boolean" } },
@@ -124,6 +127,12 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Override corrects a delegated Record; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned.",
     schema: {
       type: "object",
+      properties: {
+        op: { enum: [...new Set(evaluationOperations.map(({ op }) => op))] },
+        kind: { enum: Object.keys(records) },
+        input: { type: "object" },
+      },
+      required: ["op", "input"],
       oneOf: evaluationOperations.map(({ op, kind, tool }) => ({
         type: "object",
         properties: { op: { const: op }, ...(kind ? { kind: { const: kind } } : {}), input: tool.schema },
