@@ -16,6 +16,8 @@ const theoryNames = [
   "memory",
   "mission",
 ];
+const theoryReadings = defaultInstrumentTools.filter((tool) => theoryNames.includes(tool.name));
+const theoryInputs = Object.fromEntries(theoryReadings.map((tool) => [tool.name, tool.schema]));
 const records: Readonly<Record<string, string>> = {
   demonstration: "record_demonstration",
   "retrieval-opener": "record_retrieval_opener",
@@ -64,7 +66,28 @@ export function resolveDefaultCatalogProgram(
     ...evaluationTools,
   ].find((candidate) => candidate.name === target);
   if (tool === undefined) throw new Error("Missing catalog Program");
-  return { tool, input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input) };
+  try {
+    return {
+      tool:
+        name !== "theory"
+          ? tool
+          : {
+              ...tool,
+              *run(input, ctx) {
+                try {
+                  return yield* tool.run(input, ctx);
+                } catch (error) {
+                  throw new Error(
+                    `${String(error)}. ${tool.name} input accepts ${JSON.stringify(tool.schema)}; Nodes must exist in the graph.`,
+                  );
+                }
+              },
+            },
+      input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input),
+    };
+  } catch (error) {
+    throw new Error(`${String(error)}. ${tool.name} input accepts ${JSON.stringify(tool.schema)}`);
+  }
 }
 
 /** Only envelopes are mounted; original Programs remain available to internal host paths. */
@@ -72,7 +95,8 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "theory",
     description:
-      "Read theory facts: frontier, route, interpretations, trail, coverage, probes, warnings, items, memory or mission. Input defaults to {}. Interpretations take tag, Node scope (default: attached Nodes) and/or originating surface, and return source handles: retrieval context, never labels or evidence. Trail takes node, optional cursor and positive limit (default 20); follow continueCursor, restart on stale cursor.",
+      "Read theory facts. Node inputs name existing Nodes from the graph, never Session identities. Interpretations return source handles: retrieval context, never labels or evidence. Trail defaults to limit 20; follow continueCursor, restart on stale cursor. Input defaults to {} only where its schema permits. Input schemas by reading name: " +
+      JSON.stringify(theoryInputs),
     schema: {
       type: "object",
       properties: { name: { enum: theoryNames }, input: { type: "object" }, full: { type: "boolean" } },

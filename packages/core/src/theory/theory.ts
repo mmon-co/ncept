@@ -94,6 +94,8 @@ export interface LessonActivity {
 }
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";
+  /** Latest effective self-report, independently of acquisition status. */
+  claimed?: boolean;
   /** The existing score/annotation to display, not a host interpretation of its tag id. */
   display?: Tag;
   /** Localized state name, separate from the score's explanatory message. */
@@ -205,8 +207,6 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
   progress(graph: ResolvedGraph, projection: TheoryProjection, nodes: readonly NodeId[]): Progress;
-  /** Latest effective self-report per Node, independently of current progress. */
-  claims(graph: ResolvedGraph, observations: readonly Observation[], now: string): Readonly<Record<NodeId, boolean>>;
   /** One Lesson, a section's lessons, or all path lessons. The theory owns costs and deduplication. */
   estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
   /** Reading-owned reuse, valid only for this immutable context snapshot. */
