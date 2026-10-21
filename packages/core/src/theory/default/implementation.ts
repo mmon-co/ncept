@@ -4,7 +4,7 @@ import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
 import { DEFAULT_THEORY_REF, stateDefault, isCompletionOutcome } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
-import { progressDefault, estimateDefault, prepareEstimateDefault, claimsDefault } from "./reading";
+import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading";
 
 /** The single default implementation assembly, before executable generation and identity. */
 export const implementation = {
@@ -13,7 +13,6 @@ export const implementation = {
   state: stateDefault,
   project: projectDefault,
   progress: progressDefault,
-  claims: claimsDefault,
   estimate: estimateDefault,
   prepareEstimate: prepareEstimateDefault,
   path: pathDefault,

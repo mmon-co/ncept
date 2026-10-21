@@ -3,23 +3,6 @@ import { isNumberedLesson } from "../path";
 import type { Estimate, EstimateContext, Lesson, NodeProgress, Progress, Tag, TheoryProjection } from "../theory";
 import { defaultTheoryMessages } from "./messages";
 import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing";
-import { stateDefault } from "./state";
-import type { Observation } from "../../observations";
-
-/** Latest active claim, not a claim inferred from an assessment label. */
-export function claimsDefault(
-  graph: ResolvedGraph,
-  observations: readonly Observation[],
-  now: string,
-): Readonly<Record<NodeId, boolean>> {
-  const state = stateDefault(graph, observations, now);
-  return Object.fromEntries(
-    graph.nodes.flatMap(({ id }) => {
-      const latest = state.nodes[id]?.records.findLast(({ payload }) => payload.kind === "claim");
-      return latest?.payload.kind === "claim" ? [[id, latest.payload.stance === "knows"]] : [];
-    }),
-  );
-}
 
 /** Read a frozen default assessment through the same boundary as a live projection. */
 export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
@@ -37,6 +20,11 @@ export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
       : undefined;
   return {
     status,
+    ...(tags.some(({ tag }) => tag === "claimed")
+      ? { claimed: true }
+      : tags.some(({ tag }) => tag === "unclaimed")
+        ? { claimed: false }
+        : {}),
     ...(display === undefined ? {} : { display }),
     caption: { id: key, defaultMessage: defaultTheoryMessages[key].en },
     ...(summary === undefined ? {} : { summary }),

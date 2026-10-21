@@ -39,6 +39,14 @@ export const defaultQueryTokens = {
   demonstrated: select((node) => node.label === "demonstrated"),
   "probably-known": select((node) => node.label === "probably-known"),
   unknown: select((node) => node.label === "unknown"),
+  claimed: select((node) => {
+    const latest = node.records.findLast(({ payload }) => payload.kind === "claim");
+    return latest?.payload.kind === "claim" && latest.payload.stance === "knows";
+  }),
+  unclaimed: select((node) => {
+    const latest = node.records.findLast(({ payload }) => payload.kind === "claim");
+    return latest?.payload.kind === "claim" && latest.payload.stance !== "knows";
+  }),
   reachable: (state, graph, reached = reachableNodes(state, graph)) => reached,
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
