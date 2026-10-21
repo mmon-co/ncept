@@ -374,7 +374,20 @@ export const evaluationTools: readonly Tool<unknown, unknown, DefaultState>[] = 
       additionalProperties: false,
       required: specKeys,
       properties: { ...specProperties, response: { type: "string" }, message: { type: "string", minLength: 1 } },
-      oneOf: [{ required: ["response"] }, { required: ["message"] }],
+      oneOf: [
+        {
+          type: "object",
+          properties: { response: { type: "string" } },
+          required: ["response"],
+          additionalProperties: true,
+        },
+        {
+          type: "object",
+          properties: { message: { type: "string" } },
+          required: ["message"],
+          additionalProperties: true,
+        },
+      ],
     },
     *run(raw, ctx) {
       const input = args(raw, [...specKeys, "response", "message"]);

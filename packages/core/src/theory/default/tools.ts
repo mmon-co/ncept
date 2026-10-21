@@ -687,7 +687,10 @@ export const defaultRecordingTools = [
       "Correct evidence by retracting an existing demonstration or claim; never rewrite a Record. Pass either of (an exact Record id) or node (the latest active Record on that Node in this Session). Never retract a retraction or platform record.",
     schema: {
       ...schema({ of: { type: "string", pattern: "^obs-.+" }, node: nodeProperty }),
-      oneOf: [{ required: ["of"] }, { required: ["node"] }],
+      oneOf: [
+        { type: "object", properties: { of: { type: "string" } }, required: ["of"], additionalProperties: true },
+        { type: "object", properties: { node: nodeProperty }, required: ["node"], additionalProperties: true },
+      ],
     },
     *run(raw, ctx) {
       const input = args(raw, ["of", "node"]);
