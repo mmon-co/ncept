@@ -16,6 +16,13 @@ const theoryNames = [
   "memory",
   "mission",
 ];
+const theoryReadings = defaultInstrumentTools.filter((tool) => theoryNames.includes(tool.name));
+const programs = [...defaultInstrumentTools, ...defaultRecordingTools, ...defaultBackgroundTools, ...evaluationTools];
+function program(name: string): DefaultTool {
+  const found = programs.find((tool) => tool.name === name);
+  if (!found) throw new Error("Missing catalog Program: " + name);
+  return found;
+}
 const records: Readonly<Record<string, string>> = {
   demonstration: "record_demonstration",
   "retrieval-opener": "record_retrieval_opener",
@@ -24,6 +31,14 @@ const records: Readonly<Record<string, string>> = {
   "interpretation-correction": "correct_interpretation",
   "close-recount": "close_recount",
 };
+const evaluationOperations = [
+  ...Object.entries(records).map(([kind, name]) => ({ op: "record", kind, tool: program(name) })),
+  ...["watch", "stop", "judge", "override", "claim", "retract"].map((op) => ({
+    op,
+    kind: undefined,
+    tool: program(op === "claim" ? "record_claim" : op === "retract" ? "record_retraction" : "evaluation_" + op),
+  })),
+];
 function isObject(raw: unknown): raw is Record<string, unknown> {
   return typeof raw === "object" && raw !== null && !Array.isArray(raw);
 }
@@ -46,25 +61,44 @@ export function resolveDefaultCatalogProgram(
   if (Object.keys(envelope).some((key) => !allowed.includes(key))) throw new Error("Unknown catalog argument");
   if (name === "theory" && envelope.full !== undefined && typeof envelope.full !== "boolean")
     throw new Error("Invalid full flag");
-  let target: string | undefined;
-  if (name === "theory") {
-    if (typeof envelope.name === "string" && theoryNames.includes(envelope.name)) target = envelope.name;
-  } else if (envelope.op === "record" && typeof envelope.kind === "string") {
-    target = Object.hasOwn(records, envelope.kind) ? records[envelope.kind] : undefined;
-  } else if (envelope.kind === undefined) {
-    if (envelope.op === "claim") target = "record_claim";
-    if (envelope.op === "retract") target = "record_retraction";
-    if (["watch", "stop", "judge", "override"].includes(String(envelope.op))) target = "evaluation_" + envelope.op;
+  const tool =
+    name === "theory"
+      ? theoryReadings.find((reading) => reading.name === envelope.name)
+      : evaluationOperations.find((entry) => entry.op === envelope.op && entry.kind === envelope.kind)?.tool;
+  if (tool === undefined && name === "evaluation" && envelope.kind !== undefined && envelope.op !== "record")
+    throw new Error(
+      `kind applies only to op record (kinds: ${Object.keys(records).join(", ")}); ${String(envelope.op)} takes no kind`,
+    );
+  if (tool === undefined && name === "evaluation" && envelope.op === "record")
+    throw new Error("op record needs kind: " + Object.keys(records).join(", "));
+  if (tool === undefined)
+    throw new Error(
+      name === "theory"
+        ? "Theory name accepts " + theoryReadings.map((reading) => reading.name).join(", ")
+        : "Evaluation accepts " + evaluationOperations.map(({ op, kind }) => op + (kind ? "/" + kind : "")).join(", "),
+    );
+  try {
+    return {
+      tool:
+        name !== "theory"
+          ? tool
+          : {
+              ...tool,
+              *run(input, ctx) {
+                try {
+                  return yield* tool.run(input, ctx);
+                } catch (error) {
+                  throw new Error(
+                    `${String(error)}. ${tool.name} input accepts ${JSON.stringify(tool.schema)}; Nodes must exist in the graph.`,
+                  );
+                }
+              },
+            },
+      input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input),
+    };
+  } catch (error) {
+    throw new Error(`${String(error)}. ${tool.name} input accepts ${JSON.stringify(tool.schema)}`);
   }
-  if (target === undefined) throw new Error("Unsupported catalog operation or kind");
-  const tool = [
-    ...defaultInstrumentTools,
-    ...defaultRecordingTools,
-    ...defaultBackgroundTools,
-    ...evaluationTools,
-  ].find((candidate) => candidate.name === target);
-  if (tool === undefined) throw new Error("Missing catalog Program");
-  return { tool, input: object(name === "theory" && envelope.input === undefined ? {} : envelope.input) };
 }
 
 /** Only envelopes are mounted; original Programs remain available to internal host paths. */
@@ -72,12 +106,21 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "theory",
     description:
-      "Read theory facts: frontier, route, interpretations, trail, coverage, probes, warnings, items, memory or mission. Input defaults to {}. Interpretations take tag, Node scope (default: attached Nodes) and/or originating surface, and return source handles: retrieval context, never labels or evidence. Trail takes node, optional cursor and positive limit (default 20); follow continueCursor, restart on stale cursor.",
+      "Read theory facts. Node inputs name existing Nodes from the graph, never Session identities. Interpretations return source handles: retrieval context, never labels or evidence. Trail defaults to limit 20; follow continueCursor, restart on stale cursor.",
     schema: {
       type: "object",
+      // Top-level properties beside the variants: without them DeepSeek sent input as a JSON string.
       properties: { name: { enum: theoryNames }, input: { type: "object" }, full: { type: "boolean" } },
       required: ["name"],
-      additionalProperties: false,
+      oneOf: theoryReadings.map((reading) => ({
+        type: "object",
+        properties: { name: { const: reading.name }, input: reading.schema, full: { type: "boolean" } },
+        required: [
+          "name",
+          ...(Array.isArray(reading.schema.required) && reading.schema.required.length ? ["input"] : []),
+        ],
+        additionalProperties: false,
+      })),
     },
     *run(raw, ctx) {
       const { tool, input } = resolveDefaultCatalogProgram("theory", raw);
@@ -87,16 +130,21 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "evaluation",
     description:
-      "Delegate chat checks: watch {task,rubric:[{node,criteria:[string]}],unaided,grader} grades subsequent learner replies; stop {} ends it; judge adds response (text) or message (selected learner message id, including original media) to the same inputs for one response. Grader is decision (Account decision model) or {model:provider/model}. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Override {of,outcome,reason} corrects one delegated Record. Usually delegate rather than manually record. Manual record kinds: demonstration, retrieval-opener, teaching, claim-attachment, interpretation-correction, close-recount; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned.",
+      "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Override corrects a delegated Record; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned.",
     schema: {
       type: "object",
       properties: {
-        op: { enum: ["watch", "stop", "judge", "override", "record", "claim", "retract"] },
-        kind: { enum: Object.keys(records) },
+        op: { enum: [...new Set(evaluationOperations.map(({ op }) => op))] },
+        kind: { enum: Object.keys(records), description: "Only with op record" },
         input: { type: "object" },
       },
       required: ["op", "input"],
-      additionalProperties: false,
+      oneOf: evaluationOperations.map(({ op, kind, tool }) => ({
+        type: "object",
+        properties: { op: { const: op }, ...(kind ? { kind: { const: kind } } : {}), input: tool.schema },
+        required: ["op", "input", ...(kind ? ["kind"] : [])],
+        additionalProperties: false,
+      })),
     },
     *run(raw, ctx) {
       const { tool, input } = resolveDefaultCatalogProgram("evaluation", raw);
