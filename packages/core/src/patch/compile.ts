@@ -47,6 +47,8 @@ export interface GraphDiffCompileReport {
 export interface CompiledGraphDiff {
   readonly operations: SemanticDelta["operations"];
   readonly citations: PatchMetadata["citations"];
+  /** Entity ids removed from the terminal revision's own delta before appending operations. */
+  readonly retractions: readonly string[];
   readonly graph: ResolvedGraph;
   readonly report: GraphDiffCompileReport;
 }
@@ -63,7 +65,11 @@ export function composePatch(
   content: PatchContent,
   operations: SemanticDelta["operations"],
   citations: PatchMetadata["citations"] = [],
+  retractions: readonly string[] = [],
 ): PatchContent {
+  // Shared interface stub; the Core retraction ticket supplies the algebra.
+  if (retractions.length > 0)
+    throw new PatchCompileError("invalid-bundle", "own-contribution retractions are not implemented");
   const replacedTags = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
   return {
     bases: content.bases,
@@ -78,19 +84,20 @@ export function composePatch(
 }
 
 export function applyGraphDiff(content: PatchContent, diff: CompiledGraphDiff): PatchContent {
-  return composePatch(content, diff.operations, diff.citations);
+  return composePatch(content, diff.operations, diff.citations, diff.retractions);
 }
 
 function prospectiveBundle(
   bundle: ClosedPatchBundle,
   operations: SemanticDelta["operations"],
   citations: PatchMetadata["citations"],
+  retractions: readonly string[],
 ): ClosedPatchBundle {
   const terminalKey = exactPatchRefKey(bundle.terminal);
   const terminal = bundle.revisions.find((revision) => exactPatchRefKey(revision.ref) === terminalKey);
   if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   const { ref, ...value } = terminal;
-  const content = composePatch(value, operations, citations);
+  const content = composePatch(value, operations, citations, retractions);
   const next = { identity: ref.identity, digest: contentDigest(content) };
   return {
     terminal: next,
@@ -245,10 +252,11 @@ export function compileGraphDiff(
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
   citations: PatchMetadata["citations"] = [],
+  retractions: readonly string[] = [],
 ): CompiledGraphDiff {
   let graph: ResolvedGraph;
   try {
-    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations));
+    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations, retractions));
     projectVisualGraph({ graph, annotations: {} });
   } catch (error) {
     if (
@@ -266,7 +274,7 @@ export function compileGraphDiff(
     targets,
   );
   if (!report.valid) throw new GraphDiffCompileError(report);
-  return { graph, report, operations, citations };
+  return { graph, report, operations, citations, retractions };
 }
 
 export function compileGraph(input: GraphCompilationInput): VisualGraph {
