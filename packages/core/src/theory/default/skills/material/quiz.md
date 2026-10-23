@@ -4,7 +4,7 @@ Kind: `quizzes`. A Problem poses one graded task and a Set sequences Problems. E
 
 Where one rich task shows several capabilities (an explanation, a short essay, a small project), prefer one text Problem graded by `checks` to several narrow ones. A fast classifier picks `shown`, `absent` or a named `mistaken` version per check from the learner's text, so describe what a response visibly does. `pumps` together name every check, asking the learner to take each up without giving it away.
 
-`help` sets how far the Problem teaches. `pump` only measures: use it for prior-capability, retention and milestone checks. `hint` shows a mistaken check's hint; `correct` adds the correction if the mistake persists after it. A check help touches is recorded unaided as it stood before and aided as it ended.
+`help` sets how far the Problem teaches. `pump` only measures: use it for prior-capability, retention and milestone checks. `hint` shows a mistaken check's hint; `correct` adds the correction if the mistake persists after it. One response counts once per Node however many checks touch it; where help touches a check, that Node is recorded unaided as its checks stood before help and aided as they ended.
 
 Add with `node` or `about`. A prepared prompt clip goes in top-level `promptAudio` (omit on edit to keep; null removes), never in the body.
 
