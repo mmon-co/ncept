@@ -283,7 +283,7 @@ If "the fact that" fits, it is the other 之.
 \`\`\`
 
 A try-it is reading practice: its choice stays in the reader and records nothing. Assessed Problems go in a Quiz.
-`,"material/flashcards.md":'# flashcards\n\nKind: `srs`, type `card`. Make one card per item, attached with `node` or `about`. Give `front` (the prompt) and `back` (the answer or explanation), or a Markdown `body` with the two separated by a line containing `---`. `frontAudio` and `backAudio` attach a clip from `audio` generate; on edit, omit one to keep it or pass null to remove it. `meta: {"srs:confusable": true}` interleaves cards the learner may mix up.\n\nAdded cards join the learner\'s spaced review; open one to practise it now. Removing a card keeps its grades.\n',"material/lesson.md":`# lesson
+`,"material/flashcards.md":'# flashcards\n\nKind: `srs`, type `card`. Make one card per item, attached with `node` or `about`. Give `front` (the prompt) and `back` (the answer or explanation), or a Markdown `body` with the two separated by a line containing `---`. In a front, a line containing `+++` sets the cue above it apart from the question below. `frontAudio` and `backAudio` attach a clip from `audio` generate; on edit, omit one to keep it or pass null to remove it. `meta: {"srs:confusable": true}` interleaves cards the learner may mix up.\n\nAdded cards join the learner\'s spaced review; open one to practise it now. Removing a card keeps its grades.\n',"material/lesson.md":`# lesson
 
 The host closes the Lesson once records from its own Materials meet its focus Nodes' criteria. It wakes you only for a learner message or a Material run that ended with criteria unmet.
 
