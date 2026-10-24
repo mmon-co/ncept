@@ -1,5 +1,6 @@
 export type PatchCompileErrorCode =
   | "invalid-bundle"
+  | "invalid-retraction"
   | "unsupported-bases"
   | "unresolvable-dependency"
   | "incompatible-revision"
