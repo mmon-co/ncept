@@ -122,7 +122,7 @@ export const CATALOG_MODE_TITLES = {
 } as const;
 
 export const CATALOG_MODE_TOOLS = {
-  empty: ["query", "read", "theory", "skill", "report_friction"],
+  empty: ["query", "read", "theory", "skill", "report_friction", "propose"],
   charting: [
     "evaluation",
     "query",
