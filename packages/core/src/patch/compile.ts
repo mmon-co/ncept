@@ -47,6 +47,8 @@ export interface GraphDiffCompileReport {
 export interface CompiledGraphDiff {
   readonly operations: SemanticDelta["operations"];
   readonly citations: PatchMetadata["citations"];
+  /** Entity ids removed from the terminal revision's own delta before appending operations. */
+  readonly retractions: readonly string[];
   readonly graph: ResolvedGraph;
   readonly report: GraphDiffCompileReport;
 }
@@ -63,13 +65,39 @@ export function composePatch(
   content: PatchContent,
   operations: SemanticDelta["operations"],
   citations: PatchMetadata["citations"] = [],
+  retractions: readonly string[] = [],
 ): PatchContent {
+  const requested = new Set(retractions);
+  const found = new Set<string>();
+  const retractedEdges = new Set<string>();
+  for (const op of content.delta.operations) {
+    if (op.kind === "add-node" && requested.has(op.node.id))
+      throw new PatchCompileError("invalid-retraction", `cannot retract Node '${op.node.id}'`);
+    if (op.kind === "add-edge" && requested.has(op.edge.id)) {
+      found.add(op.edge.id);
+      retractedEdges.add(op.edge.id);
+    }
+    if (op.kind === "add-metadata-set" && requested.has(op.metadataSet.id)) found.add(op.metadataSet.id);
+  }
+  for (const id of requested)
+    if (!found.has(id))
+      throw new PatchCompileError("invalid-retraction", `cannot retract '${id}': no own Edge or metadata-set add`);
+  const retained = content.delta.operations.filter((op) => {
+    if (op.kind === "add-edge") return !requested.has(op.edge.id);
+    if (op.kind !== "add-metadata-set") return true;
+    const set = op.metadataSet;
+    if (requested.has(set.id)) return false;
+    const edge = set.subjects.find((subject) => subject.kind === "edge" && retractedEdges.has(subject.id));
+    if (edge?.kind !== "edge") return true;
+    if (set.subjects.every((subject) => subject.kind === "edge" && subject.id === edge.id)) return false;
+    throw new PatchCompileError("invalid-retraction", `retract shared metadata set '${set.id}' explicitly`);
+  });
   const replacedTags = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
   return {
     bases: content.bases,
     delta: {
       operations: [
-        ...content.delta.operations.filter((op) => op.kind !== "define-tag" || !replacedTags.has(op.tag.name)),
+        ...retained.filter((op) => op.kind !== "define-tag" || !replacedTags.has(op.tag.name)),
         ...operations,
       ],
     },
@@ -78,19 +106,20 @@ export function composePatch(
 }
 
 export function applyGraphDiff(content: PatchContent, diff: CompiledGraphDiff): PatchContent {
-  return composePatch(content, diff.operations, diff.citations);
+  return composePatch(content, diff.operations, diff.citations, diff.retractions);
 }
 
 function prospectiveBundle(
   bundle: ClosedPatchBundle,
   operations: SemanticDelta["operations"],
   citations: PatchMetadata["citations"],
+  retractions: readonly string[],
 ): ClosedPatchBundle {
   const terminalKey = exactPatchRefKey(bundle.terminal);
   const terminal = bundle.revisions.find((revision) => exactPatchRefKey(revision.ref) === terminalKey);
   if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   const { ref, ...value } = terminal;
-  const content = composePatch(value, operations, citations);
+  const content = composePatch(value, operations, citations, retractions);
   const next = { identity: ref.identity, digest: contentDigest(content) };
   return {
     terminal: next,
@@ -223,8 +252,9 @@ function approximateReport(
   bundle: ClosedPatchBundle,
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
+  retractions: readonly string[],
 ): GraphDiffCompileReport {
-  const current = resolvePatchBundle(bundle);
+  const current = resolvePatchBundle(prospectiveBundle(bundle, [], [], retractions));
   const nodes = new Set(current.nodes.map(({ id }) => id));
   const edges = new Map(current.edges.map((edge) => [edge.id, edge]));
   const labelled = resolvedLabels(current);
@@ -245,17 +275,18 @@ export function compileGraphDiff(
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
   citations: PatchMetadata["citations"] = [],
+  retractions: readonly string[] = [],
 ): CompiledGraphDiff {
   let graph: ResolvedGraph;
   try {
-    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations));
+    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations, retractions));
     projectVisualGraph({ graph, annotations: {} });
   } catch (error) {
     if (
       error instanceof PatchCompileError &&
       ["dangling-edge", "missing-display-metadata", "dependency-cycle"].includes(error.code)
     )
-      throw new GraphDiffCompileError(approximateReport(bundle, operations, targets));
+      throw new GraphDiffCompileError(approximateReport(bundle, operations, targets, retractions));
     throw error;
   }
   const report = reportFor(
@@ -266,7 +297,7 @@ export function compileGraphDiff(
     targets,
   );
   if (!report.valid) throw new GraphDiffCompileError(report);
-  return { graph, report, operations, citations };
+  return { graph, report, operations, citations, retractions };
 }
 
 export function compileGraph(input: GraphCompilationInput): VisualGraph {

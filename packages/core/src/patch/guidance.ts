@@ -30,6 +30,8 @@ export type ResolvedGuidanceEntry = GuidanceEntry & {
     readonly entryIndex: number;
   };
 };
+/** Authored first-action guidance, rendered by the tutor in the learner's language. */
+export const PEDAGOGY_OPENING_PROPERTY = "pedagogy:opening";
 export const PEDAGOGY_GUIDANCE_PROPERTY = "pedagogy:guidance";
 export const PEDAGOGY_ASSESSMENT_PROPERTY = "pedagogy:assessment";
 export const GUIDANCE_PROPERTIES = [PEDAGOGY_GUIDANCE_PROPERTY, PEDAGOGY_ASSESSMENT_PROPERTY] as const;

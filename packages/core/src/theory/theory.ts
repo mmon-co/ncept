@@ -150,6 +150,8 @@ export type LessonProgress = Readonly<{
 
 export type MissionContext = Readonly<{
   id: string;
+  /** What to ask first at this Mission's opening, not text to quote verbatim. */
+  openingGuidance?: string;
   /** Effective current Mission revision; the tutor passes this value as `revises`. */
   change: string;
   statement: string;

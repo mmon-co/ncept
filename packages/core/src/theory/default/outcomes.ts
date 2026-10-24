@@ -343,40 +343,7 @@ function checkNote(
   return `Mistaken (${error ?? "unnamed"}): ${(error && check.mistaken?.[error]) ?? "a wrong version"}`;
 }
 
-/** Shared check-to-Record projection; callers supply their own captured task and response. */
-export function checkAttempts(
-  check: {
-    about: readonly NodeId[];
-    ask: string;
-    shown: string;
-    absent: string;
-    mistaken?: Readonly<Record<string, string>>;
-  },
-  result: CheckResult,
-  context: {
-    at: string;
-    revision: ExactPatchRef;
-    prompt: string;
-    response: string;
-    unaided: boolean;
-    grader: Demonstration["grader"];
-  },
-): readonly OriginalAttempt[] {
-  return check.about.map((node) => ({
-    at: context.at,
-    payload: {
-      kind: "demonstration",
-      node: { node, provenance: { ...context.revision } },
-      outcome: result.outcome === "shown" ? "success" : result.outcome === "skipped" ? "dont-know" : "failure",
-      unaided: context.unaided,
-      grader: result.outcome === "skipped" ? "learner" : context.grader,
-      task: `${context.prompt}\nCheck: ${check.ask}`,
-      response: `${context.response}\n${checkNote(check, result)}`,
-    },
-  }));
-}
-
-/** One demonstration per captured `about` Node, pinned to the revision the Problem was opened at. */
+/** One demonstration per Node and help state, pinned to the revision the Problem was opened at. */
 export function problemAttempts(outcome: AttemptOutcome, at: string): readonly OriginalAttempt[] {
   const { problem, response, assessment } = outcome;
   if (assessment.dontKnow)
@@ -392,30 +359,45 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         response,
       },
     }));
-  // One response, one demonstration per check and Node. A check help touched is recorded twice:
-  // unaided as it stood before the help, aided as the final response left it.
-  if (problem.grader.by === "checks")
-    return problem.grader.checks.flatMap((check) => {
-      const final = assessment.checks?.[check.id] ?? { outcome: "absent" as const };
-      const before = assessment.helped?.[check.id];
-      const states =
-        before === undefined
-          ? [{ result: final, unaided: !assessment.aided }]
-          : [
-              { result: before, unaided: !assessment.aided },
-              { result: final, unaided: false },
-            ];
-      return states.flatMap(({ result, unaided }) =>
-        checkAttempts(check, result, {
+  // Checks judged from one response are dependent evidence, not separate window entries.
+  if (problem.grader.by === "checks") {
+    const checksByNode = new Map<NodeId, (typeof problem.grader.checks)[number][]>();
+    for (const check of problem.grader.checks)
+      for (const node of check.about) {
+        const checks = checksByNode.get(node) ?? [];
+        checks.push(check);
+        checksByNode.set(node, checks);
+      }
+    return [...checksByNode].flatMap(([node, checks]) => {
+      const record = (beforeHelp: boolean): OriginalAttempt => {
+        const results = checks.map((check) => ({
+          check,
+          result: (beforeHelp ? assessment.helped?.[check.id] : undefined) ??
+            assessment.checks?.[check.id] ?? { outcome: "absent" as const },
+        }));
+        const result = results.some(({ result: { outcome } }) => outcome === "absent" || outcome === "mistaken")
+          ? "failure"
+          : results.some(({ result: { outcome } }) => outcome === "skipped")
+            ? "dont-know"
+            : "success";
+        return {
           at,
-          revision: outcome.revision,
-          prompt: problem.prompt,
-          response,
-          unaided,
-          grader: assessment.grader,
-        }),
-      );
+          payload: {
+            kind: "demonstration",
+            node: { node, provenance: { ...outcome.revision } },
+            outcome: result,
+            unaided: beforeHelp && !assessment.aided,
+            grader: result === "dont-know" ? "learner" : assessment.grader,
+            task: [problem.prompt, ...checks.map((check) => `Check: ${check.ask}`)].join("\n"),
+            response: [response, ...results.map(({ check, result }) => checkNote(check, result))].join("\n"),
+          },
+        };
+      };
+      return checks.some((check) => assessment.helped?.[check.id] !== undefined)
+        ? [record(true), record(false)]
+        : [record(true)];
     });
+  }
   const choice = problem.answer.kind === "choice" ? problem.answer.options : undefined;
   const answer = choice?.find(({ id }) => id === response)?.label ?? response;
   return problem.about.map((node) => ({

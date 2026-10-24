@@ -13,7 +13,7 @@ import type { HostCapability, SessionMode } from "../modes";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
-import { defaultCatalogTools } from "./catalog";
+import { catalogToolsForMode } from "./catalog";
 import { evaluationContext } from "./evaluation";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
@@ -166,9 +166,7 @@ function* setup(
         : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
     ].join("\n\n"),
     skills: chatSkills(mode),
-    tools: defaultCatalogTools.filter((tool) =>
-      CATALOG_MODE_TOOLS[mode ?? "lesson"].some((name) => name === tool.name),
-    ),
+    tools: catalogToolsForMode(mode ?? "lesson"),
   };
 }
 

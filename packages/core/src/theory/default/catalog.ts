@@ -1,4 +1,5 @@
 import { evaluationTools } from "./evaluation";
+import { CATALOG_EVALUATION_OPERATIONS, CATALOG_MODE_TOOLS } from "./catalog-contract";
 import type { Tool } from "../theory";
 import type { DefaultState } from "./state";
 import { defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools } from "./tools";
@@ -47,15 +48,23 @@ function object(raw: unknown): Record<string, unknown> {
   return raw;
 }
 
+function evaluationOperationsFor(mode: string | undefined) {
+  const narrowed: Readonly<Record<string, readonly string[] | undefined>> = CATALOG_EVALUATION_OPERATIONS;
+  const allowed = mode !== undefined && Object.hasOwn(narrowed, mode) ? narrowed[mode] : undefined;
+  return allowed === undefined ? evaluationOperations : evaluationOperations.filter(({ op }) => allowed.includes(op));
+}
+
 /** Resolve before running so the host can validate the original schema and enrich items. */
 export function resolveDefaultCatalogProgram(
   name: string,
   raw: unknown,
+  mode?: string,
 ): {
   tool: DefaultTool;
   input: Record<string, unknown>;
 } {
   const envelope = object(raw);
+  const operations = evaluationOperationsFor(mode);
   const allowed = name === "theory" ? ["name", "input", "full"] : ["op", "kind", "input"];
   if (name !== "theory" && name !== "evaluation") throw new Error("Unsupported catalog");
   if (Object.keys(envelope).some((key) => !allowed.includes(key))) throw new Error("Unknown catalog argument");
@@ -64,7 +73,11 @@ export function resolveDefaultCatalogProgram(
   const tool =
     name === "theory"
       ? theoryReadings.find((reading) => reading.name === envelope.name)
-      : evaluationOperations.find((entry) => entry.op === envelope.op && entry.kind === envelope.kind)?.tool;
+      : operations.find((entry) => entry.op === envelope.op && entry.kind === envelope.kind)?.tool;
+  if (tool === undefined && name === "evaluation" && operations !== evaluationOperations)
+    throw new Error(
+      `This mode's evaluation accepts ${operations.map(({ op }) => op).join(", ")}; grade work in a Lesson's Materials`,
+    );
   if (tool === undefined && name === "evaluation" && envelope.kind !== undefined && envelope.op !== "record")
     throw new Error(
       `kind applies only to op record (kinds: ${Object.keys(records).join(", ")}); ${String(envelope.op)} takes no kind`,
@@ -127,19 +140,35 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       return yield* tool.run(input, ctx);
     },
   },
-  {
+  evaluationCatalogTool(undefined),
+];
+
+/** The mode's catalog roots; Chart's evaluation only records self-report and corrects evidence. */
+export function catalogToolsForMode(mode: keyof typeof CATALOG_MODE_TOOLS): readonly DefaultTool[] {
+  const roots: readonly string[] = CATALOG_MODE_TOOLS[mode];
+  return defaultCatalogTools
+    .filter((tool) => roots.includes(tool.name))
+    .map((tool) => (tool.name === "evaluation" ? evaluationCatalogTool(mode) : tool));
+}
+
+function evaluationCatalogTool(mode: string | undefined): DefaultTool {
+  const operations = evaluationOperationsFor(mode);
+  const recording = operations.some(({ op }) => op === "record");
+  return {
     name: "evaluation",
     description:
-      "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Override corrects a delegated Record; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned.",
+      operations === evaluationOperations
+        ? "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Override corrects a delegated Record; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned."
+        : "Record evidence that needs no grading: claim records self-report; retract corrects evidence. Nothing here grades a response; graded checks happen in a Lesson's Materials. Artifact filing is host-owned.",
     schema: {
       type: "object",
       properties: {
-        op: { enum: [...new Set(evaluationOperations.map(({ op }) => op))] },
-        kind: { enum: Object.keys(records), description: "Only with op record" },
+        op: { enum: [...new Set(operations.map(({ op }) => op))] },
+        ...(recording ? { kind: { enum: Object.keys(records), description: "Only with op record" } } : {}),
         input: { type: "object" },
       },
       required: ["op", "input"],
-      oneOf: evaluationOperations.map(({ op, kind, tool }) => ({
+      oneOf: operations.map(({ op, kind, tool }) => ({
         type: "object",
         properties: { op: { const: op }, ...(kind ? { kind: { const: kind } } : {}), input: tool.schema },
         required: ["op", "input", ...(kind ? ["kind"] : [])],
@@ -147,8 +176,8 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
       })),
     },
     *run(raw, ctx) {
-      const { tool, input } = resolveDefaultCatalogProgram("evaluation", raw);
+      const { tool, input } = resolveDefaultCatalogProgram("evaluation", raw, mode);
       return yield* tool.run(input, ctx);
     },
-  },
-];
+  };
+}
