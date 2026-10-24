@@ -100,6 +100,13 @@ export interface CompactGuidance {
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 
+/** Modes whose evaluation is narrower than Lesson's; the rest mount every operation. Chart records self-report, and grading happens in Lessons. */
+export const CATALOG_EVALUATION_OPERATIONS: Readonly<
+  Partial<Record<keyof typeof CATALOG_MODE_TOOLS, readonly string[]>>
+> = {
+  charting: ["claim", "retract"],
+};
+
 /** Finalization can read only; these roots expose no writing operations. */
 export const CATALOG_READ_ONLY_TOOLS = ["theory", "query", "read"] as const;
 
