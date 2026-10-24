@@ -1,6 +1,6 @@
 import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES, PEDAGOGY_OPENING_PROPERTY } from "./guidance";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -162,13 +162,20 @@ export function validateAuthoredContent(content: PatchContent): void {
       operation.kind === "add-metadata-set" ? [operation.metadataSet.properties] : [],
     ),
   ];
-  for (const properties of sets)
+  for (const properties of sets) {
+    const opening = properties[PEDAGOGY_OPENING_PROPERTY];
+    if (PEDAGOGY_OPENING_PROPERTY in properties && (typeof opening !== "string" || !opening.trim()))
+      throw new PatchCompileError(
+        "invalid-metadata-value",
+        `metadata property '${PEDAGOGY_OPENING_PROPERTY}' must be a nonblank string`,
+      );
     for (const property of GUIDANCE_PROPERTIES)
       if (property in properties && !isGuidanceEntries(properties[property]))
         throw new PatchCompileError(
           "invalid-metadata-value",
           `metadata property '${property}' must be an ordered guidance entry list`,
         );
+  }
 }
 
 /** The discovery tags a revision's metadata declares: the open `patch:<tag>: true` convention
