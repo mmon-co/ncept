@@ -433,9 +433,15 @@ export const defaultInstrumentTools = [
         limit: { type: "integer", minimum: 1 },
       }),
       required: [],
+      // Exactly one of node or scope; a cursor with scope is refused at run. Zod's JSON Schema reader rejects `not`.
       oneOf: [
-        { required: ["node"], not: { required: ["scope"] } },
-        { required: ["scope"], not: { anyOf: [{ required: ["node"] }, { required: ["cursor"] }] } },
+        { type: "object", properties: { node: nodeProperty }, required: ["node"], additionalProperties: true },
+        {
+          type: "object",
+          properties: { scope: scopeProperties.scope },
+          required: ["scope"],
+          additionalProperties: true,
+        },
       ],
     },
     description: [
