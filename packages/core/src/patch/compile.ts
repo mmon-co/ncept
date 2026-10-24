@@ -67,15 +67,37 @@ export function composePatch(
   citations: PatchMetadata["citations"] = [],
   retractions: readonly string[] = [],
 ): PatchContent {
-  // Shared interface stub; the Core retraction ticket supplies the algebra.
-  if (retractions.length > 0)
-    throw new PatchCompileError("invalid-bundle", "own-contribution retractions are not implemented");
+  const requested = new Set(retractions);
+  const found = new Set<string>();
+  const retractedEdges = new Set<string>();
+  for (const op of content.delta.operations) {
+    if (op.kind === "add-node" && requested.has(op.node.id))
+      throw new PatchCompileError("invalid-retraction", `cannot retract Node '${op.node.id}'`);
+    if (op.kind === "add-edge" && requested.has(op.edge.id)) {
+      found.add(op.edge.id);
+      retractedEdges.add(op.edge.id);
+    }
+    if (op.kind === "add-metadata-set" && requested.has(op.metadataSet.id)) found.add(op.metadataSet.id);
+  }
+  for (const id of requested)
+    if (!found.has(id))
+      throw new PatchCompileError("invalid-retraction", `cannot retract '${id}': no own Edge or metadata-set add`);
+  const retained = content.delta.operations.filter((op) => {
+    if (op.kind === "add-edge") return !requested.has(op.edge.id);
+    if (op.kind !== "add-metadata-set") return true;
+    const set = op.metadataSet;
+    if (requested.has(set.id)) return false;
+    const edge = set.subjects.find((subject) => subject.kind === "edge" && retractedEdges.has(subject.id));
+    if (edge?.kind !== "edge") return true;
+    if (set.subjects.every((subject) => subject.kind === "edge" && subject.id === edge.id)) return false;
+    throw new PatchCompileError("invalid-retraction", `retract shared metadata set '${set.id}' explicitly`);
+  });
   const replacedTags = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
   return {
     bases: content.bases,
     delta: {
       operations: [
-        ...content.delta.operations.filter((op) => op.kind !== "define-tag" || !replacedTags.has(op.tag.name)),
+        ...retained.filter((op) => op.kind !== "define-tag" || !replacedTags.has(op.tag.name)),
         ...operations,
       ],
     },
@@ -230,8 +252,9 @@ function approximateReport(
   bundle: ClosedPatchBundle,
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
+  retractions: readonly string[],
 ): GraphDiffCompileReport {
-  const current = resolvePatchBundle(bundle);
+  const current = resolvePatchBundle(prospectiveBundle(bundle, [], [], retractions));
   const nodes = new Set(current.nodes.map(({ id }) => id));
   const edges = new Map(current.edges.map((edge) => [edge.id, edge]));
   const labelled = resolvedLabels(current);
@@ -263,7 +286,7 @@ export function compileGraphDiff(
       error instanceof PatchCompileError &&
       ["dangling-edge", "missing-display-metadata", "dependency-cycle"].includes(error.code)
     )
-      throw new GraphDiffCompileError(approximateReport(bundle, operations, targets));
+      throw new GraphDiffCompileError(approximateReport(bundle, operations, targets, retractions));
     throw error;
   }
   const report = reportFor(

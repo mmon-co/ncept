@@ -9,6 +9,7 @@ import {
   composePatch,
   emptyPatch,
   lessonOperations,
+  PatchCompileError,
   resolvePatchBundle,
   revisionContent,
   revisionDigest,
@@ -109,6 +110,56 @@ test("Notebook diff compilation and application preserve citations and compute t
   ]);
   expect(empty.delta.operations).toEqual([]);
   expect(empty.metadata.citations).toEqual([]);
+});
+
+test("an accepted own Edge can be reversed without reminting Nodes or rewriting history", () => {
+  const accepted = composePatch(emptyPatch(), [
+    ...lessonOperations({ id: "node-a", label: "A", lesson: document("Explain A.") }),
+    ...lessonOperations({ id: "node-b", label: "B", lesson: document("Explain B.") }),
+    { kind: "add-edge", edge: { id: "edge-ab", from: "node-a", to: "node-b" } },
+  ]);
+  const before = candidateRevision("patch-personal", accepted);
+  const bundle = bundleForRevision(before.ref, contents(accepted));
+  const oldGraph = resolvePatchBundle(bundle);
+  const oldContent = structuredClone(accepted);
+  const compiled = compileGraphDiff(
+    bundle,
+    [{ kind: "add-edge", edge: { id: "edge-ba", from: "node-b", to: "node-a" } }],
+    ["node-a"],
+    [],
+    ["edge-ab"],
+  );
+  const next = applyGraphDiff(accepted, compiled);
+  const after = candidateRevision("patch-personal", next);
+  const graph = resolvePatchBundle(bundleForRevision(after.ref, contents(accepted, next)));
+  expect(graph).toEqual(compiled.graph);
+  expect(compiled.report.compiledAgainst).toEqual(before.ref);
+  expect(graph.nodes).toEqual(oldGraph.nodes);
+  expect(graph.nodes.map(({ id }) => id)).toEqual(["node-a", "node-b"]);
+  expect(graph.edges).toEqual([{ id: "edge-ba", from: "node-b", to: "node-a" }]);
+  expect(resolvePatchBundle(bundleForRevision(before.ref, contents(accepted, next)))).toEqual(oldGraph);
+  expect(oldGraph.edges).toEqual([{ id: "edge-ab", from: "node-a", to: "node-b" }]);
+  expect(accepted).toEqual(oldContent);
+
+  const inherited = { ...emptyPatch(), bases: [before.ref] };
+  const inheritedBundle = bundleForRevision(
+    candidateRevision("patch-inherited", inherited).ref,
+    contents(accepted, inherited),
+  );
+  for (const [source, id] of [
+    [bundle, "node-a"],
+    [bundle, "edge-unknown"],
+    [inheritedBundle, "edge-ab"],
+  ] as const) {
+    try {
+      compileGraphDiff(source, [], [], [], [id]);
+      throw new Error(`expected '${id}' retraction to fail`);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PatchCompileError);
+      if (!(error instanceof PatchCompileError)) throw error;
+      expect(error.message).toContain(id);
+    }
+  }
 });
 
 test("composed content validates exact masks and conflicts against supplied bases", () => {
