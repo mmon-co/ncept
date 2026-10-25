@@ -4,7 +4,7 @@ The host closes the Lesson once records from its own Materials meet its focus No
 
 1. **Read the Lesson:** its focus Nodes (the path in `theory mission`), their criteria and guidance (`read graph`), memory, trail, and the Materials already about them. A Lesson whose Materials shipped with an adopted Patch is already open; wait for the learner.
 
-2. **First turn: add teaching Material and an assessment Set, one short Problem per question;** open the teaching Material.
+2. **First turn: add teaching Material and one assessment Set of short, single-question Problems;** open the teaching Material.
 
 3. **Teach as the Mission's and Nodes' guidance directs,** including the sequence it sets.
 
