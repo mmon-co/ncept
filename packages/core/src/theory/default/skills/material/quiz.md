@@ -2,7 +2,7 @@
 
 Kind: `quizzes`. A Problem poses one graded task and a Set sequences Problems. Each Problem separates `answer` (how the learner responds: a choice, short or long text, or work in an applet or roleplay) from `grader` (how it's judged); choose both for the capability being shown. A choice shows recognition, so production is checked by producing; competing options are alike in length and form, and each wrong one may carry the `error` it reveals.
 
-Use one text Problem graded by `checks` when one response shows several capabilities (an explanation, essay, project); a Set of short Problems for separate questions. A fast classifier picks `shown`, `absent` or a named `mistaken` version per check from the learner's text, so describe what a response visibly does. `pumps` together name every check, asking the learner to take each up without giving it away.
+For separate questions, write a Set of short Problems, one per question. Use one `checks`-graded text Problem for a response showing several capabilities (explanation, essay, project). A fast classifier picks `shown`, `absent` or a named `mistaken` version per check from the learner's text, so describe what a response visibly does. `pumps` together name every check, asking the learner to take each up without giving it away.
 
 `help` sets how far the Problem teaches. `pump` only measures: use it for prior-capability, retention and milestone checks. `hint` shows a mistaken check's hint; `correct` adds the correction if the mistake persists after it. One response counts once per Node however many checks touch it; where help touches a check, that Node is recorded unaided as its checks stood before help and aided as they ended.
 
