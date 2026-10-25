@@ -19,7 +19,6 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch
 import type { ChatContext, Tool } from "../theory";
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
-import { milestoneDiagnosisSchema, readMilestoneDiagnosis } from "./diagnosis";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
@@ -29,7 +28,6 @@ import {
   interpretationsDefault,
   isClaim,
   isDemonstration,
-  isLapse,
   isRetrievalOpenerDemonstration,
   isTeaching,
   memoryDefault,
@@ -253,23 +251,9 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
       task: payload.kind === "demonstration" ? payload.task : (payload.prompt ?? payload.statement),
     }));
 }
-function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown) {
+function closeRecount(ctx: Ctx, rawPractising?: unknown) {
   if (ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson"))
     throw new Error("The host closes Lessons from their own Material records; close-recount is for Review.");
-  const milestoneDiagnosis = rawDiagnosis === undefined ? undefined : readMilestoneDiagnosis(rawDiagnosis);
-  if (rawDiagnosis !== undefined) {
-    if (milestoneDiagnosis === undefined)
-      throw new Error("Expected a milestone diagnosis with errors and regressed components");
-    const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
-    if (ctx.mode !== "lesson" || !lesson || lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
-      throw new Error("A milestone diagnosis requires a milestone Lesson");
-    const cone = route(ctx.graph, lesson.section.milestone);
-    const allowed = new Set(
-      cone.kind === "found" ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone) : [],
-    );
-    for (const node of milestoneDiagnosis.regressedComponents)
-      if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
-  }
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
   const directions = practising.map((entry) => {
@@ -324,7 +308,6 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
           };
     }),
     practising: directions,
-    ...(milestoneDiagnosis === undefined ? {} : { milestoneDiagnosis }),
   };
 }
 function nodeTool<const Name extends string>(
@@ -531,9 +514,8 @@ export const defaultInstrumentTools = [
   {
     name: "close_recount" as const,
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis and records component lapses for Review without changing acquisition standing.",
+      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
     schema: schema({
-      milestoneDiagnosis: milestoneDiagnosisSchema,
       practising: {
         type: "array",
         items: {
@@ -545,34 +527,8 @@ export const defaultInstrumentTools = [
       },
     }),
     *run(raw, ctx) {
-      const input = args(raw, ["practising", "milestoneDiagnosis"]);
-      const recount = closeRecount(ctx, input.practising, input.milestoneDiagnosis);
-      for (const node of recount.milestoneDiagnosis?.regressedComponents ?? []) {
-        const slip = defaultNodeState(ctx.state, node).records.findLast(
-          (record) =>
-            isDemonstration(record.payload) &&
-            record.payload.unaided &&
-            record.payload.outcome !== "success" &&
-            (ctx.sessionObservations?.includes(record.id) ?? record.surface === ctx.surface),
-        );
-        const priorLapse = ctx.state.observations.findLast(
-          (record) => isLapse(record.payload) && record.payload.node.node === node && record.surface === ctx.surface,
-        );
-        const of = slip?.id ?? priorLapse?.id;
-        yield* write({
-          at: ctx.now,
-          surface: ctx.surface,
-          about: [...ctx.about],
-          nodes: [node],
-          ...(of === undefined ? {} : { cites: [of] }),
-          payload: {
-            kind: "lapse",
-            node: { node, provenance: ctx.graph.terminal },
-            ...(of === undefined ? {} : { of }),
-          },
-        });
-      }
-      return recount;
+      const input = args(raw, ["practising"]);
+      return closeRecount(ctx, input.practising);
     },
   },
 ] satisfies readonly DefaultTool[];
