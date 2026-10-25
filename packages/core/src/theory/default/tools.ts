@@ -425,12 +425,28 @@ export const defaultInstrumentTools = [
   },
   {
     name: "trail",
-    schema: schema({ node: nodeProperty, cursor: { type: "string" }, limit: { type: "integer", minimum: 1 } }, [
-      "node",
-    ]),
+    schema: {
+      ...schema({
+        ...scopeProperties,
+        node: nodeProperty,
+        cursor: { type: "string" },
+        limit: { type: "integer", minimum: 1 },
+      }),
+      required: [],
+      // Exactly one of node or scope; a cursor with scope is refused at run. Zod's JSON Schema reader rejects `not`.
+      oneOf: [
+        { type: "object", properties: { node: nodeProperty }, required: ["node"], additionalProperties: true },
+        {
+          type: "object",
+          properties: { scope: scopeProperties.scope },
+          required: ["scope"],
+          additionalProperties: true,
+        },
+      ],
+    },
     description: [
-      "Original records and the rule producing this Node's label. The first qualifying rule applies:",
-      'pedagogy:completion is ordinary Node metadata; SRS uses { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
+      "Original records and the rule producing each Node's label. Pass node for one paged trail, or scope: [node, ...] for an array of independently paged trails. Follow each continueCursor with node and cursor, not scope. Limit applies per Node. The first qualifying rule applies:",
+      'pedagogy:completion is ordinary Node metadata, not trail input; SRS binds it with { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
       "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
@@ -438,7 +454,11 @@ export const defaultInstrumentTools = [
       "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
     *run(raw, ctx) {
-      return pagedTrail(ctx, raw);
+      const input = args(raw, ["node", "scope", "cursor", "limit"]);
+      if (input.scope === undefined) return pagedTrail(ctx, raw);
+      if (input.node !== undefined || input.cursor !== undefined)
+        throw new Error("Trail scope cannot accompany node or cursor; follow each page with node and cursor");
+      return nodesInScope(ctx, nodes(input.scope)).map((node) => pagedTrail(ctx, { node, limit: input.limit }));
     },
   },
   scopedTool("coverage", "Nodes with no records.", (ctx, scope) =>
