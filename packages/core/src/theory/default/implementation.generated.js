@@ -311,7 +311,7 @@ After two or three rounds without gain, offer the Chart aside.
 
 A Review rechecks its frozen batch for retention, assessing before any teaching.
 
-1. Assess with 3–4 realistic text Problems graded by checks with pumps, each covering several Nodes, one check per batch Node. Tally that every Node has a check before opening them as one sequential Set.
+1. Assess with 3–4 realistic text Problems graded by checks with pumps, each covering several Nodes, one check per batch Node. Open them as one sequential Set; the host refuses missing or duplicate batch Node checks, so fix what a refusal names.
 2. After submission, give each miss a one- or two-sentence corrective and reopen the Document that taught it (\`document\` open with \`teachingNode\`), one per turn, naming where the others were taught.
 3. Close with \`evaluation\` close-recount once every Node has a verdict and every miss its corrective.
 `,"material/roleplay.md":'# roleplay\n\nKind: `roleplay`, type `encounter`. Write the character\'s private `script` and the `scene` the learner sees. An ordinary opening is ungraded practice; to grade it, pose it in a Quiz Problem with `answer:{kind:"roleplay",material:{id,revision}}` and a checks or rubric grader.\n\nJSON text in a string, not Markdown:\n\n```json\n{\n  "title": "...",\n  "scene": "learner-visible situation and task",\n  "script": "private character instructions"\n}\n```\n\nText is nonblank. Optional `model` uses an existing model spec (`provider/model-id[:effort]`); omission pins the default model when opened. The Material envelope carries `about`; the body has no checks or about. The role sees only its script, scene and this run\'s transcript.\n',"mission/SKILL.md":`---
