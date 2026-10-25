@@ -19,7 +19,6 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch
 import type { ChatContext, Tool } from "../theory";
 import { readMissionPath } from "../path";
 import { pathDefault } from "./path";
-import { milestoneDiagnosisSchema, readMilestoneDiagnosis } from "./diagnosis";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
@@ -29,7 +28,6 @@ import {
   interpretationsDefault,
   isClaim,
   isDemonstration,
-  isLapse,
   isRetrievalOpenerDemonstration,
   isTeaching,
   memoryDefault,
@@ -253,23 +251,9 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
       task: payload.kind === "demonstration" ? payload.task : (payload.prompt ?? payload.statement),
     }));
 }
-function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown) {
+function closeRecount(ctx: Ctx, rawPractising?: unknown) {
   if (ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson"))
     throw new Error("The host closes Lessons from their own Material records; close-recount is for Review.");
-  const milestoneDiagnosis = rawDiagnosis === undefined ? undefined : readMilestoneDiagnosis(rawDiagnosis);
-  if (rawDiagnosis !== undefined) {
-    if (milestoneDiagnosis === undefined)
-      throw new Error("Expected a milestone diagnosis with errors and regressed components");
-    const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
-    if (ctx.mode !== "lesson" || !lesson || lesson.nodes.length !== 1 || lesson.nodes[0] !== lesson.section.milestone)
-      throw new Error("A milestone diagnosis requires a milestone Lesson");
-    const cone = route(ctx.graph, lesson.section.milestone);
-    const allowed = new Set(
-      cone.kind === "found" ? cone.nodes.map(({ id }) => id).filter((id) => id !== lesson.section.milestone) : [],
-    );
-    for (const node of milestoneDiagnosis.regressedComponents)
-      if (!allowed.has(node)) throw new Error("Regressed component is not a milestone prerequisite: " + node);
-  }
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
   const directions = practising.map((entry) => {
@@ -324,7 +308,6 @@ function closeRecount(ctx: Ctx, rawPractising?: unknown, rawDiagnosis?: unknown)
           };
     }),
     practising: directions,
-    ...(milestoneDiagnosis === undefined ? {} : { milestoneDiagnosis }),
   };
 }
 function nodeTool<const Name extends string>(
@@ -425,12 +408,28 @@ export const defaultInstrumentTools = [
   },
   {
     name: "trail",
-    schema: schema({ node: nodeProperty, cursor: { type: "string" }, limit: { type: "integer", minimum: 1 } }, [
-      "node",
-    ]),
+    schema: {
+      ...schema({
+        ...scopeProperties,
+        node: nodeProperty,
+        cursor: { type: "string" },
+        limit: { type: "integer", minimum: 1 },
+      }),
+      required: [],
+      // Exactly one of node or scope; a cursor with scope is refused at run. Zod's JSON Schema reader rejects `not`.
+      oneOf: [
+        { type: "object", properties: { node: nodeProperty }, required: ["node"], additionalProperties: true },
+        {
+          type: "object",
+          properties: { scope: scopeProperties.scope },
+          required: ["scope"],
+          additionalProperties: true,
+        },
+      ],
+    },
     description: [
-      "Original records and the rule producing this Node's label. The first qualifying rule applies:",
-      'pedagogy:completion is ordinary Node metadata; SRS uses { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
+      "Original records and the rule producing each Node's label. Pass node for one paged trail, or scope: [node, ...] for an array of independently paged trails. Follow each continueCursor with node and cursor, not scope. Limit applies per Node. The first qualifying rule applies:",
+      'pedagogy:completion is ordinary Node metadata, not trail input; SRS binds it with { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
       "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
@@ -438,7 +437,11 @@ export const defaultInstrumentTools = [
       "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
     ].join("\n"),
     *run(raw, ctx) {
-      return pagedTrail(ctx, raw);
+      const input = args(raw, ["node", "scope", "cursor", "limit"]);
+      if (input.scope === undefined) return pagedTrail(ctx, raw);
+      if (input.node !== undefined || input.cursor !== undefined)
+        throw new Error("Trail scope cannot accompany node or cursor; follow each page with node and cursor");
+      return nodesInScope(ctx, nodes(input.scope)).map((node) => pagedTrail(ctx, { node, limit: input.limit }));
     },
   },
   scopedTool("coverage", "Nodes with no records.", (ctx, scope) =>
@@ -511,9 +514,8 @@ export const defaultInstrumentTools = [
   {
     name: "close_recount" as const,
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence. For a milestone ended without passing its full unaided capstone, include milestoneDiagnosis with each error's cause and the regressed prerequisite Nodes; this hands the next check-in its diagnosis and records component lapses for Review without changing acquisition standing.",
+      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
     schema: schema({
-      milestoneDiagnosis: milestoneDiagnosisSchema,
       practising: {
         type: "array",
         items: {
@@ -525,34 +527,8 @@ export const defaultInstrumentTools = [
       },
     }),
     *run(raw, ctx) {
-      const input = args(raw, ["practising", "milestoneDiagnosis"]);
-      const recount = closeRecount(ctx, input.practising, input.milestoneDiagnosis);
-      for (const node of recount.milestoneDiagnosis?.regressedComponents ?? []) {
-        const slip = defaultNodeState(ctx.state, node).records.findLast(
-          (record) =>
-            isDemonstration(record.payload) &&
-            record.payload.unaided &&
-            record.payload.outcome !== "success" &&
-            (ctx.sessionObservations?.includes(record.id) ?? record.surface === ctx.surface),
-        );
-        const priorLapse = ctx.state.observations.findLast(
-          (record) => isLapse(record.payload) && record.payload.node.node === node && record.surface === ctx.surface,
-        );
-        const of = slip?.id ?? priorLapse?.id;
-        yield* write({
-          at: ctx.now,
-          surface: ctx.surface,
-          about: [...ctx.about],
-          nodes: [node],
-          ...(of === undefined ? {} : { cites: [of] }),
-          payload: {
-            kind: "lapse",
-            node: { node, provenance: ctx.graph.terminal },
-            ...(of === undefined ? {} : { of }),
-          },
-        });
-      }
-      return recount;
+      const input = args(raw, ["practising"]);
+      return closeRecount(ctx, input.practising);
     },
   },
 ] satisfies readonly DefaultTool[];
