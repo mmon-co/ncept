@@ -194,6 +194,8 @@ export interface ReificationTarget {
 export interface ContributionProvenance {
   readonly patch: ExactPatchRef;
   readonly operationIndex: number;
+  /** Host-projected contributions from one installed copy of this exact revision. */
+  readonly instanceId?: string;
 }
 
 export interface ResolvedGraph {
