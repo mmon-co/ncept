@@ -1,3 +1,9 @@
+import {
+  isPatchSkillEntries,
+  isPatchToolEntries,
+  PEDAGOGY_SKILLS_PROPERTY,
+  PEDAGOGY_TOOLS_PROPERTY,
+} from "./capabilities";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES, type GuidanceEntry } from "./guidance";
 import {
   materialKey,
@@ -73,6 +79,12 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
         };
       case "add-metadata-set": {
         const set = operation.metadataSet;
+        const skills = set.properties[PEDAGOGY_SKILLS_PROPERTY];
+        const tools = set.properties[PEDAGOGY_TOOLS_PROPERTY];
+        const relocateNodes = <T extends { readonly nodes?: readonly NodeId[] }>(entry: T): T => ({
+          ...entry,
+          ...(entry.nodes === undefined ? {} : { nodes: entry.nodes.map(node) }),
+        });
         return {
           kind: operation.kind,
           metadataSet: {
@@ -87,6 +99,17 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
             ),
             properties: {
               ...set.properties,
+              ...(isPatchSkillEntries(skills)
+                ? { [PEDAGOGY_SKILLS_PROPERTY]: skills.map((entry) => ({ ...relocateNodes(entry) })) }
+                : {}),
+              ...(isPatchToolEntries(tools)
+                ? {
+                    [PEDAGOGY_TOOLS_PROPERTY]: tools.map((entry) => ({
+                      ...relocateNodes(entry),
+                      applet: materialId(entry.applet),
+                    })),
+                  }
+                : {}),
               ...Object.fromEntries(
                 GUIDANCE_PROPERTIES.flatMap((property) => {
                   const guidance = set.properties[property];
