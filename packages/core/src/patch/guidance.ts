@@ -78,7 +78,7 @@ export function isGuidanceEntries(value: unknown): value is readonly GuidanceEnt
 }
 
 /** Shared tag-to-Node cascade: Node settings follow tags, then exact Patch and operation order. */
-function nodeMetadataCascade<T>(
+export function nodeMetadataCascade<T>(
   graph: ResolvedGraph,
   node: NodeId,
   key: string,
