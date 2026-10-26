@@ -83,7 +83,8 @@ export function isMaterialMeta(value: unknown): value is MaterialMeta {
   function json(entry: unknown, depth: number): boolean {
     if (entry === null || typeof entry === "string" || typeof entry === "boolean") return true;
     if (typeof entry === "number") return Number.isFinite(entry);
-    if (typeof entry !== "object" || depth > 8 || seen.has(entry)) return false;
+    // Count conjunctions wrap their history-relative predicates in several JSON containers.
+    if (typeof entry !== "object" || depth > 16 || seen.has(entry)) return false;
     const prototype = Object.getPrototypeOf(entry);
     if (!Array.isArray(entry) && prototype !== Object.prototype && prototype !== null) return false;
     seen.add(entry);

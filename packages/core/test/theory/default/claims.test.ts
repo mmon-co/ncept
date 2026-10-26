@@ -21,7 +21,18 @@ test("claims and acquisition do not cover prerequisites", () => {
           metadataSet: {
             id: "metadata-window",
             subjects: [{ kind: "node", id: "node-prerequisite" }],
-            properties: { "pedagogy:window-size": 1, "pedagogy:window-required": 1 },
+            properties: {
+              "pedagogy:completion": {
+                count: 1,
+                of: {
+                  all: [
+                    { field: "node", is: "self" },
+                    { field: "unaided", is: true },
+                    { field: "outcome", is: "success" },
+                  ],
+                },
+              },
+            },
           },
         },
       ],

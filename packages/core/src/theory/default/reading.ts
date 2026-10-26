@@ -11,11 +11,11 @@ export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
   const key = `default.state.${status}` as const;
   const values = display?.message?.values;
   const summary =
-    typeof values?.demonstrated === "number" && typeof values.window === "number"
+    typeof values?.counts === "string"
       ? {
           id: "default.progress.summary",
-          defaultMessage: "{done}/{window}",
-          values: { done: values.demonstrated, window: values.window },
+          defaultMessage: "{counts}",
+          values: { counts: values.counts },
         }
       : undefined;
   return {
