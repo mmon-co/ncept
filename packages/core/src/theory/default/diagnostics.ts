@@ -30,9 +30,8 @@ export interface DefaultNodeDiagnostics {
 }
 
 /** Fold accepted history at an explicit instant, exposing facts, never the default state.
- * Completion reports retain their exact binding, identity, coverage payload and accepted
- * support identities when supplied by the Playground. Effective recall records remain
- * chronological and independently observable; no unsupported report-to-record link is inferred.
+ * Completion exposes the query and each count's observed/required progress. Effective recall
+ * records remain chronological and independently observable; no report-to-record link is inferred.
  * Schedule retrievability is clock-dependent; all other schedule facts are replay-stable.
  */
 export function readDefaultDiagnostics(

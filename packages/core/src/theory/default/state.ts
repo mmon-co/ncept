@@ -454,7 +454,7 @@ export function homingCandidates(graph: ResolvedGraph): readonly HomingCandidate
 }
 /** Provisional interpretations for a graph edit: the target revision restates every decision in force. */
 export function projectGraphChange(
-  state: DefaultState,
+  state: Pick<DefaultState, "records" | "homing">,
   graph: ResolvedGraph,
   next: ResolvedGraph,
   successors: Readonly<Partial<Record<NodeId, readonly NodeId[]>>> = {},
@@ -820,8 +820,8 @@ export function electedObservations(observations: readonly Observation[]): reado
   return observations.filter(({ standing }) => standing !== "abandoned");
 }
 
-/** Pure default policy: history-annotated values plus an explicit evaluation instant. */
-export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
+/** Homing needs historical structure, not the acquisition vocabulary that revision was authored under. */
+export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Observation[], now: string) {
   const observations = effectiveObservations(electedObservations(supplied), now);
   const records = activeDefaultRecords(observations);
   const nodeIds = new Set(graph.nodes.map(({ id }) => id));
@@ -863,6 +863,12 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     for (const node of present) (homed[node] ??= []).push(record);
     placed.set(record.id, [...initial, ...present]);
   }
+  return { observations, records, homed, homeless, placed, nodeIds, homing: { homes, claims, pending: [...pending] } };
+}
+
+/** Pure default policy: history-annotated values plus an explicit evaluation instant. */
+export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
+  const { observations, records, homed, homeless, placed, nodeIds, homing } = homeDefaultRecords(graph, supplied, now);
   const history: CompletionObservation[] = records
     .map((observation) => ({
       observation,
@@ -915,7 +921,7 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     nodes,
     observations,
     records,
-    homing: { homes, claims, pending: [...pending] },
+    homing,
     homeless,
     memories,
     interpretations: projectInterpretations(supplied, observations, placed),
