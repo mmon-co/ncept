@@ -351,6 +351,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       at,
       payload: {
         kind: "demonstration",
+        item: problem.id,
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
         unaided: !assessment.aided,
@@ -384,6 +385,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
           at,
           payload: {
             kind: "demonstration",
+            item: problem.id,
             node: { node, provenance: { ...outcome.revision } },
             outcome: result,
             unaided: beforeHelp && !assessment.aided,
@@ -404,6 +406,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
     at,
     payload: {
       kind: "demonstration",
+      item: problem.id,
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
       unaided: !assessment.aided,
@@ -422,6 +425,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
       at: grade.gradedAt,
       payload: {
         kind: "demonstration",
+        item: card.id,
         node: { node: node.node, provenance: { ...node.provenance } },
         outcome: grade.grade === "again" ? "failure" : "success",
         unaided: recallUnaided(card),
@@ -440,6 +444,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
           at: outcome.at,
           payload: {
             kind: "demonstration" as const,
+            item: question.id,
             node: { ...outcome.node },
             outcome: "dont-know" as const,
             unaided: true,
@@ -457,6 +462,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
         at: outcome.at,
         payload: {
           kind: "demonstration" as const,
+          item: question.id,
           node: { node: outcome.node.node, provenance: { ...outcome.node.provenance } },
           outcome: option.correct ? ("success" as const) : ("failure" as const),
           unaided: true,

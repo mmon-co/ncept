@@ -46,6 +46,8 @@ export interface CompletionOutcome extends CompletionBinding {
 }
 export interface Demonstration {
   readonly kind: "demonstration";
+  readonly material?: { readonly playground: string; readonly id: string };
+  readonly item?: string;
   readonly node: NodeRef;
   readonly outcome: "success" | "failure" | "dont-know";
   readonly unaided: boolean;
@@ -179,6 +181,9 @@ export interface DefaultState {
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+function nonempty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
 function isNodeRef(value: unknown): value is NodeRef {
   return (
     object(value) && typeof value.node === "string" && /^node-.+/.test(value.node) && isExactReference(value.provenance)
@@ -222,6 +227,9 @@ export function isDemonstration(value: unknown): value is Demonstration {
   return (
     object(value) &&
     value.kind === "demonstration" &&
+    (value.material === undefined ||
+      (object(value.material) && nonempty(value.material.playground) && nonempty(value.material.id))) &&
+    (value.item === undefined || nonempty(value.item)) &&
     isNodeRef(value.node) &&
     (value.outcome === "success" || value.outcome === "failure" || value.outcome === "dont-know") &&
     typeof value.unaided === "boolean" &&

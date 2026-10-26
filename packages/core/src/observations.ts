@@ -51,6 +51,7 @@ export type PlatformEvent =
     }
   | {
       readonly kind: "outcome";
+      readonly material?: { readonly playground: string; readonly id: string };
       readonly surface: SurfaceId;
       readonly at: string;
       readonly about?: readonly NodeId[];
