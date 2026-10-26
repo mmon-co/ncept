@@ -1,5 +1,11 @@
 import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
+import {
+  isPatchSkillEntries,
+  isPatchToolEntries,
+  PEDAGOGY_SKILLS_PROPERTY,
+  PEDAGOGY_TOOLS_PROPERTY,
+} from "./capabilities";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES, PEDAGOGY_OPENING_PROPERTY } from "./guidance";
 import {
   exactPatchRefKey,
@@ -172,6 +178,15 @@ export function validateAuthoredContent(content: PatchContent): void {
         "invalid-metadata-value",
         `metadata property '${PEDAGOGY_OPENING_PROPERTY}' must be a nonblank string`,
       );
+    for (const [property, valid] of [
+      [PEDAGOGY_SKILLS_PROPERTY, isPatchSkillEntries],
+      [PEDAGOGY_TOOLS_PROPERTY, isPatchToolEntries],
+    ] as const)
+      if (property in properties && !valid(properties[property]))
+        throw new PatchCompileError(
+          "invalid-metadata-value",
+          `metadata property '${property}' must be an ordered additive capability entry list`,
+        );
     for (const property of GUIDANCE_PROPERTIES)
       if (property in properties && !isGuidanceEntries(properties[property]))
         throw new PatchCompileError(
