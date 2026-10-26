@@ -325,7 +325,7 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
         about: input.about ?? attempts.map(({ payload }) => payload.node.node),
         nodes: [attempt.payload.node.node],
         ...(input.cites === undefined ? {} : { cites: [...input.cites] }),
-        payload: attempt.payload,
+        payload: { ...attempt.payload, ...(input.material === undefined ? {} : { material: { ...input.material } }) },
       });
     }
     return;
