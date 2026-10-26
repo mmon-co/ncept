@@ -6,7 +6,13 @@ import {
   PEDAGOGY_SKILLS_PROPERTY,
   PEDAGOGY_TOOLS_PROPERTY,
 } from "./capabilities";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES, PEDAGOGY_OPENING_PROPERTY } from "./guidance";
+import {
+  isGuidanceEntries,
+  GUIDANCE_PROPERTIES,
+  PEDAGOGY_OPENING_PROPERTY,
+  PEDAGOGY_FIRST_MESSAGE_PROPERTY,
+  nodeCascadedProperty,
+} from "./guidance";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -159,6 +165,39 @@ export function validateMetadataProperties(properties: Readonly<Record<string, M
       );
 }
 
+function validateOpeningProperties(properties: Readonly<Record<string, MetadataValue>>): void {
+  for (const property of [PEDAGOGY_OPENING_PROPERTY, PEDAGOGY_FIRST_MESSAGE_PROPERTY])
+    if (property in properties && (typeof properties[property] !== "string" || !properties[property].trim()))
+      throw new PatchCompileError(
+        "invalid-metadata-value",
+        `metadata property '${property}' must be a nonblank string`,
+      );
+  if (PEDAGOGY_OPENING_PROPERTY in properties && PEDAGOGY_FIRST_MESSAGE_PROPERTY in properties)
+    throw new PatchCompileError("invalid-metadata-value", "Choose either first-turn guidance or a first message");
+}
+
+/** Validate the effective targets when minting a revision, including tag-to-Node cascades. */
+export function validateAuthoredOpenings(graph: ResolvedGraph): void {
+  const targets = new Map<string, Record<string, MetadataValue>>();
+  for (const set of graph.metadataSets) {
+    validateOpeningProperties(set.properties);
+    for (const subject of set.subjects) {
+      const key = metadataSubjectKey(subject);
+      const properties = targets.get(key) ?? {};
+      for (const property of [PEDAGOGY_OPENING_PROPERTY, PEDAGOGY_FIRST_MESSAGE_PROPERTY])
+        if (set.properties[property] !== undefined) properties[property] = set.properties[property];
+      targets.set(key, properties);
+      validateOpeningProperties(properties);
+    }
+  }
+  for (const { id } of graph.nodes)
+    if (
+      nodeCascadedProperty(graph, id, PEDAGOGY_OPENING_PROPERTY) !== undefined &&
+      nodeCascadedProperty(graph, id, PEDAGOGY_FIRST_MESSAGE_PROPERTY) !== undefined
+    )
+      throw new PatchCompileError("invalid-metadata-value", `Node '${id}' carries both opening forms`);
+}
+
 /**
  * Property shapes a new revision must have. Checked when content is minted, not when accepted
  * history is resolved: a revision written under an earlier vocabulary stays readable as history,
@@ -172,12 +211,7 @@ export function validateAuthoredContent(content: PatchContent): void {
     ),
   ];
   for (const properties of sets) {
-    const opening = properties[PEDAGOGY_OPENING_PROPERTY];
-    if (PEDAGOGY_OPENING_PROPERTY in properties && (typeof opening !== "string" || !opening.trim()))
-      throw new PatchCompileError(
-        "invalid-metadata-value",
-        `metadata property '${PEDAGOGY_OPENING_PROPERTY}' must be a nonblank string`,
-      );
+    validateOpeningProperties(properties);
     for (const [property, valid] of [
       [PEDAGOGY_SKILLS_PROPERTY, isPatchSkillEntries],
       [PEDAGOGY_TOOLS_PROPERTY, isPatchToolEntries],
