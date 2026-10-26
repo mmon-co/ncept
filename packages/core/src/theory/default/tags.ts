@@ -3,6 +3,7 @@ import { nodePriority, pathDefault, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
+import { completionCaption } from "./completion";
 import { DEFAULT_PARAMETERS, type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
@@ -15,7 +16,7 @@ export function isDefaultKnown(node: NodeState): boolean {
 }
 /** Acquisition withdrawal does not discard a completion-bound Node’s recall schedule. */
 export function isDefaultReviewable(node: NodeState): boolean {
-  return isDefaultKnown(node) || (node.completion !== undefined && node.schedule !== undefined);
+  return isDefaultKnown(node) || (node.completion.query !== undefined && node.schedule !== undefined);
 }
 
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */
@@ -124,7 +125,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
           `Task ${JSON.stringify(task)}: ${constant ? "observed outcomes never differ" : "outcome sequence matches other items"}`,
         );
     }
-    const window = attempts.filter(({ payload }) => payload.unaided).slice(-node.window);
+    const window = attempts.filter(({ payload }) => payload.unaided).slice(-3);
     if (
       window.length >= 3 &&
       window.every((record, index) => index === 0 || succeeded(record) !== succeeded(window[index - 1] ?? record))
@@ -132,7 +133,8 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       add("instability", [id], window, "Outcomes alternate across the observed window");
     if (coarse.has(id)) add("coarse", [id], [], "Left coarse at charting: its prerequisites are not charted yet");
     const used = (dependent: NodeId) =>
-      (state.nodes[dependent]?.records.length ?? 0) > 0 || state.nodes[dependent]?.completion?.report !== undefined;
+      (state.nodes[dependent]?.records.length ?? 0) > 0 ||
+      (state.nodes[dependent]?.completion.citations.length ?? 0) > 0;
     if (!used(id) && cone(id).every((dependent) => !used(dependent)))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
@@ -199,55 +201,17 @@ function indicatorTag(indicator: Indicator): Tag {
   return { tag: indicator.kind, caption: indicator.message, cites: indicator.citations };
 }
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
-  if (node.completion !== undefined) {
-    const { binding, status, report } = node.completion;
-    const aboutNode =
-      binding.playground === "srs" &&
-      typeof binding.scope === "object" &&
-      binding.scope !== null &&
-      !Array.isArray(binding.scope) &&
-      "kind" in binding.scope &&
-      binding.scope.kind === "about-node";
-    const validUntil = report?.payload.validUntil;
-    return {
-      id: `default.node-progress.completion.${status}`,
-      defaultMessage: `Completion from {playground}: ${status}; scope {scope}; report {report}{expiry}`,
-      values: {
-        playground: binding.playground,
-        scope: {
-          type: "message",
-          message: {
-            id: aboutNode ? "default.completion.scope.srs-about-node" : "default.completion.scope.bound",
-            defaultMessage: aboutNode ? "every card on this Node" : "the activity assigned to this Node",
-          },
-        },
-        report: report === undefined ? "—" : { type: "citation", value: report.id, label: "[1]" },
-        expiry:
-          validUntil === undefined
-            ? ""
-            : {
-                type: "message",
-                message: {
-                  id: "default.completion.expiry",
-                  defaultMessage: "; valid until {date}",
-                  values: { date: { type: "date", value: validUntil } },
-                },
-              },
-      },
-    };
-  }
   const hasSuccess = node.lastSuccess !== undefined;
   return {
     id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
     defaultMessage: hasSuccess
-      ? "{demonstrated} of {window}, last success {lastSuccess}; aided practice {aidedPractice}"
-      : "{demonstrated} of {window}, last success none; aided practice {aidedPractice}",
+      ? "{counts}, last success {lastSuccess}; aided practice {aidedPractice}"
+      : "{counts}, last success none; aided practice {aidedPractice}",
     remainderMessage: hasSuccess
       ? "last success {lastSuccess}; aided practice {aidedPractice}"
       : "last success none; aided practice {aidedPractice}",
     values: {
-      demonstrated: node.k,
-      window: node.window,
+      counts: completionCaption(node.completion),
       aidedPractice: node.aidedPractice,
       ...(node.lastSuccess === undefined ? {} : { lastSuccess: { type: "date" as const, value: node.lastSuccess } }),
     },
@@ -290,10 +254,7 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     nodes[id] = [
       {
         tag: node.label,
-        caption:
-          node.completion === undefined
-            ? `${node.k} of ${node.window}, last success ${node.lastSuccess ?? "none"}; aided practice ${node.aidedPractice}`
-            : `Completion from ${node.completion.binding.playground}: ${node.completion.status}`,
+        caption: completionCaption(node.completion),
         message: nodeProgressMessage(node),
         ...(isDefaultKnown(node) && node.schedule ? { rank: node.schedule.retrievability } : {}),
         cites: node.citations,
@@ -334,11 +295,7 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
   }
 
   const expiry = Object.values(state.nodes)
-    .flatMap((node) =>
-      node?.completion?.status === "complete" && node.completion.report?.payload.validUntil !== undefined
-        ? [node.completion.report.payload.validUntil]
-        : [],
-    )
+    .flatMap((node) => (node?.completion.validUntil !== undefined ? [node.completion.validUntil] : []))
     .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
   return {
     nodes,

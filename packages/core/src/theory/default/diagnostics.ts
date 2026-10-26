@@ -23,12 +23,7 @@ export function readDefaultDemonstration(payload: unknown): DefaultDemonstration
 
 export interface DefaultNodeDiagnostics {
   readonly progress: NodeProgress["status"];
-  readonly acquisition: Readonly<{ successes: number; window: number; required: number }>;
-  readonly completion?: NonNullable<NodeState["completion"]> &
-    Readonly<{
-      validUntil?: string;
-      supportIds: NonNullable<Observation["cites"]>;
-    }>;
+  readonly completion: NodeState["completion"];
   readonly schedule?: NodeSchedule;
   readonly citations: NodeState["citations"];
   readonly records: readonly HomedRecord[];
@@ -52,24 +47,12 @@ export function readDefaultDiagnostics(
       requested.flatMap((id) => {
         const node = state.nodes[id];
         if (!node) return [];
-        const completion = node.completion;
         return [
           [
             id,
             {
               progress: node.label === "demonstrated" ? "done" : node.label === "probably-known" ? "tentative" : "open",
-              acquisition: { successes: node.k, window: node.window, required: node.required },
-              ...(completion === undefined
-                ? {}
-                : {
-                    completion: {
-                      ...completion,
-                      ...(completion.report?.payload.validUntil === undefined
-                        ? {}
-                        : { validUntil: completion.report.payload.validUntil }),
-                      supportIds: completion.report?.cites ?? [],
-                    },
-                  }),
+              completion: node.completion,
               ...(node.schedule === undefined ? {} : { schedule: node.schedule }),
               citations: node.citations,
               records: node.records,

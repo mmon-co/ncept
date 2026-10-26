@@ -1,7 +1,14 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "../speaker";
-import { canonicalJson } from "../../digest";
+
 import { dependentCones } from "./dependent-cone";
+import {
+  COMPLETION_PROPERTY,
+  evaluateCompletion,
+  type Completion,
+  type CompletionObservation,
+  type CompletionProgress,
+} from "./completion";
 import {
   lastMetadataContribution,
   metadataSetsForEntity,
@@ -34,11 +41,9 @@ export type CompletionScope =
   | string
   | readonly CompletionScope[]
   | { readonly [key: string]: CompletionScope };
-export interface CompletionBinding {
+export interface CompletionOutcome {
   readonly playground: string;
   readonly scope: CompletionScope;
-}
-export interface CompletionOutcome extends CompletionBinding {
   readonly kind: "completion";
   readonly node: NodeRef;
   readonly state: "complete" | "incomplete";
@@ -204,21 +209,14 @@ function isCompletionScope(value: unknown): value is CompletionScope {
   if (Array.isArray(value)) return value.every(isCompletionScope);
   return object(value) && Object.values(value).every(isCompletionScope);
 }
-export function isCompletionBinding(value: unknown): value is CompletionBinding {
-  return (
-    object(value) &&
-    typeof value.playground === "string" &&
-    value.playground.trim().length > 0 &&
-    "scope" in value &&
-    isCompletionScope(value.scope)
-  );
-}
 export function isCompletionOutcome(value: unknown): value is CompletionOutcome {
   return (
     object(value) &&
     value.kind === "completion" &&
     isNodeRef(value.node) &&
-    isCompletionBinding(value) &&
+    nonempty(value.playground) &&
+    "scope" in value &&
+    isCompletionScope(value.scope) &&
     (value.state === "complete" || value.state === "incomplete") &&
     (value.validUntil === undefined || isObservationTimestamp(value.validUntil))
   );
@@ -502,14 +500,11 @@ export function projectGraphChange(
 }
 
 export type NodeLabel = "demonstrated" | "probably-known" | "unknown";
-export type DemonstrationWindow = Readonly<{ size: number; required: number }>;
 export type DefaultParameters = Readonly<{
-  window: DemonstrationWindow;
   retention: Readonly<{ due: number; fading: number; claimStabilityDays: number }>;
 }>;
 
 export const DEFAULT_PARAMETERS: DefaultParameters = {
-  window: { size: 3, required: 2 },
   retention: { due: 0.9, fading: 0.7, claimStabilityDays: 1 },
 };
 
@@ -530,40 +525,16 @@ const DAY_MS = 86_400_000;
 const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
 
 export interface NodeState {
-  readonly completion?: {
-    readonly binding: CompletionBinding;
-    readonly report?: Observation<CompletionOutcome>;
-    readonly status: "complete" | "incomplete" | "expired" | "absent";
-  };
+  readonly completion: CompletionProgress & { readonly query?: Completion };
   /** Effective operation receipts; these do not change competence labels or schedules. */
   readonly featureUses: readonly Observation<FeatureUse>[];
   readonly label: NodeLabel;
-  readonly k: number;
-  readonly window: number;
-  readonly required: number;
   readonly lastSuccess?: string;
   readonly aidedPractice: number;
   readonly citations: readonly ObservationId[];
   /** Original active evidence in chronological order; never memory or summaries. */
   readonly records: readonly HomedRecord[];
   readonly schedule?: NodeSchedule;
-}
-
-export function acceptsWindow(value: unknown): value is DemonstrationWindow {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "size" in value &&
-    typeof value.size === "number" &&
-    Number.isSafeInteger(value.size) &&
-    value.size > 0 &&
-    "required" in value &&
-    typeof value.required === "number" &&
-    Number.isSafeInteger(value.required) &&
-    value.required > 0 &&
-    value.required <= value.size &&
-    Object.keys(value).every((key) => key === "size" || key === "required")
-  );
 }
 
 /** The latest tentative competence report, newer than any actual failure. */
@@ -578,27 +549,31 @@ function knowsClaim(records: readonly HomedRecord[]): Observation<Claim> | undef
 /** Acquisition reads only this Node's own active, time-ordered evidence, without a horizon. */
 export function labelDefaultNode(input: {
   readonly records: readonly HomedRecord[];
-  readonly parameters: DefaultParameters;
+  readonly completion?: CompletionProgress & { readonly query: Completion };
 }): NodeState {
-  const { records, parameters } = input;
+  const { records } = input;
   const demonstrations = records.filter(
     (record): record is Observation<Demonstration> => record.payload.kind === "demonstration",
   );
-  const attempts = demonstrations.filter(({ payload }) => payload.unaided).slice(-parameters.window.size);
+  const attempts = demonstrations.filter(({ payload }) => payload.unaided).slice(-3);
   const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
   const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
   const knows = knowsClaim(records) !== undefined;
-  const label: NodeLabel = k >= parameters.window.required ? "demonstrated" : knows ? "probably-known" : "unknown";
+  // Temporary acquisition fallback for unset Nodes, removed with Lesson-authored queries.
+  const completion = input.completion ?? {
+    complete: k >= 2,
+    counts: [{ k, required: 2 }],
+    citations: records.map(({ id }) => id),
+  };
+  const label: NodeLabel = completion.complete ? "demonstrated" : knows ? "probably-known" : "unknown";
   return {
     featureUses: [],
     label,
-    k,
-    window: parameters.window.size,
-    required: parameters.window.required,
+    completion,
     ...(lastSuccess === undefined ? {} : { lastSuccess: lastSuccess.at }),
     aidedPractice: demonstrations.filter(({ payload }) => !payload.unaided).length,
-    citations: records.map(({ id }) => id),
+    citations: [...new Set([...records.map(({ id }) => id), ...completion.citations])],
     records,
   };
 }
@@ -673,60 +648,26 @@ function scheduleDefaultNode(
   };
 }
 
-export const COMPLETION_PROPERTY = "pedagogy:completion";
-/** Portable envelope; the named Playground owns the meaning of scope. */
-export function defaultNodeCompletion(graph: ResolvedGraph, node: NodeId): CompletionBinding | undefined {
+/** Resolved Node and tag metadata share the ordinary Patch precedence. */
+export function defaultNodeCompletion(graph: ResolvedGraph, node: NodeId): Completion | undefined {
   const value = lastMetadataContribution(
     graph,
-    graph.metadataSets.flatMap((set) => {
-      if (
-        !set.subjects.some((subject) => subject.kind === "node" && subject.id === node) ||
-        !(COMPLETION_PROPERTY in set.properties)
-      )
-        return [];
+    metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
+      if (!(COMPLETION_PROPERTY in set.properties)) return [];
       const source = graph.provenance.metadataProperties[set.id]?.[COMPLETION_PROPERTY]?.at(-1);
       if (source === undefined) throw new Error(`Missing completion provenance for ${node}`);
       return [{ value: set.properties[COMPLETION_PROPERTY], source }];
     }),
   )?.value;
-  if (value === undefined) return undefined;
-  if (!isCompletionBinding(value)) throw new Error(`Invalid completion binding for ${node}`);
-  return { playground: value.playground, scope: value.scope };
+  // The revision-minting boundary validates this theory-owned metadata shape.
+  // eslint-disable-next-line typescript/consistent-type-assertions
+  return value as Completion | undefined;
 }
 /** Stable authoring provenance, rather than the terminal of an unrelated graph edit. */
 export function completionNodeRef(graph: ResolvedGraph, node: NodeId): NodeRef {
   const provenance = graph.provenance.nodes[node]?.at(-1)?.patch;
   if (!provenance || !graph.nodes.some(({ id }) => id === node)) throw new Error(`Unknown completion Node ${node}`);
   return { node, provenance };
-}
-
-export const WINDOW_SIZE_PROPERTY = "pedagogy:window-size";
-export const WINDOW_REQUIRED_PROPERTY = "pedagogy:window-required";
-/** Resolve each scalar by Patch order, then operation order, matching graph metadata precedence. */
-export function defaultNodeParameters(
-  graph: ResolvedGraph,
-  node: NodeId,
-  parameters: DefaultParameters,
-): DefaultParameters {
-  function property(key: string): unknown {
-    return lastMetadataContribution(
-      graph,
-      metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
-        if (!(key in set.properties)) return [];
-        const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
-        if (source === undefined) throw new Error(`Missing provenance for ${key} on ${node}`);
-        return [{ value: set.properties[key], source }];
-      }),
-    )?.value;
-  }
-  const size = property(WINDOW_SIZE_PROPERTY);
-  const required = property(WINDOW_REQUIRED_PROPERTY);
-  const window = {
-    size: size === undefined ? parameters.window.size : size,
-    required: required === undefined ? parameters.window.required : required,
-  };
-  if (!acceptsWindow(window)) throw new Error(`Invalid demonstration window for ${node}`);
-  return { ...parameters, window };
 }
 
 /** Graph edges point from prerequisite to dependent; the strict cone excludes the queried Node. */
@@ -922,10 +863,28 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     for (const node of present) (homed[node] ??= []).push(record);
     placed.set(record.id, [...initial, ...present]);
   }
+  const history: CompletionObservation[] = records
+    .map((observation) => ({
+      observation,
+      nodes: graph.nodes
+        .filter(({ id }) => homed[id]?.some(({ id: record }) => record === observation.id))
+        .map(({ id }) => id),
+    }))
+    .filter(({ nodes }) => nodes.length > 0);
+  for (const observation of observations) {
+    if (!isDefaultObservation(observation) || !isCompletionOutcome(observation.payload)) continue;
+    const node = observation.payload.node.node;
+    if (
+      !nodeIds.has(node) ||
+      !sameExactPatchRef(observation.payload.node.provenance, completionNodeRef(graph, node).provenance)
+    )
+      continue;
+    history.push({ observation: { ...observation, payload: observation.payload }, nodes: [node] });
+  }
   const nodes: Partial<Record<NodeId, NodeState>> = {};
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
-    const parameters = defaultNodeParameters(graph, id, DEFAULT_PARAMETERS);
+    const parameters = DEFAULT_PARAMETERS;
     const own = homed[id] ?? [];
     const implicit = graph.edges
       .filter(({ from }) => from === id)
@@ -936,34 +895,12 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
         isDefaultObservation(observation) && isLapse(observation.payload) && observation.payload.node.node === id,
     );
     const schedule = scheduleDefaultNode(own, implicit, lapses, now, parameters);
-    const binding = defaultNodeCompletion(graph, id);
-    const report =
-      binding === undefined
-        ? undefined
-        : observations.findLast(
-            (entry): entry is Observation<CompletionOutcome> =>
-              isDefaultObservation(entry) &&
-              isCompletionOutcome(entry.payload) &&
-              entry.payload.node.node === id &&
-              sameExactPatchRef(entry.payload.node.provenance, completionNodeRef(graph, id).provenance) &&
-              entry.payload.playground === binding.playground &&
-              canonicalJson(entry.payload.scope) === canonicalJson(binding.scope),
-          );
-    const status =
-      report === undefined
-        ? "absent"
-        : report.payload.validUntil !== undefined && Date.parse(report.payload.validUntil) <= Date.parse(now)
-          ? "expired"
-          : report.payload.state;
+    const query = defaultNodeCompletion(graph, id);
     nodes[id] = {
-      ...labelDefaultNode({ records: own, parameters }),
-      ...(binding === undefined
-        ? {}
-        : {
-            completion: { binding, ...(report === undefined ? {} : { report }), status },
-            label: status === "complete" ? ("demonstrated" as const) : ("unknown" as const),
-            citations: report === undefined ? [] : [report.id],
-          }),
+      ...labelDefaultNode({
+        records: own,
+        ...(query === undefined ? {} : { completion: { query, ...evaluateCompletion(query, id, history, now) } }),
+      }),
       ...(schedule === undefined ? {} : { schedule }),
       featureUses: observations.filter(
         (observation): observation is Observation<FeatureUse> =>

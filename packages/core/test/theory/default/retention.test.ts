@@ -81,7 +81,7 @@ test("the first unaided attempt each day is the Node's only review, however it a
   const now = "2026-10-02T08:00:00.000Z";
   expect(schedule(twice, now, "node-isolated")).toMatchObject({ reps: 1, lapses: 0 });
   expect(schedule(twice, now, "node-isolated")?.stability).toBe(schedule(once, now, "node-isolated")?.stability);
-  expect(read(twice, now).nodes["node-isolated"]?.k).toBe(1);
+  expect(read(twice, now).nodes["node-isolated"]?.completion.counts[0]?.k).toBe(1);
   expect(
     schedule(
       [...twice, ...card("obs-3", "2026-10-02T09:00:00.000Z", "again")],
