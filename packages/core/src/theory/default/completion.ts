@@ -164,6 +164,7 @@ export function evaluateCompletion(
     } = entry;
     if (field === "node") return nodes;
     if (field === "at") return at;
+    if (field === "playground" && payload.kind === "demonstration") return payload.material?.playground;
     if (field === "current")
       return payload.kind === "completion"
         ? payload.validUntil === undefined || Date.parse(payload.validUntil) > Date.parse(now)
