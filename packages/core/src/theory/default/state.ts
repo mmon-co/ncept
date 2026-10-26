@@ -684,12 +684,9 @@ export function defaultNodeCompletion(graph: ResolvedGraph, node: NodeId): Compl
         !(COMPLETION_PROPERTY in set.properties)
       )
         return [];
-      const value = set.properties[COMPLETION_PROPERTY];
-      // null is a learner-side clear: the override is transparent, so what it overrode shows.
-      if (value === null) return [];
       const source = graph.provenance.metadataProperties[set.id]?.[COMPLETION_PROPERTY]?.at(-1);
       if (source === undefined) throw new Error(`Missing completion provenance for ${node}`);
-      return [{ value, source }];
+      return [{ value: set.properties[COMPLETION_PROPERTY], source }];
     }),
   )?.value;
   if (value === undefined) return undefined;

@@ -15,6 +15,7 @@ import {
 } from "./model";
 
 /** Metadata scalars use the last contributing exact Patch, then its operation order.
+ * A null contribution is a clear: it is transparent, so the latest non-null value beneath shows.
  * Callers select eligible properties and own value/provenance validation.
  */
 export function lastMetadataContribution<T>(
@@ -24,6 +25,7 @@ export function lastMetadataContribution<T>(
   const order = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   let selected: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
+    if (candidate.value === null) continue;
     const patch = order.get(exactPatchRefKey(candidate.source.patch)) ?? -1;
     const prior = selected === undefined ? -1 : (order.get(exactPatchRefKey(selected.source.patch)) ?? -1);
     if (
