@@ -169,6 +169,7 @@ export function validateAuthoredContent(content: PatchContent): void {
     ),
   ];
   for (const properties of sets) {
+    validateTranslationPolicy(properties);
     const opening = properties[PEDAGOGY_OPENING_PROPERTY];
     if (PEDAGOGY_OPENING_PROPERTY in properties && (typeof opening !== "string" || !opening.trim()))
       throw new PatchCompileError(
@@ -191,6 +192,17 @@ export function validateAuthoredContent(content: PatchContent): void {
           `metadata property '${property}' must be an ordered guidance entry list`,
         );
   }
+  for (const operation of content.delta.operations)
+    if (
+      (operation.kind === "add-material" || operation.kind === "edit-material") &&
+      operation.material.playground === "document"
+    )
+      validateTranslationPolicy(operation.material.meta);
+}
+
+function validateTranslationPolicy(properties: Readonly<Record<string, unknown>>): void {
+  if ("patch:translate" in properties && typeof properties["patch:translate"] !== "boolean")
+    throw new PatchCompileError("invalid-metadata-value", "metadata property 'patch:translate' must be boolean");
 }
 
 /** The discovery tags a revision's metadata declares: the open `patch:<tag>: true` convention
