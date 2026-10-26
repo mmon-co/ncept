@@ -135,6 +135,7 @@ export const CATALOG_MODE_TOOLS = {
     "web_search",
     "fetch_page",
     "bash",
+    "undo",
   ],
   // Author proposes Missions and revisions that the captured Patch ships.
   authoring: [
@@ -148,6 +149,7 @@ export const CATALOG_MODE_TOOLS = {
     "web_search",
     "fetch_page",
     "bash",
+    "undo",
     "material",
   ],
   lesson: [
@@ -161,6 +163,8 @@ export const CATALOG_MODE_TOOLS = {
     "evaluation",
     "propose",
     "bash",
+    "undo",
+    "fetch_page",
   ],
 } as const;
 

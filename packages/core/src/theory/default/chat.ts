@@ -193,7 +193,7 @@ function catalogCapabilities(mode: keyof typeof CATALOG_MODE_TOOLS): readonly Ho
     ...(roots.includes("read") ? ["reads" as const] : []),
     ...(roots.includes("material") ? ["materials" as const, "applets" as const] : []),
     ...(roots.includes("edit_graph_draft") ? ["graph-draft" as const] : []),
-    ...(roots.includes("web_search") ? ["web" as const] : []),
+    ...(roots.includes("web_search") || roots.includes("fetch_page") ? ["web" as const] : []),
     ...(roots.includes("bash") ? ["bash" as const] : []),
   ];
 }
