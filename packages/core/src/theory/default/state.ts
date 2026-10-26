@@ -555,17 +555,10 @@ export function labelDefaultNode(input: {
   const demonstrations = records.filter(
     (record): record is Observation<Demonstration> => record.payload.kind === "demonstration",
   );
-  const attempts = demonstrations.filter(({ payload }) => payload.unaided).slice(-3);
   const successes = demonstrations.filter(({ payload }) => payload.unaided && payload.outcome === "success");
   const lastSuccess = successes.at(-1);
-  const k = attempts.filter(({ payload }) => payload.outcome === "success").length;
   const knows = knowsClaim(records) !== undefined;
-  // Temporary acquisition fallback for unset Nodes, removed with Lesson-authored queries.
-  const completion = input.completion ?? {
-    complete: k >= 2,
-    counts: [{ k, required: 2 }],
-    citations: records.map(({ id }) => id),
-  };
+  const completion = input.completion ?? { complete: false, counts: [], citations: [] };
   const label: NodeLabel = completion.complete ? "demonstrated" : knows ? "probably-known" : "unknown";
   return {
     featureUses: [],
