@@ -1,6 +1,6 @@
 import { canonicalJson } from "../../digest";
 import { compareObservations, isObservationTimestamp, type Observation, type ObservationId } from "../../observations";
-import { isMaterialMeta, isNodeId, type NodeId, type ResolvedGraph } from "../../patch";
+import { isMaterialMeta, isNodeId, type NodeId } from "../../patch";
 import type { Claim, CompletionOutcome, Demonstration } from "./state";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
@@ -49,7 +49,10 @@ const object = (value: unknown): value is Record<string, unknown> =>
 /** Authored queries are checked once against the resolved revision, never while reading history. */
 export function validateCompletion(
   value: unknown,
-  graph: ResolvedGraph,
+  graph: {
+    readonly nodes: readonly { readonly id: NodeId }[];
+    readonly materials: readonly { readonly playground: string; readonly id: string }[];
+  },
   path = COMPLETION_PROPERTY,
 ): asserts value is Completion {
   function fail(at: string, message: string): never {
