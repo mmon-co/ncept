@@ -1,7 +1,7 @@
 import { isNodeId, type ResolvedGraph } from "../../patch";
 import type { Observation } from "../../observations";
 import type { LessonActivity } from "../theory";
-import { isDemonstration, stateDefault } from "./state";
+import { isDemonstration, initDefaultState } from "./state";
 
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 export const UNMEASURED_LESSON_TIMING: LessonTiming = { minutesPerNode: 20, rough: true };
@@ -54,12 +54,18 @@ export function prepareLessonTiming(
   const lessonSurfaces = new Map(teaching.map((activity) => [activity.surface, activity]));
   const demonstrated = new Set<string>();
   function* transitions() {
+    const state = initDefaultState(graph);
+    let consumed = 0;
     for (const [index, observation] of observations.entries()) {
       const activity = observation.surface === undefined ? undefined : lessonSurfaces.get(observation.surface);
       if (activity === undefined || observation.at < activity.startedAt || observation.standing === "abandoned")
         continue;
-      const before = stateDefault(graph, observations.slice(0, index), observation.at);
-      const after = stateDefault(graph, observations.slice(0, index + 1), observation.at);
+      // Skipped evidence still belongs to the prefix, but never to this activity's denominator.
+      if (consumed < index) state.step(observations.slice(consumed, index));
+      const before = state.read(observation.at);
+      state.step([observation]);
+      consumed = index + 1;
+      const after = state.read(observation.at);
       for (const [id, node] of Object.entries(after.nodes))
         if (isNodeId(id) && node?.label === "demonstrated" && before.nodes[id]?.label !== "demonstrated")
           demonstrated.add(activity.surface + "/" + id);
