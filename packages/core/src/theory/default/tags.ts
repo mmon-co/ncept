@@ -151,9 +151,8 @@ function computeIndicators(state: DefaultState, graph: ResolvedGraph, facts: Pro
     )
       add("instability", [id], window, "Outcomes alternate across the observed window");
     if (coarse.has(id)) add("coarse", [id], [], "Left coarse at charting: its prerequisites are not charted yet");
-    const used = (dependent: NodeId) =>
-      (state.nodes[dependent]?.records.length ?? 0) > 0 ||
-      (state.nodes[dependent]?.completion.citations.length ?? 0) > 0;
+    // Candidate absence is evidence-only; completion credit filters these candidates separately.
+    const used = (dependent: NodeId) => (state.nodes[dependent]?.records.length ?? 0) > 0;
     if (!used(id) && (facts.cones.get(id) ?? []).every((dependent) => !used(dependent)))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
@@ -235,8 +234,21 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
 
 /** Evidence/label facts are retained separately from decay and review membership. Weak keys belong
  * to a reducer's snapshots, so preparations cannot outlive that read context. */
-function prepareProjection(graph: ResolvedGraph, state: DefaultState, facts: ProjectionGraph) {
-  const indicators = computeIndicators(state, graph, facts);
+function prepareProjection(
+  graph: ResolvedGraph,
+  state: DefaultState,
+  facts: ProjectionGraph,
+  evidenceIndicators = computeIndicators(state, graph, facts),
+) {
+  const indicators = evidenceIndicators.filter(
+    (indicator) =>
+      indicator.kind !== "unused" ||
+      indicator.nodes.every((id) =>
+        [id, ...(facts.cones.get(id) ?? [])].every(
+          (node) => (state.nodes[node]?.completion.citations.length ?? 0) === 0,
+        ),
+      ),
+  );
   const reached = reachableNodes(state, graph);
   const selected = Object.entries(defaultQueryTokens)
     .filter(([tag]) => !tag.startsWith("review:"))
@@ -292,6 +304,7 @@ function prepareProjection(graph: ResolvedGraph, state: DefaultState, facts: Pro
 }
 type ProjectionPreparation = ReturnType<typeof prepareProjection>;
 const evidencePreparations = new WeakMap<object, ProjectionPreparation>();
+const indicatorPreparations = new WeakMap<object, readonly Indicator[]>();
 function preparedProjection(graph: ResolvedGraph, state: DefaultState): ProjectionPreparation {
   const basis = defaultProjectionBasis(state);
   if (basis === undefined || basis.graph !== graph) return prepareProjection(graph, state, prepareGraph(graph));
@@ -302,7 +315,12 @@ function preparedProjection(graph: ResolvedGraph, state: DefaultState): Projecti
     facts = prepareGraph(graph);
     graphPreparations.set(basis.graphKey, facts);
   }
-  prepared = prepareProjection(graph, state, facts);
+  let indicators = indicatorPreparations.get(basis.indicatorKey);
+  if (indicators === undefined) {
+    indicators = computeIndicators(state, graph, facts);
+    indicatorPreparations.set(basis.indicatorKey, indicators);
+  }
+  prepared = prepareProjection(graph, state, facts, indicators);
   evidencePreparations.set(basis.evidenceKey, prepared);
   return prepared;
 }

@@ -1438,6 +1438,7 @@ interface ProjectionBasis {
   readonly graph: ResolvedGraph;
   readonly graphKey: object;
   readonly evidenceKey: object;
+  readonly indicatorKey: object;
 }
 const projectionBases = new WeakMap<DefaultState, ProjectionBasis>();
 export function defaultProjectionBasis(state: DefaultState): ProjectionBasis | undefined {
@@ -1452,6 +1453,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
   const evidence = initDefaultEvidence(graph);
   const graphKey = {};
   let evidenceKey = {};
+  let indicatorKey = {};
   const graphIndex = indexDefaultGraph(graph);
   const plans = new Map(
     graph.nodes.flatMap(({ id }) => {
@@ -1502,7 +1504,8 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
     const nextBoundary = completionBoundary(history, now);
     const completionChanged = !initialized || prepared.historyChanged || boundary !== nextBoundary;
     boundary = nextBoundary;
-    let projectionChanged = !initialized || homeless !== prepared.homeless;
+    const indicatorsChanged = !initialized || changedOwn.size > 0 || homeless !== prepared.homeless;
+    let projectionChanged = indicatorsChanged;
     homeless = prepared.homeless;
     const nodes: Partial<Record<NodeId, NodeState>> = {};
     for (const { id } of graph.nodes) {
@@ -1548,6 +1551,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       nodes[id] = { ...facts, featureUses, ...(schedule === undefined ? {} : { schedule }) };
     }
     if (projectionChanged) evidenceKey = {};
+    if (indicatorsChanged) indicatorKey = {};
     initialized = true;
     const state: DefaultState = {
       nodes,
@@ -1558,7 +1562,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       memories: prepared.memories,
       interpretations: prepared.interpretations,
     };
-    projectionBases.set(state, { graph, graphKey, evidenceKey });
+    projectionBases.set(state, { graph, graphKey, evidenceKey, indicatorKey });
     return state;
   }
   return { step: evidence.step, read };
