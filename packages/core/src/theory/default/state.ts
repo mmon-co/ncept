@@ -1,6 +1,6 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "../speaker";
-import { initListTheoryState, readTheoryState, type TheoryState } from "../theory";
+import { readTheoryState, type TheoryState } from "../theory";
 
 import { dependentCones } from "./dependent-cone";
 import {
@@ -23,7 +23,6 @@ import {
 } from "../../patch";
 import {
   compareObservations,
-  effectiveObservations,
   isObservationId,
   isObservationTimestamp,
   type Observation,
@@ -742,82 +741,584 @@ function initialHomes(record: HomedRecord): readonly NodeId[] {
   return record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
 }
 
-/** Acceptance-order indexes are deliberately separate from the chronologically sorted active records.
- * Memory tracks ALL homing revisions: a later decision for a different revision can still move an
- * attachment's recording position, even though it does not decide the current graph's placement.
- */
-function indexDefaultObservations(supplied: readonly Observation[], now: string) {
-  const observations = effectiveObservations(electedObservations(supplied), now);
-  const { records, retracted } = indexDefaultRecords(observations);
-  const active = new Map(records.map((record) => [record.id, record]));
-  const suppliedPositions = new Map<ObservationId, number>();
-  supplied.forEach(({ id }, position) => {
-    if (!suppliedPositions.has(id)) suppliedPositions.set(id, position);
-  });
-  const positions = new Map<ObservationId, number>();
-  const firstById = new Map<ObservationId, Observation>();
-  const decisions = new Map<string, Map<ObservationId, Observation<Homing>>>();
-  const memoryPlacements = new Map<ObservationId, MemoryPlacement>();
-  const lapses = new Map<NodeId, Observation<Lapse>[]>();
-  const featureUses = new Map<NodeId, Observation<FeatureUse>[]>();
-  const memories = new Map<NodeId, Observation<Memory>[]>();
-  const summaries = new Map<NodeId, Observation<MemorySummaryPayload>[]>();
-  const completions: Observation<CompletionOutcome>[] = [];
-  const transcriptMemories = new Map<ObservationId, readonly NodeId[]>();
-  observations.forEach((observation, position) => {
-    positions.set(observation.id, position);
-    if (!firstById.has(observation.id)) firstById.set(observation.id, observation);
-    const record = active.get(observation.id);
-    if (record !== undefined) {
-      const placement = memoryPlacements.get(record.id) ?? { present: new Set<NodeId>(), positions: new Map() };
-      placement.present = new Set(initialHomes(record));
-      for (const node of placement.present) placement.positions.set(node, position);
-      memoryPlacements.set(record.id, placement);
-    }
-    if (!isDefaultObservation(observation)) return;
-    const { payload } = observation;
-    if (isHoming(payload)) {
-      const key = exactPatchRefKey(payload.revision);
-      let revision = decisions.get(key);
-      if (revision === undefined) decisions.set(key, (revision = new Map()));
-      revision.set(payload.of, { ...observation, payload });
-      if (active.has(payload.of)) {
-        const placement = memoryPlacements.get(payload.of) ?? { present: new Set<NodeId>(), positions: new Map() };
-        for (const node of payload.homes) if (!placement.present.has(node)) placement.positions.set(node, position);
-        placement.present = new Set(payload.homes);
-        memoryPlacements.set(payload.of, placement);
-      }
-    } else if (isLapse(payload)) append(lapses, payload.node.node, { ...observation, payload });
-    else if (isFeatureUse(payload)) {
-      for (const node of new Set(observation.nodes)) append(featureUses, node, { ...observation, payload });
-    } else if (isMemory(payload)) {
-      if (payload.entries.some((entry) => entry.source.kind === "transcript"))
-        transcriptMemories.set(observation.id, observation.nodes ?? []);
-      for (const node of new Set(observation.nodes)) append(memories, node, { ...observation, payload });
-    } else if (isSummary(payload)) {
-      for (const node of new Set(observation.nodes)) append(summaries, node, { ...observation, payload });
-    } else if (isCompletionOutcome(payload)) completions.push({ ...observation, payload });
-  });
+/** These maps are maintained by acceptance position, never by observation time. */
+interface DefaultObservationIndex {
+  readonly firstById: Map<ObservationId, Observation>;
+  readonly positions: Map<ObservationId, number>;
+  readonly memoryPlacements: Map<ObservationId, MemoryPlacement>;
+  readonly lapses: Map<NodeId, readonly Observation<Lapse>[]>;
+  readonly featureUses: Map<NodeId, readonly Observation<FeatureUse>[]>;
+  readonly memories: Map<NodeId, readonly Observation<Memory>[]>;
+  readonly summaries: Map<NodeId, readonly Observation<MemorySummaryPayload>[]>;
+  readonly transcriptMemories: Map<ObservationId, readonly NodeId[]>;
+}
+
+interface EvidenceEntry {
+  readonly observation: Observation;
+  readonly position: number;
+  readonly time: number;
+  present: boolean;
+  effective: boolean;
+}
+
+function indexed<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing indexed default evidence");
+  return value;
+}
+
+/** Two heaps partition elected evidence at the last read instant. A clock tick only touches crossed
+ * boundaries, even when acceptance times arrive out of order; backwards reads move the same entries back. */
+function evidenceClock(direction: 1 | -1) {
+  const entries: EvidenceEntry[] = [];
+  const earlier = (left: EvidenceEntry, right: EvidenceEntry) => direction * (left.time - right.time) < 0;
   return {
-    observations,
-    records,
-    active,
-    retracted,
-    suppliedPositions,
-    positions,
-    firstById,
-    decisions,
-    memoryPlacements,
-    lapses,
-    featureUses,
-    memories,
-    summaries,
-    completions,
-    transcriptMemories,
+    peek: () => entries[0],
+    push(entry: EvidenceEntry) {
+      let index = entries.length;
+      entries.push(entry);
+      while (index > 0) {
+        const parent = (index - 1) >>> 1;
+        if (!earlier(entry, indexed(entries[parent]))) break;
+        entries[index] = indexed(entries[parent]);
+        index = parent;
+      }
+      entries[index] = entry;
+    },
+    pop(): EvidenceEntry {
+      const first = indexed(entries[0]);
+      const last = indexed(entries.pop());
+      if (entries.length > 0) {
+        let index = 0;
+        while (index * 2 + 1 < entries.length) {
+          let child = index * 2 + 1;
+          if (child + 1 < entries.length && earlier(indexed(entries[child + 1]), indexed(entries[child]))) child++;
+          if (!earlier(indexed(entries[child]), last)) break;
+          entries[index] = indexed(entries[child]);
+          index = child;
+        }
+        entries[index] = last;
+      }
+      return first;
+    },
   };
 }
 
-type DefaultObservationIndex = ReturnType<typeof indexDefaultObservations>;
+type Buckets<K, V> = Map<K, Map<number, V>>;
+function changeBucket<K, V>(buckets: Buckets<K, V>, key: K, position: number, value: V, add: boolean): void {
+  let bucket = buckets.get(key);
+  if (add) {
+    if (bucket === undefined) buckets.set(key, (bucket = new Map()));
+    bucket.set(position, value);
+  } else {
+    bucket?.delete(position);
+    if (bucket?.size === 0) buckets.delete(key);
+  }
+}
+function bucketValues<V>(bucket: ReadonlyMap<number, V> | undefined): V[] {
+  return [...(bucket ?? [])].sort(([left], [right]) => left - right).map(([, value]) => value);
+}
+function firstEntry(entries: Iterable<EvidenceEntry>): EvidenceEntry | undefined {
+  let first: EvidenceEntry | undefined;
+  for (const entry of entries) if (first === undefined || entry.position < first.position) first = entry;
+  return first;
+}
+function isRecord(observation: Observation): observation is HomedRecord {
+  return isDefaultObservation(observation) && (isDemonstration(observation.payload) || isClaim(observation.payload));
+}
+function isInterpretationObservation(observation: Observation): observation is Observation<Interpretation> {
+  return isDefaultObservation(observation) && isInterpretation(observation.payload);
+}
+
+interface RecordPlacement {
+  readonly record: HomedRecord;
+  readonly present: readonly NodeId[];
+  readonly decision: Observation<Homing> | undefined;
+  readonly pending: boolean;
+  readonly homeless: boolean;
+}
+interface PreparedDefaultEvidence {
+  readonly graphIndex: DefaultGraphIndex;
+  readonly index: DefaultObservationIndex;
+  readonly observations: readonly Observation[];
+  readonly records: readonly HomedRecord[];
+  readonly homed: Readonly<Partial<Record<NodeId, readonly HomedRecord[]>>>;
+  readonly current: ReadonlyMap<ObservationId, ReadonlySet<NodeId>>;
+  readonly placed: ReadonlyMap<ObservationId, readonly NodeId[]>;
+  readonly homeless: readonly HomedRecord[];
+  readonly homing: DefaultHoming;
+  readonly memories: Readonly<Partial<Record<NodeId, NodeMemory>>>;
+  readonly interpretations: readonly Observation<Interpretation>[];
+  /** Own evidence, lapses, feature uses, memory, and direct prerequisites receiving implicit credit.
+   * Completion queries can inspect global history: its separate flag must invalidate their dependencies.
+   * Both sets describe changes since the preceding successful preparation, not since step(). */
+  readonly dirtyNodes: ReadonlySet<NodeId>;
+  readonly dirtySources: ReadonlySet<ObservationId>;
+  readonly historyChanged: boolean;
+  readonly history: readonly CompletionObservation[];
+}
+
+/** Shared cold/retained preparation. The host resets this closure for graph or annotation replacements.
+ * Supersession counts include ALL present elected observations, including superseded corrections.
+ * Retractions only exclude Records; their sources remain available to ordinary memory attachments.
+ */
+function initDefaultEvidence(graph: ResolvedGraph) {
+  const graphIndex = indexDefaultGraph(graph);
+  let suppliedCount = 0;
+  const byId = new Map<ObservationId, EvidenceEntry[]>();
+  const future = evidenceClock(1);
+  const past = evidenceClock(-1);
+  let pending: EvidenceEntry[] = [];
+  let invalidTimestamp: EvidenceEntry | undefined;
+  const superseded = new Map<ObservationId, number>();
+  const effective = new Set<EvidenceEntry>();
+  const own: Buckets<ObservationId, EvidenceEntry> = new Map();
+  const retractions: Buckets<ObservationId, EvidenceEntry> = new Map();
+  const decisions: Buckets<ObservationId, EvidenceEntry> = new Map();
+  const invalidPayloads = new Map<EvidenceEntry, Error>();
+  const invalidRetractions = new Set<EvidenceEntry>();
+  const corrections: Buckets<ObservationId, EvidenceEntry> = new Map();
+  const invalidCorrections = new Set<EvidenceEntry>();
+  const invalidScopes = new Set<EvidenceEntry>();
+  const supported = new Map<number, Observation<Interpretation>>();
+  const interpretationUsers = new Map<ObservationId, Set<EvidenceEntry>>();
+  const memoryUsers: Buckets<ObservationId, readonly NodeId[]> = new Map();
+  const lapseEntries: Buckets<NodeId, Observation<Lapse>> = new Map();
+  const featureEntries: Buckets<NodeId, Observation<FeatureUse>> = new Map();
+  const memoryEntries: Buckets<NodeId, Observation<Memory>> = new Map();
+  const summaryEntries: Buckets<NodeId, Observation<MemorySummaryPayload>> = new Map();
+  const completions = new Map<number, Observation<CompletionOutcome>>();
+  const index: DefaultObservationIndex = {
+    firstById: new Map(),
+    positions: new Map(),
+    memoryPlacements: new Map(),
+    lapses: new Map(),
+    featureUses: new Map(),
+    memories: new Map(),
+    summaries: new Map(),
+    transcriptMemories: new Map(),
+  };
+  const placements = new Map<ObservationId, readonly RecordPlacement[]>();
+  const placementByRecord = new Map<HomedRecord, RecordPlacement>();
+  const homedEntries: Buckets<NodeId, HomedRecord> = new Map();
+  const current = new Map<ObservationId, ReadonlySet<NodeId>>();
+  const placed = new Map<ObservationId, readonly NodeId[]>();
+  const homed: Partial<Record<NodeId, readonly HomedRecord[]>> = {};
+  const memories: Partial<Record<NodeId, NodeMemory>> = {};
+  const dirtyRecords = new Set<ObservationId>();
+  const dirtySources = new Set<ObservationId>();
+  const dirtyNodes = new Set(graphIndex.nodeIds);
+  const dirtyMemories = new Set(graphIndex.nodeIds);
+  const dirtyAux = new Set<NodeId>();
+  const dirtyInterpretations = new Set<EvidenceEntry>();
+  let observationsChanged = true;
+  let recordsChanged = true;
+  let historyChanged = true;
+  let prepared: PreparedDefaultEvidence | undefined;
+
+  const correctionValid = (entry: EvidenceEntry): void => {
+    const target = entry.observation.supersedes === undefined ? undefined : byId.get(entry.observation.supersedes)?.[0];
+    if (
+      target !== undefined &&
+      (target.position >= entry.position ||
+        !isDefaultObservation(target.observation) ||
+        !isInterpretation(target.observation.payload))
+    )
+      invalidCorrections.add(entry);
+    else invalidCorrections.delete(entry);
+  };
+  function step(observations: readonly Observation[]): void {
+    for (const observation of observations) {
+      const entry: EvidenceEntry = {
+        observation,
+        position: suppliedCount++,
+        time: Date.parse(observation.at),
+        present: false,
+        effective: false,
+      };
+      append(byId, observation.id, entry);
+      pending.push(entry);
+      if (observation.standing !== "abandoned" && !isObservationTimestamp(observation.at)) invalidTimestamp ??= entry;
+      // Correction validity is about the supplied sequence, even for abandoned/future corrections.
+      if (isDefaultObservation(observation) && isInterpretation(observation.payload)) {
+        if (observation.supersedes !== undefined) {
+          changeBucket(corrections, observation.supersedes, entry.position, entry, true);
+          correctionValid(entry);
+        }
+        for (const source of observation.cites ?? []) {
+          let users = interpretationUsers.get(source);
+          if (users === undefined) interpretationUsers.set(source, (users = new Set()));
+          users.add(entry);
+        }
+      }
+      for (const user of corrections.get(observation.id)?.values() ?? []) correctionValid(user);
+    }
+  }
+
+  function changeEffective(entry: EvidenceEntry, add: boolean): void {
+    const observation = entry.observation;
+    if (add) effective.add(entry);
+    else effective.delete(entry);
+    entry.effective = add;
+    observationsChanged = true;
+    dirtySources.add(observation.id);
+    dirtyRecords.add(observation.id);
+    if (!isDefaultObservation(observation)) return;
+    changeBucket(own, observation.id, entry.position, entry, add);
+    invalidPayloads.delete(entry);
+    if (add) {
+      try {
+        assertDefaultPayload(observation.payload);
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        invalidPayloads.set(entry, error);
+      }
+    }
+    const payload = observation.payload;
+    const sources = isMemory(payload)
+      ? payload.entries.flatMap(({ source }) => (source.kind === "observation" ? [source.observation] : []))
+      : isSummary(payload)
+        ? [...payload.sources, ...payload.dependencies]
+        : [];
+    for (const source of sources) changeBucket(memoryUsers, source, entry.position, observation.nodes ?? [], add);
+    if (isRetraction(payload)) {
+      changeBucket(retractions, payload.of, entry.position, entry, add);
+      invalidRetractions.delete(entry);
+      dirtyRecords.add(payload.of);
+    } else if (isHoming(payload)) {
+      changeBucket(decisions, payload.of, entry.position, entry, add);
+      dirtyRecords.add(payload.of);
+    } else if (isLapse(payload)) {
+      changeBucket(lapseEntries, payload.node.node, entry.position, { ...observation, payload }, add);
+      dirtyAux.add(payload.node.node);
+    } else if (isFeatureUse(payload)) {
+      for (const node of new Set(observation.nodes)) {
+        changeBucket(featureEntries, node, entry.position, { ...observation, payload }, add);
+        dirtyAux.add(node);
+      }
+    } else if (isMemory(payload)) {
+      for (const node of new Set(observation.nodes)) {
+        changeBucket(memoryEntries, node, entry.position, { ...observation, payload }, add);
+        dirtyAux.add(node);
+        dirtyMemories.add(node);
+      }
+    } else if (isSummary(payload)) {
+      for (const node of new Set(observation.nodes)) {
+        changeBucket(summaryEntries, node, entry.position, { ...observation, payload }, add);
+        dirtyAux.add(node);
+        dirtyMemories.add(node);
+      }
+    } else if (isCompletionOutcome(payload)) {
+      if (add) completions.set(entry.position, { ...observation, payload });
+      else completions.delete(entry.position);
+      historyChanged = true;
+    } else if (isInterpretation(payload)) {
+      invalidScopes.delete(entry);
+      if (
+        add &&
+        ((observation.nodes?.length ?? 0) === 0 ||
+          (observation.cites?.length ?? 0) === 0 ||
+          new Set(observation.cites).size !== observation.cites?.length)
+      )
+        invalidScopes.add(entry);
+      dirtyInterpretations.add(entry);
+    }
+  }
+
+  function placeRecord(id: ObservationId): void {
+    const previous = placements.get(id) ?? [];
+    const previousPlaced = placed.get(id) ?? [];
+    const previousMemory = index.memoryPlacements.get(id);
+    const previousHomes = new Map<NodeId, HomedRecord[]>();
+    const nextHomes = new Map<NodeId, HomedRecord[]>();
+    for (const { record, present } of previous) {
+      placementByRecord.delete(record);
+      // Duplicate identities can have several records: remove every old occurrence for this id.
+      for (const node of present) {
+        const bucket = homedEntries.get(node);
+        for (const [key, value] of bucket ?? []) if (value.id === id) bucket?.delete(key);
+        append(previousHomes, node, record);
+      }
+    }
+    const entries = bucketValues(own.get(id));
+    const target = entries[0]?.observation;
+    const retractors = retractions.get(id);
+    for (const entry of retractors?.values() ?? []) {
+      if (target !== undefined && !isRecord(target)) invalidRetractions.add(entry);
+      else invalidRetractions.delete(entry);
+    }
+    const records = (retractors?.size ?? 0) > 0 ? [] : entries.filter(({ observation }) => isRecord(observation));
+    records.sort(
+      (left, right) => compareObservations(left.observation, right.observation) || left.position - right.position,
+    );
+    const homing = bucketValues(decisions.get(id));
+    let decision: Observation<Homing> | undefined;
+    for (const { observation } of homing)
+      if (isHoming(observation.payload) && sameExactPatchRef(observation.payload.revision, graph.terminal))
+        decision = { ...observation, payload: observation.payload };
+    const next: RecordPlacement[] = [];
+    for (const entry of records) {
+      const record = entry.observation;
+      if (!isRecord(record)) continue;
+      const chosen = decision?.payload.homes ?? initialHomes(record);
+      const present = [...new Set(chosen)].filter((node) => graphIndex.nodeIds.has(node));
+      const placement: RecordPlacement = {
+        record,
+        present,
+        decision,
+        pending:
+          record.payload.kind === "demonstration" &&
+          (decision?.payload.pending === true || chosen.some((node) => !graphIndex.nodeIds.has(node))),
+        homeless:
+          present.length === 0 &&
+          (record.payload.kind === "demonstration" || decision !== undefined || record.nodes !== undefined),
+      };
+      next.push(placement);
+      placementByRecord.set(record, placement);
+      for (const node of present) {
+        changeBucket(homedEntries, node, entry.position, record, true);
+        append(nextHomes, node, record);
+      }
+      current.set(id, new Set(present));
+      placed.set(id, [...initialHomes(record), ...present]);
+    }
+    if (next.length === 0) {
+      placements.delete(id);
+      current.delete(id);
+      placed.delete(id);
+      index.memoryPlacements.delete(id);
+    } else {
+      placements.set(id, next);
+      // ALL revisions affect recording position. Every effective occurrence with this identity resets
+      // intrinsic placement; a decision may arrive before the Record or re-enter an earlier home.
+      const record = indexed(next.at(-1)).record;
+      const placement: MemoryPlacement = { present: new Set(), positions: new Map() };
+      const events = [...new Set([...(byId.get(id) ?? []).filter((entry) => entry.effective), ...homing])].sort(
+        (left, right) => left.position - right.position,
+      );
+      for (const { observation, position } of events) {
+        if (observation.id === id) {
+          placement.present = new Set(initialHomes(record));
+          for (const node of placement.present) placement.positions.set(node, position);
+        }
+        if (isDefaultObservation(observation) && isHoming(observation.payload) && observation.payload.of === id) {
+          for (const node of observation.payload.homes)
+            if (!placement.present.has(node)) placement.positions.set(node, position);
+          placement.present = new Set(observation.payload.homes);
+        }
+      }
+      index.memoryPlacements.set(id, placement);
+    }
+    for (const node of new Set([...previousHomes.keys(), ...nextHomes.keys()])) {
+      const before = previousHomes.get(node) ?? [];
+      const after = nextHomes.get(node) ?? [];
+      if (before.length !== after.length || before.some((record, i) => record !== after[i])) {
+        dirtyNodes.add(node);
+        dirtyMemories.add(node);
+        historyChanged = true;
+      } else if (previousMemory?.positions.get(node) !== index.memoryPlacements.get(id)?.positions.get(node)) {
+        dirtyMemories.add(node);
+      }
+    }
+    const beforeScope = new Set(previousPlaced);
+    const afterScope = new Set(placed.get(id));
+    if (beforeScope.size !== afterScope.size || [...beforeScope].some((node) => !afterScope.has(node)))
+      dirtySources.add(id);
+    if (previous.length > 0 || next.length > 0) recordsChanged = true;
+  }
+
+  function read(now: string, validateInterpretations = true): PreparedDefaultEvidence {
+    if (!isObservationTimestamp(now)) throw new Error("State requires an ISO timestamp");
+    if (invalidTimestamp !== undefined)
+      throw new Error("Invalid observation timestamp: " + invalidTimestamp.observation.id);
+    const time = Date.parse(now);
+    const changed = new Set<ObservationId>();
+    const toggle = (entry: EvidenceEntry, present: boolean): void => {
+      if (entry.present === present || entry.observation.standing === "abandoned") return;
+      entry.present = present;
+      changed.add(entry.observation.id);
+      const target = entry.observation.supersedes;
+      if (target !== undefined) {
+        superseded.set(target, (superseded.get(target) ?? 0) + (present ? 1 : -1));
+        changed.add(target);
+      }
+    };
+    while ((future.peek()?.time ?? Infinity) <= time) {
+      const entry = future.pop();
+      toggle(entry, true);
+      past.push(entry);
+    }
+    while ((past.peek()?.time ?? -Infinity) > time) {
+      const entry = past.pop();
+      toggle(entry, false);
+      future.push(entry);
+    }
+    for (const entry of pending) {
+      if (entry.observation.standing === "abandoned") continue;
+      toggle(entry, entry.time <= time);
+      (entry.present ? past : future).push(entry);
+    }
+    pending = [];
+    if (prepared !== undefined && changed.size === 0 && dirtySources.size === 0 && dirtyRecords.size === 0) {
+      if (validateInterpretations && invalidCorrections.size > 0)
+        throw new Error("A correction must supersede an earlier interpretation");
+      return { ...prepared, dirtyNodes: new Set(), dirtySources: new Set(), historyChanged: false };
+    }
+    // Finish membership first, so dependencies always observe the final effective batch.
+    for (const id of changed) {
+      for (const entry of byId.get(id) ?? []) {
+        const active = entry.present && (superseded.get(id) ?? 0) === 0;
+        if (entry.effective !== active) changeEffective(entry, active);
+      }
+    }
+    for (const id of dirtySources) {
+      const entries = (byId.get(id) ?? []).filter((entry) => entry.effective);
+      const first = entries[0]?.observation;
+      if (first === undefined) {
+        index.firstById.delete(id);
+        index.positions.delete(id);
+        index.transcriptMemories.delete(id);
+      } else {
+        index.firstById.set(id, first);
+        index.positions.set(id, indexed(entries.at(-1)).position);
+        index.transcriptMemories.delete(id);
+        for (const { observation } of entries)
+          if (
+            isDefaultObservation(observation) &&
+            isMemory(observation.payload) &&
+            observation.payload.entries.some(({ source }) => source.kind === "transcript")
+          )
+            index.transcriptMemories.set(id, observation.nodes ?? []);
+      }
+    }
+    for (const id of dirtyRecords) placeRecord(id);
+    const invalidPayload = firstEntry(invalidPayloads.keys());
+    if (invalidPayload !== undefined) throw indexed(invalidPayloads.get(invalidPayload));
+    if (invalidRetractions.size > 0) throw new Error("Default retractions must target a demonstration or claim");
+    for (const node of dirtyAux) {
+      index.lapses.set(node, bucketValues(lapseEntries.get(node)));
+      index.featureUses.set(node, bucketValues(featureEntries.get(node)));
+      index.memories.set(node, bucketValues(memoryEntries.get(node)));
+      index.summaries.set(node, bucketValues(summaryEntries.get(node)));
+      dirtyNodes.add(node);
+    }
+    for (const id of dirtySources) {
+      for (const nodes of memoryUsers.get(id)?.values() ?? []) for (const node of nodes) dirtyMemories.add(node);
+      for (const entry of interpretationUsers.get(id) ?? []) dirtyInterpretations.add(entry);
+    }
+    for (const node of dirtyNodes) {
+      const records = bucketValues(homedEntries.get(node)).sort(compareObservations);
+      if (records.length === 0) delete homed[node];
+      else homed[node] = records;
+    }
+    for (const node of dirtyMemories) {
+      if (graphIndex.nodeIds.has(node)) memories[node] = projectMemory(node, homed[node] ?? [], index, current);
+    }
+    if (validateInterpretations && invalidCorrections.size > 0)
+      throw new Error("A correction must supersede an earlier interpretation");
+    for (const entry of dirtyInterpretations) {
+      supported.delete(entry.position);
+      const observation = entry.observation;
+      if (!entry.effective || !isInterpretationObservation(observation)) continue;
+      const { nodes = [], cites = [] } = observation;
+      if (nodes.length === 0 || cites.length === 0 || new Set(cites).size !== cites.length) continue;
+      const scope = new Set(nodes);
+      if (
+        cites.every((id) => (placed.get(id) ?? index.transcriptMemories.get(id) ?? []).some((node) => scope.has(node)))
+      )
+        supported.set(entry.position, observation);
+    }
+    if (validateInterpretations && invalidScopes.size > 0)
+      throw new Error("Interpretations require a Node scope and unique support");
+    let records = prepared?.records ?? [];
+    if (recordsChanged) {
+      const previous = records.filter(({ id }) => !dirtyRecords.has(id));
+      const updates = [...dirtyRecords]
+        .flatMap((id) => (placements.get(id) ?? []).map(({ record }) => record))
+        .sort(compareObservations);
+      const next: HomedRecord[] = [];
+      let left = 0;
+      let right = 0;
+      while (left < previous.length && right < updates.length) {
+        if (compareObservations(indexed(previous[left]), indexed(updates[right])) <= 0)
+          next.push(indexed(previous[left++]));
+        else next.push(indexed(updates[right++]));
+      }
+      records = [...next, ...previous.slice(left), ...updates.slice(right)];
+    }
+    let homing: DefaultHoming = prepared?.homing ?? { homes: {}, claims: {}, pending: [] };
+    let homeless = prepared?.homeless ?? [];
+    if (recordsChanged || prepared === undefined) {
+      const homes: Partial<Record<ObservationId, readonly NodeId[]>> = {};
+      const claims: Partial<Record<ObservationId, readonly NodeId[]>> = {};
+      const pending: ObservationId[] = [];
+      const lost: HomedRecord[] = [];
+      for (const record of records) {
+        const { present, decision, pending: unresolved, homeless: unplaced } = indexed(placementByRecord.get(record));
+        if (decision !== undefined) (record.payload.kind === "claim" ? claims : homes)[record.id] = present;
+        if (unresolved) pending.push(record.id);
+        if (unplaced) lost.push(record);
+      }
+      homing = { homes, claims, pending: [...new Set(pending)] };
+      homeless = lost;
+    }
+    let history = prepared?.history ?? [];
+    if (historyChanged) {
+      const next: CompletionObservation[] = records
+        .map((observation) => ({
+          observation,
+          nodes: [...(current.get(observation.id) ?? [])].sort(
+            (left, right) => (graphIndex.nodeOrder.get(left) ?? 0) - (graphIndex.nodeOrder.get(right) ?? 0),
+          ),
+        }))
+        .filter(({ nodes }) => nodes.length > 0);
+      for (const observation of bucketValues(completions)) {
+        const node = observation.payload.node.node;
+        if (
+          graphIndex.nodeIds.has(node) &&
+          sameExactPatchRef(
+            observation.payload.node.provenance,
+            completionNodeRef(graph, node, graphIndex.nodeIds).provenance,
+          )
+        )
+          next.push({ observation, nodes: [node] });
+      }
+      history = next;
+    }
+    // Only direct prerequisites receive implicit retention credit.
+    const affected = new Set([...dirtyNodes, ...dirtyMemories]);
+    for (const node of dirtyNodes)
+      for (const prerequisite of graphIndex.prerequisites.get(node) ?? []) affected.add(prerequisite);
+    prepared = {
+      graphIndex,
+      index,
+      observations: observationsChanged
+        ? [...effective].sort((left, right) => left.position - right.position).map(({ observation }) => observation)
+        : (prepared?.observations ?? []),
+      records,
+      homed: { ...homed },
+      current,
+      placed,
+      homeless,
+      homing,
+      memories: { ...memories },
+      interpretations:
+        dirtyInterpretations.size > 0 || prepared === undefined ? bucketValues(supported) : prepared.interpretations,
+      dirtyNodes: affected,
+      dirtySources: new Set(dirtySources),
+      historyChanged,
+      history,
+    };
+    dirtyRecords.clear();
+    dirtySources.clear();
+    dirtyNodes.clear();
+    dirtyMemories.clear();
+    dirtyAux.clear();
+    dirtyInterpretations.clear();
+    observationsChanged = recordsChanged = historyChanged = false;
+    return prepared;
+  }
+  return { step, read };
+}
 
 /** Attachment order is recording order, not source time: old evidence can arrive or gain a home later. */
 function projectMemory(
@@ -895,41 +1396,6 @@ function projectMemory(
   };
 }
 
-/**
- * A correction supersedes an earlier accepted interpretation, so chains cannot cycle. An interpretation is
- * current while every cite is an active Record or a transcript-backed memory batch sharing a Node with its
- * scope; summaries, other interpretations and missing, retracted or abandoned sources support nothing.
- */
-function projectInterpretations(
-  supplied: readonly Observation[],
-  index: DefaultObservationIndex,
-  records: ReadonlyMap<ObservationId, readonly NodeId[]>,
-): readonly Observation<Interpretation>[] {
-  supplied.forEach((observation, position) => {
-    if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return;
-    const target =
-      observation.supersedes === undefined ? undefined : index.suppliedPositions.get(observation.supersedes);
-    const found = target === undefined ? undefined : supplied[target];
-    if (
-      target !== undefined &&
-      found !== undefined &&
-      (target >= position || !isDefaultObservation(found) || !isInterpretation(found.payload))
-    )
-      throw new Error("A correction must supersede an earlier interpretation");
-  });
-  return index.observations.filter((observation): observation is Observation<Interpretation> => {
-    if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return false;
-    const { nodes = [], cites = [] } = observation;
-    if (nodes.length === 0 || cites.length === 0 || new Set(cites).size !== cites.length)
-      throw new Error("Interpretations require a Node scope and unique support");
-    const scope = new Set(nodes);
-    return cites.every((id) => {
-      const related = records.get(id) ?? index.transcriptMemories.get(id) ?? [];
-      return related.some((node) => scope.has(node));
-    });
-  });
-}
-
 export type InterpretationQuery = Readonly<{ nodes?: readonly NodeId[]; tag?: string; surface?: SurfaceId }>;
 /** Deterministic lookup: supplied filters intersect; results keep acceptance order. */
 export function interpretationsDefault(
@@ -951,45 +1417,9 @@ export function electedObservations(observations: readonly Observation[]): reado
 
 /** Homing needs historical structure, not the acquisition vocabulary that revision was authored under. */
 export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Observation[], now: string) {
-  return homeIndexedRecords(graph, indexDefaultObservations(supplied, now), new Set(graph.nodes.map(({ id }) => id)));
-}
-
-function homeIndexedRecords(graph: ResolvedGraph, index: DefaultObservationIndex, nodeIds: ReadonlySet<NodeId>) {
-  const { observations, records } = index;
-  const decisions = index.decisions.get(exactPatchRefKey(graph.terminal));
-  const current = new Map<ObservationId, ReadonlySet<NodeId>>();
-  const homes: Partial<Record<ObservationId, readonly NodeId[]>> = {};
-  const claims: Partial<Record<ObservationId, readonly NodeId[]>> = {};
-  const pending = new Set<ObservationId>();
-  const homed: Partial<Record<NodeId, HomedRecord[]>> = {};
-  const homeless: HomedRecord[] = [];
-  const placed = new Map<ObservationId, readonly NodeId[]>();
-  for (const record of records) {
-    // A homing decision interprets the exact graph revision it names, and only that one: the graph
-    // change that produced this revision restates every decision still in force. Recording order
-    // decides between decisions naming this revision, so the supplied order must be logical
-    // acceptance order — a hook's writes belong where it was emitted, not where they landed.
-    const decision = decisions?.get(record.id);
-    const mapping = record.payload.kind === "claim" ? claims : homes;
-    const initial = initialHomes(record);
-    const chosen = decision?.payload.homes ?? initial;
-    const present = [...new Set(chosen)].filter((node) => nodeIds.has(node));
-    // homes/claims are the decisions in force at this revision; intrinsic placement stays on the record.
-    if (decision !== undefined) mapping[record.id] = present;
-    if (
-      record.payload.kind === "demonstration" &&
-      (decision?.payload.pending || chosen.some((node) => !nodeIds.has(node)))
-    )
-      pending.add(record.id);
-    if (
-      present.length === 0 &&
-      (record.payload.kind === "demonstration" || decision !== undefined || record.nodes !== undefined)
-    )
-      homeless.push(record);
-    for (const node of present) (homed[node] ??= []).push(record);
-    current.set(record.id, new Set(present));
-    placed.set(record.id, [...initial, ...present]);
-  }
+  const evidence = initDefaultEvidence(graph);
+  evidence.step(supplied);
+  const { observations, records, homed, homeless, placed, current, homing } = evidence.read(now, false);
   return {
     observations,
     records,
@@ -997,44 +1427,21 @@ function homeIndexedRecords(graph: ResolvedGraph, index: DefaultObservationIndex
     homeless,
     placed,
     current,
-    nodeIds,
-    homing: { homes, claims, pending: [...pending] },
+    homing,
+    nodeIds: new Set(graph.nodes.map(({ id }) => id)),
   };
 }
 
-/** Indexed rebuild used by the default reducer's read-at-now operation. */
-function rebuildDefaultState(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
-  const index = indexDefaultObservations(supplied, now);
-  const graphIndex = indexDefaultGraph(graph);
-  const { observations, records, homed, homeless, placed, current, nodeIds, homing } = homeIndexedRecords(
-    graph,
-    index,
-    graphIndex.nodeIds,
-  );
-  const history: CompletionObservation[] = records
-    .map((observation) => ({
-      observation,
-      nodes: [...(current.get(observation.id) ?? [])].sort(
-        (left, right) => (graphIndex.nodeOrder.get(left) ?? 0) - (graphIndex.nodeOrder.get(right) ?? 0),
-      ),
-    }))
-    .filter(({ nodes }) => nodes.length > 0);
-  for (const observation of index.completions) {
-    const node = observation.payload.node.node;
-    if (
-      !nodeIds.has(node) ||
-      !sameExactPatchRef(observation.payload.node.provenance, completionNodeRef(graph, node, nodeIds).provenance)
-    )
-      continue;
-    history.push({ observation: { ...observation, payload: observation.payload }, nodes: [node] });
-  }
+/** Node evaluation is still time-varying; the next reduction layer consumes the prepared dirty sets. */
+function readDefaultState(evidence: PreparedDefaultEvidence, graph: ResolvedGraph, now: string): DefaultState {
+  const { graphIndex, index, observations, records, homed, homeless, homing, history, memories, interpretations } =
+    evidence;
   const successes = new Map<NodeId, HomedRecord[]>();
   for (const { id } of graph.nodes)
     for (const record of homed[id] ?? [])
       if (record.payload.kind === "demonstration" && record.payload.unaided && record.payload.outcome === "success")
         append(successes, id, record);
   const nodes: Partial<Record<NodeId, NodeState>> = {};
-  const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = DEFAULT_PARAMETERS;
     const own = homed[id] ?? [];
@@ -1050,7 +1457,6 @@ function rebuildDefaultState(graph: ResolvedGraph, supplied: readonly Observatio
       ...(schedule === undefined ? {} : { schedule }),
       featureUses: index.featureUses.get(id) ?? [],
     };
-    memories[id] = projectMemory(id, own, index, current);
   }
   return {
     nodes,
@@ -1059,12 +1465,16 @@ function rebuildDefaultState(graph: ResolvedGraph, supplied: readonly Observatio
     homing,
     homeless,
     memories,
-    interpretations: projectInterpretations(supplied, index, placed),
+    interpretations,
   };
 }
 
 export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState> {
-  return initListTheoryState(graph, rebuildDefaultState);
+  const evidence = initDefaultEvidence(graph);
+  return {
+    step: evidence.step,
+    read: (now) => readDefaultState(evidence.read(now), graph, now),
+  };
 }
 
 /** Pure default policy, derived from the same reducer used by retained replays. */
