@@ -156,7 +156,10 @@ export function evaluateCompletion(
   history: readonly CompletionObservation[],
   now: string,
 ): CompletionProgress {
-  const ordered = [...history].sort((a, b) => compareObservations(a.observation, b.observation));
+  // Removed cards keep their evidence for memory and retention, but no longer satisfy completion.
+  const ordered = history
+    .filter(({ observation }) => observation.materialPresent !== false)
+    .sort((a, b) => compareObservations(a.observation, b.observation));
   const value = (entry: CompletionObservation, field: Field): Json | undefined => {
     const {
       observation: { payload, at },
