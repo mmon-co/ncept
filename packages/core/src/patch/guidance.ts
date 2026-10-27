@@ -32,6 +32,8 @@ export type ResolvedGuidanceEntry = GuidanceEntry & {
 };
 /** Authored first-action guidance, rendered by the tutor in the learner's language. */
 export const PEDAGOGY_OPENING_PROPERTY = "pedagogy:opening";
+/** Verbatim tutor message prompting the learner’s first action, without a model turn. */
+export const PEDAGOGY_FIRST_MESSAGE_PROPERTY = "pedagogy:first-message";
 export const PEDAGOGY_GUIDANCE_PROPERTY = "pedagogy:guidance";
 export const PEDAGOGY_ASSESSMENT_PROPERTY = "pedagogy:assessment";
 export const GUIDANCE_PROPERTIES = [PEDAGOGY_GUIDANCE_PROPERTY, PEDAGOGY_ASSESSMENT_PROPERTY] as const;
@@ -78,7 +80,7 @@ export function isGuidanceEntries(value: unknown): value is readonly GuidanceEnt
 }
 
 /** Shared tag-to-Node cascade: Node settings follow tags, then exact Patch and operation order. */
-function nodeMetadataCascade<T>(
+export function nodeMetadataCascade<T>(
   graph: ResolvedGraph,
   node: NodeId,
   key: string,

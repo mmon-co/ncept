@@ -2,6 +2,7 @@ import { canonicalJson } from "../digest";
 import { PatchCompileError } from "./errors";
 import { discoveryTags, sameMetadataSubjects } from "./metadata";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance";
+import { CAPABILITY_PROPERTIES } from "./capabilities";
 import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
 import type {
   ClosedPatchBundle,
@@ -197,10 +198,10 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       const inheritedEntity = inheritsEntity(view.provenance.metadataSets[metadataSet.id]);
       const groups = new Map<string, { source: ContributionProvenance; metadataSet: MetadataSet }>();
       for (const [key, value] of Object.entries(metadataSet.properties)) {
-        // Reauthor guidance even from retained bases: flattened sources can precede them,
+        // Reauthor ordered pedagogy even from retained bases: flattened sources can precede them,
         // while every captured operation resolves after all retained contributions.
         if (
-          !GUIDANCE_PROPERTIES.some((property) => property === key) &&
+          ![...GUIDANCE_PROPERTIES, ...CAPABILITY_PROPERTIES].some((property) => property === key) &&
           inheritedEntity &&
           inheritsProperty(metadataSet.id, key)
         )

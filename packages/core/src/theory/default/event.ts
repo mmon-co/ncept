@@ -14,6 +14,7 @@ import type { Context } from "../theory";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
 import {
   stateDefault,
+  homeDefaultRecords,
   isCompletionOutcome,
   projectGraphChange,
   homingCandidates,
@@ -325,7 +326,7 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
         about: input.about ?? attempts.map(({ payload }) => payload.node.node),
         nodes: [attempt.payload.node.node],
         ...(input.cites === undefined ? {} : { cites: [...input.cites] }),
-        payload: attempt.payload,
+        payload: { ...attempt.payload, ...(input.material === undefined ? {} : { material: { ...input.material } }) },
       });
     }
     return;
@@ -337,7 +338,7 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
     if (!sameExactPatchRef(before.patch, input.from)) throw new Error("Graph change requires its source graph");
     const observations = yield* read.observations({});
     const projected = projectGraphChange(
-      stateDefault(before.graph, observations, ctx.now),
+      homeDefaultRecords(before.graph, observations, ctx.now),
       before.graph,
       ctx.graph,
       input.successors,

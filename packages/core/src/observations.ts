@@ -10,6 +10,8 @@ export type TheoryRef = Readonly<{ theory: string; version: string }>;
 export type SourceStanding = "selected" | "abandoned" | "unscoped";
 export interface Observation<P = unknown> {
   readonly standing?: SourceStanding;
+  /** Host-read lifecycle of a review card, not authored evidence; absent for other sources. */
+  readonly materialPresent?: boolean;
   readonly id: ObservationId;
   readonly at: string;
   readonly by: "platform" | TheoryRef;
@@ -21,7 +23,10 @@ export interface Observation<P = unknown> {
   readonly supersedes?: ObservationId;
   readonly payload: P;
 }
-export type ObservationWrite<P = unknown> = Omit<Observation<P>, "id" | "at" | "by" | "standing"> & {
+export type ObservationWrite<P = unknown> = Omit<
+  Observation<P>,
+  "id" | "at" | "by" | "standing" | "materialPresent"
+> & {
   readonly at?: string;
 };
 export type TranscriptSpan = Readonly<{ from: string; to: string }>;
@@ -51,6 +56,7 @@ export type PlatformEvent =
     }
   | {
       readonly kind: "outcome";
+      readonly material?: { readonly playground: string; readonly id: string };
       readonly surface: SurfaceId;
       readonly at: string;
       readonly about?: readonly NodeId[];

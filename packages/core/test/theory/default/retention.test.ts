@@ -18,6 +18,25 @@ const revision: PatchRevision = {
   delta: {
     operations: [
       ...nodes.map((id) => ({ kind: "add-node" as const, node: { id } })),
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-isolated-completion",
+          subjects: [{ kind: "node", id: "node-isolated" }],
+          properties: {
+            "pedagogy:completion": {
+              count: 2,
+              of: {
+                all: [
+                  { field: "node", is: "self" },
+                  { field: "unaided", is: true },
+                  { field: "outcome", is: "success" },
+                ],
+              },
+            },
+          },
+        },
+      },
       { kind: "add-edge", edge: { id: "edge-a", from: "node-ancestor", to: "node-prerequisite" } },
       { kind: "add-edge", edge: { id: "edge-b", from: "node-prerequisite", to: "node-dependent" } },
       { kind: "add-edge", edge: { id: "edge-c", from: "node-claim", to: "node-dependent" } },
@@ -81,7 +100,7 @@ test("the first unaided attempt each day is the Node's only review, however it a
   const now = "2026-10-02T08:00:00.000Z";
   expect(schedule(twice, now, "node-isolated")).toMatchObject({ reps: 1, lapses: 0 });
   expect(schedule(twice, now, "node-isolated")?.stability).toBe(schedule(once, now, "node-isolated")?.stability);
-  expect(read(twice, now).nodes["node-isolated"]?.k).toBe(1);
+  expect(read(twice, now).nodes["node-isolated"]?.completion.counts[0]?.k).toBe(1);
   expect(
     schedule(
       [...twice, ...card("obs-3", "2026-10-02T09:00:00.000Z", "again")],

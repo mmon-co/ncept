@@ -17,6 +17,7 @@ export * from "./diagnosis";
 export * from "./diagnostics";
 export * from "./messages";
 export * from "./state";
+export * from "./completion";
 export * from "./tags";
 export * from "./outcomes";
 export * from "./roleplay";

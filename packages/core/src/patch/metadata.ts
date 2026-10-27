@@ -1,6 +1,18 @@
 import { canonicalJson, isContentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES, PEDAGOGY_OPENING_PROPERTY } from "./guidance";
+import {
+  isPatchSkillEntries,
+  isPatchToolEntries,
+  PEDAGOGY_SKILLS_PROPERTY,
+  PEDAGOGY_TOOLS_PROPERTY,
+} from "./capabilities";
+import {
+  isGuidanceEntries,
+  GUIDANCE_PROPERTIES,
+  PEDAGOGY_OPENING_PROPERTY,
+  PEDAGOGY_FIRST_MESSAGE_PROPERTY,
+  nodeCascadedProperty,
+} from "./guidance";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -15,6 +27,7 @@ import {
 } from "./model";
 
 /** Metadata scalars use the last contributing exact Patch, then its operation order.
+ * A null contribution is a clear: it is transparent, so the latest non-null value beneath shows.
  * Callers select eligible properties and own value/provenance validation.
  */
 export function lastMetadataContribution<T>(
@@ -24,6 +37,7 @@ export function lastMetadataContribution<T>(
   const order = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   let selected: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
+    if (candidate.value === null) continue;
     const patch = order.get(exactPatchRefKey(candidate.source.patch)) ?? -1;
     const prior = selected === undefined ? -1 : (order.get(exactPatchRefKey(selected.source.patch)) ?? -1);
     if (
@@ -81,7 +95,8 @@ export function isMaterialMeta(value: unknown): value is MaterialMeta {
   function json(entry: unknown, depth: number): boolean {
     if (entry === null || typeof entry === "string" || typeof entry === "boolean") return true;
     if (typeof entry === "number") return Number.isFinite(entry);
-    if (typeof entry !== "object" || depth > 8 || seen.has(entry)) return false;
+    // Count conjunctions wrap their history-relative predicates in several JSON containers.
+    if (typeof entry !== "object" || depth > 16 || seen.has(entry)) return false;
     const prototype = Object.getPrototypeOf(entry);
     if (!Array.isArray(entry) && prototype !== Object.prototype && prototype !== null) return false;
     seen.add(entry);
@@ -150,6 +165,39 @@ export function validateMetadataProperties(properties: Readonly<Record<string, M
       );
 }
 
+function validateOpeningProperties(properties: Readonly<Record<string, MetadataValue>>): void {
+  for (const property of [PEDAGOGY_OPENING_PROPERTY, PEDAGOGY_FIRST_MESSAGE_PROPERTY])
+    if (property in properties && (typeof properties[property] !== "string" || !properties[property].trim()))
+      throw new PatchCompileError(
+        "invalid-metadata-value",
+        `metadata property '${property}' must be a nonblank string`,
+      );
+  if (PEDAGOGY_OPENING_PROPERTY in properties && PEDAGOGY_FIRST_MESSAGE_PROPERTY in properties)
+    throw new PatchCompileError("invalid-metadata-value", "Choose either first-turn guidance or a first message");
+}
+
+/** Validate the effective targets when minting a revision, including tag-to-Node cascades. */
+export function validateAuthoredOpenings(graph: ResolvedGraph): void {
+  const targets = new Map<string, Record<string, MetadataValue>>();
+  for (const set of graph.metadataSets) {
+    validateOpeningProperties(set.properties);
+    for (const subject of set.subjects) {
+      const key = metadataSubjectKey(subject);
+      const properties = targets.get(key) ?? {};
+      for (const property of [PEDAGOGY_OPENING_PROPERTY, PEDAGOGY_FIRST_MESSAGE_PROPERTY])
+        if (set.properties[property] !== undefined) properties[property] = set.properties[property];
+      targets.set(key, properties);
+      validateOpeningProperties(properties);
+    }
+  }
+  for (const { id } of graph.nodes)
+    if (
+      nodeCascadedProperty(graph, id, PEDAGOGY_OPENING_PROPERTY) !== undefined &&
+      nodeCascadedProperty(graph, id, PEDAGOGY_FIRST_MESSAGE_PROPERTY) !== undefined
+    )
+      throw new PatchCompileError("invalid-metadata-value", `Node '${id}' carries both opening forms`);
+}
+
 /**
  * Property shapes a new revision must have. Checked when content is minted, not when accepted
  * history is resolved: a revision written under an earlier vocabulary stays readable as history,
@@ -163,12 +211,16 @@ export function validateAuthoredContent(content: PatchContent): void {
     ),
   ];
   for (const properties of sets) {
-    const opening = properties[PEDAGOGY_OPENING_PROPERTY];
-    if (PEDAGOGY_OPENING_PROPERTY in properties && (typeof opening !== "string" || !opening.trim()))
-      throw new PatchCompileError(
-        "invalid-metadata-value",
-        `metadata property '${PEDAGOGY_OPENING_PROPERTY}' must be a nonblank string`,
-      );
+    validateOpeningProperties(properties);
+    for (const [property, valid] of [
+      [PEDAGOGY_SKILLS_PROPERTY, isPatchSkillEntries],
+      [PEDAGOGY_TOOLS_PROPERTY, isPatchToolEntries],
+    ] as const)
+      if (property in properties && !valid(properties[property]))
+        throw new PatchCompileError(
+          "invalid-metadata-value",
+          `metadata property '${property}' must be an ordered additive capability entry list`,
+        );
     for (const property of GUIDANCE_PROPERTIES)
       if (property in properties && !isGuidanceEntries(properties[property]))
         throw new PatchCompileError(

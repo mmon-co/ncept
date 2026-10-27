@@ -172,14 +172,21 @@ function trail(ctx: Ctx, node: NodeId) {
   nodesInScope(ctx, [node]);
   const state = defaultNodeState(ctx.state, node);
   const rule =
-    state.completion !== undefined
-      ? "playground-completion"
+    state.completion.query !== undefined
+      ? "completion-query"
       : state.label === "demonstrated"
         ? "demonstration-window"
         : state.label === "probably-known"
           ? "knows-claim-newer-than-failure"
           : "no-qualifying-evidence";
-  return { node, state, rule, records: state.records.toReversed(), citations: state.citations };
+  return {
+    node,
+    state,
+    counts: state.completion.counts.map(({ k, required }) => k + " of " + required),
+    rule,
+    records: state.records.toReversed(),
+    citations: state.citations,
+  };
 }
 function pagedTrail(ctx: Ctx, raw: unknown) {
   const input = args(raw, ["node", "cursor", "limit"], ["node"]);
@@ -429,12 +436,12 @@ export const defaultInstrumentTools = [
     },
     description: [
       "Original records and the rule producing each Node's label. Pass node for one paged trail, or scope: [node, ...] for an array of independently paged trails. Follow each continueCursor with node and cursor, not scope. Limit applies per Node. The first qualifying rule applies:",
-      'pedagogy:completion is ordinary Node metadata, not trail input; SRS binds it with { playground: "srs", scope: { kind: "about-node" } }. A bound Node uses only its named Playground report: current complete → demonstrated; incomplete, expired or absent → unknown. Trail exposes the binding, report and citations. Demonstrations and claims remain history and retention evidence, not acquisition authority.',
-      "1. For an unbound Node, demonstrated: the window holds (default two successes in the last three unaided attempts), without a time horizon. Aided attempts count only as practice.",
+      'pedagogy:completion is a query on Node or tag metadata: all/any combine counts; {count, of} counts observations matching a predicate. Predicates support all, any, not, field/is and latest: {per: [fields], of: predicate}. Example: {count: 16, of: {all: [{latest: {per: ["material", "item"], of: {all: [{field: "node", is: "self"}, {field: "material", is: {playground: "quizzes", id: "set-verbs-1"}}, {field: "unaided", is: true}]}}}, {field: "outcome", is: "success"}]}}. Without node: self a query can count other Nodes too. playground projects a demonstration\'s material.playground or a report\'s Playground; kind distinguishes them. Reports also expose scope, state and current (not expired). Trail displays each count as k of required, the query and citations.',
+      "1. demonstrated: the Node query holds. A Node with no completion is never demonstrated. Aided attempts count only as practice unless the query selects them.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
       "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
-      "Node window overrides are content metadata. A newer knows claim can follow failure; a later failure defeats that claim unless the demonstration window still holds.",
+      "A newer knows claim can follow failure; a later failure defeats that claim unless completion still holds.",
     ].join("\n"),
     *run(raw, ctx) {
       const input = args(raw, ["node", "scope", "cursor", "limit"]);

@@ -1,6 +1,7 @@
 export * from "./model";
 export * from "./metadata";
 export * from "./guidance";
+export * from "./capabilities";
 export * from "./errors";
 export * from "./resolve";
 export * from "./reify";
