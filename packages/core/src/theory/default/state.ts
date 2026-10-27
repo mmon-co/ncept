@@ -830,6 +830,7 @@ function isInterpretationObservation(observation: Observation): observation is O
 }
 
 interface RecordPlacement {
+  readonly position: number;
   readonly record: HomedRecord;
   readonly present: readonly NodeId[];
   readonly decision: Observation<Homing> | undefined;
@@ -1030,12 +1031,10 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     const previousMemory = index.memoryPlacements.get(id);
     const previousHomes = new Map<NodeId, HomedRecord[]>();
     const nextHomes = new Map<NodeId, HomedRecord[]>();
-    for (const { record, present } of previous) {
+    for (const { position, record, present } of previous) {
       placementByRecord.delete(record);
-      // Duplicate identities can have several records: remove every old occurrence for this id.
       for (const node of present) {
-        const bucket = homedEntries.get(node);
-        for (const [key, value] of bucket ?? []) if (value.id === id) bucket?.delete(key);
+        changeBucket(homedEntries, node, position, record, false);
         append(previousHomes, node, record);
       }
     }
@@ -1062,6 +1061,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       const chosen = decision?.payload.homes ?? initialHomes(record);
       const present = [...new Set(chosen)].filter((node) => graphIndex.nodeIds.has(node));
       const placement: RecordPlacement = {
+        position: entry.position,
         record,
         present,
         decision,
