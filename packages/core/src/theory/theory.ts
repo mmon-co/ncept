@@ -14,8 +14,6 @@ import type {
 export type MessageDescriptor = Readonly<{
   id: string;
   defaultMessage: string;
-  /** Caption without the leading rank, for presentations that draw it separately. */
-  remainderMessage?: string;
   values?: Readonly<
     Record<
       string,
