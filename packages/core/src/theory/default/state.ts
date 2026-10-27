@@ -1,5 +1,6 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "../speaker";
+import { initListTheoryState, readTheoryState, type TheoryState } from "../theory";
 
 import { dependentCones } from "./dependent-cone";
 import {
@@ -1001,8 +1002,8 @@ function homeIndexedRecords(graph: ResolvedGraph, index: DefaultObservationIndex
   };
 }
 
-/** Pure default policy: history-annotated values plus an explicit evaluation instant. */
-export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
+/** Indexed rebuild used by the default reducer's read-at-now operation. */
+function rebuildDefaultState(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
   const index = indexDefaultObservations(supplied, now);
   const graphIndex = indexDefaultGraph(graph);
   const { observations, records, homed, homeless, placed, current, nodeIds, homing } = homeIndexedRecords(
@@ -1060,4 +1061,13 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     memories,
     interpretations: projectInterpretations(supplied, index, placed),
   };
+}
+
+export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState> {
+  return initListTheoryState(graph, rebuildDefaultState);
+}
+
+/** Pure default policy, derived from the same reducer used by retained replays. */
+export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
+  return readTheoryState({ initState: initDefaultState }, graph, supplied, now);
 }

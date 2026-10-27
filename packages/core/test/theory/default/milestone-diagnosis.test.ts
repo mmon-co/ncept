@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
-import type { ChatContext, LessonSnapshot } from "../../../src/theory";
+import { readTheoryState, type ChatContext, type LessonSnapshot } from "../../../src/theory";
 import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "../../../src/theory/default";
 
 test("host milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
@@ -44,7 +44,7 @@ test("host milestone diagnosis reaches check-in; numbered Lessons close from Mat
   };
   const ctx: ChatContext<DefaultState> = {
     graph,
-    state: defaultTheory.state(graph, [], now),
+    state: readTheoryState(defaultTheory, graph, [], now),
     now,
     surface: "surface-milestone",
     mode: "lesson",
@@ -79,5 +79,5 @@ test("host milestone diagnosis reaches check-in; numbered Lessons close from Mat
     .next();
   if (!checkIn.done) throw new Error("Check-in setup unexpectedly requested an effect");
   expect(checkIn.value.context).toContain(`Session opening (host-resolved facts):\n${JSON.stringify(opening)}`);
-  expect(ctx.state).toEqual(defaultTheory.state(graph, [], now));
+  expect(ctx.state).toEqual(readTheoryState(defaultTheory, graph, [], now));
 });
