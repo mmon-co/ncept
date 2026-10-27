@@ -10,11 +10,13 @@ import {
   type CompletionProgress,
 } from "./completion";
 import {
+  exactPatchRefKey,
   lastMetadataContribution,
   metadataSetsForEntity,
   NODE_CRITERION_PROPERTY,
   sameExactPatchRef,
   type ExactPatchRef,
+  type MetadataSet,
   type NodeId,
   type ResolvedGraph,
 } from "../../patch";
@@ -334,6 +336,7 @@ function isInterpretation(value: unknown): value is Interpretation {
 function isSummary(value: unknown): value is MemorySummaryPayload {
   if (!object(value)) return false;
   const { sources, dependencies } = value;
+  const dependencyIds = new Set(Array.isArray(dependencies) ? dependencies : []);
   return (
     value.kind === "memory-summary" &&
     typeof value.text === "string" &&
@@ -343,7 +346,7 @@ function isSummary(value: unknown): value is MemorySummaryPayload {
     sources.every(isObservationId) &&
     Array.isArray(dependencies) &&
     dependencies.every(isObservationId) &&
-    sources.every((source) => dependencies.includes(source))
+    sources.every((source) => dependencyIds.has(source))
   );
 }
 export function isDefaultObservation(observation: Observation): boolean {
@@ -395,24 +398,31 @@ function assertDefaultPayload(payload: unknown): void {
  * from the order observations were accepted in: decisions and memory read the supplied sequence instead.
  */
 export function activeDefaultRecords(observations: readonly Observation[]): readonly HomedRecord[] {
+  return indexDefaultRecords(observations).records;
+}
+
+function indexDefaultRecords(observations: readonly Observation[]) {
   const own = observations.filter(isDefaultObservation);
   for (const observation of own) assertDefaultPayload(observation.payload);
+  const byId = new Map<ObservationId, Observation>();
+  for (const observation of own) if (!byId.has(observation.id)) byId.set(observation.id, observation);
   const retracted = new Set<ObservationId>();
   for (const observation of own) {
     if (!isRetraction(observation.payload)) continue;
     const of = observation.payload.of;
-    const target = own.find(({ id }) => id === of);
+    const target = byId.get(of);
     if (target === undefined) continue; // The host may have excluded the source from effective evidence.
     if (!isDemonstration(target.payload) && !isClaim(target.payload))
       throw new Error("Default retractions must target a demonstration or claim");
     retracted.add(target.id);
   }
-  return own
+  const records = own
     .filter(
       (observation): observation is HomedRecord =>
         !retracted.has(observation.id) && (isDemonstration(observation.payload) || isClaim(observation.payload)),
     )
     .sort(compareObservations);
+  return { records, retracted };
 }
 export function assertDefaultRetraction(of: ObservationId, observations: readonly Observation[]): void {
   if (!activeDefaultRecords(observations).some(({ id }) => id === of))
@@ -591,6 +601,13 @@ function scheduleDefaultNode(
     ...records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
     ...lapses.map(({ at }) => dayOf(at)),
   ]);
+  const slips = new Set<ObservationId>();
+  for (const { id, payload } of [...records, ...lapses])
+    if (
+      payload.kind === "lapse" ||
+      (payload.kind === "demonstration" && payload.unaided && payload.outcome !== "success")
+    )
+      slips.add(id);
   const credit = implicit.filter(({ at }) => !directDays.has(dayOf(at)));
   for (const record of [...records, ...credit, ...lapses].sort(compareObservations)) {
     const { payload, at, id } = record;
@@ -605,15 +622,7 @@ function scheduleDefaultNode(
       if (payload.kind !== "lapse" && !payload.unaided) continue;
       lapsed = payload.kind === "lapse" || payload.outcome !== "success";
       // A close diagnosis repeats the slip, not its FSRS review, even across midnight.
-      const recordedSlip =
-        payload.kind === "lapse" &&
-        payload.of !== undefined &&
-        [...records, ...lapses].some(
-          ({ id, payload: attempt }) =>
-            id === payload.of &&
-            (attempt.kind === "lapse" ||
-              (attempt.kind === "demonstration" && attempt.unaided && attempt.outcome !== "success")),
-        );
+      const recordedSlip = payload.kind === "lapse" && payload.of !== undefined && slips.has(payload.of);
       const day = dayOf(at);
       if (day === reviewDay || recordedSlip) {
         citations.push(id);
@@ -642,24 +651,33 @@ function scheduleDefaultNode(
 }
 
 /** Resolved Node and tag metadata share the ordinary Patch precedence. */
-export function defaultNodeCompletion(graph: ResolvedGraph, node: NodeId): Completion | undefined {
+export function defaultNodeCompletion(
+  graph: ResolvedGraph,
+  node: NodeId,
+  index?: Pick<DefaultGraphIndex, "metadata" | "patchOrder">,
+): Completion | undefined {
   const value = lastMetadataContribution(
     graph,
-    metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
+    (index === undefined
+      ? metadataSetsForEntity(graph, { kind: "node", id: node })
+      : (index.metadata.get(node) ?? [])
+    ).flatMap((set) => {
       if (!(COMPLETION_PROPERTY in set.properties)) return [];
       const source = graph.provenance.metadataProperties[set.id]?.[COMPLETION_PROPERTY]?.at(-1);
       if (source === undefined) throw new Error(`Missing completion provenance for ${node}`);
       return [{ value: set.properties[COMPLETION_PROPERTY], source }];
     }),
+    index?.patchOrder,
   )?.value;
   // The revision-minting boundary validates this theory-owned metadata shape.
   // eslint-disable-next-line typescript/consistent-type-assertions
   return value as Completion | undefined;
 }
 /** Stable authoring provenance, rather than the terminal of an unrelated graph edit. */
-export function completionNodeRef(graph: ResolvedGraph, node: NodeId): NodeRef {
+export function completionNodeRef(graph: ResolvedGraph, node: NodeId, nodeIds?: ReadonlySet<NodeId>): NodeRef {
   const provenance = graph.provenance.nodes[node]?.at(-1)?.patch;
-  if (!provenance || !graph.nodes.some(({ id }) => id === node)) throw new Error(`Unknown completion Node ${node}`);
+  if (!provenance || !(nodeIds?.has(node) ?? graph.nodes.some(({ id }) => id === node)))
+    throw new Error(`Unknown completion Node ${node}`);
   return { node, provenance };
 }
 
@@ -668,38 +686,160 @@ export function defaultDependentCone(graph: ResolvedGraph, node: NodeId): readon
   return dependentCones(graph)(node);
 }
 
+function append<K, V>(index: Map<K, V[]>, key: K, value: V): void {
+  const values = index.get(key);
+  if (values === undefined) index.set(key, [value]);
+  else values.push(value);
+}
+
+/** Graph facts are shared by every Node reduction, and can survive evidence-only updates. */
+interface DefaultGraphIndex {
+  readonly nodeIds: ReadonlySet<NodeId>;
+  readonly nodeOrder: ReadonlyMap<NodeId, number>;
+  readonly dependents: ReadonlyMap<NodeId, readonly NodeId[]>;
+  readonly prerequisites: ReadonlyMap<NodeId, readonly NodeId[]>;
+  readonly metadata: ReadonlyMap<NodeId, readonly MetadataSet[]>;
+  readonly patchOrder: ReadonlyMap<string, number>;
+}
+
+function indexDefaultGraph(graph: ResolvedGraph): DefaultGraphIndex {
+  const nodeOrder = new Map(graph.nodes.map(({ id }, index) => [id, index]));
+  const dependents = new Map<NodeId, NodeId[]>();
+  const prerequisites = new Map<NodeId, NodeId[]>();
+  for (const { from, to } of graph.edges) {
+    append(dependents, from, to);
+    append(prerequisites, to, from);
+  }
+  const tags = new Map<string, readonly NodeId[]>();
+  for (const tag of graph.tags) if (!tags.has(tag.name)) tags.set(tag.name, tag.nodes);
+  const metadata = new Map<NodeId, MetadataSet[]>();
+  for (const set of graph.metadataSets) {
+    if (!(COMPLETION_PROPERTY in set.properties)) continue;
+    const nodes = new Set<NodeId>();
+    for (const subject of set.subjects) {
+      if (subject.kind === "node") nodes.add(subject.id);
+      else if (subject.kind === "tag") for (const node of tags.get(subject.name) ?? []) nodes.add(node);
+    }
+    for (const node of nodes) append(metadata, node, set);
+  }
+  return {
+    nodeIds: new Set(nodeOrder.keys()),
+    nodeOrder,
+    dependents,
+    prerequisites,
+    metadata,
+    patchOrder: new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index])),
+  };
+}
+
+interface MemoryPlacement {
+  present: ReadonlySet<NodeId>;
+  readonly positions: Map<NodeId, number>;
+}
+
+function initialHomes(record: HomedRecord): readonly NodeId[] {
+  return record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
+}
+
+/** Acceptance-order indexes are deliberately separate from the chronologically sorted active records.
+ * Memory tracks ALL homing revisions: a later decision for a different revision can still move an
+ * attachment's recording position, even though it does not decide the current graph's placement.
+ */
+function indexDefaultObservations(supplied: readonly Observation[], now: string) {
+  const observations = effectiveObservations(electedObservations(supplied), now);
+  const { records, retracted } = indexDefaultRecords(observations);
+  const active = new Map(records.map((record) => [record.id, record]));
+  const suppliedPositions = new Map<ObservationId, number>();
+  supplied.forEach(({ id }, position) => {
+    if (!suppliedPositions.has(id)) suppliedPositions.set(id, position);
+  });
+  const positions = new Map<ObservationId, number>();
+  const byId = new Map<ObservationId, Observation>();
+  const firstById = new Map<ObservationId, Observation>();
+  const decisions = new Map<string, Map<ObservationId, Observation<Homing>>>();
+  const memoryPlacements = new Map<ObservationId, MemoryPlacement>();
+  const lapses = new Map<NodeId, Observation<Lapse>[]>();
+  const featureUses = new Map<NodeId, Observation<FeatureUse>[]>();
+  const memories = new Map<NodeId, Observation<Memory>[]>();
+  const summaries = new Map<NodeId, Observation<MemorySummaryPayload>[]>();
+  const completions: Observation<CompletionOutcome>[] = [];
+  const transcriptMemories = new Map<ObservationId, readonly NodeId[]>();
+  observations.forEach((observation, position) => {
+    positions.set(observation.id, position);
+    byId.set(observation.id, observation);
+    if (!firstById.has(observation.id)) firstById.set(observation.id, observation);
+    const record = active.get(observation.id);
+    if (record !== undefined) {
+      const placement = memoryPlacements.get(record.id) ?? { present: new Set<NodeId>(), positions: new Map() };
+      placement.present = new Set(initialHomes(record));
+      for (const node of placement.present) placement.positions.set(node, position);
+      memoryPlacements.set(record.id, placement);
+    }
+    if (!isDefaultObservation(observation)) return;
+    const { payload } = observation;
+    if (isHoming(payload)) {
+      const key = exactPatchRefKey(payload.revision);
+      let revision = decisions.get(key);
+      if (revision === undefined) decisions.set(key, (revision = new Map()));
+      revision.set(payload.of, { ...observation, payload });
+      if (active.has(payload.of)) {
+        const placement = memoryPlacements.get(payload.of) ?? { present: new Set<NodeId>(), positions: new Map() };
+        for (const node of payload.homes) if (!placement.present.has(node)) placement.positions.set(node, position);
+        placement.present = new Set(payload.homes);
+        memoryPlacements.set(payload.of, placement);
+      }
+    } else if (isLapse(payload)) append(lapses, payload.node.node, { ...observation, payload });
+    else if (isFeatureUse(payload)) {
+      for (const node of new Set(observation.nodes)) append(featureUses, node, { ...observation, payload });
+    } else if (isMemory(payload)) {
+      if (payload.entries.some((entry) => entry.source.kind === "transcript"))
+        transcriptMemories.set(observation.id, observation.nodes ?? []);
+      for (const node of new Set(observation.nodes)) append(memories, node, { ...observation, payload });
+    } else if (isSummary(payload)) {
+      for (const node of new Set(observation.nodes)) append(summaries, node, { ...observation, payload });
+    } else if (isCompletionOutcome(payload)) completions.push({ ...observation, payload });
+  });
+  return {
+    observations,
+    records,
+    active,
+    retracted,
+    suppliedPositions,
+    positions,
+    byId,
+    firstById,
+    decisions,
+    memoryPlacements,
+    lapses,
+    featureUses,
+    memories,
+    summaries,
+    completions,
+    transcriptMemories,
+  };
+}
+
+type DefaultObservationIndex = ReturnType<typeof indexDefaultObservations>;
+
 /** Attachment order is recording order, not source time: old evidence can arrive or gain a home later. */
 function projectMemory(
   node: NodeId,
   records: readonly HomedRecord[],
-  observations: readonly Observation[],
+  index: DefaultObservationIndex,
+  current: ReadonlyMap<ObservationId, ReadonlySet<NodeId>>,
 ): NodeMemory {
   const effectiveSource = (id: ObservationId): boolean => {
-    const target = observations.find((observation) => observation.id === id);
+    const target = index.firstById.get(id);
     return (
       target !== undefined &&
       (!isDefaultObservation(target) ||
         (!isDemonstration(target.payload) && !isClaim(target.payload)) ||
-        records.some((record) => record.id === id))
+        current.get(id)?.has(node) === true)
     );
   };
   const attachments: { observation: ObservationId; position: number; entries: readonly MemoryAttachment[] }[] = [];
   for (const record of records) {
-    let present = false;
-    let position = -1;
-    observations.forEach((observation, index) => {
-      if (observation.id === record.id) {
-        present = (
-          record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : [])
-        ).includes(node);
-        if (present) position = index;
-      }
-      if (isDefaultObservation(observation) && isHoming(observation.payload) && observation.payload.of === record.id) {
-        const next = observation.payload.homes.includes(node);
-        if (next && !present) position = index;
-        present = next;
-      }
-    });
+    const position = index.memoryPlacements.get(record.id)?.positions.get(node) ?? -1;
     const strings =
       record.payload.kind === "demonstration"
         ? [record.payload.task, record.payload.response]
@@ -715,46 +855,45 @@ function projectMemory(
       })),
     });
   }
-  observations.forEach((observation, position) => {
-    if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isMemory(observation.payload))
-      return;
+  for (const observation of index.memories.get(node) ?? []) {
+    const position = index.positions.get(observation.id) ?? -1;
     const entries = observation.payload.entries.filter(
       ({ source }) => source.kind !== "observation" || effectiveSource(source.observation),
     );
     attachments.push({ observation: observation.id, position, entries });
-  });
+  }
   attachments.sort((left, right) => left.position - right.position);
   const originals: MemoryEntry[] = [];
   for (const attachment of attachments)
     for (const entry of attachment.entries)
       originals.push({ ...entry, kind: "entry", observation: attachment.observation, position: originals.length });
-  const sources = new Set(originals.map(({ observation }) => observation));
+  const originalsBySource = new Map<ObservationId, MemoryEntry[]>();
+  for (const entry of originals) append(originalsBySource, entry.observation, entry);
   let summary: MemorySummary | undefined;
-  for (const observation of observations) {
-    if (!isDefaultObservation(observation) || !observation.nodes?.includes(node) || !isSummary(observation.payload))
-      continue;
+  for (const observation of index.summaries.get(node) ?? []) {
     const { sources: covered, dependencies } = observation.payload;
+    const dependencyIds = new Set(dependencies);
     if (
       observation.payload.sources.length === 0 ||
-      observation.payload.sources.some((source) => !sources.has(source)) ||
+      covered.some((source) => !originalsBySource.has(source)) ||
       dependencies.some((source) => !effectiveSource(source)) ||
-      originals.some(
-        (entry) =>
-          covered.includes(entry.observation) &&
-          entry.source.kind === "observation" &&
-          !dependencies.includes(entry.source.observation),
+      covered.some((source) =>
+        originalsBySource
+          .get(source)
+          ?.some((entry) => entry.source.kind === "observation" && !dependencyIds.has(entry.source.observation)),
       )
     )
       continue;
     summary = { ...observation.payload, kind: "summary", observation: observation.id, at: observation.at };
   }
+  const summarized = new Set(summary?.sources);
   return {
     node,
     originals,
     entries:
       summary === undefined
         ? originals
-        : [summary, ...originals.filter(({ observation }) => !summary.sources.includes(observation))],
+        : [summary, ...originals.filter(({ observation }) => !summarized.has(observation))],
   };
 }
 
@@ -765,31 +904,30 @@ function projectMemory(
  */
 function projectInterpretations(
   supplied: readonly Observation[],
-  observations: readonly Observation[],
+  index: DefaultObservationIndex,
   records: ReadonlyMap<ObservationId, readonly NodeId[]>,
 ): readonly Observation<Interpretation>[] {
-  supplied.forEach((observation, index) => {
+  supplied.forEach((observation, position) => {
     if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return;
-    const target = supplied.findIndex(({ id }) => id === observation.supersedes);
-    const found = supplied[target];
-    if (found !== undefined && (target >= index || !isDefaultObservation(found) || !isInterpretation(found.payload)))
+    const target =
+      observation.supersedes === undefined ? undefined : index.suppliedPositions.get(observation.supersedes);
+    const found = target === undefined ? undefined : supplied[target];
+    if (
+      target !== undefined &&
+      found !== undefined &&
+      (target >= position || !isDefaultObservation(found) || !isInterpretation(found.payload))
+    )
       throw new Error("A correction must supersede an earlier interpretation");
   });
-  const byId = new Map(observations.map((observation) => [observation.id, observation]));
-  return observations.filter((observation): observation is Observation<Interpretation> => {
+  return index.observations.filter((observation): observation is Observation<Interpretation> => {
     if (!isDefaultObservation(observation) || !isInterpretation(observation.payload)) return false;
     const { nodes = [], cites = [] } = observation;
     if (nodes.length === 0 || cites.length === 0 || new Set(cites).size !== cites.length)
       throw new Error("Interpretations require a Node scope and unique support");
+    const scope = new Set(nodes);
     return cites.every((id) => {
-      const source = byId.get(id);
-      const batch =
-        source !== undefined &&
-        isDefaultObservation(source) &&
-        isMemory(source.payload) &&
-        source.payload.entries.some((entry) => entry.source.kind === "transcript");
-      const related = records.get(id) ?? (batch ? source.nodes : undefined) ?? [];
-      return related.some((node) => nodes.includes(node));
+      const related = records.get(id) ?? index.transcriptMemories.get(id) ?? [];
+      return related.some((node) => scope.has(node));
     });
   });
 }
@@ -815,9 +953,13 @@ export function electedObservations(observations: readonly Observation[]): reado
 
 /** Homing needs historical structure, not the acquisition vocabulary that revision was authored under. */
 export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Observation[], now: string) {
-  const observations = effectiveObservations(electedObservations(supplied), now);
-  const records = activeDefaultRecords(observations);
-  const nodeIds = new Set(graph.nodes.map(({ id }) => id));
+  return homeIndexedRecords(graph, indexDefaultObservations(supplied, now), new Set(graph.nodes.map(({ id }) => id)));
+}
+
+function homeIndexedRecords(graph: ResolvedGraph, index: DefaultObservationIndex, nodeIds: ReadonlySet<NodeId>) {
+  const { observations, records } = index;
+  const decisions = index.decisions.get(exactPatchRefKey(graph.terminal));
+  const current = new Map<ObservationId, ReadonlySet<NodeId>>();
   const homes: Partial<Record<ObservationId, readonly NodeId[]>> = {};
   const claims: Partial<Record<ObservationId, readonly NodeId[]>> = {};
   const pending = new Set<ObservationId>();
@@ -829,16 +971,9 @@ export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Obse
     // change that produced this revision restates every decision still in force. Recording order
     // decides between decisions naming this revision, so the supplied order must be logical
     // acceptance order — a hook's writes belong where it was emitted, not where they landed.
-    const decisions = observations.filter(
-      (entry): entry is Observation<Homing> =>
-        isDefaultObservation(entry) &&
-        isHoming(entry.payload) &&
-        entry.payload.of === record.id &&
-        sameExactPatchRef(entry.payload.revision, graph.terminal),
-    );
-    const decision = decisions.at(-1);
+    const decision = decisions?.get(record.id);
     const mapping = record.payload.kind === "claim" ? claims : homes;
-    const initial = record.nodes ?? (record.payload.kind === "demonstration" ? [record.payload.node.node] : []);
+    const initial = initialHomes(record);
     const chosen = decision?.payload.homes ?? initial;
     const present = [...new Set(chosen)].filter((node) => nodeIds.has(node));
     // homes/claims are the decisions in force at this revision; intrinsic placement stays on the record.
@@ -854,61 +989,70 @@ export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Obse
     )
       homeless.push(record);
     for (const node of present) (homed[node] ??= []).push(record);
+    current.set(record.id, new Set(present));
     placed.set(record.id, [...initial, ...present]);
   }
-  return { observations, records, homed, homeless, placed, nodeIds, homing: { homes, claims, pending: [...pending] } };
+  return {
+    observations,
+    records,
+    homed,
+    homeless,
+    placed,
+    current,
+    nodeIds,
+    homing: { homes, claims, pending: [...pending] },
+  };
 }
 
 /** Pure default policy: history-annotated values plus an explicit evaluation instant. */
 export function stateDefault(graph: ResolvedGraph, supplied: readonly Observation[], now: string): DefaultState {
-  const { observations, records, homed, homeless, placed, nodeIds, homing } = homeDefaultRecords(graph, supplied, now);
+  const index = indexDefaultObservations(supplied, now);
+  const graphIndex = indexDefaultGraph(graph);
+  const { observations, records, homed, homeless, placed, current, nodeIds, homing } = homeIndexedRecords(
+    graph,
+    index,
+    graphIndex.nodeIds,
+  );
   const history: CompletionObservation[] = records
     .map((observation) => ({
       observation,
-      nodes: graph.nodes
-        .filter(({ id }) => homed[id]?.some(({ id: record }) => record === observation.id))
-        .map(({ id }) => id),
+      nodes: [...(current.get(observation.id) ?? [])].sort(
+        (left, right) => (graphIndex.nodeOrder.get(left) ?? 0) - (graphIndex.nodeOrder.get(right) ?? 0),
+      ),
     }))
     .filter(({ nodes }) => nodes.length > 0);
-  for (const observation of observations) {
-    if (!isDefaultObservation(observation) || !isCompletionOutcome(observation.payload)) continue;
+  for (const observation of index.completions) {
     const node = observation.payload.node.node;
     if (
       !nodeIds.has(node) ||
-      !sameExactPatchRef(observation.payload.node.provenance, completionNodeRef(graph, node).provenance)
+      !sameExactPatchRef(observation.payload.node.provenance, completionNodeRef(graph, node, nodeIds).provenance)
     )
       continue;
     history.push({ observation: { ...observation, payload: observation.payload }, nodes: [node] });
   }
+  const successes = new Map<NodeId, HomedRecord[]>();
+  for (const { id } of graph.nodes)
+    for (const record of homed[id] ?? [])
+      if (record.payload.kind === "demonstration" && record.payload.unaided && record.payload.outcome === "success")
+        append(successes, id, record);
   const nodes: Partial<Record<NodeId, NodeState>> = {};
   const memories: Partial<Record<NodeId, NodeMemory>> = {};
   for (const { id } of graph.nodes) {
     const parameters = DEFAULT_PARAMETERS;
     const own = homed[id] ?? [];
-    const implicit = graph.edges
-      .filter(({ from }) => from === id)
-      .flatMap(({ to }) => homed[to] ?? [])
-      .filter(({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success");
-    const lapses = observations.filter(
-      (observation): observation is Observation<Lapse> =>
-        isDefaultObservation(observation) && isLapse(observation.payload) && observation.payload.node.node === id,
-    );
+    const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
+    const lapses = index.lapses.get(id) ?? [];
     const schedule = scheduleDefaultNode(own, implicit, lapses, now, parameters);
-    const query = defaultNodeCompletion(graph, id);
+    const query = defaultNodeCompletion(graph, id, graphIndex);
     nodes[id] = {
       ...labelDefaultNode({
         records: own,
         ...(query === undefined ? {} : { completion: { query, ...evaluateCompletion(query, id, history, now) } }),
       }),
       ...(schedule === undefined ? {} : { schedule }),
-      featureUses: observations.filter(
-        (observation): observation is Observation<FeatureUse> =>
-          isDefaultObservation(observation) &&
-          isFeatureUse(observation.payload) &&
-          observation.nodes?.includes(id) === true,
-      ),
+      featureUses: index.featureUses.get(id) ?? [],
     };
-    memories[id] = projectMemory(id, homed[id] ?? [], observations);
+    memories[id] = projectMemory(id, own, index, current);
   }
   return {
     nodes,
@@ -917,6 +1061,6 @@ export function stateDefault(graph: ResolvedGraph, supplied: readonly Observatio
     homing,
     homeless,
     memories,
-    interpretations: projectInterpretations(supplied, observations, placed),
+    interpretations: projectInterpretations(supplied, index, placed),
   };
 }
