@@ -754,7 +754,6 @@ function indexDefaultObservations(supplied: readonly Observation[], now: string)
     if (!suppliedPositions.has(id)) suppliedPositions.set(id, position);
   });
   const positions = new Map<ObservationId, number>();
-  const byId = new Map<ObservationId, Observation>();
   const firstById = new Map<ObservationId, Observation>();
   const decisions = new Map<string, Map<ObservationId, Observation<Homing>>>();
   const memoryPlacements = new Map<ObservationId, MemoryPlacement>();
@@ -766,7 +765,6 @@ function indexDefaultObservations(supplied: readonly Observation[], now: string)
   const transcriptMemories = new Map<ObservationId, readonly NodeId[]>();
   observations.forEach((observation, position) => {
     positions.set(observation.id, position);
-    byId.set(observation.id, observation);
     if (!firstById.has(observation.id)) firstById.set(observation.id, observation);
     const record = active.get(observation.id);
     if (record !== undefined) {
@@ -806,7 +804,6 @@ function indexDefaultObservations(supplied: readonly Observation[], now: string)
     retracted,
     suppliedPositions,
     positions,
-    byId,
     firstById,
     decisions,
     memoryPlacements,
