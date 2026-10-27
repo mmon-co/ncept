@@ -838,7 +838,7 @@ interface RecordPlacement {
 }
 interface PreparedDefaultEvidence {
   readonly graphIndex: DefaultGraphIndex;
-  readonly index: DefaultObservationIndex;
+  readonly index: Pick<DefaultObservationIndex, "lapses" | "featureUses">;
   readonly observations: readonly Observation[];
   readonly records: readonly HomedRecord[];
   readonly homed: Readonly<Partial<Record<NodeId, readonly HomedRecord[]>>>;
@@ -1290,14 +1290,14 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       for (const prerequisite of graphIndex.prerequisites.get(node) ?? []) affected.add(prerequisite);
     prepared = {
       graphIndex,
-      index,
+      index: { lapses: new Map(index.lapses), featureUses: new Map(index.featureUses) },
       observations: observationsChanged
         ? [...effective].sort((left, right) => left.position - right.position).map(({ observation }) => observation)
         : (prepared?.observations ?? []),
       records,
       homed: { ...homed },
-      current,
-      placed,
+      current: new Map(current),
+      placed: new Map(placed),
       homeless,
       homing,
       memories: { ...memories },
