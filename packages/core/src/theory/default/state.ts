@@ -1473,21 +1473,23 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
     const prepared = evidence.read(now);
     const { index, homed } = prepared;
     const changedOwn = new Set<NodeId>();
+    const changedSuccesses = new Set<NodeId>();
     for (const id of prepared.dirtyNodes) {
       const records = homed[id] ?? [];
       if (!own.has(id) || !sameRecords(own.get(id) ?? [], records)) {
         own.set(id, records);
-        successes.set(
-          id,
-          records.filter(
-            ({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success",
-          ),
+        const credit = records.filter(
+          ({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success",
         );
+        if (!sameRecords(successes.get(id) ?? [], credit)) {
+          successes.set(id, credit);
+          changedSuccesses.add(id);
+        }
         changedOwn.add(id);
       }
     }
     const dirtySchedules = new Set(changedOwn);
-    for (const id of changedOwn)
+    for (const id of changedSuccesses)
       for (const prerequisite of graphIndex.prerequisites.get(id) ?? []) dirtySchedules.add(prerequisite);
     for (const id of prepared.dirtyNodes) {
       const lapses = index.lapses.get(id) ?? [];
