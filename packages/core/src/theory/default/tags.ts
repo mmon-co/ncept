@@ -207,9 +207,6 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
     defaultMessage: hasSuccess
       ? "{counts}, last success {lastSuccess}; aided practice {aidedPractice}"
       : "{counts}, last success none; aided practice {aidedPractice}",
-    remainderMessage: hasSuccess
-      ? "last success {lastSuccess}; aided practice {aidedPractice}"
-      : "last success none; aided practice {aidedPractice}",
     values: {
       counts: completionCaption(node.completion),
       aidedPractice: node.aidedPractice,
