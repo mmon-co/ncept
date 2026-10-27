@@ -4,7 +4,14 @@ import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph }
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
 import { completionCaption } from "./completion";
-import { DEFAULT_PARAMETERS, type DefaultState, type Demonstration, type HomedRecord, type NodeState } from "./state";
+import {
+  defaultProjectionBasis,
+  DEFAULT_PARAMETERS,
+  type DefaultState,
+  type Demonstration,
+  type HomedRecord,
+  type NodeState,
+} from "./state";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
   const value = state.nodes[node];
@@ -81,11 +88,23 @@ function coarseNodes(graph: ResolvedGraph): ReadonlySet<NodeId> {
   );
 }
 
+function prepareGraph(graph: ResolvedGraph) {
+  const cone = dependentCones(graph);
+  const targets = graph.nodes.filter(({ id }) => !graph.edges.some((edge) => edge.from === id)).map(({ id }) => id);
+  return {
+    coarse: coarseNodes(graph),
+    cones: new Map(graph.nodes.map(({ id }) => [id, cone(id)])),
+    priority: new Map(graph.nodes.map(({ id }) => [id, nodePriority(graph, id)])),
+    warnings: pathDefault(graph, targets).warnings,
+  };
+}
+type ProjectionGraph = ReturnType<typeof prepareGraph>;
+const graphPreparations = new WeakMap<object, ProjectionGraph>();
+
 /** Facts only. Empty citations on absence indicators mean no evidence, not invented support. */
-export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): readonly Indicator[] {
+function computeIndicators(state: DefaultState, graph: ResolvedGraph, facts: ProjectionGraph): readonly Indicator[] {
   // Failure and "I don't know" weigh alike for mastery, so item and window comparisons see only success or not.
   const succeeded = ({ payload }: { readonly payload: Demonstration }) => payload.outcome === "success";
-  const cone = dependentCones(graph);
   const results: Indicator[] = [];
   function add(kind: string, nodes: readonly NodeId[], records: readonly HomedRecord[], message: string) {
     results.push({
@@ -95,7 +114,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
       message,
     });
   }
-  const coarse = coarseNodes(graph);
+  const coarse = facts.coarse;
   for (const { id } of graph.nodes) {
     const node = state.nodes[id];
     if (node === undefined) throw new Error(`Node ${id} has not been projected`);
@@ -135,7 +154,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
     const used = (dependent: NodeId) =>
       (state.nodes[dependent]?.records.length ?? 0) > 0 ||
       (state.nodes[dependent]?.completion.citations.length ?? 0) > 0;
-    if (!used(id) && cone(id).every((dependent) => !used(dependent)))
+    if (!used(id) && (facts.cones.get(id) ?? []).every((dependent) => !used(dependent)))
       add("unused", [id], [], "No records on this Node or its dependents");
     const graded = attempts.filter(({ payload }) => payload.grader !== "learner");
     for (const report of node.records) {
@@ -179,8 +198,7 @@ export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): re
     }
   }
   for (const record of state.homeless) add("homeless", [], [record], "Record has no home after Patch revision");
-  const targets = graph.nodes.filter(({ id }) => !graph.edges.some((edge) => edge.from === id)).map(({ id }) => id);
-  for (const warning of pathDefault(graph, targets).warnings)
+  for (const warning of facts.warnings)
     add(warning.kind, warning.nodes, [], `Lesson ${warning.name} splits around a section or outside blocker`);
   return results;
 }
@@ -215,18 +233,14 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
   };
 }
 
-/**
- * The graph-wide facts — query token membership and indicators — are computed once here and then
- * distributed to their subjects, rather than rediscovered for each Node and Edge.
- */
-export function projectDefault(graph: ResolvedGraph, state: DefaultState): TheoryProjection {
-  const indicators = indicatorsDefault(state, graph);
+/** Evidence/label facts are retained separately from decay and review membership. Weak keys belong
+ * to a reducer's snapshots, so preparations cannot outlive that read context. */
+function prepareProjection(graph: ResolvedGraph, state: DefaultState, facts: ProjectionGraph) {
+  const indicators = computeIndicators(state, graph, facts);
   const reached = reachableNodes(state, graph);
-  const selected = Object.entries(defaultQueryTokens).map(
-    ([tag, select]) => [tag, select(state, graph, reached)] as const,
-  );
-  // One bucket per Node, appended to; an indicator that names a Node twice — a self-edge does —
-  // is still one thing to show there.
+  const selected = Object.entries(defaultQueryTokens)
+    .filter(([tag]) => !tag.startsWith("review:"))
+    .map(([tag, select]) => [tag, select(state, graph, reached)] as const);
   const perNode = new Map<NodeId, Tag[]>();
   for (const indicator of indicators) {
     const tag = indicatorTag(indicator);
@@ -237,41 +251,24 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     }
   }
   const contradictions = indicators.filter(({ kind }) => kind === "edge-contradiction");
-  const cone = dependentCones(graph);
-
-  const nodes: Record<NodeId, readonly Tag[]> = {};
-  for (const { id } of graph.nodes) {
-    const node = defaultNodeState(state, id);
-    // Priority outranks all dependents; a whole dependent outranks any retention difference.
-    const reviewRank =
-      nodePriority(graph, id) * (graph.nodes.length + 1) +
-      cone(id).filter((dependent) => !isDefaultKnown(defaultNodeState(state, dependent))).length +
-      1 -
-      (node.schedule?.retrievability ?? 1);
-    nodes[id] = [
-      {
+  const nodes = new Map(
+    graph.nodes.map(({ id }) => {
+      const node = defaultNodeState(state, id);
+      const assessment: Tag = {
         tag: node.label,
         caption: completionCaption(node.completion),
         message: nodeProgressMessage(node),
-        ...(isDefaultKnown(node) && node.schedule ? { rank: node.schedule.retrievability } : {}),
         cites: node.citations,
-      },
-      ...selected.flatMap(([tag, members]) =>
-        tag !== node.label && members.has(id)
-          ? [
-              {
-                tag,
-                ...(tag.startsWith("review:")
-                  ? { rank: reviewRank, cites: node.schedule?.citations }
-                  : { cites: node.citations }),
-              },
-            ]
-          : [],
-      ),
-      ...(perNode.get(id) ?? []),
-    ];
-  }
-
+      };
+      const tags = selected.flatMap(([tag, members]) =>
+        tag !== node.label && members.has(id) ? [{ tag, cites: node.citations }] : [],
+      );
+      const reviewRank =
+        (facts.priority.get(id) ?? 0) * (graph.nodes.length + 1) +
+        (facts.cones.get(id) ?? []).filter((dependent) => !isDefaultKnown(defaultNodeState(state, dependent))).length;
+      return [id, { assessment, tags, reviewRank }] as const;
+    }),
+  );
   const edges: Record<EdgeId, readonly Tag[]> = {};
   for (const edge of graph.edges) {
     const dependent = defaultNodeState(state, edge.to);
@@ -291,13 +288,67 @@ export function projectDefault(graph: ResolvedGraph, state: DefaultState): Theor
     ];
   }
 
+  return { indicators, perNode, nodes, edges, learner: indicators.map(indicatorTag) };
+}
+type ProjectionPreparation = ReturnType<typeof prepareProjection>;
+const evidencePreparations = new WeakMap<object, ProjectionPreparation>();
+function preparedProjection(graph: ResolvedGraph, state: DefaultState): ProjectionPreparation {
+  const basis = defaultProjectionBasis(state);
+  if (basis === undefined || basis.graph !== graph) return prepareProjection(graph, state, prepareGraph(graph));
+  let prepared = evidencePreparations.get(basis.evidenceKey);
+  if (prepared !== undefined) return prepared;
+  let facts = graphPreparations.get(basis.graphKey);
+  if (facts === undefined) {
+    facts = prepareGraph(graph);
+    graphPreparations.set(basis.graphKey, facts);
+  }
+  prepared = prepareProjection(graph, state, facts);
+  evidencePreparations.set(basis.evidenceKey, prepared);
+  return prepared;
+}
+
+export function indicatorsDefault(state: DefaultState, graph: ResolvedGraph): readonly Indicator[] {
+  return preparedProjection(graph, state).indicators;
+}
+
+/** Only output assembly, continuous decay ranks and review membership vary within a boundary. */
+export function projectDefault(graph: ResolvedGraph, state: DefaultState): TheoryProjection {
+  const prepared = preparedProjection(graph, state);
+  const reviews = Object.entries(defaultQueryTokens)
+    .filter(([tag]) => tag.startsWith("review:"))
+    .map(([tag, select]) => [tag, select(state, graph)] as const);
+  const nodes: Record<NodeId, readonly Tag[]> = {};
+  for (const { id } of graph.nodes) {
+    const node = defaultNodeState(state, id);
+    const facts = prepared.nodes.get(id);
+    if (facts === undefined) throw new Error("Missing prepared default projection");
+    nodes[id] = [
+      {
+        ...facts.assessment,
+        ...(isDefaultKnown(node) && node.schedule ? { rank: node.schedule.retrievability } : {}),
+      },
+      ...facts.tags,
+      ...reviews.flatMap(([tag, members]) =>
+        members.has(id)
+          ? [
+              {
+                tag,
+                rank: facts.reviewRank + 1 - (node.schedule?.retrievability ?? 1),
+                cites: node.schedule?.citations,
+              },
+            ]
+          : [],
+      ),
+      ...(prepared.perNode.get(id) ?? []),
+    ];
+  }
   const expiry = Object.values(state.nodes)
     .flatMap((node) => (node?.completion.validUntil !== undefined ? [node.completion.validUntil] : []))
     .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
   return {
     nodes,
-    edges,
-    learner: indicators.map(indicatorTag),
+    edges: prepared.edges,
+    learner: prepared.learner,
     ...(expiry === undefined ? {} : { validUntil: expiry }),
   };
 }

@@ -5,7 +5,9 @@ import { readTheoryState, type TheoryState } from "../theory";
 import { dependentCones } from "./dependent-cone";
 import {
   COMPLETION_PROPERTY,
-  evaluateCompletion,
+  compileCompletion,
+  completionBoundary,
+  prepareCompletionHistory,
   type Completion,
   type CompletionObservation,
   type CompletionProgress,
@@ -589,9 +591,8 @@ function scheduleDefaultNode(
   records: readonly HomedRecord[],
   implicit: readonly HomedRecord[],
   lapses: readonly Observation<Lapse>[],
-  now: string,
   parameters: DefaultParameters,
-): NodeSchedule | undefined {
+): Omit<NodeSchedule, "retrievability"> | undefined {
   let card: Card | undefined;
   let reviewDay: string | undefined;
   const citations: ObservationId[] = [];
@@ -645,7 +646,6 @@ function scheduleDefaultNode(
     lapses: card.lapses,
     lastReview: card.last_review.toISOString(),
     lapsed,
-    retrievability: forgetting_curve((Date.parse(now) - card.last_review.getTime()) / DAY_MS, card.stability),
     citations,
   };
 }
@@ -1432,49 +1432,134 @@ export function homeDefaultRecords(graph: ResolvedGraph, supplied: readonly Obse
   };
 }
 
-/** Node evaluation is still time-varying; the next reduction layer consumes the prepared dirty sets. */
-function readDefaultState(evidence: PreparedDefaultEvidence, graph: ResolvedGraph, now: string): DefaultState {
-  const { graphIndex, index, observations, records, homed, homeless, homing, history, memories, interpretations } =
-    evidence;
-  const successes = new Map<NodeId, HomedRecord[]>();
-  for (const { id } of graph.nodes)
-    for (const record of homed[id] ?? [])
-      if (record.payload.kind === "demonstration" && record.payload.unaided && record.payload.outcome === "success")
-        append(successes, id, record);
-  const nodes: Partial<Record<NodeId, NodeState>> = {};
-  for (const { id } of graph.nodes) {
-    const parameters = DEFAULT_PARAMETERS;
-    const own = homed[id] ?? [];
-    const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
-    const lapses = index.lapses.get(id) ?? [];
-    const schedule = scheduleDefaultNode(own, implicit, lapses, now, parameters);
-    const query = defaultNodeCompletion(graph, id, graphIndex);
-    nodes[id] = {
-      ...labelDefaultNode({
-        records: own,
-        ...(query === undefined ? {} : { completion: { query, ...evaluateCompletion(query, id, history, now) } }),
-      }),
-      ...(schedule === undefined ? {} : { schedule }),
-      featureUses: index.featureUses.get(id) ?? [],
-    };
-  }
-  return {
-    nodes,
-    observations,
-    records,
-    homing,
-    homeless,
-    memories,
-    interpretations,
-  };
+/** Snapshot-associated keys are private preparation, not serialized state or a cross-context cache.
+ * A plain DefaultState has no key and remains fully projectable. */
+interface ProjectionBasis {
+  readonly graph: ResolvedGraph;
+  readonly graphKey: object;
+  readonly evidenceKey: object;
+}
+const projectionBases = new WeakMap<DefaultState, ProjectionBasis>();
+export function defaultProjectionBasis(state: DefaultState): ProjectionBasis | undefined {
+  return projectionBases.get(state);
+}
+
+function sameRecords<T>(left: readonly T[], right: readonly T[]): boolean {
+  return left === right || (left.length === right.length && left.every((record, i) => record === right[i]));
 }
 
 export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState> {
   const evidence = initDefaultEvidence(graph);
-  return {
-    step: evidence.step,
-    read: (now) => readDefaultState(evidence.read(now), graph, now),
-  };
+  const graphKey = {};
+  let evidenceKey = {};
+  const graphIndex = indexDefaultGraph(graph);
+  const plans = new Map(
+    graph.nodes.flatMap(({ id }) => {
+      const query = defaultNodeCompletion(graph, id, graphIndex);
+      return query === undefined ? [] : [[id, { query, evaluate: compileCompletion(query, id) }] as const];
+    }),
+  );
+  const own = new Map<NodeId, readonly HomedRecord[]>();
+  const successes = new Map<NodeId, readonly HomedRecord[]>();
+  const lapseInputs = new Map<NodeId, readonly Observation<Lapse>[]>();
+  const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
+  const acquisition = new Map<NodeId, NodeState>();
+  let history = prepareCompletionHistory([]);
+  let boundary = -1;
+  let initialized = false;
+  let homeless: readonly HomedRecord[] | undefined;
+
+  function read(now: string): DefaultState {
+    const prepared = evidence.read(now);
+    const { index, homed } = prepared;
+    const changedOwn = new Set<NodeId>();
+    for (const id of prepared.dirtyNodes) {
+      const records = homed[id] ?? [];
+      if (!own.has(id) || !sameRecords(own.get(id) ?? [], records)) {
+        own.set(id, records);
+        successes.set(
+          id,
+          records.filter(
+            ({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success",
+          ),
+        );
+        changedOwn.add(id);
+      }
+    }
+    const dirtySchedules = new Set(changedOwn);
+    for (const id of changedOwn)
+      for (const prerequisite of graphIndex.prerequisites.get(id) ?? []) dirtySchedules.add(prerequisite);
+    for (const id of prepared.dirtyNodes) {
+      const lapses = index.lapses.get(id) ?? [];
+      if (!lapseInputs.has(id) || !sameRecords(lapseInputs.get(id) ?? [], lapses)) {
+        lapseInputs.set(id, lapses);
+        dirtySchedules.add(id);
+      }
+    }
+    if (prepared.historyChanged) history = prepareCompletionHistory(prepared.history);
+    const nextBoundary = completionBoundary(history, now);
+    const completionChanged = !initialized || prepared.historyChanged || boundary !== nextBoundary;
+    boundary = nextBoundary;
+    let projectionChanged = !initialized || homeless !== prepared.homeless;
+    homeless = prepared.homeless;
+    const nodes: Partial<Record<NodeId, NodeState>> = {};
+    for (const { id } of graph.nodes) {
+      const previous = acquisition.get(id);
+      const plan = plans.get(id);
+      let completion = previous?.completion;
+      if (plan !== undefined && completionChanged)
+        completion = { query: plan.query, ...plan.evaluate(history, now, boundary) };
+      if (previous === undefined || changedOwn.has(id) || completion !== previous.completion) {
+        acquisition.set(
+          id,
+          labelDefaultNode({
+            records: own.get(id) ?? [],
+            ...(plan === undefined || completion === undefined
+              ? {}
+              : { completion: { ...completion, query: plan.query } }),
+          }),
+        );
+        projectionChanged = true;
+      }
+      const facts = indexed(acquisition.get(id));
+      const featureUses = index.featureUses.get(id) ?? [];
+      if (!initialized || dirtySchedules.has(id)) {
+        const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
+        // A late own attempt replaces this day's implicit credit. Replay only the affected Node's
+        // chronology, including lapse references; no append-only FSRS shortcut can preserve that rule.
+        schedules.set(
+          id,
+          scheduleDefaultNode(own.get(id) ?? [], implicit, lapseInputs.get(id) ?? [], DEFAULT_PARAMETERS),
+        );
+      }
+      const card = schedules.get(id);
+      const schedule =
+        card === undefined
+          ? undefined
+          : {
+              ...card,
+              retrievability: forgetting_curve(
+                (Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS,
+                card.stability,
+              ),
+            };
+      nodes[id] = { ...facts, featureUses, ...(schedule === undefined ? {} : { schedule }) };
+    }
+    if (projectionChanged) evidenceKey = {};
+    initialized = true;
+    const state: DefaultState = {
+      nodes,
+      observations: prepared.observations,
+      records: prepared.records,
+      homing: prepared.homing,
+      homeless: prepared.homeless,
+      memories: prepared.memories,
+      interpretations: prepared.interpretations,
+    };
+    projectionBases.set(state, { graph, graphKey, evidenceKey });
+    return state;
+  }
+  return { step: evidence.step, read };
 }
 
 /** Pure default policy, derived from the same reducer used by retained replays. */
