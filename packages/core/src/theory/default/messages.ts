@@ -14,14 +14,6 @@ export const defaultTheoryMessages = {
     en: "{counts}, last success {lastSuccess}; aided practice {aidedPractice}",
     "zh-CN": "{counts}，最近成功：{lastSuccess}；辅助练习 {aidedPractice}",
   },
-  "default.node-progress.no-success.remainder": {
-    en: "last success none; aided practice {aidedPractice}",
-    "zh-CN": "尚无成功；辅助练习 {aidedPractice}",
-  },
-  "default.node-progress.last-success.remainder": {
-    en: "last success {lastSuccess}; aided practice {aidedPractice}",
-    "zh-CN": "最近成功：{lastSuccess}；辅助练习 {aidedPractice}",
-  },
   "default.charting.note.known": { en: "I already know this.", "zh-CN": "这个我已经会了。" },
   "default.charting.note.unwanted": { en: "I don't need this.", "zh-CN": "这个我不需要。" },
   "default.charting.note.why": { en: "Why is this needed?", "zh-CN": "为什么需要这个？" },

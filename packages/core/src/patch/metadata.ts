@@ -33,8 +33,8 @@ import {
 export function lastMetadataContribution<T>(
   graph: Pick<ResolvedGraph, "patchOrder">,
   candidates: readonly { readonly value: T; readonly source: ContributionProvenance }[],
+  order: ReadonlyMap<string, number> = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index])),
 ): { readonly value: T; readonly source: ContributionProvenance } | undefined {
-  const order = new Map(graph.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   let selected: (typeof candidates)[number] | undefined;
   for (const candidate of candidates) {
     if (candidate.value === null) continue;
@@ -211,6 +211,7 @@ export function validateAuthoredContent(content: PatchContent): void {
     ),
   ];
   for (const properties of sets) {
+    validateTranslationPolicy(properties);
     validateOpeningProperties(properties);
     for (const [property, valid] of [
       [PEDAGOGY_SKILLS_PROPERTY, isPatchSkillEntries],
@@ -228,6 +229,17 @@ export function validateAuthoredContent(content: PatchContent): void {
           `metadata property '${property}' must be an ordered guidance entry list`,
         );
   }
+  for (const operation of content.delta.operations)
+    if (
+      (operation.kind === "add-material" || operation.kind === "edit-material") &&
+      operation.material.playground === "document"
+    )
+      validateTranslationPolicy(operation.material.meta);
+}
+
+function validateTranslationPolicy(properties: Readonly<Record<string, unknown>>): void {
+  if ("patch:translate" in properties && typeof properties["patch:translate"] !== "boolean")
+    throw new PatchCompileError("invalid-metadata-value", "metadata property 'patch:translate' must be boolean");
 }
 
 /** The discovery tags a revision's metadata declares: the open `patch:<tag>: true` convention

@@ -75,20 +75,25 @@ function parseRangeReference(value: unknown, field: string): PatchVersionRange {
   return { patchId, range };
 }
 
+/** The language declared by a release's root metadata, for sources and variants alike. */
+export function declaredPatchLocale(metadata: PatchMetadata): string | undefined {
+  const value = metadata.properties[PATCH_VARIANT_LOCALE];
+  return value === undefined ? undefined : localeTag(value, PATCH_VARIANT_LOCALE);
+}
+
 /** Parses the portable claim and confirmation fields; it does not look up either Patch. */
 export function patchVariantMetadata(patchId: string, metadata: PatchMetadata): PatchVariantMetadata {
   const properties = metadata.properties;
   const rawClaim = properties[PATCH_VARIANT_OF];
-  const rawLocale = properties[PATCH_VARIANT_LOCALE];
+  const locale = declaredPatchLocale(metadata);
   const rawAccessMode = properties[PATCH_VARIANT_ACCESS_MODE];
   let claim: PatchVariantClaim | undefined;
 
   if (rawClaim !== undefined) {
     const target = parseRangeReference(rawClaim, PATCH_VARIANT_OF);
     if (target.patchId === patchId) invalid("a Patch cannot be a variant of itself");
-    if (rawLocale === undefined && rawAccessMode === undefined)
+    if (locale === undefined && rawAccessMode === undefined)
       invalid(`${PATCH_VARIANT_OF} needs ${PATCH_VARIANT_LOCALE} and/or ${PATCH_VARIANT_ACCESS_MODE}`);
-    const locale = rawLocale === undefined ? undefined : localeTag(rawLocale, PATCH_VARIANT_LOCALE);
     let accessMode: string | undefined;
     if (rawAccessMode !== undefined) {
       if (typeof rawAccessMode !== "string" || rawAccessMode.trim() !== rawAccessMode || rawAccessMode === "")
@@ -100,8 +105,8 @@ export function patchVariantMetadata(patchId: string, metadata: PatchMetadata): 
       ...(locale === undefined ? {} : { locale }),
       ...(accessMode === undefined ? {} : { accessMode }),
     };
-  } else if (rawLocale !== undefined || rawAccessMode !== undefined) {
-    invalid(`${PATCH_VARIANT_LOCALE} and ${PATCH_VARIANT_ACCESS_MODE} require ${PATCH_VARIANT_OF}`);
+  } else if (rawAccessMode !== undefined) {
+    invalid(`${PATCH_VARIANT_ACCESS_MODE} requires ${PATCH_VARIANT_OF}`);
   }
 
   const rawConfirmations = properties[PATCH_VARIANTS];

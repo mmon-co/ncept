@@ -1,3 +1,4 @@
+import { readTheoryState } from "../../../src/theory";
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision } from "../../../src/patch";
 import type { Observation, ObservationId } from "../../../src/observations";
@@ -75,7 +76,8 @@ function claim(id: ObservationId, node: NodeId, at: string): Observation<Claim> 
     payload: { kind: "claim", statement: "I know it", stance: "knows" },
   };
 }
-const read = (observations: readonly Observation[], now: string) => defaultTheory.state(graph, observations, now);
+const read = (observations: readonly Observation[], now: string) =>
+  readTheoryState(defaultTheory, graph, observations, now);
 const schedule = (observations: readonly Observation[], now: string, node: NodeId) =>
   read(observations, now).nodes[node]?.schedule;
 const tags = (observations: readonly Observation[], now: string, node: NodeId) =>
