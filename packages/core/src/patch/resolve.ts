@@ -378,6 +378,20 @@ function stackVariantBundles(
   return { bundle, staleMasks };
 }
 
+/** A source release read through a stack of variant layers, as a template copy takes its words.
+ * A layer that does not compile over the source gives way, as in a Notebook reading. */
+export function resolveVariantStack(
+  source: ClosedPatchBundle,
+  variants: readonly ClosedPatchBundle[],
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+) {
+  return resolvePatchBundle(
+    stackVariantBundles(source, variants, sourceVersion, availablePlaygrounds).bundle,
+    availablePlaygrounds,
+  );
+}
+
 function composeVariantLayer(
   notebook: ClosedPatchBundle,
   source: ClosedPatchBundle,

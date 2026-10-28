@@ -30,7 +30,7 @@ export interface ReadToolInput {
   /** Bypass context-relative deltas and return the complete result. */
   readonly full?: boolean;
   /** Omitted resource means this Session's graph. */
-  readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch";
+  readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch" | "update";
   readonly input?: CatalogArguments;
   readonly cursor?: string;
   readonly limit?: number;
