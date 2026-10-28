@@ -1,6 +1,6 @@
 import { canonicalJson } from "../../digest";
 import { compareObservations, isObservationTimestamp, type Observation, type ObservationId } from "../../observations";
-import { isMaterialMeta, isNodeId, type NodeId, type ResolvedGraph } from "../../patch";
+import { isMaterialMeta, isNodeId, type NodeId } from "../../patch";
 import type { Claim, CompletionOutcome, Demonstration } from "./state";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
@@ -49,7 +49,10 @@ const object = (value: unknown): value is Record<string, unknown> =>
 /** Authored queries are checked once against the resolved revision, never while reading history. */
 export function validateCompletion(
   value: unknown,
-  graph: ResolvedGraph,
+  graph: {
+    readonly nodes: readonly { readonly id: NodeId }[];
+    readonly materials: readonly { readonly playground: string; readonly id: string }[];
+  },
   path = COMPLETION_PROPERTY,
 ): asserts value is Completion {
   function fail(at: string, message: string): never {
@@ -149,18 +152,41 @@ export interface CompletionProgress {
   readonly validUntil?: string;
 }
 
-/** Predicates select sets from the same history: latest's input is its own 'of', not sibling filters. */
-export function evaluateCompletion(
-  query: Completion,
-  node: NodeId,
-  history: readonly CompletionObservation[],
-  now: string,
-): CompletionProgress {
+/** Ordered candidates and all report expiries survive clock reads unchanged. */
+export function prepareCompletionHistory(history: readonly CompletionObservation[]) {
   // Removed cards keep their evidence for memory and retention, but no longer satisfy completion.
   const ordered = history
     .filter(({ observation }) => observation.materialPresent !== false)
     .sort((a, b) => compareObservations(a.observation, b.observation));
-  const value = (entry: CompletionObservation, field: Field): Json | undefined => {
+  const expiries = ordered
+    .flatMap(({ observation: { payload } }) =>
+      payload.kind === "completion" && payload.validUntil !== undefined ? [payload.validUntil] : [],
+    )
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+  return { ordered, expiries };
+}
+type CompletionHistory = ReturnType<typeof prepareCompletionHistory>;
+
+/** First strictly future expiry; works for backwards clocks and duplicate deadlines too. */
+export function completionBoundary(history: CompletionHistory, now: string): number {
+  let low = 0;
+  let high = history.expiries.length;
+  const time = Date.parse(now);
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (Date.parse(history.expiries[mid] ?? "") <= time) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/** Compile the authored tree once. Arbitrary predicates still inspect the shared ordered corpus
+ * when history or an expiry boundary changes, never on an unchanged clock interval.
+ * Latest's input is its own 'of', not sibling filters. */
+export function compileCompletion(query: Completion, node: NodeId) {
+  type Context = { readonly ordered: CompletionHistory["ordered"]; readonly now: number };
+  type Selection = (context: Context) => Set<CompletionObservation>;
+  const value = (entry: CompletionObservation, field: Field, now: number): Json | undefined => {
     const {
       observation: { payload, at },
       nodes,
@@ -170,66 +196,95 @@ export function evaluateCompletion(
     if (field === "playground" && payload.kind === "demonstration") return payload.material?.playground;
     if (field === "current")
       return payload.kind === "completion"
-        ? payload.validUntil === undefined || Date.parse(payload.validUntil) > Date.parse(now)
+        ? payload.validUntil === undefined || Date.parse(payload.validUntil) > now
         : undefined;
-    const selected: Json | undefined = field in payload ? Reflect.get(payload, field) : undefined;
-    return selected;
+    return field in payload ? Reflect.get(payload, field) : undefined;
   };
-  const equal = (a: Json | undefined, b: Json | undefined) =>
-    a === undefined || b === undefined ? a === b : canonicalJson(a) === canonicalJson(b);
-  function select(predicate: Predicate): Set<CompletionObservation> {
+  function select(predicate: Predicate): Selection {
     if ("all" in predicate) {
-      const sets = predicate.all.map(select);
-      return new Set(ordered.filter((entry) => sets.every((set) => set.has(entry))));
+      const children = predicate.all.map(select);
+      return (context) => {
+        const sets = children.map((child) => child(context));
+        return new Set(context.ordered.filter((entry) => sets.every((set) => set.has(entry))));
+      };
     }
-    if ("any" in predicate) return new Set(predicate.any.flatMap((child) => [...select(child)]));
+    if ("any" in predicate) {
+      const children = predicate.any.map(select);
+      return (context) => new Set(children.flatMap((child) => [...child(context)]));
+    }
     if ("not" in predicate) {
-      const excluded = select(predicate.not);
-      return new Set(ordered.filter((entry) => !excluded.has(entry)));
+      const child = select(predicate.not);
+      return (context) => {
+        const excluded = child(context);
+        return new Set(context.ordered.filter((entry) => !excluded.has(entry)));
+      };
     }
     if ("latest" in predicate) {
-      const matches = select(predicate.latest.of);
-      const latest = new Map<string, CompletionObservation>();
-      for (const entry of ordered)
-        if (matches.has(entry))
-          latest.set(canonicalJson(predicate.latest.per.map((field) => value(entry, field) ?? null)), entry);
-      return new Set(latest.values());
+      const child = select(predicate.latest.of);
+      return (context) => {
+        const matches = child(context);
+        const latest = new Map<string, CompletionObservation>();
+        for (const entry of context.ordered)
+          if (matches.has(entry))
+            latest.set(
+              canonicalJson(predicate.latest.per.map((field) => value(entry, field, context.now) ?? null)),
+              entry,
+            );
+        return new Set(latest.values());
+      };
     }
-    return new Set(
-      ordered.filter((entry) =>
-        predicate.field === "node"
-          ? entry.nodes.some((id) => id === (predicate.is === "self" ? node : predicate.is))
-          : equal(value(entry, predicate.field), predicate.is),
-      ),
-    );
+    const expected = canonicalJson(predicate.is);
+    return (context) =>
+      new Set(
+        context.ordered.filter((entry) => {
+          if (predicate.field === "node")
+            return entry.nodes.some((id) => id === (predicate.is === "self" ? node : predicate.is));
+          const selected = value(entry, predicate.field, context.now);
+          return selected !== undefined && canonicalJson(selected) === expected;
+        }),
+      );
   }
-  const counts: CountProgress[] = [];
-  const matched = new Set<CompletionObservation>();
-  function evaluate(completion: Completion): boolean {
-    if ("all" in completion) return completion.all.map(evaluate).every(Boolean);
-    if ("any" in completion) return completion.any.map(evaluate).some(Boolean);
-    const matches = select(completion.of);
-    for (const entry of matches) matched.add(entry);
-    counts.push({ k: matches.size, required: completion.count });
-    return matches.size >= completion.count;
+  type Evaluation = (context: Context, counts: CountProgress[], matched: Set<CompletionObservation>) => boolean;
+  function compile(completion: Completion): Evaluation {
+    if ("all" in completion) {
+      const children = completion.all.map(compile);
+      return (context, counts, matched) => children.map((child) => child(context, counts, matched)).every(Boolean);
+    }
+    if ("any" in completion) {
+      const children = completion.any.map(compile);
+      return (context, counts, matched) => children.map((child) => child(context, counts, matched)).some(Boolean);
+    }
+    const selection = select(completion.of);
+    return (context, counts, matched) => {
+      const matches = selection(context);
+      for (const entry of matches) matched.add(entry);
+      counts.push({ k: matches.size, required: completion.count });
+      return matches.size >= completion.count;
+    };
   }
-  const complete = evaluate(query);
-  // Even a negated predicate can become true at an unmatched report's expiry.
-  const validUntil = ordered
-    .flatMap(({ observation: { payload } }) =>
-      payload.kind === "completion" &&
-      payload.validUntil !== undefined &&
-      Date.parse(payload.validUntil) > Date.parse(now)
-        ? [payload.validUntil]
-        : [],
-    )
-    .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
-  return {
-    complete,
-    counts,
-    citations: [...matched].map(({ observation }) => observation.id),
-    ...(validUntil === undefined ? {} : { validUntil }),
+  const evaluate = compile(query);
+  return (history: CompletionHistory, now: string, boundary = completionBoundary(history, now)): CompletionProgress => {
+    const counts: CountProgress[] = [];
+    const matched = new Set<CompletionObservation>();
+    const complete = evaluate({ ordered: history.ordered, now: Date.parse(now) }, counts, matched);
+    // Even negated predicates and queries without 'current' advertise the global next expiry.
+    const validUntil = history.expiries[boundary];
+    return {
+      complete,
+      counts,
+      citations: [...matched].map(({ observation }) => observation.id),
+      ...(validUntil === undefined ? {} : { validUntil }),
+    };
   };
+}
+
+export function evaluateCompletion(
+  query: Completion,
+  node: NodeId,
+  history: readonly CompletionObservation[],
+  now: string,
+): CompletionProgress {
+  return compileCompletion(query, node)(prepareCompletionHistory(history), now);
 }
 
 /** Hosts discover report producers in the query instead of recognizing a canonical binding. */

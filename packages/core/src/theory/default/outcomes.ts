@@ -227,6 +227,8 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     valid &&
     ["pump", "hint", "correct"].includes(String(grader.help)) &&
     (dontKnow ||
+      // Decision outages can delegate the whole assessment to the tutor.
+      assessment.grader === "tutor" ||
       (assessment.grader === "decision" &&
         results(final) &&
         (assessment.helped === undefined || results(assessment.helped)) &&
@@ -361,7 +363,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       },
     }));
   // Checks judged from one response are dependent evidence, not separate window entries.
-  if (problem.grader.by === "checks") {
+  if (problem.grader.by === "checks" && assessment.grader !== "tutor") {
     const checksByNode = new Map<NodeId, (typeof problem.grader.checks)[number][]>();
     for (const check of problem.grader.checks)
       for (const node of check.about) {

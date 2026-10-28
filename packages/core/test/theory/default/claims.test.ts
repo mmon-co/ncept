@@ -1,3 +1,4 @@
+import { readTheoryState } from "../../../src/theory";
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
 import type { Observation } from "../../../src/observations";
@@ -55,7 +56,7 @@ test("claims and acquisition do not cover prerequisites", () => {
   };
   const now = "2026-10-08T09:03:00.000Z";
   const records = [unfamiliar, dependent];
-  const state = defaultTheory.state(graph, records, now);
+  const state = readTheoryState(defaultTheory, graph, records, now);
   expect(state.nodes["node-prerequisite"]?.label).toBe("unknown");
   expect(state.nodes["node-dependent"]?.label).toBe("probably-known");
   expect(state.nodes["node-untouched"]?.label).toBe("unknown");
@@ -65,7 +66,9 @@ test("claims and acquisition do not cover prerequisites", () => {
     at: "2026-10-08T09:02:00.000Z",
     nodes: ["node-prerequisite"],
   };
-  expect(defaultTheory.state(graph, [...records, own], now).nodes["node-prerequisite"]?.label).toBe("probably-known");
+  expect(readTheoryState(defaultTheory, graph, [...records, own], now).nodes["node-prerequisite"]?.label).toBe(
+    "probably-known",
+  );
   const demonstration: Observation<Demonstration> = {
     id: "obs-demonstration",
     at: own.at,
@@ -80,15 +83,15 @@ test("claims and acquisition do not cover prerequisites", () => {
       response: "Shown",
     },
   };
-  expect(defaultTheory.state(graph, [...records, demonstration], now).nodes["node-prerequisite"]?.label).toBe(
-    "demonstrated",
-  );
+  expect(
+    readTheoryState(defaultTheory, graph, [...records, demonstration], now).nodes["node-prerequisite"]?.label,
+  ).toBe("demonstrated");
   const dependentDemonstration: Observation<Demonstration> = {
     ...demonstration,
     id: "obs-dependent-demonstration",
     payload: { ...demonstration.payload, node: { node: "node-dependent", provenance: ref } },
   };
-  expect(defaultTheory.state(graph, [...records, dependentDemonstration], now).nodes["node-prerequisite"]?.label).toBe(
-    "unknown",
-  );
+  expect(
+    readTheoryState(defaultTheory, graph, [...records, dependentDemonstration], now).nodes["node-prerequisite"]?.label,
+  ).toBe("unknown");
 });

@@ -4,6 +4,8 @@ import { attachmentDigest } from "../../src/digest";
 import {
   bundleForRevision,
   candidateRevision,
+  declaredPatchLocale,
+  patchVariantMetadata,
   emptyPatch,
   materialKey,
   resolvePatchBundleWithVariant,
@@ -80,4 +82,15 @@ test("a read-time variant overlays a Notebook base without replacing its termina
   );
   expect(staleMasks).toHaveLength(1);
   expect(notebookBundle).toEqual(original);
+});
+
+test("patch:locale declares a source's language as well as a variant's", () => {
+  const locale = (properties: Record<string, string>) => declaredPatchLocale({ properties, citations: [] });
+  expect(locale({ "patch:locale": "de-de" })).toBe("de-DE");
+  expect(
+    patchVariantMetadata("patch-source", { properties: { "patch:locale": "en" }, citations: [] }).claim,
+  ).toBeUndefined();
+  expect(locale({})).toBeUndefined();
+  const { variant } = variantLayerFixture();
+  expect(declaredPatchLocale(revisionContent(variant).metadata)).toBe("zh-CN");
 });
