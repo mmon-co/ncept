@@ -1,7 +1,7 @@
 import { chat, modes } from "./chat";
 import { event } from "./event";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
-import { DEFAULT_THEORY_REF, stateDefault, isCompletionOutcome } from "./state";
+import { DEFAULT_THEORY_REF, initDefaultState, isCompletionOutcome } from "./state";
 import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
 import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading";
@@ -10,7 +10,7 @@ import { progressDefault, estimateDefault, prepareEstimateDefault } from "./read
 export const implementation = {
   id: DEFAULT_THEORY_REF.theory,
   version: DEFAULT_THEORY_REF.version,
-  state: stateDefault,
+  initState: initDefaultState,
   project: projectDefault,
   progress: progressDefault,
   estimate: estimateDefault,

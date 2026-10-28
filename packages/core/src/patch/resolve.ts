@@ -570,7 +570,32 @@ export function resolveAvailablePatchGraph(
   ];
   if (supplied.size === direct.size) {
     const bundle = { terminal: terminal.ref, revisions: [...revisions(bases), terminal] };
-    return { ...resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds).graph, terminal: terminal.ref };
+    const { graph } = resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds);
+    if (sameExactPatchRef(graph.terminal, terminal.ref)) return graph;
+    // Variant composition changes only the Notebook's base pointers, not its delta.
+    // Its operations still belong to the recorded checkpoint, never the virtual revision.
+    const patch = (ref: ExactPatchRef): ExactPatchRef => (sameExactPatchRef(ref, graph.terminal) ? terminal.ref : ref);
+    const provenance = (entries: Readonly<Record<string, readonly ContributionProvenance[]>>) =>
+      Object.fromEntries(
+        Object.entries(entries).map(([id, contributions]) => [
+          id,
+          contributions.map((contribution) => ({ ...contribution, patch: patch(contribution.patch) })),
+        ]),
+      );
+    return {
+      ...graph,
+      terminal: terminal.ref,
+      patchOrder: graph.patchOrder.map(patch),
+      provenance: {
+        nodes: provenance(graph.provenance.nodes),
+        edges: provenance(graph.provenance.edges),
+        metadataSets: provenance(graph.provenance.metadataSets),
+        materials: provenance(graph.provenance.materials),
+        metadataProperties: Object.fromEntries(
+          Object.entries(graph.provenance.metadataProperties).map(([id, properties]) => [id, provenance(properties)]),
+        ),
+      },
+    };
   }
   const projected = bases.map((base) => {
     const layer = layers.find((candidate) => sameExactPatchRef(candidate.source.terminal, base.terminal));

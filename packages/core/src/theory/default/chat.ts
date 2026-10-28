@@ -163,7 +163,16 @@ function* setup(
         : []),
       ...(ctx.lesson === undefined
         ? []
-        : [`Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify(ctx.lesson)}`]),
+        : [
+            `Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify({
+              ...ctx.lesson,
+              completion: ctx.lesson.lesson.nodes.map((node) => ({
+                node,
+                query: ctx.state.nodes[node]?.completion.query ?? "no completion set",
+                counts: ctx.state.nodes[node]?.completion.counts ?? [],
+              })),
+            })}`,
+          ]),
     ].join("\n\n"),
     skills: chatSkills(mode),
     tools: catalogToolsForMode(mode ?? "lesson"),
@@ -184,7 +193,7 @@ function catalogCapabilities(mode: keyof typeof CATALOG_MODE_TOOLS): readonly Ho
     ...(roots.includes("read") ? ["reads" as const] : []),
     ...(roots.includes("material") ? ["materials" as const, "applets" as const] : []),
     ...(roots.includes("edit_graph_draft") ? ["graph-draft" as const] : []),
-    ...(roots.includes("web_search") ? ["web" as const] : []),
+    ...(roots.includes("web_search") || roots.includes("fetch_page") ? ["web" as const] : []),
     ...(roots.includes("bash") ? ["bash" as const] : []),
   ];
 }

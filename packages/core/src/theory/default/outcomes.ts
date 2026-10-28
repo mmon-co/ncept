@@ -227,6 +227,8 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     valid &&
     ["pump", "hint", "correct"].includes(String(grader.help)) &&
     (dontKnow ||
+      // Decision outages can delegate the whole assessment to the tutor.
+      assessment.grader === "tutor" ||
       (assessment.grader === "decision" &&
         results(final) &&
         (assessment.helped === undefined || results(assessment.helped)) &&
@@ -351,6 +353,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       at,
       payload: {
         kind: "demonstration",
+        item: problem.id,
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
         unaided: !assessment.aided,
@@ -360,7 +363,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       },
     }));
   // Checks judged from one response are dependent evidence, not separate window entries.
-  if (problem.grader.by === "checks") {
+  if (problem.grader.by === "checks" && assessment.grader !== "tutor") {
     const checksByNode = new Map<NodeId, (typeof problem.grader.checks)[number][]>();
     for (const check of problem.grader.checks)
       for (const node of check.about) {
@@ -384,6 +387,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
           at,
           payload: {
             kind: "demonstration",
+            item: problem.id,
             node: { node, provenance: { ...outcome.revision } },
             outcome: result,
             unaided: beforeHelp && !assessment.aided,
@@ -404,6 +408,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
     at,
     payload: {
       kind: "demonstration",
+      item: problem.id,
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
       unaided: !assessment.aided,
@@ -422,6 +427,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
       at: grade.gradedAt,
       payload: {
         kind: "demonstration",
+        item: card.id,
         node: { node: node.node, provenance: { ...node.provenance } },
         outcome: grade.grade === "again" ? "failure" : "success",
         unaided: recallUnaided(card),
@@ -440,6 +446,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
           at: outcome.at,
           payload: {
             kind: "demonstration" as const,
+            item: question.id,
             node: { ...outcome.node },
             outcome: "dont-know" as const,
             unaided: true,
@@ -457,6 +464,7 @@ export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly
         at: outcome.at,
         payload: {
           kind: "demonstration" as const,
+          item: question.id,
           node: { node: outcome.node.node, provenance: { ...outcome.node.provenance } },
           outcome: option.correct ? ("success" as const) : ("failure" as const),
           unaided: true,
