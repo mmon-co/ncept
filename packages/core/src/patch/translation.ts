@@ -1,6 +1,12 @@
 import { contentDigest } from "../digest";
 import { PatchCompileError } from "./errors";
-import { GUIDANCE_PROPERTIES, isGuidanceEntries, nodeCascadedProperty, PEDAGOGY_OPENING_PROPERTY } from "./guidance";
+import {
+  GUIDANCE_PROPERTIES,
+  isGuidanceEntries,
+  nodeCascadedProperty,
+  PEDAGOGY_FIRST_MESSAGE_PROPERTY,
+  PEDAGOGY_OPENING_PROPERTY,
+} from "./guidance";
 import { isAttachment, metadataSubjectAppliesToEntity } from "./metadata";
 import {
   exactPatchRefKey,
@@ -23,6 +29,8 @@ import { declaredPatchLocale, patchVariantMetadata, patchVersionInRange } from "
 
 export const PATCH_MACHINE_TRANSLATION = "patch:machine-translation";
 export const PATCH_TRANSLATE = "patch:translate";
+/** What a learner first reads in a Session: translated before everything else. */
+const OPENING_PROPERTIES: readonly string[] = [PEDAGOGY_OPENING_PROPERTY, PEDAGOGY_FIRST_MESSAGE_PROPERTY];
 
 export interface TranslationText {
   /** Content/locale/location identity, deliberately independent of the terminal revision digest. */
@@ -116,8 +124,8 @@ function textProperty(property: string): boolean {
       "pedagogy:criterion",
       "pedagogy:because",
       "pedagogy:raise-when",
-      PEDAGOGY_OPENING_PROPERTY,
-    ].includes(property)
+    ].includes(property) ||
+    OPENING_PROPERTIES.includes(property)
   );
 }
 
@@ -199,7 +207,7 @@ export function planPatchTranslation(input: {
         locale,
         [target.kind, target.kind === "root" ? source.terminal.identity : target.set.id, property, index],
         text,
-        property === PEDAGOGY_OPENING_PROPERTY ? 0 : 1,
+        OPENING_PROPERTIES.includes(property) ? 0 : 1,
       );
       texts.push(item);
       return [{ key: item.key, ...(typeof value === "string" ? {} : { index }) }];
