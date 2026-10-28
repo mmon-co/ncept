@@ -73,7 +73,13 @@ export type Lesson = Readonly<{
   nodes: readonly NodeId[];
   review?: true;
   /** The check-in after `milestone`; absent for the check-in before the first span. */
-  checkpoint?: Readonly<{ milestone?: NodeId; required: boolean; final?: true }>;
+  checkpoint?: Readonly<{
+    milestone?: NodeId;
+    required: boolean;
+    final?: true;
+    /** Host-inserted update stop; never emitted by the theory's graph-only path. */
+    updates?: readonly { patch: string; title: string; version: string }[];
+  }>;
 }>;
 export type MissionPath = Readonly<{
   /** The first section's milestone is shown as 0 when no unclaimed Lesson precedes it, else 1. */
