@@ -6,6 +6,7 @@ import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState }
 
 // One equivalence property: retained/chunked public reads versus fresh init/step/read.
 // Seeds are reproducible; the existing retention/claims suites independently pin policy semantics.
+// Takes 12–15 s on an idle host; under concurrent worker load it passed 30 s and held main red (2026-10-29).
 test("default retained prefixes, clocks and context resets equal fresh state, projection and progress", () => {
   let seed = 0;
   const random = (max: number) => {
@@ -274,4 +275,4 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
         }
       }
   }
-});
+}, 120_000);
