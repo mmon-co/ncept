@@ -4,7 +4,7 @@ Kind: `quizzes`. A Problem poses one graded task and a Set sequences Problems. E
 
 Put separate questions in a Set, one short Problem per item. State `feedback: "each"` for practice with feedback on each answer, or `"end"` for prior-capability, retention and milestone checks whose results should wait until the run ends; this is independent of the `next` strategy and `checks.help`. Reserve `checks`-graded text Problems for one integrated response showing several capabilities (an explanation, essay, project). A fast classifier picks `shown`, `absent` or a named `mistaken` version per check from the learner's text, so describe what a response visibly does. `pumps` together name every check, asking the learner to take each up without giving it away.
 
-`help` sets how far the Problem teaches. `pump` only measures: use it for prior-capability, retention and milestone checks. `hint` shows a mistaken check's hint; `correct` adds the correction if the mistake persists after it. One response counts once per Node however many checks touch it; where help touches a check, that Node is recorded unaided as its checks stood before help and aided as they ended.
+`help` sets how far the Problem teaches. In a Lesson, use `hint`, which shows a mistaken check's hint, or `correct`, which adds the correction if the mistake persists after it; `pump` only measures, for prior-capability, retention and milestone checks. Help costs no evidence: one response counts once per Node however many checks touch it, and where help touches a check, that Node is recorded unaided as its checks stood before help and aided as they ended.
 
 Add with `node` or `about`. A prepared prompt clip goes in top-level `promptAudio` (omit on edit to keep; null removes), never in the body.
 
