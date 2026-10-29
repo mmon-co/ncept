@@ -243,13 +243,13 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
           accepted = end;
           for (const now of [at(-2), at(2), at(3), at(3, 10), at(9), at(4), at(1), "bad-now"]) {
             const current = capture(() => retained.read(now));
-            expect(current).toEqual(capture(() => readTheoryState(defaultTheory, context.graph, prefix, now)));
+            const fresh = capture(() => readTheoryState(defaultTheory, context.graph, prefix, now));
+            expect(current).toEqual(fresh);
             if (current.state !== undefined) {
               const projection = defaultTheory.project(context.graph, current.state);
               // Unprepared, plain valid snapshots must retain the exact public projection semantics.
               expect(projection).toEqual(defaultTheory.project(context.graph, structuredClone(current.state)));
-              const fresh = readTheoryState(defaultTheory, context.graph, prefix, now);
-              const freshProjection = defaultTheory.project(context.graph, fresh);
+              const freshProjection = defaultTheory.project(context.graph, required(fresh.state));
               expect(projection).toEqual(freshProjection);
               const requested: NodeId[] = [...context.graph.nodes.map(({ id }) => id).reverse(), "node-missing"];
               expect(defaultTheory.progress(context.graph, projection, requested)).toEqual(
