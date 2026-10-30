@@ -6,13 +6,14 @@ export const defaultTheoryMessages = {
   "default.checklist.done": { en: "Demonstrated", "zh-CN": "已展示掌握" },
   "default.checklist.tentative": { en: "Probably known · confirm with a check", "zh-CN": "可能已掌握 · 仍需检验确认" },
   "default.checklist.open": { en: "Not yet demonstrated", "zh-CN": "尚未展示掌握" },
+  "default.node-progress.counts": { en: "{counts}, ", "zh-CN": "{counts}，" },
   "default.node-progress.no-success": {
-    en: "{counts}, last success none; aided practice {aidedPractice}",
-    "zh-CN": "{counts}，尚无成功；辅助练习 {aidedPractice}",
+    en: "{counts}last success none; aided practice {aidedPractice}",
+    "zh-CN": "{counts}尚无成功；辅助练习 {aidedPractice}",
   },
   "default.node-progress.last-success": {
-    en: "{counts}, last success {lastSuccess}; aided practice {aidedPractice}",
-    "zh-CN": "{counts}，最近成功：{lastSuccess}；辅助练习 {aidedPractice}",
+    en: "{counts}last success {lastSuccess}; aided practice {aidedPractice}",
+    "zh-CN": "{counts}最近成功：{lastSuccess}；辅助练习 {aidedPractice}",
   },
   "default.charting.note.known": { en: "I already know this.", "zh-CN": "这个我已经会了。" },
   "default.charting.note.unwanted": { en: "I don't need this.", "zh-CN": "这个我不需要。" },
