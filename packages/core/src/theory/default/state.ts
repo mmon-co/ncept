@@ -27,6 +27,7 @@ import {
   compareObservations,
   isObservationId,
   isObservationTimestamp,
+  type LearnerDay,
   type Observation,
   type ObservationId,
   type SurfaceId,
@@ -79,6 +80,13 @@ export interface Lapse {
   readonly node: NodeRef;
   /** The same lesson's already-recorded slip or diagnosis, if any. */
   readonly of?: ObservationId;
+}
+/** One whole-day retention judgment; support lives in the Record envelope. */
+export interface Grade {
+  readonly kind: "grade";
+  readonly node: NodeRef;
+  readonly day: LearnerDay;
+  readonly rating: "Again" | "Hard" | "Good" | "Easy";
 }
 export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
 /** An accepted operation, not a demonstration of every clause of a Node's criterion. */
@@ -142,6 +150,7 @@ export type DefaultPayload =
   | CompletionOutcome
   | Demonstration
   | Lapse
+  | Grade
   | FeatureUse
   | Teaching
   | Claim
@@ -250,6 +259,17 @@ export function isLapse(value: unknown): value is Lapse {
     value.kind === "lapse" &&
     isNodeRef(value.node) &&
     (value.of === undefined || isObservationId(value.of))
+  );
+}
+export function isGrade(value: unknown): value is Grade {
+  if (!object(value) || value.kind !== "grade" || !isNodeRef(value.node) || !object(value.day)) return false;
+  return (
+    nonempty(value.day.id) &&
+    isObservationTimestamp(value.day.start) &&
+    isObservationTimestamp(value.day.end) &&
+    Date.parse(value.day.start) < Date.parse(value.day.end) &&
+    typeof value.rating === "string" &&
+    ["Again", "Hard", "Good", "Easy"].includes(value.rating)
   );
 }
 export function isRetrievalOpenerDemonstration(value: unknown): value is RetrievalOpenerDemonstration {
@@ -368,6 +388,9 @@ function assertDefaultPayload(payload: unknown): void {
     case "lapse":
       valid = isLapse(payload);
       break;
+    case "grade":
+      valid = isGrade(payload);
+      break;
     case "feature-use":
       valid = isFeatureUse(payload);
       break;
@@ -429,6 +452,54 @@ function indexDefaultRecords(observations: readonly Observation[]) {
 export function assertDefaultRetraction(of: ObservationId, observations: readonly Observation[]): void {
   if (!activeDefaultRecords(observations).some(({ id }) => id === of))
     throw new Error("Retraction requires an active default demonstration or claim");
+}
+
+/** Whole-day support uses the same active, re-homed demonstrations as acquisition.
+ * Diagnoses are retention evidence only; retracted attempts never support a grade. */
+export function nodeDayEvidence(state: DefaultState, node: NodeId): readonly Observation<Demonstration | Lapse>[] {
+  const attempts = state.records.flatMap((record) =>
+    record.payload.kind === "demonstration" &&
+    record.payload.unaided &&
+    (state.homing.homes[record.id] ?? record.nodes ?? [record.payload.node.node]).includes(node)
+      ? [{ ...record, payload: record.payload }]
+      : [],
+  );
+  return [
+    ...attempts,
+    ...state.observations.flatMap((record) =>
+      isDefaultObservation(record) && isLapse(record.payload) && record.payload.node.node === node
+        ? [{ ...record, payload: record.payload }]
+        : [],
+    ),
+  ].sort(compareObservations);
+}
+
+/** A grade stops being active if any cited attempt is retracted, abandoned or superseded.
+ * It never becomes acquisition/completion evidence. The scheduler consumes this projection. */
+export function activeDefaultGrades(state: DefaultState): readonly Observation<Grade>[] {
+  const seen = new Set<string>();
+  return state.observations.flatMap((record) => {
+    if (!isDefaultObservation(record) || !isGrade(record.payload)) return [];
+    const { payload } = record;
+    const key = JSON.stringify([payload.node.node, payload.day.id]);
+    if (seen.has(key)) throw new Error("Duplicate default Node-day grade");
+    seen.add(key);
+    const active = new Set(
+      nodeDayEvidence(state, payload.node.node)
+        .filter(
+          ({ at }) => Date.parse(at) >= Date.parse(payload.day.start) && Date.parse(at) < Date.parse(payload.day.end),
+        )
+        .map(({ id }) => id),
+    );
+    if (
+      record.nodes?.length !== 1 ||
+      record.nodes[0] !== payload.node.node ||
+      !record.cites?.length ||
+      new Set(record.cites).size !== record.cites.length
+    )
+      throw new Error("Grade requires its Node scope and unique evidence citations");
+    return record.cites.every((id) => active.has(id)) ? [{ ...record, payload }] : [];
+  });
 }
 
 /** Original strings stay citable; a summary is only usable while all its original sources remain effective. */
