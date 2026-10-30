@@ -597,6 +597,8 @@ function scheduleDefaultNode(
   let reviewDay: string | undefined;
   const citations: ObservationId[] = [];
   let lapsed = false;
+  let firstSuccessDay: string | undefined;
+  const ownRecords = new Set(records.map(({ id }) => id));
   const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
   const directDays = new Set([
     ...records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
@@ -619,12 +621,16 @@ function scheduleDefaultNode(
         stability: parameters.retention.claimStabilityDays,
         reps: 0,
       };
+      firstSuccessDay ??= dayOf(at);
     } else {
       if (payload.kind !== "lapse" && !payload.unaided) continue;
-      lapsed = payload.kind === "lapse" || payload.outcome !== "success";
+      const day = dayOf(at);
+      const succeeded = payload.kind !== "lapse" && payload.outcome === "success";
+      // Implicit prerequisite credit is not evidence of having recalled this Node.
+      if (succeeded && ownRecords.has(id)) firstSuccessDay ??= day;
+      lapsed = !succeeded && firstSuccessDay !== undefined && firstSuccessDay < day;
       // A close diagnosis repeats the slip, not its FSRS review, even across midnight.
       const recordedSlip = payload.kind === "lapse" && payload.of !== undefined && slips.has(payload.of);
-      const day = dayOf(at);
       if (day === reviewDay || recordedSlip) {
         citations.push(id);
         continue;
