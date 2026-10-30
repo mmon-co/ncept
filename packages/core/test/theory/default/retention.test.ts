@@ -137,6 +137,74 @@ test("a Node's own attempt is its day's review even after a dependent's earlier 
   );
 });
 
+test("only an earlier direct success day or initializing knows claim makes a miss a lapse", () => {
+  const success = attempt("obs-success", "node-isolated", "2026-10-01T08:00:00.000Z");
+  const miss = attempt("obs-miss", "node-isolated", "2026-10-01T09:00:00.000Z", "failure");
+  const laterMiss = attempt("obs-later", "node-isolated", "2026-10-02T09:00:00.000Z", "failure");
+  const now = "2026-10-02T10:00:00.000Z";
+  expect(schedule([miss], now, "node-isolated")?.lapsed).toBe(false);
+  expect(schedule([success, miss], now, "node-isolated")?.lapsed).toBe(false);
+  expect(schedule([miss], now, "node-isolated")?.stability).toBeLessThan(
+    schedule([success], now, "node-isolated")?.stability ?? 0,
+  );
+  expect(schedule([success, laterMiss], now, "node-isolated")?.lapsed).toBe(true);
+  expect(schedule([claim("obs-knows", "node-isolated", success.at), laterMiss], now, "node-isolated")?.lapsed).toBe(
+    true,
+  );
+  const implicit = attempt("obs-dependent", "node-dependent", success.at);
+  const prerequisiteMiss = attempt("obs-prerequisite", "node-prerequisite", laterMiss.at, "failure");
+  expect(schedule([implicit, prerequisiteMiss], now, "node-prerequisite")?.lapsed).toBe(false);
+  const diagnosis: Observation = {
+    id: "obs-diagnosis",
+    at: laterMiss.at,
+    by: DEFAULT_THEORY_REF,
+    payload: { kind: "lapse", node: { node: "node-isolated", provenance: ref } },
+  };
+  expect(schedule([diagnosis], now, "node-isolated")?.lapsed).toBe(false);
+  expect(schedule([success, diagnosis], now, "node-isolated")?.lapsed).toBe(true);
+});
+
+test("a passed placement milestone keeps its evidence and schedule but never gets review tags", () => {
+  const milestoneGraph = resolvePatchBundle({
+    terminal: ref,
+    revisions: [
+      {
+        ...revision,
+        delta: {
+          operations: [
+            ...revision.delta.operations,
+            {
+              kind: "add-metadata-set",
+              metadataSet: {
+                id: "metadata-milestone",
+                subjects: [{ kind: "node", id: "node-isolated" }],
+                properties: { "pedagogy:milestone": true },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const observations = [
+    attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
+    attempt("obs-2", "node-isolated", "2026-10-01T09:00:00.000Z"),
+    attempt("obs-3", "node-isolated", "2026-10-01T10:00:00.000Z", "failure"),
+  ];
+  const now = "2027-10-01T11:00:00.000Z";
+  const state = readTheoryState(defaultTheory, milestoneGraph, observations, now);
+  expect(state.nodes["node-isolated"]?.completion.complete).toBe(true);
+  expect(state.nodes["node-isolated"]?.schedule).toBeDefined();
+  expect(state.nodes["node-isolated"]?.records).toHaveLength(3);
+  expect(tags(observations, now, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
+  expect(defaultTheory.project(milestoneGraph, state).nodes["node-isolated"]?.map(({ tag }) => tag)).not.toContain(
+    "review:due",
+  );
+  expect(defaultTheory.project(milestoneGraph, state).nodes["node-isolated"]?.map(({ tag }) => tag)).not.toContain(
+    "review:fading",
+  );
+});
+
 test("knows claims schedule soon without covering prerequisites", () => {
   const observations: Observation[] = [
     claim("obs-claim", "node-claim", "2026-10-01T08:00:00.000Z"),
