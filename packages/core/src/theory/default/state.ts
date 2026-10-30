@@ -477,15 +477,24 @@ export function nodeDayEvidence(state: DefaultState, node: NodeId): readonly Obs
 /** A grade stops being active if any cited attempt is retracted, abandoned or superseded.
  * It never becomes acquisition/completion evidence. The scheduler consumes this projection. */
 export function activeDefaultGrades(state: DefaultState): readonly Observation<Grade>[] {
+  const grades = new Map<NodeId, Observation<Grade>[]>();
+  for (const record of state.observations)
+    if (isDefaultObservation(record) && isGrade(record.payload))
+      append(grades, record.payload.node.node, { ...record, payload: record.payload });
+  return [...grades].flatMap(([node, records]) => activeNodeGrades(records, nodeDayEvidence(state, node)));
+}
+
+function activeNodeGrades(
+  grades: readonly Observation<Grade>[],
+  evidence: readonly Observation<Demonstration | Lapse>[],
+): readonly Observation<Grade>[] {
   const seen = new Set<string>();
-  return state.observations.flatMap((record) => {
-    if (!isDefaultObservation(record) || !isGrade(record.payload)) return [];
+  return grades.filter((record) => {
     const { payload } = record;
-    const key = JSON.stringify([payload.node.node, payload.day.id]);
-    if (seen.has(key)) throw new Error("Duplicate default Node-day grade");
-    seen.add(key);
+    if (seen.has(payload.day.id)) throw new Error("Duplicate default Node-day grade");
+    seen.add(payload.day.id);
     const active = new Set(
-      nodeDayEvidence(state, payload.node.node)
+      evidence
         .filter(
           ({ at }) => Date.parse(at) >= Date.parse(payload.day.start) && Date.parse(at) < Date.parse(payload.day.end),
         )
@@ -498,7 +507,7 @@ export function activeDefaultGrades(state: DefaultState): readonly Observation<G
       new Set(record.cites).size !== record.cites.length
     )
       throw new Error("Grade requires its Node scope and unique evidence citations");
-    return record.cites.every((id) => active.has(id)) ? [{ ...record, payload }] : [];
+    return record.cites.every((id) => active.has(id));
   });
 }
 
@@ -598,7 +607,7 @@ export interface NodeSchedule {
   readonly lapses: number;
   readonly lastReview: string;
   readonly retrievability: number;
-  /** Observed forgetting stays due until an unaided success, independently of FSRS R. */
+  /** Observed forgetting stays due until a later non-Again day grade, independently of FSRS R. */
   readonly lapsed: boolean;
   readonly citations: readonly ObservationId[];
 }
@@ -654,36 +663,31 @@ export function labelDefaultNode(input: {
   };
 }
 
-/**
- * One review per UTC day: the Node's first unaided attempt, else the first implicit credit from a dependent.
- * Diagnosed lapses supply Again unless they repeat a recorded slip. Claims only initialize an absent schedule.
- */
+/** Accepted whole-day grades are the only direct FSRS reviews. Ungraded direct days also
+ * suppress implicit credit. Core uses host boundaries, never a clock-zone or UTC-day fallback. */
 function scheduleDefaultNode(
   records: readonly HomedRecord[],
   implicit: readonly HomedRecord[],
   lapses: readonly Observation<Lapse>[],
+  grades: readonly Observation<Grade>[],
   parameters: DefaultParameters,
 ): Omit<NodeSchedule, "retrievability"> | undefined {
+  const direct = [
+    ...records.flatMap((record) =>
+      record.payload.kind === "demonstration" && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
+    ),
+    ...lapses,
+  ];
+  const accepted = activeNodeGrades(grades, direct);
+  const directDays = new Set(direct.flatMap(({ learnerDay }) => (learnerDay === undefined ? [] : [learnerDay.id])));
+  const credit = implicit.filter(({ learnerDay }) => learnerDay !== undefined && !directDays.has(learnerDay.id));
+  const claims = records.filter((record): record is Observation<Claim> => record.payload.kind === "claim");
   let card: Card | undefined;
   let reviewDay: string | undefined;
-  const citations: ObservationId[] = [];
+  let initializingClaim: string | undefined;
   let lapsed = false;
-  let firstSuccessDay: string | undefined;
-  const ownRecords = new Set(records.map(({ id }) => id));
-  const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
-  const directDays = new Set([
-    ...records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
-    ...lapses.map(({ at }) => dayOf(at)),
-  ]);
-  const slips = new Set<ObservationId>();
-  for (const { id, payload } of [...records, ...lapses])
-    if (
-      payload.kind === "lapse" ||
-      (payload.kind === "demonstration" && payload.unaided && payload.outcome !== "success")
-    )
-      slips.add(id);
-  const credit = implicit.filter(({ at }) => !directDays.has(dayOf(at)));
-  for (const record of [...records, ...credit, ...lapses].sort(compareObservations)) {
+  const citations: ObservationId[] = [];
+  for (const record of [...claims, ...credit, ...accepted].sort(compareObservations)) {
     const { payload, at, id } = record;
     if (payload.kind === "claim") {
       if (payload.stance !== "knows" || card !== undefined) continue;
@@ -692,26 +696,24 @@ function scheduleDefaultNode(
         stability: parameters.retention.claimStabilityDays,
         reps: 0,
       };
-      firstSuccessDay ??= dayOf(at);
+      initializingClaim = at;
+    } else if (payload.kind === "grade") {
+      const earlierSuccess =
+        (initializingClaim !== undefined && Date.parse(initializingClaim) < Date.parse(payload.day.start)) ||
+        direct.some(
+          ({ at, payload: evidence }) =>
+            evidence.kind === "demonstration" &&
+            evidence.outcome === "success" &&
+            Date.parse(at) < Date.parse(payload.day.start),
+        );
+      card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
+      lapsed = payload.rating === "Again" && earlierSuccess;
+      citations.push(...(record.cites ?? []));
     } else {
-      if (payload.kind !== "lapse" && !payload.unaided) continue;
-      const day = dayOf(at);
-      const succeeded = payload.kind !== "lapse" && payload.outcome === "success";
-      // Implicit prerequisite credit is not evidence of having recalled this Node.
-      if (succeeded && ownRecords.has(id)) firstSuccessDay ??= day;
-      lapsed = !succeeded && firstSuccessDay !== undefined && firstSuccessDay < day;
-      // A close diagnosis repeats the slip, not its FSRS review, even across midnight.
-      const recordedSlip = payload.kind === "lapse" && payload.of !== undefined && slips.has(payload.of);
-      if (day === reviewDay || recordedSlip) {
-        citations.push(id);
-        continue;
-      }
-      card = SCHEDULER.next(
-        card ?? createEmptyCard(at),
-        at,
-        payload.kind !== "lapse" && payload.outcome === "success" ? Rating.Good : Rating.Again,
-      ).card;
-      reviewDay = day;
+      const day = record.learnerDay;
+      if (day === undefined || day.id === reviewDay) continue;
+      card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
+      reviewDay = day.id;
     }
     citations.push(id);
   }
@@ -723,7 +725,7 @@ function scheduleDefaultNode(
     lapses: card.lapses,
     lastReview: card.last_review.toISOString(),
     lapsed,
-    citations,
+    citations: [...new Set(citations)],
   };
 }
 
@@ -824,6 +826,7 @@ interface DefaultObservationIndex {
   readonly positions: Map<ObservationId, number>;
   readonly memoryPlacements: Map<ObservationId, MemoryPlacement>;
   readonly lapses: Map<NodeId, readonly Observation<Lapse>[]>;
+  readonly grades: Map<NodeId, readonly Observation<Grade>[]>;
   readonly featureUses: Map<NodeId, readonly Observation<FeatureUse>[]>;
   readonly memories: Map<NodeId, readonly Observation<Memory>[]>;
   readonly summaries: Map<NodeId, readonly Observation<MemorySummaryPayload>[]>;
@@ -916,7 +919,7 @@ interface RecordPlacement {
 }
 interface PreparedDefaultEvidence {
   readonly graphIndex: DefaultGraphIndex;
-  readonly index: Pick<DefaultObservationIndex, "lapses" | "featureUses">;
+  readonly index: Pick<DefaultObservationIndex, "lapses" | "grades" | "featureUses">;
   readonly observations: readonly Observation[];
   readonly records: readonly HomedRecord[];
   readonly homed: Readonly<Partial<Record<NodeId, readonly HomedRecord[]>>>;
@@ -961,6 +964,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
   const interpretationUsers = new Map<ObservationId, Set<EvidenceEntry>>();
   const memoryUsers: Buckets<ObservationId, readonly NodeId[]> = new Map();
   const lapseEntries: Buckets<NodeId, Observation<Lapse>> = new Map();
+  const gradeEntries: Buckets<NodeId, Observation<Grade>> = new Map();
   const featureEntries: Buckets<NodeId, Observation<FeatureUse>> = new Map();
   const memoryEntries: Buckets<NodeId, Observation<Memory>> = new Map();
   const summaryEntries: Buckets<NodeId, Observation<MemorySummaryPayload>> = new Map();
@@ -970,6 +974,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     positions: new Map(),
     memoryPlacements: new Map(),
     lapses: new Map(),
+    grades: new Map(),
     featureUses: new Map(),
     memories: new Map(),
     summaries: new Map(),
@@ -1067,6 +1072,9 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       dirtyRecords.add(payload.of);
     } else if (isLapse(payload)) {
       changeBucket(lapseEntries, payload.node.node, entry.position, { ...observation, payload }, add);
+      dirtyAux.add(payload.node.node);
+    } else if (isGrade(payload)) {
+      changeBucket(gradeEntries, payload.node.node, entry.position, { ...observation, payload }, add);
       dirtyAux.add(payload.node.node);
     } else if (isFeatureUse(payload)) {
       for (const node of new Set(observation.nodes)) {
@@ -1273,6 +1281,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     if (invalidRetractions.size > 0) throw new Error("Default retractions must target a demonstration or claim");
     for (const node of dirtyAux) {
       index.lapses.set(node, bucketValues(lapseEntries.get(node)));
+      index.grades.set(node, bucketValues(gradeEntries.get(node)));
       index.featureUses.set(node, bucketValues(featureEntries.get(node)));
       index.memories.set(node, bucketValues(memoryEntries.get(node)));
       index.summaries.set(node, bucketValues(summaryEntries.get(node)));
@@ -1367,7 +1376,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       for (const prerequisite of graphIndex.prerequisites.get(node) ?? []) affected.add(prerequisite);
     prepared = {
       graphIndex,
-      index: { lapses: new Map(index.lapses), featureUses: new Map(index.featureUses) },
+      index: { lapses: new Map(index.lapses), grades: new Map(index.grades), featureUses: new Map(index.featureUses) },
       observations: observationsChanged
         ? [...effective].sort((left, right) => left.position - right.position).map(({ observation }) => observation)
         : (prepared?.observations ?? []),
@@ -1540,7 +1549,6 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
   );
   const own = new Map<NodeId, readonly HomedRecord[]>();
   const successes = new Map<NodeId, readonly HomedRecord[]>();
-  const lapseInputs = new Map<NodeId, readonly Observation<Lapse>[]>();
   const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
   const acquisition = new Map<NodeId, NodeState>();
   let history = prepareCompletionHistory([]);
@@ -1552,7 +1560,6 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
     const prepared = evidence.read(now);
     const { index, homed } = prepared;
     const changedOwn = new Set<NodeId>();
-    const changedSuccesses = new Set<NodeId>();
     for (const id of prepared.dirtyNodes) {
       const records = homed[id] ?? [];
       if (!own.has(id) || !sameRecords(own.get(id) ?? [], records)) {
@@ -1560,23 +1567,11 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
         const credit = records.filter(
           ({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success",
         );
-        if (!sameRecords(successes.get(id) ?? [], credit)) {
-          successes.set(id, credit);
-          changedSuccesses.add(id);
-        }
+        successes.set(id, credit);
         changedOwn.add(id);
       }
     }
-    const dirtySchedules = new Set(changedOwn);
-    for (const id of changedSuccesses)
-      for (const prerequisite of graphIndex.prerequisites.get(id) ?? []) dirtySchedules.add(prerequisite);
-    for (const id of prepared.dirtyNodes) {
-      const lapses = index.lapses.get(id) ?? [];
-      if (!lapseInputs.has(id) || !sameRecords(lapseInputs.get(id) ?? [], lapses)) {
-        lapseInputs.set(id, lapses);
-        dirtySchedules.add(id);
-      }
-    }
+    const dirtySchedules = new Set(prepared.dirtyNodes);
     if (prepared.historyChanged) history = prepareCompletionHistory(prepared.history);
     const nextBoundary = completionBoundary(history, now);
     const completionChanged = !initialized || prepared.historyChanged || boundary !== nextBoundary;
@@ -1607,11 +1602,17 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       const featureUses = index.featureUses.get(id) ?? [];
       if (!initialized || dirtySchedules.has(id)) {
         const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
-        // A late own attempt replaces this day's implicit credit. Replay only the affected Node's
-        // chronology, including lapse references; no append-only FSRS shortcut can preserve that rule.
+        // Grade/support changes and late direct evidence replace the affected day's review;
+        // replay only this Node's chronology rather than retaining a second retention state.
         schedules.set(
           id,
-          scheduleDefaultNode(own.get(id) ?? [], implicit, lapseInputs.get(id) ?? [], DEFAULT_PARAMETERS),
+          scheduleDefaultNode(
+            own.get(id) ?? [],
+            implicit,
+            index.lapses.get(id) ?? [],
+            index.grades.get(id) ?? [],
+            DEFAULT_PARAMETERS,
+          ),
         );
       }
       const card = schedules.get(id);

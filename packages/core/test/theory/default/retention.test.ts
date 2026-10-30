@@ -1,11 +1,13 @@
 import { readTheoryState } from "../../../src/theory";
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision } from "../../../src/patch";
-import type { Observation, ObservationId } from "../../../src/observations";
+import type { LearnerDay, Observation, ObservationId } from "../../../src/observations";
 import {
   defaultTheory,
   DEFAULT_THEORY_REF,
-  practiceAttempts,
+  isDemonstration,
+  isLapse,
+  type Grade,
   type Claim,
   type Demonstration,
 } from "../../../src/theory/default";
@@ -19,6 +21,14 @@ const revision: PatchRevision = {
   delta: {
     operations: [
       ...nodes.map((id) => ({ kind: "add-node" as const, node: { id } })),
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-capabilities",
+          subjects: nodes.map((id) => ({ kind: "node" as const, id })),
+          properties: { "pedagogy:criterion": "Recall the named capability unaided." },
+        },
+      },
       {
         kind: "add-metadata-set",
         metadataSet: {
@@ -46,6 +56,41 @@ const revision: PatchRevision = {
 };
 const graph = resolvePatchBundle({ terminal: ref, revisions: [revision] });
 
+// Host-supplied Shanghai boundaries: 04:00 local is 20:00 UTC, not UTC midnight.
+function day(at: string): LearnerDay {
+  const start = Math.floor((Date.parse(at) + 4 * 3_600_000) / 86_400_000) * 86_400_000 - 4 * 3_600_000;
+  return { id: String(start), start: new Date(start).toISOString(), end: new Date(start + 86_400_000).toISOString() };
+}
+
+function judged(
+  observations: readonly Observation[],
+  rating: Grade["rating"] | ((node: NodeId, day: LearnerDay) => Grade["rating"]) = "Good",
+): Observation[] {
+  const result = [...observations];
+  const days = new Map<string, { node: NodeId; day: LearnerDay }>();
+  for (const { payload, learnerDay } of observations)
+    if ((isDemonstration(payload) || isLapse(payload)) && learnerDay !== undefined)
+      days.set(JSON.stringify([payload.node.node, learnerDay.id]), { node: payload.node.node, day: learnerDay });
+  for (const { node, day } of [...days.values()].sort((a, b) => Date.parse(a.day.start) - Date.parse(b.day.start))) {
+    const program = defaultTheory.event(
+      { kind: "day.ended", day, about: [node] },
+      { graph, state: read(result, day.end), now: day.end },
+    );
+    let next = program.next();
+    while (!next.done) {
+      const request = next.value;
+      if (request.kind === "read") next = program.next(result);
+      else if (request.kind === "judge") next = program.next(typeof rating === "function" ? rating(node, day) : rating);
+      else if (request.kind === "write") {
+        const id: ObservationId = `obs-grade-${result.length}`;
+        result.push({ ...request.observation, id, at: request.observation.at ?? day.end, by: DEFAULT_THEORY_REF });
+        next = program.next(id);
+      } else throw new Error("Unexpected grading request");
+    }
+  }
+  return result;
+}
+
 function attempt(
   id: ObservationId,
   node: NodeId,
@@ -55,6 +100,7 @@ function attempt(
   return {
     id,
     at,
+    learnerDay: day(at),
     by: DEFAULT_THEORY_REF,
     payload: {
       kind: "demonstration",
@@ -73,6 +119,7 @@ function claim(id: ObservationId, node: NodeId, at: string): Observation<Claim> 
     at,
     by: DEFAULT_THEORY_REF,
     nodes: [node],
+    learnerDay: day(at),
     payload: { kind: "claim", statement: "I know it", stance: "knows" },
   };
 }
@@ -84,84 +131,119 @@ const tags = (observations: readonly Observation[], now: string, node: NodeId) =
   defaultTheory.project(graph, read(observations, now)).nodes[node]?.filter(({ tag }) => tag.startsWith("review:")) ??
   [];
 
-test("the first unaided attempt each day is the Node's only review, however it arrives", () => {
-  const card = (id: ObservationId, at: string, grade: "again" | "good") =>
-    practiceAttempts({
-      kind: "recall",
-      card: { id: "card", front: "f", back: "b", nodes: [{ node: "node-isolated", provenance: ref }] },
-      grade: { id, cardId: "card", gradedAt: at, answer: "b", grade },
-    }).map(({ at, payload }, index): Observation => ({
-      id: `${id}-${index}`,
-      at,
-      by: DEFAULT_THEORY_REF,
-      nodes: ["node-isolated"],
-      payload,
-    }));
-  const once = [...card("obs-1", "2026-10-01T08:00:00.000Z", "good")];
-  const twice = [...once, ...card("obs-2", "2026-10-01T20:00:00.000Z", "again")];
-  const now = "2026-10-02T08:00:00.000Z";
-  expect(schedule(twice, now, "node-isolated")).toMatchObject({ reps: 1, lapses: 0 });
-  expect(schedule(twice, now, "node-isolated")?.stability).toBe(schedule(once, now, "node-isolated")?.stability);
-  expect(read(twice, now).nodes["node-isolated"]?.completion.counts[0]?.k).toBe(1);
-  expect(
-    schedule(
-      [...twice, ...card("obs-3", "2026-10-02T09:00:00.000Z", "again")],
-      "2026-10-03T08:00:00.000Z",
+test("a whole-day grade, not the first or last of 33 attempts, supplies the Node's review", () => {
+  const attempts = Array.from({ length: 33 }, (_, i) =>
+    attempt(
+      `obs-${i}`,
       "node-isolated",
+      new Date(Date.parse("2026-10-01T08:00:00.000Z") + i * 1000).toISOString(),
+      i === 32 ? "failure" : "success",
     ),
-  ).toMatchObject({ reps: 2, lapses: 1 });
+  );
+  const now = "2026-10-02T08:00:00.000Z";
+  expect(schedule(attempts, now, "node-isolated")).toBeUndefined();
+  const stability = [];
+  for (const rating of ["Hard", "Good", "Easy"] as const) {
+    const observations = judged(attempts, rating);
+    const review = schedule(observations, now, "node-isolated");
+    expect(review).toMatchObject({
+      reps: 1,
+      lapses: 0,
+      lapsed: false,
+      lastReview: day("2026-10-01T08:00:00.000Z").end,
+    });
+    expect(review?.citations).toHaveLength(34);
+    expect(read(observations, now).nodes["node-isolated"]?.completion.complete).toBe(true);
+    stability.push(review?.stability ?? 0);
+    const retained = defaultTheory.initState(graph);
+    retained.step(attempts);
+    expect(retained.read(now).nodes["node-isolated"]?.schedule).toBeUndefined();
+    retained.step(observations.slice(attempts.length));
+    expect(retained.read(now).nodes["node-isolated"]?.schedule).toEqual(review);
+    retained.step([
+      { id: "obs-retraction", at: now, by: DEFAULT_THEORY_REF, payload: { kind: "retraction", of: "obs-0" } },
+    ]);
+    expect(retained.read(now).nodes["node-isolated"]?.schedule).toBeUndefined();
+  }
+  expect(stability[0]).toBeLessThan(stability[1] ?? 0);
+  expect(stability[1]).toBeLessThan(stability[2] ?? 0);
 });
 
-test("a success credits direct prerequisites only, and a failure lowers retrievability from then on", () => {
+test("a success credits direct prerequisites only, and the direct day's grade controls retrievability", () => {
   const success = attempt("obs-success", "node-dependent", "2026-10-01T08:00:00.000Z");
   const now = "2026-10-03T08:00:00.000Z";
   expect(schedule([success], now, "node-prerequisite")?.reps).toBe(1);
   expect(schedule([success], now, "node-ancestor")).toBeUndefined();
   expect(read([success], now).nodes["node-prerequisite"]?.label).toBe("unknown");
   const failure = attempt("obs-failure", "node-prerequisite", "2026-10-02T08:00:00.000Z", "failure");
-  const lapsed = read([success, failure], now);
-  expect(lapsed.nodes["node-prerequisite"]?.schedule?.lapses).toBe(1);
+  const initial = judged([success], "Hard");
+  const lapsed = read(judged([...initial, failure], "Hard"), now);
+  expect(lapsed.nodes["node-prerequisite"]?.schedule?.reps).toBe(2);
   expect(lapsed.nodes["node-prerequisite"]?.schedule?.retrievability).toBeLessThan(
-    schedule([success], now, "node-prerequisite")?.retrievability ?? 0,
+    schedule(judged([...initial, failure], "Good"), now, "node-prerequisite")?.retrievability ?? 0,
   );
-  expect(lapsed.nodes["node-dependent"]?.schedule).toEqual(read([success], now).nodes["node-dependent"]?.schedule);
+  expect(lapsed.nodes["node-dependent"]?.schedule).toEqual(read(initial, now).nodes["node-dependent"]?.schedule);
   expect(lapsed.nodes["node-ancestor"]?.schedule).toBeUndefined();
 });
 
-test("a Node's own attempt is its day's review even after a dependent's earlier success", () => {
-  const success = attempt("obs-success", "node-dependent", "2026-10-01T08:00:00.000Z");
-  const failure = attempt("obs-failure", "node-prerequisite", "2026-10-01T09:00:00.000Z", "failure");
-  expect(schedule([success, failure], "2026-10-02T08:00:00.000Z", "node-prerequisite")).toMatchObject({ reps: 1 });
-  expect(schedule([success, failure], "2026-10-02T08:00:00.000Z", "node-prerequisite")?.stability).toBe(
-    schedule([failure], "2026-10-02T08:00:00.000Z", "node-prerequisite")?.stability,
+test("an ungraded direct day withholds dependent credit and a grade replaces it", () => {
+  const success = attempt("obs-success", "node-dependent", "2026-10-01T23:59:00.000Z");
+  const failure = attempt("obs-failure", "node-prerequisite", "2026-10-02T00:01:00.000Z", "failure");
+  const now = "2026-10-02T21:00:00.000Z";
+  expect(schedule([success, failure], now, "node-prerequisite")).toBeUndefined();
+  expect(schedule(judged([success, failure], "Hard"), now, "node-prerequisite")).toMatchObject({
+    reps: 1,
+    lapsed: false,
+  });
+  const prior = judged([attempt("obs-prior", "node-prerequisite", "2026-10-01T08:00:00.000Z")]);
+  expect(schedule([...prior, success, failure], now, "node-prerequisite")).toEqual(
+    schedule(prior, now, "node-prerequisite"),
   );
+  const nextDay = attempt("obs-next", "node-dependent", "2026-10-02T20:00:00.000Z");
+  expect(schedule([...prior, success, failure, nextDay], now, "node-prerequisite")?.reps).toBe(2);
 });
 
-test("only an earlier direct success day or initializing knows claim makes a miss a lapse", () => {
-  const success = attempt("obs-success", "node-isolated", "2026-10-01T08:00:00.000Z");
-  const miss = attempt("obs-miss", "node-isolated", "2026-10-01T09:00:00.000Z", "failure");
-  const laterMiss = attempt("obs-later", "node-isolated", "2026-10-02T09:00:00.000Z", "failure");
-  const now = "2026-10-02T10:00:00.000Z";
-  expect(schedule([miss], now, "node-isolated")?.lapsed).toBe(false);
-  expect(schedule([success, miss], now, "node-isolated")?.lapsed).toBe(false);
-  expect(schedule([miss], now, "node-isolated")?.stability).toBeLessThan(
-    schedule([success], now, "node-isolated")?.stability ?? 0,
+test("Again lapses only after an earlier direct success day or initializing knows claim", () => {
+  const success = attempt("obs-success", "node-isolated", "2026-10-01T23:59:00.000Z");
+  const miss = attempt("obs-miss", "node-isolated", "2026-10-02T00:01:00.000Z", "failure");
+  const laterMiss = attempt("obs-later", "node-isolated", "2026-10-02T20:00:00.000Z", "failure");
+  const now = "2026-10-04T00:00:00.000Z";
+  expect(schedule(judged([miss], "Again"), now, "node-isolated")?.lapsed).toBe(false);
+  expect(schedule(judged([success, miss], "Again"), now, "node-isolated")?.lapsed).toBe(false);
+  expect(schedule(judged([miss], "Again"), now, "node-isolated")?.stability).toBeLessThan(
+    schedule(judged([success]), now, "node-isolated")?.stability ?? 0,
   );
-  expect(schedule([success, laterMiss], now, "node-isolated")?.lapsed).toBe(true);
-  expect(schedule([claim("obs-knows", "node-isolated", success.at), laterMiss], now, "node-isolated")?.lapsed).toBe(
-    true,
+  const graded = judged([success, laterMiss], (_node, boundary) =>
+    boundary.id === day(success.at).id ? "Good" : "Again",
   );
+  expect(schedule(graded, now, "node-isolated")).toMatchObject({ reps: 2, lapses: 1, lapsed: true });
+  expect(
+    schedule(judged([claim("obs-knows", "node-isolated", success.at), laterMiss], "Again"), now, "node-isolated")
+      ?.lapsed,
+  ).toBe(true);
   const implicit = attempt("obs-dependent", "node-dependent", success.at);
   const prerequisiteMiss = attempt("obs-prerequisite", "node-prerequisite", laterMiss.at, "failure");
-  expect(schedule([implicit, prerequisiteMiss], now, "node-prerequisite")?.lapsed).toBe(false);
+  expect(schedule(judged([implicit, prerequisiteMiss], "Again"), now, "node-prerequisite")?.lapsed).toBe(false);
   const diagnosis: Observation = {
     id: "obs-diagnosis",
     at: laterMiss.at,
+    learnerDay: day(laterMiss.at),
     by: DEFAULT_THEORY_REF,
     payload: { kind: "lapse", node: { node: "node-isolated", provenance: ref } },
   };
-  expect(schedule([diagnosis], now, "node-isolated")?.lapsed).toBe(false);
-  expect(schedule([success, diagnosis], now, "node-isolated")?.lapsed).toBe(true);
+  expect(schedule(judged([diagnosis], "Again"), now, "node-isolated")?.lapsed).toBe(false);
+  expect(
+    schedule(
+      judged([success, diagnosis], (_node, boundary) => (boundary.id === day(success.at).id ? "Good" : "Again")),
+      now,
+      "node-isolated",
+    )?.lapsed,
+  ).toBe(true);
+  const recovery = attempt("obs-recovered", "node-isolated", "2026-10-03T20:00:00.000Z");
+  expect(schedule([...graded, recovery], "2026-10-05T00:00:00.000Z", "node-isolated")?.lapsed).toBe(true);
+  expect(schedule(judged([...graded, recovery], "Hard"), "2026-10-05T00:00:00.000Z", "node-isolated")?.lapsed).toBe(
+    false,
+  );
 });
 
 test("a passed placement milestone keeps its evidence and schedule but never gets review tags", () => {
@@ -186,11 +268,14 @@ test("a passed placement milestone keeps its evidence and schedule but never get
       },
     ],
   });
-  const observations = [
-    attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
-    attempt("obs-2", "node-isolated", "2026-10-01T09:00:00.000Z"),
-    attempt("obs-3", "node-isolated", "2026-10-01T10:00:00.000Z", "failure"),
-  ];
+  const observations = judged(
+    [
+      attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
+      attempt("obs-2", "node-isolated", "2026-10-01T09:00:00.000Z"),
+      attempt("obs-3", "node-isolated", "2026-10-01T10:00:00.000Z", "failure"),
+    ],
+    "Hard",
+  );
   const now = "2027-10-01T11:00:00.000Z";
   const state = readTheoryState(defaultTheory, milestoneGraph, observations, now);
   expect(state.nodes["node-isolated"]?.completion.complete).toBe(true);
@@ -232,10 +317,10 @@ test("review tags apply to acquired Nodes at 0.9 and 0.7 and rank untaught depen
   expect(rank("node-prerequisite")).toBeGreaterThan(rank("node-claim"));
   expect(rank("node-claim")).toBeGreaterThan(rank("node-isolated"));
   const year = "2027-10-09T08:00:00.000Z";
-  const learned = [
+  const learned = judged([
     attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
     attempt("obs-2", "node-isolated", "2026-10-02T08:00:00.000Z"),
-  ];
+  ]);
   expect(read(learned, year).nodes["node-isolated"]?.label).toBe("demonstrated");
   expect(tags(learned, year, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
 });

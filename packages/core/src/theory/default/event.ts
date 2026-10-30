@@ -293,12 +293,20 @@ function* gradeDay(input: Extract<PlatformEvent, { kind: "day.ended" }>, ctx: Co
       ({ at }) => Date.parse(at) >= Date.parse(input.day.start) && Date.parse(at) < Date.parse(input.day.end),
     );
     if (evidence.length === 0) continue;
-    const earlierSuccess = history.some(
-      ({ at, payload }) =>
-        Date.parse(at) < Date.parse(input.day.start) &&
-        payload.kind === "demonstration" &&
-        payload.outcome === "success",
-    );
+    const earlierSuccess =
+      history.some(
+        ({ at, payload }) =>
+          Date.parse(at) < Date.parse(input.day.start) &&
+          payload.kind === "demonstration" &&
+          payload.outcome === "success",
+      ) ||
+      state.records.some(
+        ({ id, at, payload }) =>
+          payload.kind === "claim" &&
+          payload.stance === "knows" &&
+          Date.parse(at) < Date.parse(input.day.start) &&
+          state.nodes[node]?.schedule?.citations.includes(id),
+      );
     const decision = yield* judge(
       GRADE_DAY,
       {

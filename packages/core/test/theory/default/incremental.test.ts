@@ -95,10 +95,12 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
     };
     return resolvePatchBundle({ terminal: revisionRef, revisions: [revision] });
   }
+  const dayBoundary = (day: number) => ({ id: `day-${day}`, start: at(day, 4), end: at(day + 1, 4) });
   function authored(size: number): Observation[] {
     const observation = (id: string, day: number, payload: unknown, nodes?: readonly NodeId[]): Observation => ({
       id: `obs-${id}`,
       at: at(day),
+      learnerDay: dayBoundary(day),
       by: DEFAULT_THEORY_REF,
       payload,
       ...(nodes === undefined ? {} : { nodes }),
@@ -181,6 +183,18 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
     stream[1] = { ...required(stream[1]), at: at(0, 10) }; // Later arrival overrides same-day implicit credit.
     stream[10] = { ...required(stream[10]), cites: ["obs-direct"] };
     stream[11] = { ...required(stream[11]), cites: ["obs-direct"], supersedes: "obs-interpretation" };
+    for (const [id, node, day, source, rating] of [
+      ["grade-direct", "node-1", 0, "obs-direct", "Good"],
+      ["grade-own", "node-0", 0, "obs-late-own", "Hard"],
+      ["grade-lapse", "node-0", 1, "obs-lapse", "Again"],
+    ] as const)
+      stream.push({
+        ...observation(id, day + 1, { kind: "grade", node: { node, provenance: ref }, day: dayBoundary(day), rating }, [
+          node,
+        ]),
+        at: dayBoundary(day).end,
+        cites: [source],
+      });
     for (let i = 0; i < 14; i++) {
       const node: NodeId = `node-${random(size + 1)}`; // Includes a homeless Node.
       stream.push(
