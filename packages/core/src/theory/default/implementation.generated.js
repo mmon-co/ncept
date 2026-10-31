@@ -325,7 +325,7 @@ A Mission is a concretely demonstrable long term goal that the learner wants dir
 
 1. **Read the learner's existing Missions.** A goal that has moved is a revision of its Mission, one they no longer want is retired, and only an unrelated goal is a new Mission.
 
-2. **Research the goal on the Hub and the web.** Find what high-level approaches exist, reading only what you don't already know. Suggest adopting a Hub Patch if you'd chart no better yourself for this learner's approach; then tell them what it covers and how it differs.
+2. **Research the goal on the Hub and the web.** Find what high-level approaches exist, reading only what you don't already know. If a Hub template fits this learner's approach as well as you'd chart it yourself, tell them what it covers and how it differs, and propose charting from it.
 
 3. **Interview the learner maieutically.** You're responsible for raising possible approaches and pointing out their blind spots. They're responsible for deciding what exactly they want. If the learner seems unaware of something relevant (eg existing materials, pedagogical approaches, or lines of thought), you should tell them about it rather than affirming what they feel to be novel. Don't be afraid to be a bit disagreeable. Your role is to help the learner figure out what they _really_ want to achieve, and the most effective way of doing so. Don't always take the learner's words at face value.
 
