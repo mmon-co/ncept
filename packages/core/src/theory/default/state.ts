@@ -88,6 +88,11 @@ export interface Grade {
   readonly day: LearnerDay;
   readonly rating: "Again" | "Hard" | "Good" | "Easy";
 }
+/** A passed Review clears the path until a grade covering that Review sets retention. */
+export interface ReviewPass {
+  readonly kind: "review-pass";
+  readonly node: NodeRef;
+}
 export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
 /** An accepted operation, not a demonstration of every clause of a Node's criterion. */
 export interface FeatureUse {
@@ -151,6 +156,7 @@ export type DefaultPayload =
   | Demonstration
   | Lapse
   | Grade
+  | ReviewPass
   | FeatureUse
   | Teaching
   | Claim
@@ -272,6 +278,9 @@ export function isGrade(value: unknown): value is Grade {
     ["Again", "Hard", "Good", "Easy"].includes(value.rating)
   );
 }
+export function isReviewPass(value: unknown): value is ReviewPass {
+  return object(value) && value.kind === "review-pass" && isNodeRef(value.node);
+}
 export function isRetrievalOpenerDemonstration(value: unknown): value is RetrievalOpenerDemonstration {
   return isDemonstration(value) && value.recording === "retrieval-opener";
 }
@@ -390,6 +399,9 @@ function assertDefaultPayload(payload: unknown): void {
       break;
     case "grade":
       valid = isGrade(payload);
+      break;
+    case "review-pass":
+      valid = isReviewPass(payload);
       break;
     case "feature-use":
       valid = isFeatureUse(payload);
@@ -627,6 +639,8 @@ export interface NodeState {
   /** Original active evidence in chronological order; never memory or summaries. */
   readonly records: readonly HomedRecord[];
   readonly schedule?: NodeSchedule;
+  /** A successful Review awaiting its day grade; not a change to the FSRS card. */
+  readonly reviewCleared?: boolean;
 }
 
 /** The latest tentative competence report, newer than any actual failure. */
@@ -827,6 +841,7 @@ interface DefaultObservationIndex {
   readonly memoryPlacements: Map<ObservationId, MemoryPlacement>;
   readonly lapses: Map<NodeId, readonly Observation<Lapse>[]>;
   readonly grades: Map<NodeId, readonly Observation<Grade>[]>;
+  readonly reviewPasses: Map<NodeId, readonly Observation<ReviewPass>[]>;
   readonly featureUses: Map<NodeId, readonly Observation<FeatureUse>[]>;
   readonly memories: Map<NodeId, readonly Observation<Memory>[]>;
   readonly summaries: Map<NodeId, readonly Observation<MemorySummaryPayload>[]>;
@@ -919,7 +934,7 @@ interface RecordPlacement {
 }
 interface PreparedDefaultEvidence {
   readonly graphIndex: DefaultGraphIndex;
-  readonly index: Pick<DefaultObservationIndex, "lapses" | "grades" | "featureUses">;
+  readonly index: Pick<DefaultObservationIndex, "lapses" | "grades" | "reviewPasses" | "featureUses">;
   readonly observations: readonly Observation[];
   readonly records: readonly HomedRecord[];
   readonly homed: Readonly<Partial<Record<NodeId, readonly HomedRecord[]>>>;
@@ -965,6 +980,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
   const memoryUsers: Buckets<ObservationId, readonly NodeId[]> = new Map();
   const lapseEntries: Buckets<NodeId, Observation<Lapse>> = new Map();
   const gradeEntries: Buckets<NodeId, Observation<Grade>> = new Map();
+  const reviewPassEntries: Buckets<NodeId, Observation<ReviewPass>> = new Map();
   const featureEntries: Buckets<NodeId, Observation<FeatureUse>> = new Map();
   const memoryEntries: Buckets<NodeId, Observation<Memory>> = new Map();
   const summaryEntries: Buckets<NodeId, Observation<MemorySummaryPayload>> = new Map();
@@ -975,6 +991,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     memoryPlacements: new Map(),
     lapses: new Map(),
     grades: new Map(),
+    reviewPasses: new Map(),
     featureUses: new Map(),
     memories: new Map(),
     summaries: new Map(),
@@ -1075,6 +1092,9 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       dirtyAux.add(payload.node.node);
     } else if (isGrade(payload)) {
       changeBucket(gradeEntries, payload.node.node, entry.position, { ...observation, payload }, add);
+      dirtyAux.add(payload.node.node);
+    } else if (isReviewPass(payload)) {
+      changeBucket(reviewPassEntries, payload.node.node, entry.position, { ...observation, payload }, add);
       dirtyAux.add(payload.node.node);
     } else if (isFeatureUse(payload)) {
       for (const node of new Set(observation.nodes)) {
@@ -1282,6 +1302,7 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     for (const node of dirtyAux) {
       index.lapses.set(node, bucketValues(lapseEntries.get(node)));
       index.grades.set(node, bucketValues(gradeEntries.get(node)));
+      index.reviewPasses.set(node, bucketValues(reviewPassEntries.get(node)));
       index.featureUses.set(node, bucketValues(featureEntries.get(node)));
       index.memories.set(node, bucketValues(memoryEntries.get(node)));
       index.summaries.set(node, bucketValues(summaryEntries.get(node)));
@@ -1376,7 +1397,12 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       for (const prerequisite of graphIndex.prerequisites.get(node) ?? []) affected.add(prerequisite);
     prepared = {
       graphIndex,
-      index: { lapses: new Map(index.lapses), grades: new Map(index.grades), featureUses: new Map(index.featureUses) },
+      index: {
+        lapses: new Map(index.lapses),
+        grades: new Map(index.grades),
+        reviewPasses: new Map(index.reviewPasses),
+        featureUses: new Map(index.featureUses),
+      },
       observations: observationsChanged
         ? [...effective].sort((left, right) => left.position - right.position).map(({ observation }) => observation)
         : (prepared?.observations ?? []),
@@ -1551,6 +1577,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
   const successes = new Map<NodeId, readonly HomedRecord[]>();
   const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
   const acquisition = new Map<NodeId, NodeState>();
+  const reviewClearances = new Map<NodeId, boolean>();
   let history = prepareCompletionHistory([]);
   let boundary = -1;
   let initialized = false;
@@ -1602,6 +1629,27 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       const featureUses = index.featureUses.get(id) ?? [];
       if (!initialized || dirtySchedules.has(id)) {
         const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
+        const records = own.get(id) ?? [];
+        const grades = activeNodeGrades(index.grades.get(id) ?? [], [
+          ...records.flatMap((record) =>
+            isDemonstration(record.payload) && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
+          ),
+          ...(index.lapses.get(id) ?? []),
+        ]);
+        const supportedSuccesses = new Set(
+          records
+            .filter(({ payload }) => isDemonstration(payload) && payload.unaided && payload.outcome === "success")
+            .map(({ id }) => id),
+        );
+        reviewClearances.set(
+          id,
+          (index.reviewPasses.get(id) ?? []).some(
+            (pass) =>
+              (pass.cites?.length ?? 0) > 0 &&
+              pass.cites?.every((source) => supportedSuccesses.has(source)) &&
+              !grades.some(({ payload }) => Date.parse(payload.day.end) > Date.parse(pass.at)),
+          ),
+        );
         // Grade/support changes and late direct evidence replace the affected day's review;
         // replay only this Node's chronology rather than retaining a second retention state.
         schedules.set(
@@ -1626,7 +1674,12 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
                 card.stability,
               ),
             };
-      nodes[id] = { ...facts, featureUses, ...(schedule === undefined ? {} : { schedule }) };
+      nodes[id] = {
+        ...facts,
+        featureUses,
+        reviewCleared: reviewClearances.get(id) ?? false,
+        ...(schedule === undefined ? {} : { schedule }),
+      };
     }
     if (projectionChanged) evidenceKey = {};
     if (indicatorsChanged) indicatorKey = {};

@@ -22,6 +22,7 @@ import { pathDefault } from "./path";
 import { refinePendingHomes } from "./event";
 import {
   activeDefaultRecords,
+  completionNodeRef,
   electedObservations,
   assertDefaultRetraction,
   emptyNodeMemory,
@@ -535,7 +536,30 @@ export const defaultInstrumentTools = [
     }),
     *run(raw, ctx) {
       const input = args(raw, ["practising"]);
-      return closeRecount(ctx, input.practising);
+      const recount = closeRecount(ctx, input.practising);
+      if (ctx.entry?.kind === "review") {
+        const session = new Set(ctx.sessionObservations ?? []);
+        for (const node of ctx.entry.nodes) {
+          const verdict = ctx.state.nodes[node]?.records.findLast(
+            (record) => session.has(record.id) && isDemonstration(record.payload),
+          );
+          if (
+            verdict === undefined ||
+            !isDemonstration(verdict.payload) ||
+            !verdict.payload.unaided ||
+            verdict.payload.outcome !== "success"
+          )
+            continue;
+          yield* write({
+            at: ctx.now,
+            surface: ctx.surface,
+            nodes: [node],
+            cites: [verdict.id],
+            payload: { kind: "review-pass", node: completionNodeRef(ctx.graph, node) },
+          });
+        }
+      }
+      return recount;
     },
   },
 ] satisfies readonly DefaultTool[];

@@ -61,12 +61,14 @@ export const defaultQueryTokens = {
   "review:due": select(
     (node, graph, id) =>
       pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
     (node, graph, id) =>
       pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
   ),
