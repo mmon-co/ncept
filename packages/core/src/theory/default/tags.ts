@@ -28,9 +28,9 @@ export function isDefaultReviewable(node: NodeState): boolean {
 
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */
 type QueryToken = (state: DefaultState, graph: ResolvedGraph, reached?: ReadonlySet<NodeId>) => ReadonlySet<NodeId>;
-function select(predicate: (node: NodeState) => boolean): QueryToken {
+function select(predicate: (node: NodeState, graph: ResolvedGraph, id: NodeId) => boolean): QueryToken {
   return (state, graph) =>
-    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id));
+    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id), graph, id)).map(({ id }) => id));
 }
 function reachableNodes(state: DefaultState, graph: ResolvedGraph): ReadonlySet<NodeId> {
   return new Set(
@@ -59,12 +59,16 @@ export const defaultQueryTokens = {
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   "review:due": select(
-    (node) =>
+    (node, graph, id) =>
+      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
-    (node) =>
+    (node, graph, id) =>
+      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
   ),
