@@ -14,6 +14,7 @@ import type {
 } from "./model";
 import { exactPatchRefKey, NODE_LABEL_PROPERTY } from "./model";
 import { metadataSetsForEntity } from "./metadata";
+import { nodeCascadedProperty } from "./guidance";
 import { projectVisualGraph } from "./project";
 import { resolvePatchBundle } from "./resolve";
 import { selectGraph } from "./select";
@@ -269,6 +270,52 @@ function approximateReport(
   return reportFor(bundle.terminal, nodes, edges, labelled, targets);
 }
 
+/**
+ * Elaborations retain their coarse Node's method. An authored tag definition is the complete
+ * membership choice, including explicit exclusions; generated discovery tags describe immutable
+ * release closures, not an authored strand.
+ */
+function carryElaborationTags(
+  bundle: ClosedPatchBundle,
+  operations: SemanticDelta["operations"],
+): SemanticDelta["operations"] {
+  const before = resolvePatchBundle(bundle);
+  const existing = new Set(before.nodes.map(({ id }) => id));
+  const added = new Set(
+    operations.flatMap((op) => (op.kind === "add-node" && !existing.has(op.node.id) ? [op.node.id] : [])),
+  );
+  const parents = new Map<NodeId, Set<NodeId>>();
+  for (const op of operations) {
+    if (op.kind !== "add-edge" || !added.has(op.edge.from)) continue;
+    if (nodeCascadedProperty(before, op.edge.to, "pedagogy:elaborate") !== true) continue;
+    const children = parents.get(op.edge.to) ?? new Set<NodeId>();
+    children.add(op.edge.from);
+    parents.set(op.edge.to, children);
+  }
+  if (!parents.size) return operations;
+  const explicit = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
+  const authored = new Set(
+    bundle.revisions.flatMap((revision) =>
+      revision.delta.operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])),
+    ),
+  );
+  return [
+    ...operations,
+    ...before.tags.flatMap((tag): SemanticDelta["operations"] => {
+      if (tag.name.startsWith("lesson:") || explicit.has(tag.name) || !authored.has(tag.name)) return [];
+      const nodes = new Set(tag.nodes);
+      for (const parent of tag.nodes) for (const child of parents.get(parent) ?? []) nodes.add(child);
+      if (nodes.size === tag.nodes.length) return [];
+      return [
+        {
+          kind: "define-tag",
+          tag: { name: tag.name, nodes: [...nodes].sort(), edges: tag.edges, metadataSets: tag.metadataSets },
+        },
+      ];
+    }),
+  ];
+}
+
 /** Compile a proposed delta against one exact User graph and describe its Mission cone. */
 export function compileGraphDiff(
   bundle: ClosedPatchBundle,
@@ -277,6 +324,7 @@ export function compileGraphDiff(
   citations: PatchMetadata["citations"] = [],
   retractions: readonly string[] = [],
 ): CompiledGraphDiff {
+  operations = carryElaborationTags(bundle, operations);
   let graph: ResolvedGraph;
   try {
     graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations, retractions));

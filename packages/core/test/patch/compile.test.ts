@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { compileGraph, compileGraphDiff, GraphDiffCompileError } from "../../src/patch/compile";
-import type { ClosedPatchBundle, PatchRevision } from "../../src/patch/model";
+import type { ClosedPatchBundle, NodeId, PatchRevision, ResolvedGraph, SemanticOperation } from "../../src/patch/model";
 
 const revision: PatchRevision = {
   ref: {
@@ -291,4 +291,89 @@ test("content source follows the effective display label after metadata edits", 
     label: "Vectors, revised",
     contentSource: contribution.ref,
   });
+});
+
+const templateRevision: PatchRevision = {
+  ref: { identity: "patch-language-template", digest: `sha256:${"b".repeat(64)}` },
+  bases: [],
+  metadata: { properties: { "patch:title": "Language template" }, citations: [] },
+  delta: {
+    operations: [
+      { kind: "add-node", node: { id: "node-lexicon" } },
+      { kind: "add-node", node: { id: "node-grammar" } },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-lexicon",
+          subjects: [{ kind: "node", id: "node-lexicon" }],
+          properties: { "display:label": "Lexicon", "pedagogy:elaborate": true },
+        },
+      },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-grammar",
+          subjects: [{ kind: "node", id: "node-grammar" }],
+          properties: { "display:label": "Grammar", "pedagogy:elaborate": false },
+        },
+      },
+      {
+        kind: "define-tag",
+        tag: { name: "language", nodes: ["node-lexicon", "node-grammar"], edges: [], metadataSets: [] },
+      },
+      { kind: "define-tag", tag: { name: "strand:lexicon", nodes: ["node-lexicon"], edges: [], metadataSets: [] } },
+      { kind: "define-tag", tag: { name: "lesson:first-words", nodes: ["node-lexicon"], edges: [], metadataSets: [] } },
+    ],
+  },
+};
+const templateBundle: ClosedPatchBundle = { terminal: templateRevision.ref, revisions: [templateRevision] };
+
+function elaboration(child: NodeId, parent: NodeId): SemanticOperation[] {
+  return [
+    { kind: "add-node", node: { id: child } },
+    {
+      kind: "add-metadata-set",
+      metadataSet: {
+        id: `metadata-${child}`,
+        subjects: [{ kind: "node", id: child }],
+        properties: { "display:label": child },
+      },
+    },
+    { kind: "add-edge", edge: { id: `edge-${child}`, from: child, to: parent } },
+  ];
+}
+
+function membership(diff: { graph: ResolvedGraph }, node: NodeId): string[] {
+  return diff.graph.tags.filter((tag) => tag.nodes.includes(node)).map(({ name }) => name);
+}
+
+test("a new prerequisite of an elaborate Node joins its authored method tags, but not lesson tags", () => {
+  const diff = compileGraphDiff(
+    templateBundle,
+    [...elaboration("node-words", "node-lexicon"), ...elaboration("node-verbs", "node-grammar")],
+    ["node-lexicon"],
+  );
+  expect(membership(diff, "node-words")).toEqual(["language", "strand:lexicon"]);
+  // Grammar is not marked elaborate, so its new prerequisite has nothing to follow.
+  expect(membership(diff, "node-verbs")).toEqual([]);
+  // The returned operations alone reproduce the membership.
+  expect(membership(compileGraphDiff(templateBundle, diff.operations, ["node-lexicon"]), "node-words")).toEqual([
+    "language",
+    "strand:lexicon",
+  ]);
+});
+
+test("an explicit tag definition is the complete membership and excludes a prerequisite", () => {
+  const diff = compileGraphDiff(
+    templateBundle,
+    [
+      ...elaboration("node-words", "node-lexicon"),
+      {
+        kind: "define-tag",
+        tag: { name: "language", nodes: ["node-lexicon", "node-grammar"], edges: [], metadataSets: [] },
+      },
+    ],
+    ["node-lexicon"],
+  );
+  expect(membership(diff, "node-words")).toEqual(["strand:lexicon"]);
 });

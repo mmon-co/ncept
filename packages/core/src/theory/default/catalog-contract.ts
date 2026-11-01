@@ -72,7 +72,7 @@ export interface FetchPageToolInput {
 }
 
 export interface ProposeToolInput {
-  readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "mode" | "missing-capability";
+  readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "settings" | "mode" | "missing-capability";
   readonly input: CatalogArguments;
 }
 
