@@ -1,14 +1,9 @@
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
-import type { ChatContext, LessonSnapshot } from "../../../src/theory";
-import {
-  defaultTheory,
-  readMilestoneDiagnosis,
-  type DefaultState,
-  type MilestoneDiagnosis,
-} from "../../../src/theory/default";
+import { readTheoryState, type ChatContext, type LessonSnapshot } from "../../../src/theory";
+import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "../../../src/theory/default";
 
-test("historical milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
+test("host milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
   const revision: PatchRevision = {
     ref: { identity: "patch-milestone-diagnosis", digest: `sha256:${"a".repeat(64)}` },
     bases: [],
@@ -49,7 +44,7 @@ test("historical milestone diagnosis reaches check-in; numbered Lessons close fr
   };
   const ctx: ChatContext<DefaultState> = {
     graph,
-    state: defaultTheory.state(graph, [], now),
+    state: readTheoryState(defaultTheory, graph, [], now),
     now,
     surface: "surface-milestone",
     mode: "lesson",
@@ -68,23 +63,21 @@ test("historical milestone diagnosis reaches check-in; numbered Lessons close fr
     ],
     regressedComponents: ["node-component"],
   };
-  const program = close.run({ op: "record", kind: "close-recount", input: { milestoneDiagnosis: diagnosis } }, ctx);
+  const program = close.run({ op: "record", kind: "close-recount", input: {} }, ctx);
   expect(() => program.next()).toThrow("The host closes Lessons from their own Material records");
-  // Historical checkpoints retain their accepted diagnosis; live Lessons no longer mint recounts.
-  const acceptedDiagnosis = readMilestoneDiagnosis(diagnosis);
-  expect(acceptedDiagnosis).toEqual(diagnosis);
+  // The host supplies diagnosis in the Checkpoint opening, never a close-recount input.
   const opening = {
     kind: "checkpoint" as const,
     missionId: lesson.mission.id,
     milestone: lesson.section.milestone,
     sessionId: "session-milestone",
     closedAt: now,
-    outcome: { kind: "diagnosis", diagnosis: acceptedDiagnosis },
+    outcome: { kind: "diagnosis", diagnosis },
   };
   const checkIn = defaultTheory.modes.charting
     .setup({ ...ctx, surface: "surface-check-in", mode: "charting", entry: opening })
     .next();
   if (!checkIn.done) throw new Error("Check-in setup unexpectedly requested an effect");
   expect(checkIn.value.context).toContain(`Session opening (host-resolved facts):\n${JSON.stringify(opening)}`);
-  expect(ctx.state).toEqual(defaultTheory.state(graph, [], now));
+  expect(ctx.state).toEqual(readTheoryState(defaultTheory, graph, [], now));
 });

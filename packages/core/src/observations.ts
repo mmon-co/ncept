@@ -8,8 +8,14 @@ export type ObjectId = `object-${string}`;
 export type TheoryRef = Readonly<{ theory: string; version: string }>;
 /** Host-computed relation to selected history; not authored evidence. */
 export type SourceStanding = "selected" | "abandoned" | "unscoped";
+/** A host-resolved 04:00–04:00 local day; [start, end), with an opaque day identity. */
+export type LearnerDay = Readonly<{ id: string; start: string; end: string }>;
 export interface Observation<P = unknown> {
+  /** Host-read day boundary, like standing; absent until the browser reports a zone. */
+  readonly learnerDay?: LearnerDay;
   readonly standing?: SourceStanding;
+  /** Host-read lifecycle of a review card, not authored evidence; absent for other sources. */
+  readonly materialPresent?: boolean;
   readonly id: ObservationId;
   readonly at: string;
   readonly by: "platform" | TheoryRef;
@@ -21,7 +27,10 @@ export interface Observation<P = unknown> {
   readonly supersedes?: ObservationId;
   readonly payload: P;
 }
-export type ObservationWrite<P = unknown> = Omit<Observation<P>, "id" | "at" | "by" | "standing"> & {
+export type ObservationWrite<P = unknown> = Omit<
+  Observation<P>,
+  "id" | "at" | "by" | "standing" | "materialPresent" | "learnerDay"
+> & {
   readonly at?: string;
 };
 export type TranscriptSpan = Readonly<{ from: string; to: string }>;
@@ -37,6 +46,7 @@ export interface Transcript {
   }[];
 }
 export type PlatformEvent =
+  | { readonly kind: "day.ended"; readonly day: LearnerDay; readonly about: readonly NodeId[] }
   | {
       readonly kind: "surface.open";
       readonly surface: SurfaceId;
@@ -51,6 +61,7 @@ export type PlatformEvent =
     }
   | {
       readonly kind: "outcome";
+      readonly material?: { readonly playground: string; readonly id: string };
       readonly surface: SurfaceId;
       readonly at: string;
       readonly about?: readonly NodeId[];

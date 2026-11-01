@@ -30,7 +30,7 @@ export interface ReadToolInput {
   /** Bypass context-relative deltas and return the complete result. */
   readonly full?: boolean;
   /** Omitted resource means this Session's graph. */
-  readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch";
+  readonly resource?: "graph" | "view" | "session" | "artifact" | "material" | "applet" | "patch" | "update";
   readonly input?: CatalogArguments;
   readonly cursor?: string;
   readonly limit?: number;
@@ -72,7 +72,7 @@ export interface FetchPageToolInput {
 }
 
 export interface ProposeToolInput {
-  readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "mode" | "missing-capability";
+  readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "settings" | "mode" | "missing-capability";
   readonly input: CatalogArguments;
 }
 
@@ -135,6 +135,7 @@ export const CATALOG_MODE_TOOLS = {
     "web_search",
     "fetch_page",
     "bash",
+    "undo",
   ],
   // Author proposes Missions and revisions that the captured Patch ships.
   authoring: [
@@ -148,7 +149,27 @@ export const CATALOG_MODE_TOOLS = {
     "web_search",
     "fetch_page",
     "bash",
+    "undo",
     "material",
   ],
-  lesson: ["query", "read", "theory", "skill", "report_friction", "material", "evaluation", "propose"],
+  lesson: [
+    "query",
+    "read",
+    "theory",
+    "skill",
+    "report_friction",
+    "material",
+    "edit_metadata",
+    "evaluation",
+    "propose",
+    "bash",
+    "undo",
+    "fetch_page",
+  ],
 } as const;
+
+/** The keys each mode's edit_metadata may write; the tool is mounted only where a list exists. */
+export const CATALOG_MODE_METADATA_KEYS: Readonly<Partial<Record<keyof typeof CATALOG_MODE_TOOLS, readonly string[]>>> =
+  {
+    lesson: ["pedagogy:completion"],
+  };

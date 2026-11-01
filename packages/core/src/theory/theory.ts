@@ -14,8 +14,6 @@ import type {
 export type MessageDescriptor = Readonly<{
   id: string;
   defaultMessage: string;
-  /** Caption without the leading rank, for presentations that draw it separately. */
-  remainderMessage?: string;
   values?: Readonly<
     Record<
       string,
@@ -75,7 +73,13 @@ export type Lesson = Readonly<{
   nodes: readonly NodeId[];
   review?: true;
   /** The check-in after `milestone`; absent for the check-in before the first span. */
-  checkpoint?: Readonly<{ milestone?: NodeId; required: boolean; final?: true }>;
+  checkpoint?: Readonly<{
+    milestone?: NodeId;
+    required: boolean;
+    final?: true;
+    /** Host-inserted update stop; never emitted by the theory's graph-only path. */
+    updates?: readonly { patch: string; title: string; version: string }[];
+  }>;
 }>;
 export type MissionPath = Readonly<{
   /** The first section's milestone is shown as 0 when no unclaimed Lesson precedes it, else 1. */
@@ -152,6 +156,8 @@ export type MissionContext = Readonly<{
   id: string;
   /** What to ask first at this Mission's opening, not text to quote verbatim. */
   openingGuidance?: string;
+  /** Verbatim tutor message prompting the learner’s first action. */
+  openingMessage?: string;
   /** Effective current Mission revision; the tutor passes this value as `revises`. */
   change: string;
   statement: string;
@@ -201,11 +207,19 @@ export type Skill = Readonly<{
   body: string;
   resources?: readonly import("./skills").SkillResource[];
 }>;
+/** A graph-bound replay of immutable observations in logical order. */
+export interface TheoryState<S> {
+  /** Append a logical suffix; changed prefixes require a fresh reducer. */
+  step(observations: readonly Observation[]): void;
+  /** Read at any valid instant. Later steps or reads must not mutate this snapshot. */
+  read(now: string): S;
+}
+
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly version: string;
   readonly digest: ContentDigest;
-  state(graph: ResolvedGraph, observations: readonly Observation[], now: string): S;
+  initState(graph: ResolvedGraph): TheoryState<S>;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
   progress(graph: ResolvedGraph, projection: TheoryProjection, nodes: readonly NodeId[]): Progress;
@@ -224,4 +238,31 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   };
   event(event: PlatformEvent, ctx: Context<S>): Program<void>;
 }
+/** The pure state operation, derived from the theory's defining reducer. */
+export function readTheoryState<S>(
+  theory: Pick<Theory<S>, "initState">,
+  graph: ResolvedGraph,
+  observations: readonly Observation[],
+  now: string,
+): S {
+  const state = theory.initState(graph);
+  state.step(observations);
+  return state.read(now);
+}
+
+/** Explicit adapter for pure whole-list theories; no incremental cost guarantee. */
+export function initListTheoryState<S>(
+  graph: ResolvedGraph,
+  readState: (graph: ResolvedGraph, observations: readonly Observation[], now: string) => S,
+): TheoryState<S> {
+  const observations: Observation[] = [];
+  return {
+    step(suffix) {
+      for (const observation of suffix) observations.push(observation);
+    },
+    // A pure function may return its input list; never expose the growing accumulator.
+    read: (now) => readState(graph, observations.slice(), now),
+  };
+}
+
 export type TheoryRelease = Readonly<{ ref: TheoryRef; digest: ContentDigest }>;

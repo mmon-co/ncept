@@ -7,7 +7,17 @@ export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" |
 
 /** @public Resolved entry facts; the host resolves Lesson selectors before calling the theory. */
 export type ModeEntry =
-  | Readonly<{ kind: "goal"; text: string }>
+  | Readonly<{
+      kind: "goal";
+      text: string;
+      adoptedPatch?: Readonly<{
+        patchId: string;
+        digest: string;
+        version: string;
+        instanceId?: string;
+        title: string;
+      }>;
+    }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>
   | Readonly<{ kind: "lesson"; lesson: LessonSnapshot }>

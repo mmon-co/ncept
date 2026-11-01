@@ -318,22 +318,89 @@ export function resolveVariantBundle(
   };
 }
 
-/** One confirmed variant layer the host selected for the source release currently in scope. */
+/** The ordered variant layers selected for one adopted source, highest priority last. */
 export interface PatchVariantLayer {
   readonly source: ClosedPatchBundle;
-  readonly variant: ClosedPatchBundle;
+  readonly variants: readonly ClosedPatchBundle[];
   readonly sourceVersion: string;
+}
+
+/** Rebase each mask against the source, never against another translation. A higher layer
+ * also masks the lower layers' contributions to that same entity/property, so partial
+ * translations retain lower-layer text and Materials do not become conflicting additions. */
+function stackVariantBundles(
+  source: ClosedPatchBundle,
+  variants: readonly ClosedPatchBundle[],
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+): { readonly bundle: ClosedPatchBundle; readonly staleMasks: ExactContributionMask[] } {
+  let bundle = source;
+  const staleMasks: ExactContributionMask[] = [];
+  const sourceRefs = new Set(source.revisions.map(({ ref }) => exactPatchRefKey(ref)));
+  for (const variant of variants) {
+    try {
+      const layer = variantOverlayBundle(source, variant, sourceVersion, availablePlaygrounds);
+      if (!layer.applied) continue;
+      const owner = layer.bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, layer.bundle.terminal));
+      if (!owner || bundle.revisions.some(({ ref }) => sameExactPatchRef(ref, owner.ref))) continue;
+      const masks = owner.delta.operations.flatMap((operation) =>
+        operation.kind === "mask-contribution" ? [operation.mask] : [],
+      );
+      const overrides: SemanticOperation[] = bundle.revisions
+        .filter(({ ref }) => !sourceRefs.has(exactPatchRefKey(ref)))
+        .flatMap((revision) =>
+          revision.delta.operations.flatMap((operation, operationIndex) =>
+            masks
+              .filter((mask) => matchesMask(operation, mask) && contributedValue(operation, mask) !== undefined)
+              .map((mask): SemanticOperation => ({
+                kind: "mask-contribution",
+                mask: { ...mask, source: revision.ref, operationIndex },
+              })),
+          ),
+        );
+      const stacked = {
+        ...owner,
+        bases: owner.bases.map((ref) => (sameExactPatchRef(ref, source.terminal) ? bundle.terminal : ref)),
+        delta: { ...owner.delta, operations: [...owner.delta.operations, ...overrides] },
+      };
+      const revisions = new Map(
+        [...bundle.revisions, ...layer.bundle.revisions].map((revision) => [exactPatchRefKey(revision.ref), revision]),
+      );
+      revisions.set(exactPatchRefKey(stacked.ref), stacked);
+      const next = { terminal: stacked.ref, revisions: [...revisions.values()] };
+      resolvePatchBundle(next, availablePlaygrounds);
+      bundle = next;
+      staleMasks.push(...layer.staleMasks);
+    } catch (error) {
+      if (!(error instanceof PatchCompileError)) throw error;
+    }
+  }
+  return { bundle, staleMasks };
+}
+
+/** A source release read through a stack of variant layers, as a template copy takes its words.
+ * A layer that does not compile over the source gives way, as in a Notebook reading. */
+export function resolveVariantStack(
+  source: ClosedPatchBundle,
+  variants: readonly ClosedPatchBundle[],
+  sourceVersion: string,
+  availablePlaygrounds?: ReadonlySet<string>,
+) {
+  return resolvePatchBundle(
+    stackVariantBundles(source, variants, sourceVersion, availablePlaygrounds).bundle,
+    availablePlaygrounds,
+  );
 }
 
 function composeVariantLayer(
   notebook: ClosedPatchBundle,
   source: ClosedPatchBundle,
-  variant: ClosedPatchBundle,
+  variants: readonly ClosedPatchBundle[],
   sourceVersion: string,
   availablePlaygrounds?: ReadonlySet<string>,
 ): { readonly bundle: ClosedPatchBundle; readonly staleMasks: ExactContributionMask[] } {
-  const layer = variantOverlayBundle(source, variant, sourceVersion, availablePlaygrounds);
-  if (!layer.applied) return { bundle: notebook, staleMasks: [] };
+  const layer = stackVariantBundles(source, variants, sourceVersion, availablePlaygrounds);
+  if (layer.bundle === source) return { bundle: notebook, staleMasks: [] };
   const terminal = notebook.revisions.find(({ ref }) => sameExactPatchRef(ref, notebook.terminal));
   if (!terminal) throw new PatchCompileError("invalid-bundle", "Notebook terminal revision is missing");
   if (!terminal.bases.some((base) => sameExactPatchRef(base, source.terminal)))
@@ -364,7 +431,7 @@ function composeVariantLayer(
   };
 }
 
-/** Read an adopted Notebook with its confirmed variants layered in their adoption order.
+/** Read an adopted Notebook with its variants layered in their adoption order.
  * A layer that does not compile over its source gives way whole: its learners read the source
  * release rather than losing the graph to one variant's authoring error. */
 export function resolvePatchBundleWithVariants(
@@ -380,7 +447,7 @@ export function resolvePatchBundleWithVariants(
       const composed = composeVariantLayer(
         projected,
         layer.source,
-        layer.variant,
+        layer.variants,
         layer.sourceVersion,
         availablePlaygrounds,
       );
@@ -403,7 +470,11 @@ export function resolvePatchBundleWithVariant(
   sourceVersion: string,
   availablePlaygrounds?: ReadonlySet<string>,
 ): VariantResolution {
-  return resolvePatchBundleWithVariants(notebook, [{ source, variant, sourceVersion }], availablePlaygrounds);
+  return resolvePatchBundleWithVariants(
+    notebook,
+    [{ source, variants: [variant], sourceVersion }],
+    availablePlaygrounds,
+  );
 }
 interface Contribution<Value> {
   readonly value: Value;
@@ -513,17 +584,36 @@ export function resolveAvailablePatchGraph(
   ];
   if (supplied.size === direct.size) {
     const bundle = { terminal: terminal.ref, revisions: [...revisions(bases), terminal] };
-    return { ...resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds).graph, terminal: terminal.ref };
+    const { graph } = resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds);
+    if (sameExactPatchRef(graph.terminal, terminal.ref)) return graph;
+    // Variant composition changes only the Notebook's base pointers, not its delta.
+    // Its operations still belong to the recorded checkpoint, never the virtual revision.
+    const patch = (ref: ExactPatchRef): ExactPatchRef => (sameExactPatchRef(ref, graph.terminal) ? terminal.ref : ref);
+    const provenance = (entries: Readonly<Record<string, readonly ContributionProvenance[]>>) =>
+      Object.fromEntries(
+        Object.entries(entries).map(([id, contributions]) => [
+          id,
+          contributions.map((contribution) => ({ ...contribution, patch: patch(contribution.patch) })),
+        ]),
+      );
+    return {
+      ...graph,
+      terminal: terminal.ref,
+      patchOrder: graph.patchOrder.map(patch),
+      provenance: {
+        nodes: provenance(graph.provenance.nodes),
+        edges: provenance(graph.provenance.edges),
+        metadataSets: provenance(graph.provenance.metadataSets),
+        materials: provenance(graph.provenance.materials),
+        metadataProperties: Object.fromEntries(
+          Object.entries(graph.provenance.metadataProperties).map(([id, properties]) => [id, provenance(properties)]),
+        ),
+      },
+    };
   }
   const projected = bases.map((base) => {
     const layer = layers.find((candidate) => sameExactPatchRef(candidate.source.terminal, base.terminal));
-    if (!layer) return base;
-    try {
-      return variantOverlayBundle(base, layer.variant, layer.sourceVersion, availablePlaygrounds).bundle;
-    } catch (error) {
-      if (!(error instanceof PatchCompileError)) throw error;
-      return base;
-    }
+    return layer ? stackVariantBundles(base, layer.variants, layer.sourceVersion, availablePlaygrounds).bundle : base;
   });
   return resolveBundle(
     { terminal: terminal.ref, revisions: revisions(projected) },

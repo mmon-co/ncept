@@ -13,7 +13,7 @@ Charting is dependency resolution from a settled Mission. With no learner, as fo
 
 3. **Choose milestones.** A few milestones mark sections of progress toward the targets. Each is a smaller Mission: a whole performance worth having on its own, checked by using its section together. First is whichever gets the learner doing the real thing soonest, even crudely. Set `pedagogy:milestone: true` on the Node ending each section, and give its criterion a ladder of simpler conditions down to the lowest viable whole task. Milestone 0 holds what the learner says they already have, their words quoted as claims.
 
-4. **Elaborate the first section.** Recursively, starting from its milestone Node: is its new part small enough for one lesson? If not, how can that new part be broken into smaller prerequisites? Leave later sections coarse with `pedagogy:elaborate: true`, for the check-in before them.
+4. **Elaborate the first section.** Recursively, starting from its milestone Node: does its new part fit one Session at the learner's minutes per Node? If not, how can that new part be broken into smaller prerequisites? Leave later sections coarse with `pedagogy:elaborate: true`, for the check-in before them.
 
 5. **Propose** the draft as a revision setting the Mission's targets, or as a graph diff when they don't change; content for others carries no claims. Don't write a syllabus; the theory derives the path.
 
