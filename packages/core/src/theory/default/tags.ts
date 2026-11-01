@@ -223,13 +223,19 @@ function indicatorTag(indicator: Indicator): Tag {
 }
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
   const hasSuccess = node.lastSuccess !== undefined;
+  const counts = completionCaption(node.completion);
   return {
     id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
     defaultMessage: hasSuccess
-      ? "{counts}, last success {lastSuccess}; aided practice {aidedPractice}"
-      : "{counts}, last success none; aided practice {aidedPractice}",
+      ? "{counts}last success {lastSuccess}; aided practice {aidedPractice}"
+      : "{counts}last success none; aided practice {aidedPractice}",
     values: {
-      counts: completionCaption(node.completion),
+      counts: counts
+        ? {
+            type: "message" as const,
+            message: { id: "default.node-progress.counts", defaultMessage: "{counts}, ", values: { counts } },
+          }
+        : "",
       aidedPractice: node.aidedPractice,
       ...(node.lastSuccess === undefined ? {} : { lastSuccess: { type: "date" as const, value: node.lastSuccess } }),
     },
