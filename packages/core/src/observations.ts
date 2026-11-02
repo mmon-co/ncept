@@ -8,7 +8,7 @@ export type ObjectId = `object-${string}`;
 export type TheoryRef = Readonly<{ theory: string; version: string }>;
 /** Host-computed relation to selected history; not authored evidence. */
 export type SourceStanding = "selected" | "abandoned" | "unscoped";
-/** A host-resolved 04:00–04:00 local day; [start, end), with an opaque day identity. */
+/** A host-resolved local day (possibly truncated at a zone-change floor); [start, end). */
 export type LearnerDay = Readonly<{ id: string; start: string; end: string }>;
 export interface Observation<P = unknown> {
   /** Host-read day boundary, like standing; absent until the browser reports a zone. */
