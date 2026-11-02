@@ -284,7 +284,10 @@ function* gradeDay(input: Extract<PlatformEvent, { kind: "day.ended" }>, ctx: Co
     if (
       state.observations.some(
         (record) =>
-          isGrade(record.payload) && record.payload.node.node === node && record.payload.day.id === input.day.id,
+          isGrade(record.payload) &&
+          record.payload.node.node === node &&
+          record.payload.day.start === input.day.start &&
+          record.payload.day.end === input.day.end,
       )
     )
       continue;

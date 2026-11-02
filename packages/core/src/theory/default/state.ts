@@ -503,8 +503,9 @@ function activeNodeGrades(
   const seen = new Set<string>();
   return grades.filter((record) => {
     const { payload } = record;
-    if (seen.has(payload.day.id)) throw new Error("Duplicate default Node-day grade");
-    seen.add(payload.day.id);
+    const interval = JSON.stringify([payload.day.start, payload.day.end]);
+    if (seen.has(interval)) throw new Error("Duplicate default Node-day grade");
+    seen.add(interval);
     const active = new Set(
       evidence
         .filter(
