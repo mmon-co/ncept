@@ -104,6 +104,8 @@ export type NodeProgress = Readonly<{
   display?: Tag;
   /** Localized state name, separate from the score's explanatory message. */
   caption?: MessageDescriptor;
+  /** The one count its completion rule waits on (k observations of the required number), when it has exactly one. */
+  count?: Readonly<{ k: number; required: number }>;
   /** Optional compact evidence summary, suitable beside a frontier or other host heading. */
   summary?: MessageDescriptor;
   /** Optional task-facing wording for a captured checklist, distinct from a general map state. */
