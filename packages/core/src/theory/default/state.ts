@@ -27,6 +27,7 @@ import {
   compareObservations,
   isObservationId,
   isObservationTimestamp,
+  type LearnerDay,
   type Observation,
   type ObservationId,
   type SurfaceId,
@@ -79,6 +80,18 @@ export interface Lapse {
   readonly node: NodeRef;
   /** The same lesson's already-recorded slip or diagnosis, if any. */
   readonly of?: ObservationId;
+}
+/** One whole-day retention judgment; support lives in the Record envelope. */
+export interface Grade {
+  readonly kind: "grade";
+  readonly node: NodeRef;
+  readonly day: LearnerDay;
+  readonly rating: "Again" | "Hard" | "Good" | "Easy";
+}
+/** A passed Review clears the path until a grade covering that Review sets retention. */
+export interface ReviewPass {
+  readonly kind: "review-pass";
+  readonly node: NodeRef;
 }
 export type RetrievalOpenerDemonstration = Demonstration & { readonly recording: "retrieval-opener" };
 /** An accepted operation, not a demonstration of every clause of a Node's criterion. */
@@ -142,6 +155,8 @@ export type DefaultPayload =
   | CompletionOutcome
   | Demonstration
   | Lapse
+  | Grade
+  | ReviewPass
   | FeatureUse
   | Teaching
   | Claim
@@ -251,6 +266,20 @@ export function isLapse(value: unknown): value is Lapse {
     isNodeRef(value.node) &&
     (value.of === undefined || isObservationId(value.of))
   );
+}
+export function isGrade(value: unknown): value is Grade {
+  if (!object(value) || value.kind !== "grade" || !isNodeRef(value.node) || !object(value.day)) return false;
+  return (
+    nonempty(value.day.id) &&
+    isObservationTimestamp(value.day.start) &&
+    isObservationTimestamp(value.day.end) &&
+    Date.parse(value.day.start) < Date.parse(value.day.end) &&
+    typeof value.rating === "string" &&
+    ["Again", "Hard", "Good", "Easy"].includes(value.rating)
+  );
+}
+export function isReviewPass(value: unknown): value is ReviewPass {
+  return object(value) && value.kind === "review-pass" && isNodeRef(value.node);
 }
 export function isRetrievalOpenerDemonstration(value: unknown): value is RetrievalOpenerDemonstration {
   return isDemonstration(value) && value.recording === "retrieval-opener";
@@ -368,6 +397,12 @@ function assertDefaultPayload(payload: unknown): void {
     case "lapse":
       valid = isLapse(payload);
       break;
+    case "grade":
+      valid = isGrade(payload);
+      break;
+    case "review-pass":
+      valid = isReviewPass(payload);
+      break;
     case "feature-use":
       valid = isFeatureUse(payload);
       break;
@@ -429,6 +464,64 @@ function indexDefaultRecords(observations: readonly Observation[]) {
 export function assertDefaultRetraction(of: ObservationId, observations: readonly Observation[]): void {
   if (!activeDefaultRecords(observations).some(({ id }) => id === of))
     throw new Error("Retraction requires an active default demonstration or claim");
+}
+
+/** Whole-day support uses the same active, re-homed demonstrations as acquisition.
+ * Diagnoses are retention evidence only; retracted attempts never support a grade. */
+export function nodeDayEvidence(state: DefaultState, node: NodeId): readonly Observation<Demonstration | Lapse>[] {
+  const attempts = state.records.flatMap((record) =>
+    record.payload.kind === "demonstration" &&
+    record.payload.unaided &&
+    (state.homing.homes[record.id] ?? record.nodes ?? [record.payload.node.node]).includes(node)
+      ? [{ ...record, payload: record.payload }]
+      : [],
+  );
+  return [
+    ...attempts,
+    ...state.observations.flatMap((record) =>
+      isDefaultObservation(record) && isLapse(record.payload) && record.payload.node.node === node
+        ? [{ ...record, payload: record.payload }]
+        : [],
+    ),
+  ].sort(compareObservations);
+}
+
+/** A grade stops being active if any cited attempt is retracted, abandoned or superseded.
+ * It never becomes acquisition/completion evidence. The scheduler consumes this projection. */
+export function activeDefaultGrades(state: DefaultState): readonly Observation<Grade>[] {
+  const grades = new Map<NodeId, Observation<Grade>[]>();
+  for (const record of state.observations)
+    if (isDefaultObservation(record) && isGrade(record.payload))
+      append(grades, record.payload.node.node, { ...record, payload: record.payload });
+  return [...grades].flatMap(([node, records]) => activeNodeGrades(records, nodeDayEvidence(state, node)));
+}
+
+function activeNodeGrades(
+  grades: readonly Observation<Grade>[],
+  evidence: readonly Observation<Demonstration | Lapse>[],
+): readonly Observation<Grade>[] {
+  const seen = new Set<string>();
+  return grades.filter((record) => {
+    const { payload } = record;
+    const interval = JSON.stringify([payload.day.start, payload.day.end]);
+    if (seen.has(interval)) throw new Error("Duplicate default Node-day grade");
+    seen.add(interval);
+    const active = new Set(
+      evidence
+        .filter(
+          ({ at }) => Date.parse(at) >= Date.parse(payload.day.start) && Date.parse(at) < Date.parse(payload.day.end),
+        )
+        .map(({ id }) => id),
+    );
+    if (
+      record.nodes?.length !== 1 ||
+      record.nodes[0] !== payload.node.node ||
+      !record.cites?.length ||
+      new Set(record.cites).size !== record.cites.length
+    )
+      throw new Error("Grade requires its Node scope and unique evidence citations");
+    return record.cites.every((id) => active.has(id));
+  });
 }
 
 /** Original strings stay citable; a summary is only usable while all its original sources remain effective. */
@@ -527,7 +620,7 @@ export interface NodeSchedule {
   readonly lapses: number;
   readonly lastReview: string;
   readonly retrievability: number;
-  /** Observed forgetting stays due until an unaided success, independently of FSRS R. */
+  /** Observed forgetting stays due until a later non-Again day grade, independently of FSRS R. */
   readonly lapsed: boolean;
   readonly citations: readonly ObservationId[];
 }
@@ -547,6 +640,8 @@ export interface NodeState {
   /** Original active evidence in chronological order; never memory or summaries. */
   readonly records: readonly HomedRecord[];
   readonly schedule?: NodeSchedule;
+  /** A successful Review awaiting its day grade; not a change to the FSRS card. */
+  readonly reviewCleared?: boolean;
 }
 
 /** The latest tentative competence report, newer than any actual failure. */
@@ -583,34 +678,31 @@ export function labelDefaultNode(input: {
   };
 }
 
-/**
- * One review per UTC day: the Node's first unaided attempt, else the first implicit credit from a dependent.
- * Diagnosed lapses supply Again unless they repeat a recorded slip. Claims only initialize an absent schedule.
- */
+/** Accepted whole-day grades are the only direct FSRS reviews. Ungraded direct days also
+ * suppress implicit credit. Core uses host boundaries, never a clock-zone or UTC-day fallback. */
 function scheduleDefaultNode(
   records: readonly HomedRecord[],
   implicit: readonly HomedRecord[],
   lapses: readonly Observation<Lapse>[],
+  grades: readonly Observation<Grade>[],
   parameters: DefaultParameters,
 ): Omit<NodeSchedule, "retrievability"> | undefined {
+  const direct = [
+    ...records.flatMap((record) =>
+      record.payload.kind === "demonstration" && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
+    ),
+    ...lapses,
+  ];
+  const accepted = activeNodeGrades(grades, direct);
+  const directDays = new Set(direct.flatMap(({ learnerDay }) => (learnerDay === undefined ? [] : [learnerDay.id])));
+  const credit = implicit.filter(({ learnerDay }) => learnerDay !== undefined && !directDays.has(learnerDay.id));
+  const claims = records.filter((record): record is Observation<Claim> => record.payload.kind === "claim");
   let card: Card | undefined;
   let reviewDay: string | undefined;
-  const citations: ObservationId[] = [];
+  let initializingClaim: string | undefined;
   let lapsed = false;
-  const dayOf = (at: string) => new Date(at).toISOString().slice(0, 10);
-  const directDays = new Set([
-    ...records.flatMap(({ payload, at }) => (payload.kind === "demonstration" && payload.unaided ? [dayOf(at)] : [])),
-    ...lapses.map(({ at }) => dayOf(at)),
-  ]);
-  const slips = new Set<ObservationId>();
-  for (const { id, payload } of [...records, ...lapses])
-    if (
-      payload.kind === "lapse" ||
-      (payload.kind === "demonstration" && payload.unaided && payload.outcome !== "success")
-    )
-      slips.add(id);
-  const credit = implicit.filter(({ at }) => !directDays.has(dayOf(at)));
-  for (const record of [...records, ...credit, ...lapses].sort(compareObservations)) {
+  const citations: ObservationId[] = [];
+  for (const record of [...claims, ...credit, ...accepted].sort(compareObservations)) {
     const { payload, at, id } = record;
     if (payload.kind === "claim") {
       if (payload.stance !== "knows" || card !== undefined) continue;
@@ -619,22 +711,24 @@ function scheduleDefaultNode(
         stability: parameters.retention.claimStabilityDays,
         reps: 0,
       };
+      initializingClaim = at;
+    } else if (payload.kind === "grade") {
+      const earlierSuccess =
+        (initializingClaim !== undefined && Date.parse(initializingClaim) < Date.parse(payload.day.start)) ||
+        direct.some(
+          ({ at, payload: evidence }) =>
+            evidence.kind === "demonstration" &&
+            evidence.outcome === "success" &&
+            Date.parse(at) < Date.parse(payload.day.start),
+        );
+      card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
+      lapsed = payload.rating === "Again" && earlierSuccess;
+      citations.push(...(record.cites ?? []));
     } else {
-      if (payload.kind !== "lapse" && !payload.unaided) continue;
-      lapsed = payload.kind === "lapse" || payload.outcome !== "success";
-      // A close diagnosis repeats the slip, not its FSRS review, even across midnight.
-      const recordedSlip = payload.kind === "lapse" && payload.of !== undefined && slips.has(payload.of);
-      const day = dayOf(at);
-      if (day === reviewDay || recordedSlip) {
-        citations.push(id);
-        continue;
-      }
-      card = SCHEDULER.next(
-        card ?? createEmptyCard(at),
-        at,
-        payload.kind !== "lapse" && payload.outcome === "success" ? Rating.Good : Rating.Again,
-      ).card;
-      reviewDay = day;
+      const day = record.learnerDay;
+      if (day === undefined || day.id === reviewDay) continue;
+      card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
+      reviewDay = day.id;
     }
     citations.push(id);
   }
@@ -646,7 +740,7 @@ function scheduleDefaultNode(
     lapses: card.lapses,
     lastReview: card.last_review.toISOString(),
     lapsed,
-    citations,
+    citations: [...new Set(citations)],
   };
 }
 
@@ -747,6 +841,8 @@ interface DefaultObservationIndex {
   readonly positions: Map<ObservationId, number>;
   readonly memoryPlacements: Map<ObservationId, MemoryPlacement>;
   readonly lapses: Map<NodeId, readonly Observation<Lapse>[]>;
+  readonly grades: Map<NodeId, readonly Observation<Grade>[]>;
+  readonly reviewPasses: Map<NodeId, readonly Observation<ReviewPass>[]>;
   readonly featureUses: Map<NodeId, readonly Observation<FeatureUse>[]>;
   readonly memories: Map<NodeId, readonly Observation<Memory>[]>;
   readonly summaries: Map<NodeId, readonly Observation<MemorySummaryPayload>[]>;
@@ -839,7 +935,7 @@ interface RecordPlacement {
 }
 interface PreparedDefaultEvidence {
   readonly graphIndex: DefaultGraphIndex;
-  readonly index: Pick<DefaultObservationIndex, "lapses" | "featureUses">;
+  readonly index: Pick<DefaultObservationIndex, "lapses" | "grades" | "reviewPasses" | "featureUses">;
   readonly observations: readonly Observation[];
   readonly records: readonly HomedRecord[];
   readonly homed: Readonly<Partial<Record<NodeId, readonly HomedRecord[]>>>;
@@ -884,6 +980,8 @@ function initDefaultEvidence(graph: ResolvedGraph) {
   const interpretationUsers = new Map<ObservationId, Set<EvidenceEntry>>();
   const memoryUsers: Buckets<ObservationId, readonly NodeId[]> = new Map();
   const lapseEntries: Buckets<NodeId, Observation<Lapse>> = new Map();
+  const gradeEntries: Buckets<NodeId, Observation<Grade>> = new Map();
+  const reviewPassEntries: Buckets<NodeId, Observation<ReviewPass>> = new Map();
   const featureEntries: Buckets<NodeId, Observation<FeatureUse>> = new Map();
   const memoryEntries: Buckets<NodeId, Observation<Memory>> = new Map();
   const summaryEntries: Buckets<NodeId, Observation<MemorySummaryPayload>> = new Map();
@@ -893,6 +991,8 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     positions: new Map(),
     memoryPlacements: new Map(),
     lapses: new Map(),
+    grades: new Map(),
+    reviewPasses: new Map(),
     featureUses: new Map(),
     memories: new Map(),
     summaries: new Map(),
@@ -990,6 +1090,12 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       dirtyRecords.add(payload.of);
     } else if (isLapse(payload)) {
       changeBucket(lapseEntries, payload.node.node, entry.position, { ...observation, payload }, add);
+      dirtyAux.add(payload.node.node);
+    } else if (isGrade(payload)) {
+      changeBucket(gradeEntries, payload.node.node, entry.position, { ...observation, payload }, add);
+      dirtyAux.add(payload.node.node);
+    } else if (isReviewPass(payload)) {
+      changeBucket(reviewPassEntries, payload.node.node, entry.position, { ...observation, payload }, add);
       dirtyAux.add(payload.node.node);
     } else if (isFeatureUse(payload)) {
       for (const node of new Set(observation.nodes)) {
@@ -1196,6 +1302,8 @@ function initDefaultEvidence(graph: ResolvedGraph) {
     if (invalidRetractions.size > 0) throw new Error("Default retractions must target a demonstration or claim");
     for (const node of dirtyAux) {
       index.lapses.set(node, bucketValues(lapseEntries.get(node)));
+      index.grades.set(node, bucketValues(gradeEntries.get(node)));
+      index.reviewPasses.set(node, bucketValues(reviewPassEntries.get(node)));
       index.featureUses.set(node, bucketValues(featureEntries.get(node)));
       index.memories.set(node, bucketValues(memoryEntries.get(node)));
       index.summaries.set(node, bucketValues(summaryEntries.get(node)));
@@ -1290,7 +1398,12 @@ function initDefaultEvidence(graph: ResolvedGraph) {
       for (const prerequisite of graphIndex.prerequisites.get(node) ?? []) affected.add(prerequisite);
     prepared = {
       graphIndex,
-      index: { lapses: new Map(index.lapses), featureUses: new Map(index.featureUses) },
+      index: {
+        lapses: new Map(index.lapses),
+        grades: new Map(index.grades),
+        reviewPasses: new Map(index.reviewPasses),
+        featureUses: new Map(index.featureUses),
+      },
       observations: observationsChanged
         ? [...effective].sort((left, right) => left.position - right.position).map(({ observation }) => observation)
         : (prepared?.observations ?? []),
@@ -1463,9 +1576,9 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
   );
   const own = new Map<NodeId, readonly HomedRecord[]>();
   const successes = new Map<NodeId, readonly HomedRecord[]>();
-  const lapseInputs = new Map<NodeId, readonly Observation<Lapse>[]>();
   const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
   const acquisition = new Map<NodeId, NodeState>();
+  const reviewClearances = new Map<NodeId, boolean>();
   let history = prepareCompletionHistory([]);
   let boundary = -1;
   let initialized = false;
@@ -1475,7 +1588,6 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
     const prepared = evidence.read(now);
     const { index, homed } = prepared;
     const changedOwn = new Set<NodeId>();
-    const changedSuccesses = new Set<NodeId>();
     for (const id of prepared.dirtyNodes) {
       const records = homed[id] ?? [];
       if (!own.has(id) || !sameRecords(own.get(id) ?? [], records)) {
@@ -1483,23 +1595,11 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
         const credit = records.filter(
           ({ payload }) => payload.kind === "demonstration" && payload.unaided && payload.outcome === "success",
         );
-        if (!sameRecords(successes.get(id) ?? [], credit)) {
-          successes.set(id, credit);
-          changedSuccesses.add(id);
-        }
+        successes.set(id, credit);
         changedOwn.add(id);
       }
     }
-    const dirtySchedules = new Set(changedOwn);
-    for (const id of changedSuccesses)
-      for (const prerequisite of graphIndex.prerequisites.get(id) ?? []) dirtySchedules.add(prerequisite);
-    for (const id of prepared.dirtyNodes) {
-      const lapses = index.lapses.get(id) ?? [];
-      if (!lapseInputs.has(id) || !sameRecords(lapseInputs.get(id) ?? [], lapses)) {
-        lapseInputs.set(id, lapses);
-        dirtySchedules.add(id);
-      }
-    }
+    const dirtySchedules = new Set(prepared.dirtyNodes);
     if (prepared.historyChanged) history = prepareCompletionHistory(prepared.history);
     const nextBoundary = completionBoundary(history, now);
     const completionChanged = !initialized || prepared.historyChanged || boundary !== nextBoundary;
@@ -1530,11 +1630,38 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       const featureUses = index.featureUses.get(id) ?? [];
       if (!initialized || dirtySchedules.has(id)) {
         const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
-        // A late own attempt replaces this day's implicit credit. Replay only the affected Node's
-        // chronology, including lapse references; no append-only FSRS shortcut can preserve that rule.
+        const records = own.get(id) ?? [];
+        const grades = activeNodeGrades(index.grades.get(id) ?? [], [
+          ...records.flatMap((record) =>
+            isDemonstration(record.payload) && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
+          ),
+          ...(index.lapses.get(id) ?? []),
+        ]);
+        const supportedSuccesses = new Set(
+          records
+            .filter(({ payload }) => isDemonstration(payload) && payload.unaided && payload.outcome === "success")
+            .map(({ id }) => id),
+        );
+        reviewClearances.set(
+          id,
+          (index.reviewPasses.get(id) ?? []).some(
+            (pass) =>
+              (pass.cites?.length ?? 0) > 0 &&
+              pass.cites?.every((source) => supportedSuccesses.has(source)) &&
+              !grades.some(({ payload }) => Date.parse(payload.day.end) > Date.parse(pass.at)),
+          ),
+        );
+        // Grade/support changes and late direct evidence replace the affected day's review;
+        // replay only this Node's chronology rather than retaining a second retention state.
         schedules.set(
           id,
-          scheduleDefaultNode(own.get(id) ?? [], implicit, lapseInputs.get(id) ?? [], DEFAULT_PARAMETERS),
+          scheduleDefaultNode(
+            own.get(id) ?? [],
+            implicit,
+            index.lapses.get(id) ?? [],
+            index.grades.get(id) ?? [],
+            DEFAULT_PARAMETERS,
+          ),
         );
       }
       const card = schedules.get(id);
@@ -1548,7 +1675,12 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
                 card.stability,
               ),
             };
-      nodes[id] = { ...facts, featureUses, ...(schedule === undefined ? {} : { schedule }) };
+      nodes[id] = {
+        ...facts,
+        featureUses,
+        reviewCleared: reviewClearances.get(id) ?? false,
+        ...(schedule === undefined ? {} : { schedule }),
+      };
     }
     if (projectionChanged) evidenceKey = {};
     if (indicatorsChanged) indicatorKey = {};

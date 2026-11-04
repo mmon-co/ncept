@@ -6,6 +6,7 @@ import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState }
 
 // One equivalence property: retained/chunked public reads versus fresh init/step/read.
 // Seeds are reproducible; the existing retention/claims suites independently pin policy semantics.
+// Takes 12–15 s on an idle host; under concurrent worker load it passed 30 s and held main red (2026-10-29).
 test("default retained prefixes, clocks and context resets equal fresh state, projection and progress", () => {
   let seed = 0;
   const random = (max: number) => {
@@ -94,10 +95,12 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
     };
     return resolvePatchBundle({ terminal: revisionRef, revisions: [revision] });
   }
+  const dayBoundary = (day: number) => ({ id: `day-${day}`, start: at(day, 4), end: at(day + 1, 4) });
   function authored(size: number): Observation[] {
     const observation = (id: string, day: number, payload: unknown, nodes?: readonly NodeId[]): Observation => ({
       id: `obs-${id}`,
       at: at(day),
+      learnerDay: dayBoundary(day),
       by: DEFAULT_THEORY_REF,
       payload,
       ...(nodes === undefined ? {} : { nodes }),
@@ -180,6 +183,18 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
     stream[1] = { ...required(stream[1]), at: at(0, 10) }; // Later arrival overrides same-day implicit credit.
     stream[10] = { ...required(stream[10]), cites: ["obs-direct"] };
     stream[11] = { ...required(stream[11]), cites: ["obs-direct"], supersedes: "obs-interpretation" };
+    for (const [id, node, day, source, rating] of [
+      ["grade-direct", "node-1", 0, "obs-direct", "Good"],
+      ["grade-own", "node-0", 0, "obs-late-own", "Hard"],
+      ["grade-lapse", "node-0", 1, "obs-lapse", "Again"],
+    ] as const)
+      stream.push({
+        ...observation(id, day + 1, { kind: "grade", node: { node, provenance: ref }, day: dayBoundary(day), rating }, [
+          node,
+        ]),
+        at: dayBoundary(day).end,
+        cites: [source],
+      });
     for (let i = 0; i < 14; i++) {
       const node: NodeId = `node-${random(size + 1)}`; // Includes a homeless Node.
       stream.push(
@@ -243,13 +258,13 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
           accepted = end;
           for (const now of [at(-2), at(2), at(3), at(3, 10), at(9), at(4), at(1), "bad-now"]) {
             const current = capture(() => retained.read(now));
-            expect(current).toEqual(capture(() => readTheoryState(defaultTheory, context.graph, prefix, now)));
+            const fresh = capture(() => readTheoryState(defaultTheory, context.graph, prefix, now));
+            expect(current).toEqual(fresh);
             if (current.state !== undefined) {
               const projection = defaultTheory.project(context.graph, current.state);
               // Unprepared, plain valid snapshots must retain the exact public projection semantics.
               expect(projection).toEqual(defaultTheory.project(context.graph, structuredClone(current.state)));
-              const fresh = readTheoryState(defaultTheory, context.graph, prefix, now);
-              const freshProjection = defaultTheory.project(context.graph, fresh);
+              const freshProjection = defaultTheory.project(context.graph, required(fresh.state));
               expect(projection).toEqual(freshProjection);
               const requested: NodeId[] = [...context.graph.nodes.map(({ id }) => id).reverse(), "node-missing"];
               expect(defaultTheory.progress(context.graph, projection, requested)).toEqual(
@@ -274,4 +289,4 @@ test("default retained prefixes, clocks and context resets equal fresh state, pr
         }
       }
   }
-});
+}, 120_000);

@@ -28,9 +28,9 @@ export function isDefaultReviewable(node: NodeState): boolean {
 
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */
 type QueryToken = (state: DefaultState, graph: ResolvedGraph, reached?: ReadonlySet<NodeId>) => ReadonlySet<NodeId>;
-function select(predicate: (node: NodeState) => boolean): QueryToken {
+function select(predicate: (node: NodeState, graph: ResolvedGraph, id: NodeId) => boolean): QueryToken {
   return (state, graph) =>
-    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id));
+    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id), graph, id)).map(({ id }) => id));
 }
 function reachableNodes(state: DefaultState, graph: ResolvedGraph): ReadonlySet<NodeId> {
   return new Set(
@@ -59,12 +59,16 @@ export const defaultQueryTokens = {
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   "review:due": select(
-    (node) =>
+    (node, graph, id) =>
+      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
-    (node) =>
+    (node, graph, id) =>
+      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
   ),
@@ -219,13 +223,19 @@ function indicatorTag(indicator: Indicator): Tag {
 }
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
   const hasSuccess = node.lastSuccess !== undefined;
+  const counts = completionCaption(node.completion);
   return {
     id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
     defaultMessage: hasSuccess
-      ? "{counts}, last success {lastSuccess}; aided practice {aidedPractice}"
-      : "{counts}, last success none; aided practice {aidedPractice}",
+      ? "{counts}last success {lastSuccess}; aided practice {aidedPractice}"
+      : "{counts}last success none; aided practice {aidedPractice}",
     values: {
-      counts: completionCaption(node.completion),
+      counts: counts
+        ? {
+            type: "message" as const,
+            message: { id: "default.node-progress.counts", defaultMessage: "{counts}, ", values: { counts } },
+          }
+        : "",
       aidedPractice: node.aidedPractice,
       ...(node.lastSuccess === undefined ? {} : { lastSuccess: { type: "date" as const, value: node.lastSuccess } }),
     },
