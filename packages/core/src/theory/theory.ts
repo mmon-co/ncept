@@ -1,4 +1,3 @@
-import type { ContentDigest } from "../digest";
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
@@ -212,7 +211,6 @@ export interface TheoryState<S> {
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly version: string;
-  readonly digest: ContentDigest;
   initState(graph: ResolvedGraph): TheoryState<S>;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */

@@ -2,7 +2,7 @@
 
 Markdown is the authoring source for the tutor's Skills, each named for an activity: `mission`, `chart`, `checkpoint`, `publish`, `material` (whose resources are a guide per Session type and a format per Material kind), `records` and `help`. `base.md` holds the always-loaded tutor instruction. Each `<name>/SKILL.md` declares only its `name` and `description`; the tutor loads any Skill listed for its mode. No mode has an automatic procedure; a mode's prompt is `base.md` plus its Skill index.
 
-`bun scripts/default-implementation-digest.ts` embeds the Markdown in `sources.ts` and emits the executable module, typed declaration and identity from the private typed assembly. The public default Theory executes that generated module, including its Skill strings, not raw files or independently imported source. `--check` rebuilds exact checked-out inputs and compares all four outputs; `--staged` uses the frozen index and its exact dependency resolution without changing working files. `bun run build:skills` and `bun scripts/build-skills.ts --check` remain embedding-only commands. Pre-commit and final-tree rebase/merge regeneration own the same four derived files.
+`bun scripts/build-skills.ts` (`bun run build:skills`) embeds the Markdown in the Git-ignored `sources.ts`, because the Convex bundler cannot import Markdown; setup, dev, check, test and deploy run it first. `../skills.ts` imports that module.
 
 `../skills.ts` returns catalog values. The tutor's index for a mode is a flat list; the learner never starts a Skill. Each Session mode receives only its declared catalog in `chat.open` and `chat.turn`.
 

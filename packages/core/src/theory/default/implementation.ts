@@ -6,7 +6,7 @@ import { defaultTags, projectDefault } from "./tags";
 import { pathDefault } from "./path";
 import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading";
 
-/** The single default implementation assembly, before executable generation and identity. */
+/** The single default implementation assembly. */
 export const implementation = {
   id: DEFAULT_THEORY_REF.theory,
   version: DEFAULT_THEORY_REF.version,
@@ -26,15 +26,12 @@ export const implementation = {
   chat,
   modes,
   event,
-} satisfies Omit<
-  import("../theory").Theory<
-    import("./state").DefaultState,
-    {
-      completion: import("./state").CompletionOutcome;
-      recall: import("./outcomes").RecallOutcome;
-      quiz: import("./outcomes").QuizOutcome;
-      attempt: import("./outcomes").AttemptOutcome;
-    }
-  >,
-  "digest"
+} satisfies import("../theory").Theory<
+  import("./state").DefaultState,
+  {
+    completion: import("./state").CompletionOutcome;
+    recall: import("./outcomes").RecallOutcome;
+    quiz: import("./outcomes").QuizOutcome;
+    attempt: import("./outcomes").AttemptOutcome;
+  }
 >;

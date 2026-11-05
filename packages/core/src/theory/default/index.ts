@@ -1,5 +1,4 @@
-import { implementation } from "./implementation.generated.js";
-import { DEFAULT_IMPLEMENTATION_DIGEST } from "./implementation-digest";
+import { implementation } from "./implementation";
 
 /** The deploy's commit as semver build metadata, which range matching ignores; `dev` outside a deploy. */
 const buildMetadata = () => (typeof process === "undefined" ? undefined : process.env.CONCEPT_COMMIT) || "dev";
@@ -11,11 +10,7 @@ export const defaultTheory = {
   get version() {
     return `${implementation.version}+${buildMetadata()}`;
   },
-  digest: DEFAULT_IMPLEMENTATION_DIGEST,
-} satisfies Omit<typeof implementation, "version"> & {
-  version: string;
-  digest: import("../../digest").ContentDigest;
-};
+} satisfies Omit<typeof implementation, "version"> & { version: string };
 /** The range a new Profile accepts: the default Theory's current minor, which a patch deploy keeps. */
 export const DEFAULT_THEORY_REQUIREMENT = { theory: defaultTheory.id, range: "~1.0" } as const;
 export * from "./path";
