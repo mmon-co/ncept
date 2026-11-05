@@ -1,15 +1,7 @@
 import type { ContentDigest } from "../digest";
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
-import type {
-  JsonSchema,
-  Observation,
-  ObservationId,
-  PlatformEvent,
-  Program,
-  SurfaceId,
-  TheoryRef,
-} from "../observations";
+import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
 
 export type MessageDescriptor = Readonly<{
   id: string;
@@ -267,4 +259,7 @@ export function initListTheoryState<S>(
   };
 }
 
-export type TheoryRelease = Readonly<{ ref: TheoryRef; digest: ContentDigest }>;
+/** The exact version of a Theory that ran, as a lockfile records it: `1.0.0+<commit>`. */
+export type TheoryRelease = Readonly<{ theory: string; version: string }>;
+/** The range of a Theory a Profile accepts, as a manifest records it: `~1.0`. */
+export type TheoryRequirement = Readonly<{ theory: string; range: string }>;
