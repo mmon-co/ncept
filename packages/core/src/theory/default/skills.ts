@@ -1,6 +1,6 @@
 /** Pure default Skill catalog; build-time Markdown embedding lives in scripts/build-skills.ts. */
 import YAML from "yaml";
-import type { BuiltSkillBundle, SkillResource } from "../skills";
+import { parseSkillSource, type BuiltSkillBundle, type SkillMeta, type SkillResource } from "../skills";
 import { sources } from "./skills/sources";
 
 const SKILL_SOURCES: Readonly<Record<string, string>> = {
@@ -9,43 +9,17 @@ const SKILL_SOURCES: Readonly<Record<string, string>> = {
   checkpoint: sources["checkpoint/SKILL.md"],
   publish: sources["publish/SKILL.md"],
   mission: sources["mission/SKILL.md"],
-  help: sources["help/SKILL.md"],
   records: sources["records/SKILL.md"],
 };
-
-export interface SkillMeta {
-  readonly name: string;
-  readonly description: string;
-}
 
 interface SkillFile {
   readonly meta: SkillMeta;
   readonly body: string;
 }
 
-function parseSkillFile(dir: string, raw: string): SkillFile {
-  const description = `skills/${dir}/SKILL.md`;
-  const match = /^---\n([\s\S]*?)\n---\n/.exec(raw);
-  if (match === null) throw new Error(`${description} has no frontmatter`);
-  const front: unknown = YAML.parse(match[1] ?? "");
-  if (typeof front !== "object" || front === null) throw new Error(`${description} frontmatter must be a mapping`);
-  const name: unknown = Reflect.get(front, "name");
-  const skillDescription: unknown = Reflect.get(front, "description");
-  if (typeof name !== "string" || name !== dir || name.length > 64 || !/^(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name))
-    throw new Error(`${description} name must equal its directory name and follow Agent Skills naming`);
-  if (typeof skillDescription !== "string" || skillDescription.trim() === "" || skillDescription.length > 1024)
-    throw new Error(`${description} needs an Agent Skills description of at most 1024 characters`);
-  if (raw.includes("<skill_context>"))
-    throw new Error(`${description} contains a leaked harness <skill_context> block`);
-  return {
-    meta: { name, description: skillDescription },
-    body: raw.slice(match[0].length),
-  };
-}
-
 function skillFiles(): SkillFile[] {
   return Object.entries(SKILL_SOURCES)
-    .map(([name, source]) => parseSkillFile(name, source))
+    .map(([name, source]) => parseSkillSource(name, source))
     .sort((left, right) => left.meta.name.localeCompare(right.meta.name));
 }
 
@@ -58,13 +32,13 @@ export function skillsForMode(mode?: string): SkillMeta[] {
   const all = listSkills();
   const names =
     mode === "authoring"
-      ? new Set(["publish", "chart", "material", "help"])
+      ? new Set(["publish", "chart", "material"])
       : mode === "empty"
-        ? new Set(["help"])
+        ? new Set<string>()
         : mode === "charting"
-          ? new Set(["mission", "chart", "checkpoint", "help"])
+          ? new Set(["mission", "chart", "checkpoint"])
           : mode === "lesson"
-            ? new Set(["material", "records", "help"])
+            ? new Set(["material", "records"])
             : mode === undefined || mode === ""
               ? new Set(all.map(({ name }) => name))
               : undefined;

@@ -19,4 +19,4 @@ Content for others is charted (see `chart`) for the Mission a typical adopter wo
 
 6. **Check sources' licenses** permit redistribution before embedding their content, and keep source and license attribution. If permission is unclear, cite rather than copy.
 
-7. **Propose** the draft as one `graph-diff` with `viewName` set to the Patch's name. Once accepted, the author captures and publishes that View from the Hub (see `help`). Trying it as a learner means adopting the release into another Profile.
+7. **Propose** the draft as one graph diff whose View is named for the Patch. Once accepted, the author captures and publishes that View from the Hub. Trying it as a learner means adopting the release into another Profile.
