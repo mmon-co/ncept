@@ -1,5 +1,24 @@
 import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory";
 import type { NodeId } from "../patch";
+import type { StopRef } from "../run";
+
+/** The host resolves the displayed name now, including unnamed Lessons and Checkpoints.
+ * A named Lesson also retains the tag name carried by the path, independent of that display name. */
+export function stopRef(stop: Lesson, name: string): StopRef {
+  if (stop.checkpoint)
+    return {
+      kind: "checkpoint",
+      name,
+      ...(stop.checkpoint.milestone === undefined ? {} : { milestone: stop.checkpoint.milestone }),
+    };
+  if (stop.review) return { kind: "review", name, nodes: [...stop.nodes] };
+  return {
+    kind: "lesson",
+    name,
+    ...(stop.name === undefined ? {} : { tag: stop.name }),
+    nodes: [...stop.nodes],
+  };
+}
 
 /** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;

@@ -1,5 +1,7 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
+import type { MissionRunReading } from "../run";
+import type { LessonReading } from "./path";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
 
 export type MessageDescriptor = Readonly<{
@@ -158,6 +160,8 @@ export type MissionContext = Readonly<{
   nodes: readonly NodeId[];
   targets?: readonly NodeId[];
   priority: number;
+  /** Learner-scoped run reading. The host selects upcoming stops from readMissionPath. */
+  run?: MissionRunReading & Readonly<{ next: readonly LessonReading[] }>;
 }>;
 export type ChatContext<S> = Context<S> &
   Readonly<{

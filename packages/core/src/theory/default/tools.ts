@@ -497,7 +497,7 @@ export const defaultInstrumentTools = [
   }),
   scopedTool(
     "mission",
-    "Effective Missions, revisions and resolved scopes, with numbered lesson sections, cleared stops and estimated minutes left. Checkpoints follow milestone Lessons and refine the next section.",
+    "Effective Missions, revisions and resolved scopes. Each run shows its active Session, open asides, recent past and next stops; the path shows numbered lesson sections, cleared stops and estimated minutes left. Checkpoints follow milestone Lessons and refine the next section.",
     (ctx, scope) =>
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
