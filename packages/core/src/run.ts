@@ -73,7 +73,7 @@ export function setActive(
         ];
   return {
     run: { ...run, active: target.kind === "aside" ? run.active : target.session, past },
-    // A resumed aside is the incoming Session, not one of its outgoing parent\'s closures.
+    // A resumed aside is the incoming Session, not one of its outgoing parent's closures.
     close:
       target.kind === "aside" || run.active === null
         ? []
