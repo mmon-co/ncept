@@ -18,8 +18,10 @@ export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
           values: { counts: values.counts },
         }
       : undefined;
+  const { k, required } = display?.message?.values ?? {};
   return {
     status,
+    ...(typeof k === "number" && typeof required === "number" ? { count: { k, required } } : {}),
     ...(tags.some(({ tag }) => tag === "claimed")
       ? { claimed: true }
       : tags.some(({ tag }) => tag === "unclaimed")

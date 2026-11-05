@@ -224,6 +224,7 @@ function indicatorTag(indicator: Indicator): Tag {
 function nodeProgressMessage(node: NodeState): MessageDescriptor {
   const hasSuccess = node.lastSuccess !== undefined;
   const counts = completionCaption(node.completion);
+  const only = node.completion.counts.length === 1 ? node.completion.counts[0] : undefined;
   return {
     id: hasSuccess ? "default.node-progress.last-success" : "default.node-progress.no-success",
     defaultMessage: hasSuccess
@@ -237,6 +238,7 @@ function nodeProgressMessage(node: NodeState): MessageDescriptor {
           }
         : "",
       aidedPractice: node.aidedPractice,
+      ...(only === undefined ? {} : { k: only.k, required: only.required }),
       ...(node.lastSuccess === undefined ? {} : { lastSuccess: { type: "date" as const, value: node.lastSuccess } }),
     },
   };
