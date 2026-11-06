@@ -25,13 +25,14 @@ function sessionRef(value: unknown): value is SessionRef {
   return typeof value === "string" && value.length > 0;
 }
 export function isStopRef(value: unknown): value is StopRef {
-  if (!runObject(value) || typeof value.name !== "string") return false;
-  if (value.kind === "checkpoint") return value.milestone === undefined || isNodeId(value.milestone);
   return (
-    (value.kind === "lesson" || value.kind === "review") &&
-    Array.isArray(value.nodes) &&
-    value.nodes.every(isNodeId) &&
-    (value.kind !== "lesson" || value.tag === undefined || typeof value.tag === "string")
+    runObject(value) &&
+    typeof value.kind === "string" &&
+    value.kind.length > 0 &&
+    typeof value.name === "string" &&
+    (value.nodes === undefined || (Array.isArray(value.nodes) && value.nodes.every(isNodeId))) &&
+    (value.tag === undefined || typeof value.tag === "string") &&
+    (value.milestone === undefined || isNodeId(value.milestone))
   );
 }
 export function isPastEntry(value: unknown): value is PastEntry {
