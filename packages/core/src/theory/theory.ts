@@ -1,6 +1,6 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
-import type { MissionRunReading } from "../run";
+import type { MissionRunReading, StopRef } from "../run";
 import type { LessonReading } from "./path";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
 
@@ -93,8 +93,10 @@ export interface LessonActivity {
   readonly surface: string;
   readonly activeMs: number;
   readonly startedAt: string;
-  readonly reviewNodes?: readonly NodeId[];
-  readonly reviewSurfaces?: readonly string[];
+  /** Identity captured for this Session, independent of its current place in a Mission. */
+  readonly stop?: StopRef;
+  /** Related Material surfaces owned by the same Session. */
+  readonly relatedSurfaces?: readonly string[];
 }
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";

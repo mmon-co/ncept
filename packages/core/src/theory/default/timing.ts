@@ -12,10 +12,10 @@ export function measuredReviewTiming(
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ): LessonTiming {
-  const reviews = activities.filter((activity) => activity.reviewNodes !== undefined);
+  const reviews = activities.filter((activity) => activity.stop?.kind === "review");
   const surfaces = new Map(
     reviews.flatMap((activity) =>
-      [activity.surface, ...(activity.reviewSurfaces ?? [])].map((surface) => [surface, activity] as const),
+      [activity.surface, ...(activity.relatedSurfaces ?? [])].map((surface) => [surface, activity] as const),
     ),
   );
   const reviewed = new Set<string>();
@@ -23,7 +23,7 @@ export function measuredReviewTiming(
     const activity = observation.surface === undefined ? undefined : surfaces.get(observation.surface);
     if (!activity || observation.at < activity.startedAt || observation.standing === "abandoned") continue;
     const payload = observation.payload;
-    if (isDemonstration(payload) && payload.unaided && activity.reviewNodes?.includes(payload.node.node))
+    if (isDemonstration(payload) && payload.unaided && activity.stop?.nodes?.includes(payload.node.node))
       reviewed.add(activity.surface + "/" + payload.node.node);
   }
   const activeMs = reviews.reduce((sum, activity) => sum + activity.activeMs, 0);
@@ -50,7 +50,7 @@ export function prepareLessonTiming(
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ) {
-  const teaching = activities.filter((activity) => activity.reviewNodes === undefined);
+  const teaching = activities.filter((activity) => activity.stop?.kind !== "review");
   const lessonSurfaces = new Map(teaching.map((activity) => [activity.surface, activity]));
   const demonstrated = new Set<string>();
   function* transitions() {
