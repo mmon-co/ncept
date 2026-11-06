@@ -228,6 +228,25 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
   const now = Date.parse(context.now);
   const boundaries = context.projection.validUntil === undefined ? [] : [Date.parse(context.projection.validUntil)];
   const state = stateDefault(context.graph, context.observations, context.now);
+  const candidates = context.graph.nodes.flatMap(({ id }) => {
+    const schedule = state.nodes[id]?.schedule;
+    const rank = context.projection.nodes[id]?.find(({ tag }) => tag === "review:due")?.rank;
+    return scope.has(id) && schedule && rank !== undefined
+      ? [{ id, schedule, priority: Math.round(rank - 1 + schedule.retrievability) }]
+      : [];
+  });
+  // Integer priority dominates decay. Identical curves keep even their stable ties forever.
+  const competing = new Set(
+    candidates
+      .filter((a) =>
+        candidates.some(
+          (b) =>
+            a.priority === b.priority &&
+            (a.schedule.lastReview !== b.schedule.lastReview || a.schedule.stability !== b.schedule.stability),
+        ),
+      )
+      .map(({ id }) => id),
+  );
   for (const { id } of context.graph.nodes) {
     const node = state.nodes[id];
     const schedule = node?.schedule;
@@ -258,7 +277,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
       nextBelow(DEFAULT_PARAMETERS.retention.due);
       nextBelow(DEFAULT_PARAMETERS.retention.fading);
     }
-    if (context.projection.nodes[id]?.some(({ tag }) => tag === "review:due")) nextBelow(schedule.retrievability);
+    if (competing.has(id)) nextBelow(schedule.retrievability);
   }
   const expiry = Math.min(...boundaries);
   return Number.isFinite(expiry) ? { validUntil: new Date(expiry).toISOString() } : {};
