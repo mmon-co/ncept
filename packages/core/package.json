@@ -7,6 +7,7 @@
     "./digest": "./src/digest.ts",
     "./patch": "./src/patch/index.ts",
     "./observations": "./src/observations.ts",
+    "./profile": "./src/profile.ts",
     "./theory": "./src/theory/index.ts",
     "./theory/path": "./src/theory/path.ts",
     "./theory/default/path": "./src/theory/default/path.ts",
