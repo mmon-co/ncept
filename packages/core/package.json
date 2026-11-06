@@ -7,18 +7,14 @@
     "./digest": "./src/digest.ts",
     "./patch": "./src/patch/index.ts",
     "./observations": "./src/observations.ts",
+    "./profile": "./src/profile.ts",
     "./theory": "./src/theory/index.ts",
     "./theory/path": "./src/theory/path.ts",
-    "./theory/default/path": "./src/theory/default/path.ts",
-    "./theory/default/state": "./src/theory/default/state.ts",
-    "./theory/speaker": "./src/theory/speaker.ts",
-    "./theory/default": "./src/theory/default/index.ts",
-    "./theory/default/messages": "./src/theory/default/messages.ts"
+    "./theory/speaker": "./src/theory/speaker.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "std-semver": "^1.0.8",
-    "ts-fsrs": "^4.0.0",
     "yaml": "^2.5.0"
   }
 }

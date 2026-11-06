@@ -1,19 +1,57 @@
-import type { NodeId } from "./patch";
+import { isNodeId, type NodeId } from "./patch";
+import { isObservationTimestamp } from "./observations";
 
 /** Application-owned Session identity, opaque to Core. */
 export type SessionRef = string;
 
 /** A captured stop, independent of its changing position in the future path. */
-export type StopRef = Readonly<
-  | { kind: "lesson"; name: string; tag?: string; nodes: readonly NodeId[] }
-  | { kind: "review"; name: string; nodes: readonly NodeId[] }
-  | { kind: "checkpoint"; name: string; milestone?: NodeId }
->;
+export type StopRef = Readonly<{
+  kind: string;
+  name: string;
+  /** Historical checkpoints need not carry Nodes; future stops always do. */
+  nodes?: readonly NodeId[];
+  tag?: string;
+  milestone?: NodeId;
+}>;
 export type PastEntry = Readonly<
   | { kind: "session"; session: SessionRef; parent?: SessionRef; stop?: StopRef; at: string }
   | { kind: "ghost"; session?: SessionRef; act: number; nodes: readonly NodeId[]; at: string }
   | { kind: "plan-changed"; act: number; at: string }
 >;
+function runObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function sessionRef(value: unknown): value is SessionRef {
+  return typeof value === "string" && value.length > 0;
+}
+export function isStopRef(value: unknown): value is StopRef {
+  return (
+    runObject(value) &&
+    typeof value.kind === "string" &&
+    value.kind.length > 0 &&
+    typeof value.name === "string" &&
+    (value.nodes === undefined || (Array.isArray(value.nodes) && value.nodes.every(isNodeId))) &&
+    (value.tag === undefined || typeof value.tag === "string") &&
+    (value.milestone === undefined || isNodeId(value.milestone))
+  );
+}
+export function isPastEntry(value: unknown): value is PastEntry {
+  if (!runObject(value) || !isObservationTimestamp(value.at)) return false;
+  if (value.kind === "session")
+    return (
+      sessionRef(value.session) &&
+      (value.parent === undefined || sessionRef(value.parent)) &&
+      (value.stop === undefined || isStopRef(value.stop))
+    );
+  if (typeof value.act !== "number" || !Number.isSafeInteger(value.act) || value.act < 0) return false;
+  return (
+    value.kind === "plan-changed" ||
+    (value.kind === "ghost" &&
+      (value.session === undefined || sessionRef(value.session)) &&
+      Array.isArray(value.nodes) &&
+      value.nodes.every(isNodeId))
+  );
+}
 export type MissionRun = Readonly<{
   mission: string;
   active: SessionRef | null;
@@ -43,7 +81,7 @@ export function setActive(
   at: string,
   sessions: readonly RunSession[],
 ): { run: MissionRun; close: readonly SessionRef[] } {
-  if (run.retired) throw new Error("A retired Mission cannot change its active Session");
+  if (run.retired?.outcome === "abandoned") throw new Error("An abandoned Mission cannot change its active Session");
   if (target.kind === "none") {
     return {
       run: run.active === null ? run : { ...run, active: null },

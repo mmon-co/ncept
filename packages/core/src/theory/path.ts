@@ -2,27 +2,21 @@ import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory";
 import type { NodeId } from "../patch";
 import type { StopRef } from "../run";
 
-/** The host resolves the displayed name now, including unnamed Lessons and Checkpoints.
- * A named Lesson also retains the tag name carried by the path, independent of that display name. */
+/** Freeze identity facts, not the stop's changing future position or numbering. */
 export function stopRef(stop: Lesson, name: string): StopRef {
-  if (stop.checkpoint)
-    return {
-      kind: "checkpoint",
-      name,
-      ...(stop.checkpoint.milestone === undefined ? {} : { milestone: stop.checkpoint.milestone }),
-    };
-  if (stop.review) return { kind: "review", name, nodes: [...stop.nodes] };
   return {
-    kind: "lesson",
+    kind: stop.kind,
     name,
-    ...(stop.name === undefined ? {} : { tag: stop.name }),
     nodes: [...stop.nodes],
+    ...(stop.tag === undefined ? {} : { tag: stop.tag }),
+    ...(stop.milestone === undefined ? {} : { milestone: stop.milestone }),
   };
 }
 
-/** A Review borrows the following Lesson's number as its address, not as a numbered stop. */
+/** Number is a future address, independent of Session attachment order. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
+  validUntil?: string;
   sections: readonly {
     /** Displayed milestone number: 0 for a first milestone no unclaimed Lesson precedes, else counting from 1. */
     readonly number: number;
@@ -35,8 +29,8 @@ export type MissionPathReading = Readonly<{
   minutesLeft: number;
   rough: boolean;
 }>;
-/** A numbered stop: a teaching Lesson, neither a Review nor a Checkpoint. */
-export const isNumberedLesson = (stop: Pick<Lesson, "review" | "checkpoint">) => !stop.review && !stop.checkpoint;
+/** Numbering is a Theory-declared fact, never inferred from a kind name. */
+export const isNumberedStop = (stop: Pick<Lesson, "numbered">) => stop.numbered;
 export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate" | "prepareEstimate">;
 
 /** Keep each scope independent, including for custom theories without preparation. */
@@ -59,21 +53,22 @@ export function readMissionPath(path: MissionPath, theory: PathTheory, context: 
   const estimateScope = prepareEstimate(theory, context);
   const estimate = estimateScope(path.sections.flatMap(({ lessons }) => lessons));
   return {
+    ...(path.validUntil === undefined ? {} : { validUntil: path.validUntil }),
     sections: path.sections.map((section, index) => ({
       number: index + (path.zeroBased ? 0 : 1),
       milestone: section.milestone,
       lessons: section.lessons.map((lesson) => ({
         ...lesson,
-        number: lesson.checkpoint ? number : lesson.review ? number + 1 : ++number,
+        number: lesson.numbered ? ++number : number + (lesson.numberOffset ?? 0),
         cleared:
-          isNumberedLesson(lesson) &&
+          isNumberedStop(lesson) &&
           lesson.nodes.every((id) => progress[id]?.status !== "open" && progress[id] !== undefined),
-        ...(lesson.review ? { minutes: estimateScope([lesson]).minutes } : {}),
+        minutes: estimateScope([lesson]).minutes,
       })),
       minutesLeft: estimateScope(section.lessons).minutes,
     })),
     warnings: path.warnings,
-    lessonCount: path.sections.reduce((total, section) => total + section.lessons.filter(isNumberedLesson).length, 0),
+    lessonCount: path.sections.reduce((total, section) => total + section.lessons.filter(isNumberedStop).length, 0),
     minutesLeft: estimate.minutes,
     rough: estimate.rough,
   };

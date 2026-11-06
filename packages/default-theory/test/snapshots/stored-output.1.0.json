@@ -1,0 +1,438 @@
+{
+  "pedagogyKeys": [
+    "pedagogy:completion",
+    "pedagogy:criterion",
+    "pedagogy:elaborate",
+    "pedagogy:milestone",
+    "pedagogy:priority",
+    "pedagogy:raise-when"
+  ],
+  "emittedPayloads": [
+    {
+      "kind": "teaching",
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "explanation": "Here is a worked explanation of the base capability, with an example."
+    },
+    {
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "success",
+      "unaided": true,
+      "grader": "tutor",
+      "task": "Explain the detail",
+      "response": "An explanation",
+      "kind": "demonstration"
+    },
+    {
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "failure",
+      "unaided": true,
+      "grader": "tutor",
+      "task": "Explain the detail",
+      "response": "I cannot explain it",
+      "kind": "demonstration"
+    },
+    {
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "success",
+      "unaided": true,
+      "grader": "tutor",
+      "task": "Explain the detail",
+      "response": "An explanation",
+      "kind": "demonstration"
+    },
+    {
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "failure",
+      "unaided": true,
+      "grader": "tutor",
+      "task": "Recall the base",
+      "response": "I forgot",
+      "kind": "demonstration",
+      "recording": "retrieval-opener"
+    },
+    {
+      "kind": "feature-use",
+      "operation": "open-help"
+    },
+    {
+      "kind": "completion",
+      "playground": "checklist",
+      "scope": {
+        "section": "base"
+      },
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "state": "complete",
+      "validUntil": "2026-11-04T00:00:00.000Z"
+    },
+    {
+      "kind": "demonstration",
+      "item": "card-base",
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "success",
+      "unaided": true,
+      "grader": "mechanical",
+      "task": "Explain the base",
+      "response": "An explanation",
+      "material": {
+        "playground": "cards",
+        "id": "set"
+      }
+    },
+    {
+      "kind": "demonstration",
+      "item": "question-base",
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "failure",
+      "unaided": true,
+      "grader": "mechanical",
+      "task": "Choose the base\n- Base\n- Not base",
+      "response": "Not base\nUnsure\nConfuses base and detail",
+      "material": {
+        "playground": "cards",
+        "id": "set"
+      }
+    },
+    {
+      "kind": "demonstration",
+      "item": "problem-detail",
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "failure",
+      "unaided": true,
+      "grader": "decision",
+      "task": "Explain the detail\nCheck: Explains?",
+      "response": "An explanation after help\nNot taken up: No explanation",
+      "material": {
+        "playground": "cards",
+        "id": "set"
+      }
+    },
+    {
+      "kind": "demonstration",
+      "item": "problem-detail",
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "outcome": "success",
+      "unaided": false,
+      "grader": "decision",
+      "task": "Explain the detail\nCheck: Explains?",
+      "response": "An explanation after help\nShown: Explains",
+      "material": {
+        "playground": "cards",
+        "id": "set"
+      }
+    },
+    {
+      "kind": "grade",
+      "node": {
+        "node": "node-base",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "day": {
+        "id": "day-fixture",
+        "start": "2026-11-02T00:00:00.000Z",
+        "end": "2026-11-03T00:00:00.000Z"
+      },
+      "rating": "Good"
+    },
+    {
+      "kind": "grade",
+      "node": {
+        "node": "node-detail",
+        "provenance": {
+          "identity": "patch-stored-output",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "day": {
+        "id": "day-fixture",
+        "start": "2026-11-02T00:00:00.000Z",
+        "end": "2026-11-03T00:00:00.000Z"
+      },
+      "rating": "Good"
+    }
+  ],
+  "projections": [
+    {
+      "prefix": 0,
+      "clocks": [
+        {
+          "at": "2026-11-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown", "unused"],
+            "node-claimed": ["frontier", "reachable", "unknown", "unused"],
+            "node-detail": ["unknown", "unused"],
+            "node-milestone": ["unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["gating"],
+            "edge-detail-milestone": ["gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-11-05T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown", "unused"],
+            "node-claimed": ["frontier", "reachable", "unknown", "unused"],
+            "node-detail": ["unknown", "unused"],
+            "node-milestone": ["unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["gating"],
+            "edge-detail-milestone": ["gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-12-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown", "unused"],
+            "node-claimed": ["frontier", "reachable", "unknown", "unused"],
+            "node-detail": ["unknown", "unused"],
+            "node-milestone": ["unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["gating"],
+            "edge-detail-milestone": ["gating"]
+          },
+          "learner": ["coarse", "unused"]
+        }
+      ]
+    },
+    {
+      "prefix": 2,
+      "clocks": [
+        {
+          "at": "2026-11-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-11-05T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-12-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due", "review:fading"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due", "review:fading"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        }
+      ]
+    },
+    {
+      "prefix": 4,
+      "clocks": [
+        {
+          "at": "2026-11-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-11-05T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        },
+        {
+          "at": "2026-12-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due", "review:fading"],
+            "node-detail": ["claimed", "known", "probably-known", "review:due", "review:fading"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "unused"]
+        }
+      ]
+    },
+    {
+      "prefix": 16,
+      "clocks": [
+        {
+          "at": "2026-11-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "instability", "item-outcomes", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "demonstrated", "instability", "known", "review:due", "self-report"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "instability", "item-outcomes", "self-report", "unused"]
+        },
+        {
+          "at": "2026-11-05T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "instability", "item-outcomes", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due"],
+            "node-detail": ["claimed", "demonstrated", "instability", "known", "self-report"],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "instability", "item-outcomes", "self-report", "unused"]
+        },
+        {
+          "at": "2026-12-02T12:00:00.000Z",
+          "nodes": {
+            "node-base": ["frontier", "instability", "item-outcomes", "reachable", "unknown"],
+            "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due", "review:fading"],
+            "node-detail": [
+              "claimed",
+              "demonstrated",
+              "instability",
+              "known",
+              "review:due",
+              "review:fading",
+              "self-report"
+            ],
+            "node-milestone": ["frontier", "reachable", "unknown", "unused"],
+            "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
+          },
+          "edges": {
+            "edge-base-detail": ["not-gating"],
+            "edge-detail-milestone": ["frontier", "not-gating"]
+          },
+          "learner": ["coarse", "instability", "item-outcomes", "self-report", "unused"]
+        }
+      ]
+    }
+  ]
+}
