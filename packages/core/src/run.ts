@@ -1,4 +1,5 @@
-import type { NodeId } from "./patch";
+import { isNodeId, type NodeId } from "./patch";
+import { isObservationTimestamp } from "./observations";
 
 /** Application-owned Session identity, opaque to Core. */
 export type SessionRef = string;
@@ -17,6 +18,39 @@ export type PastEntry = Readonly<
   | { kind: "ghost"; session?: SessionRef; act: number; nodes: readonly NodeId[]; at: string }
   | { kind: "plan-changed"; act: number; at: string }
 >;
+function runObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function sessionRef(value: unknown): value is SessionRef {
+  return typeof value === "string" && value.length > 0;
+}
+export function isStopRef(value: unknown): value is StopRef {
+  if (!runObject(value) || typeof value.name !== "string") return false;
+  if (value.kind === "checkpoint") return value.milestone === undefined || isNodeId(value.milestone);
+  return (
+    (value.kind === "lesson" || value.kind === "review") &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isNodeId) &&
+    (value.kind !== "lesson" || value.tag === undefined || typeof value.tag === "string")
+  );
+}
+export function isPastEntry(value: unknown): value is PastEntry {
+  if (!runObject(value) || !isObservationTimestamp(value.at)) return false;
+  if (value.kind === "session")
+    return (
+      sessionRef(value.session) &&
+      (value.parent === undefined || sessionRef(value.parent)) &&
+      (value.stop === undefined || isStopRef(value.stop))
+    );
+  if (typeof value.act !== "number" || !Number.isSafeInteger(value.act) || value.act < 0) return false;
+  return (
+    value.kind === "plan-changed" ||
+    (value.kind === "ghost" &&
+      (value.session === undefined || sessionRef(value.session)) &&
+      Array.isArray(value.nodes) &&
+      value.nodes.every(isNodeId))
+  );
+}
 export type MissionRun = Readonly<{
   mission: string;
   active: SessionRef | null;
