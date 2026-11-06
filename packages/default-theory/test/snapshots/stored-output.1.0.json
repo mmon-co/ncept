@@ -331,7 +331,7 @@
             "node-detail": ["claimed", "known", "probably-known", "review:due"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],
@@ -347,7 +347,7 @@
             "node-detail": ["claimed", "known", "probably-known", "review:due"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],
@@ -363,7 +363,7 @@
             "node-detail": ["claimed", "known", "probably-known", "review:due", "review:fading"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],
@@ -374,7 +374,7 @@
       ]
     },
     {
-      "prefix": 15,
+      "prefix": 16,
       "clocks": [
         {
           "at": "2026-11-02T12:00:00.000Z",
@@ -384,7 +384,7 @@
             "node-detail": ["claimed", "demonstrated", "instability", "known", "review:due", "self-report"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],
@@ -400,7 +400,7 @@
             "node-detail": ["claimed", "demonstrated", "instability", "known", "self-report"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],
@@ -424,7 +424,7 @@
             ],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
-            "node-untouched": ["coarse", "frontier", "reachable", "unknown", "unused"]
+            "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]
           },
           "edges": {
             "edge-base-detail": ["not-gating"],

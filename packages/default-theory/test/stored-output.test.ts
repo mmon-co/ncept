@@ -134,6 +134,13 @@ function storedOutput() {
       nodes: ["node-claimed", "node-detail"],
       payload: { kind: "claim", stance: "knows", statement: "I know these" },
     },
+    {
+      id: "obs-claim-forgotten",
+      at: "2026-11-01T10:30:00.000Z",
+      by: DEFAULT_THEORY_REF,
+      nodes: ["node-untouched"],
+      payload: { kind: "claim", stance: "forgotten", statement: "I have forgotten this" },
+    },
   ];
   const payloads: unknown[] = [];
   function run<T>(program: Program<T>): T {
