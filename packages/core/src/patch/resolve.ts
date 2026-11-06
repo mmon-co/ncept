@@ -1,14 +1,14 @@
 import { satisfies, tryParse, tryParseRange } from "std-semver";
-import { canonicalJson } from "../digest";
-import { candidateRevision } from "./release";
+import { canonicalJson } from "../digest.js";
+import { candidateRevision } from "./release.js";
 import {
   discoveryTags,
   isAttachment,
   isMaterialMeta,
   sameMetadataSubjects,
   validateMetadataProperties,
-} from "./metadata";
-import { PatchCompileError } from "./errors";
+} from "./metadata.js";
+import { PatchCompileError } from "./errors.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -28,8 +28,8 @@ import type {
   GraphTag,
   TaggedSet,
   SemanticOperation,
-} from "./model";
-import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
+} from "./model.js";
+import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model.js";
 
 function sorted<T extends { id: string }>(values: Iterable<T>): T[] {
   return [...values].sort((left, right) => left.id.localeCompare(right.id));

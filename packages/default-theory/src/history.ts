@@ -1,4 +1,4 @@
-import type { Observation } from "@concept/core/observations";
+import type { Observation } from "@mmon-co/core/observations";
 import {
   isClaim,
   isCompletionOutcome,
@@ -12,7 +12,7 @@ import {
   isRetraction,
   isReviewPass,
   isTeaching,
-} from "./state";
+} from "./state.js";
 
 /** Describe the accepted evidence, not the learner's present state. No host parses these payloads. */
 export function describeDefaultObservation(observation: Observation): string | undefined {

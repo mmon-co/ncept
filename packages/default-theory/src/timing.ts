@@ -1,7 +1,7 @@
-import { isNodeId, type ResolvedGraph } from "@concept/core/patch";
-import type { Observation } from "@concept/core/observations";
-import type { LessonActivity } from "@concept/core/theory";
-import { isDemonstration, initDefaultState } from "./state";
+import { isNodeId, type ResolvedGraph } from "@mmon-co/core/patch";
+import type { Observation } from "@mmon-co/core/observations";
+import type { LessonActivity } from "@mmon-co/core/theory";
+import { isDemonstration, initDefaultState } from "./state.js";
 
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 export const UNMEASURED_LESSON_TIMING: LessonTiming = { minutesPerNode: 20, rough: true };

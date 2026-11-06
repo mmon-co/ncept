@@ -1,9 +1,9 @@
-import { dependentCones } from "./dependent-cone";
-import { nodePriority, teachingPath, pathProperty } from "./path";
-import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@concept/core/patch";
-import type { Observation, ObservationId } from "@concept/core/observations";
-import type { MessageDescriptor, Tag, TheoryProjection } from "@concept/core/theory";
-import { completionCaption } from "./completion";
+import { dependentCones } from "./dependent-cone.js";
+import { nodePriority, teachingPath, pathProperty } from "./path.js";
+import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@mmon-co/core/patch";
+import type { Observation, ObservationId } from "@mmon-co/core/observations";
+import type { MessageDescriptor, Tag, TheoryProjection } from "@mmon-co/core/theory";
+import { completionCaption } from "./completion.js";
 import {
   defaultProjectionBasis,
   DEFAULT_PARAMETERS,
@@ -11,7 +11,7 @@ import {
   type Demonstration,
   type HomedRecord,
   type NodeState,
-} from "./state";
+} from "./state.js";
 
 export function defaultNodeState(state: DefaultState, node: NodeId): NodeState {
   const value = state.nodes[node];

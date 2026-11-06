@@ -1,5 +1,5 @@
-import { isNodeId, type NodeId } from "./patch";
-import { isObservationTimestamp } from "./observations";
+import { isNodeId, type NodeId } from "./patch/index.js";
+import { isObservationTimestamp } from "./observations.js";
 
 /** Application-owned Session identity, opaque to Core. */
 export type SessionRef = string;

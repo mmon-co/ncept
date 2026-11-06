@@ -1,6 +1,6 @@
-export { attachmentDigest, canonicalJson, contentDigest, isContentDigest, type ContentDigest } from "./digest";
-export * from "./patch";
-export * from "./run";
-export * from "./profile";
-export * from "./observations";
-export * from "./theory";
+export { attachmentDigest, canonicalJson, contentDigest, isContentDigest, type ContentDigest } from "./digest.js";
+export * from "./patch/index.js";
+export * from "./run.js";
+export * from "./profile.js";
+export * from "./observations.js";
+export * from "./theory/index.js";

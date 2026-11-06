@@ -1,7 +1,7 @@
 import { satisfies, tryParse, tryParseRange } from "std-semver";
-import { PatchCompileError } from "./errors";
-import { isPatchId } from "./release";
-import type { PatchMetadata } from "./model";
+import { PatchCompileError } from "./errors.js";
+import { isPatchId } from "./release.js";
+import type { PatchMetadata } from "./model.js";
 
 export const PATCH_VARIANT_OF = "patch:variant-of";
 export const PATCH_VARIANT_LOCALE = "patch:locale";

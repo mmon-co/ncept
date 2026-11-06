@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type NodeId, type PatchRevision } from "@concept/core/patch";
-import type { Observation, PlatformEvent, Program } from "@concept/core/observations";
-import { readTheoryState, type Tag } from "@concept/core/theory";
+import { resolvePatchBundle, type NodeId, type PatchRevision } from "@mmon-co/core/patch";
+import type { Observation, PlatformEvent, Program } from "@mmon-co/core/observations";
+import { readTheoryState, type Tag } from "@mmon-co/core/theory";
 import {
   defaultTheory,
   DEFAULT_THEORY_REF,
   documentListing,
   resolveDefaultCatalogProgram,
-} from "@concept/default-theory";
+} from "@mmon-co/default-theory";
 
 const ref = { identity: "patch-stored-output", digest: `sha256:${"a".repeat(64)}` } as const;
 const day = { id: "day-fixture", start: "2026-11-02T00:00:00.000Z", end: "2026-11-03T00:00:00.000Z" };
