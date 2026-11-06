@@ -18,6 +18,18 @@ bun -e 'import { defaultTheory, DEFAULT_THEORY_REQUIREMENT, skillBody } from "@c
 
 The Skills' Markdown is the source. The repository's `build:skills` task embeds it in Git-ignored `src/skills/sources.ts` for the Convex bundler; setup, dev, checks, tests and deploys build it first. Existing algorithm tests live in `test/`: `bun test --parallel packages/default-theory/test`.
 
+## Stored-output version guard
+
+`bun test packages/default-theory/test/stored-output.test.ts` compares a fixed graph and observation log with `test/snapshots/stored-output.<major>.<minor>.json`. The ordinary test suite and pre-integration gate run it too. It records tag membership on Nodes, Edges and the learner at several evidence prefixes and clocks, the `pedagogy:` keys those operations read, and observation payloads emitted by recording tools and outcome/day events. It does not record captions, rankings, readings, paths, prompts or build metadata. Like any fixture, it detects changes exercised by that graph and log, not every possible policy change.
+
+A mismatch requires a minor (mechanical migration) or major (non-mechanical migration) bump to `DEFAULT_THEORY_REF` and the corresponding forward data migration. Changed criteria for applying the same tags count as stored-data changes, not patches. Generate the new version's snapshot after making that change. If the diff changes no stored data, refresh the existing snapshot instead:
+
+```sh
+UPDATE_DEFAULT_THEORY_STORED_OUTPUT=1 bun test packages/default-theory/test/stored-output.test.ts
+```
+
+Review the snapshot diff; refreshing it is not a substitute for a required version bump or migration. A missing versioned snapshot fails rather than being created by an ordinary test run.
+
 ## Observation contract
 
 The observation vocabulary is this package's public data contract, not a Core vocabulary or a private implementation detail. Other Theories may import and interpret it so switching Theory need not restart a learner's progress. They decide how that evidence affects their own state; reusing the evidence does not require reproducing this Theory's labels or FSRS schedules.
