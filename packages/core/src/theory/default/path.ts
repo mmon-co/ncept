@@ -9,7 +9,15 @@ import {
   type ResolvedGraph,
 } from "../../patch";
 import { dependentCones } from "./dependent-cone";
-import { LESSON_TAG_PREFIX, type Lesson, type MissionPath } from "../theory";
+import {
+  LESSON_TAG_PREFIX,
+  tagIndex,
+  type Lesson,
+  type MissionPath,
+  type MissionFuture,
+  type PathContext,
+} from "../theory";
+import { prepareEstimateDefault, progressDefault } from "./reading";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
@@ -33,7 +41,7 @@ export function nodePriority(graph: ResolvedGraph, node: NodeId): number {
  * outside blocker. Overlapping tags remain separate lessons; coverage is claimed by section,
  * not by lesson, so a Node may be taught in more than one group.
  */
-export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath {
+export function teachingPath(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath {
   const stable: NodeId[] = [];
   const cones = new Map<NodeId, readonly NodeId[]>();
   const cone = (id: NodeId) => {
@@ -187,4 +195,100 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
   )
     first.lessons.unshift({ kind: "checkpoint", numbered: false, nodes: [], checkpoint: { required: true } });
   return { sections, warnings: [...warnings.values()] };
+}
+
+/** Most overdue first, with deterministic ties independent of projection assembly order. */
+function ranked(nodes: readonly NodeId[], context: PathContext): NodeId[] {
+  const rank = (id: NodeId) => context.projection.nodes[id]?.find((tag) => tag.tag === "review:due")?.rank ?? 0;
+  return [...nodes].sort((a, b) => rank(b) - rank(a) || a.localeCompare(b));
+}
+
+/** Nodes are indivisible: an over-budget first Node must still make progress. */
+function packed(candidates: readonly NodeId[], context: PathContext): NodeId[] {
+  const estimate = prepareEstimateDefault(context);
+  const nodes: NodeId[] = [];
+  for (const node of ranked(candidates, context)) {
+    if (
+      nodes.length &&
+      estimate([{ kind: "review", numbered: false, nodes: [...nodes, node] }]).minutes > context.minutes
+    )
+      break;
+    nodes.push(node);
+  }
+  return nodes;
+}
+
+/** Retention ranks vary continuously. A projected reading alone cannot promise the next
+ * membership or rank crossing, so a retention-dependent future expires at the next clock
+ * millisecond, not at the (possibly much later) completion expiry. Evidence-free previews
+ * can retain the projection's own boundary. No timer or host polling preference lives here.
+ */
+function pathValidity(context: PathContext): Pick<MissionPath, "validUntil"> {
+  const retention = Object.values(context.projection.nodes).some((tags) =>
+    tags.some(({ tag }) => tag === "demonstrated" || tag === "probably-known" || tag.startsWith("review:")),
+  );
+  const boundaries = [
+    context.projection.validUntil,
+    ...(retention ? [new Date(Date.parse(context.now) + 1).toISOString()] : []),
+  ].filter((at) => at !== undefined);
+  const validUntil = boundaries.sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  return validUntil === undefined ? {} : { validUntil };
+}
+
+/** The syllabus stays addressable as progress changes; only the future is upcoming.
+ * A trailing unnumbered review is maintenance; a review with numberOffset 1 blocks the
+ * following teaching stop. A graph-wide reading has only maintenance, and no Mission.
+ */
+export function pathDefault(context: PathContext): MissionFuture {
+  if (context.retired?.outcome === "abandoned") return { sections: [], warnings: [], future: [] };
+  const { graph, targets, projection } = context;
+  const path = teachingPath(graph, targets ?? []);
+  const tags = tagIndex(projection);
+  const scope =
+    targets === undefined
+      ? new Set(graph.nodes.map(({ id }) => id))
+      : new Set(path.sections.flatMap(({ lessons }) => lessons.flatMap(({ nodes }) => nodes)));
+  const due = packed(
+    graph.nodes.map(({ id }) => id).filter((id) => scope.has(id) && tags("review:due").has(id)),
+    context,
+  );
+  const maintenance: Lesson[] = due.length ? [{ kind: "review", numbered: false, nodes: due }] : [];
+  if (context.retired?.outcome === "achieved" || targets === undefined)
+    return { ...path, ...pathValidity(context), future: maintenance };
+
+  const progress = progressDefault(graph, projection, [...scope]);
+  const next = path.sections
+    .flatMap(({ lessons }) => lessons)
+    .find((lesson) => lesson.numbered && lesson.nodes.some((id) => progress[id]?.status === "open"));
+  const cone = new Set(
+    next?.nodes.flatMap((id) => {
+      const result = route(graph, id);
+      return result.kind === "found" ? result.nodes.map(({ id }) => id) : [];
+    }) ?? [],
+  );
+  const fading = packed(
+    graph.nodes
+      .map(({ id }) => id)
+      .filter((id) => cone.has(id) && !next?.nodes.includes(id) && tags("review:fading").has(id)),
+    context,
+  );
+  const sections = path.sections.map((section) => ({
+    ...section,
+    lessons: section.lessons.flatMap((lesson) =>
+      lesson === next && fading.length
+        ? [{ kind: "review", numbered: false, numberOffset: 1, nodes: fading }, lesson]
+        : [lesson],
+    ),
+  }));
+  return {
+    ...path,
+    ...pathValidity(context),
+    sections,
+    future: [
+      ...sections
+        .flatMap(({ lessons }) => lessons)
+        .filter((lesson) => !lesson.numbered || lesson.nodes.some((id) => progress[id]?.status === "open")),
+      ...maintenance,
+    ],
+  };
 }

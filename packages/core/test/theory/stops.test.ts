@@ -17,8 +17,8 @@ const goalTracker: Theory<void> = {
   project: () => ({ nodes: {}, edges: {}, learner: [] }),
   progress: (_graph, _projection, nodes) => Object.fromEntries(nodes.map((id) => [id, { status: "open" }])),
   estimate: () => ({ minutes: 0, rough: false }),
-  path: (_graph, targets) => ({
-    sections: targets.map((milestone) => ({
+  path: ({ targets = [] }) => {
+    const sections = targets.map((milestone) => ({
       milestone,
       lessons: [
         { kind: "check-in", name: "Orient", nodes: [], numbered: false },
@@ -26,9 +26,9 @@ const goalTracker: Theory<void> = {
         { kind: "check-in", name: "Reflect", nodes: [milestone], numbered: false },
         { kind: "check-in", name: "Next goal", nodes: [milestone], numbered: true },
       ],
-    })),
-    warnings: [],
-  }),
+    }));
+    return { sections, warnings: [], future: sections.flatMap(({ lessons }) => lessons) };
+  },
   tags: [],
   outcomes: {},
   *event() {},
@@ -50,7 +50,16 @@ test("Theory-named numbered and unnumbered stops retain identity through public 
     ],
   });
   const projection = goalTracker.project(graph, undefined);
-  const path = goalTracker.path?.(graph, ["node-goal"]);
+  const path = goalTracker.path?.({
+    graph,
+    targets: ["node-goal"],
+    projection,
+    past: [],
+    observations: [],
+    activities: [],
+    now: "2026-11-06T00:00:00.000Z",
+    minutes: 20,
+  });
   if (!path) throw new Error("Goal tracker must have a path");
   const reading = readMissionPath(path, goalTracker, { graph, projection, observations: [], activities: [] });
   const stops = reading.sections.flatMap(({ lessons }) => lessons);

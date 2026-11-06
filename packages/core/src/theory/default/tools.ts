@@ -502,13 +502,21 @@ export const defaultInstrumentTools = [
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
         path: readMissionPath(
-          pathDefault(
-            ctx.graph,
-            mission.targets ??
+          pathDefault({
+            graph: ctx.graph,
+            targets:
+              mission.targets ??
               mission.nodes.filter(
                 (id) => !ctx.graph.edges.some((edge) => edge.from === id && mission.nodes.includes(edge.to)),
               ),
-          ),
+            past: mission.run?.past ?? [],
+            ...(mission.run?.retired ? { retired: mission.run.retired } : {}),
+            now: ctx.now,
+            minutes: ctx.sessionMinutes ?? Number.POSITIVE_INFINITY,
+            projection: projectDefault(ctx.graph, ctx.state),
+            observations: ctx.state.observations,
+            activities: ctx.lessonActivities ?? [],
+          }),
           { progress: progressDefault, estimate: estimateDefault, prepareEstimate: prepareEstimateDefault },
           {
             graph: ctx.graph,

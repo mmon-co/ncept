@@ -1,6 +1,6 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
 import type { ModeEntry, SessionMode } from "./modes";
-import type { MissionRunReading, StopRef } from "../run";
+import type { MissionRun, MissionRunReading, StopRef } from "../run";
 import type { LessonReading } from "./path";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
 
@@ -82,6 +82,8 @@ export type Lesson = Readonly<{
   }>;
 }>;
 export type MissionPath = Readonly<{
+  /** Earliest clock instant requiring a fresh path read; input changes always invalidate it. */
+  validUntil?: string;
   /** The first section's milestone is shown as 0 when no unclaimed Lesson precedes it, else 1. */
   zeroBased?: true;
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
@@ -122,6 +124,22 @@ export type EstimateContext = Readonly<{
   observations: readonly Observation[];
   activities: readonly LessonActivity[];
 }>;
+
+/** A value-only reading: omitted targets selects a graph-wide future without a Mission. */
+export type PathContext = EstimateContext &
+  Readonly<{
+    targets?: readonly NodeId[];
+    past: MissionRun["past"];
+    retired?: MissionRun["retired"];
+    now: string;
+    /** The host's effective Session budget, never a Theory preference. */
+    minutes: number;
+  }>;
+export type MissionFuture = MissionPath &
+  Readonly<{
+    /** Ordered upcoming stops; sections retain the structural syllabus and checkpoint addresses. */
+    future: readonly Lesson[];
+  }>;
 
 /** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
 export type LessonSnapshot = Readonly<{
@@ -189,6 +207,8 @@ export type ChatContext<S> = Context<S> &
     missions?: readonly MissionContext[];
     /** Measured by the host from lesson Session activity, never by the theory. */
     lessonActivities?: readonly LessonActivity[];
+    /** Host budget for computed futures; absent means the host imposes no bound. */
+    sessionMinutes?: number;
     /** The fixed Lesson's current checklist, from the host's same reading as the header. */
     lesson?: LessonProgress;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
@@ -232,8 +252,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
   /** Reading-owned reuse, valid only for this immutable context snapshot. */
   prepareEstimate?(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate;
-  /** Stable graph-only stops. A theory without this method has no Lessons. */
-  path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
+  /** Compute the future from this reading, never persist it. A theory may have no stops. */
+  path?(context: PathContext): MissionFuture;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   /** A historical act's meaning, from its accepted evidence rather than present progress. */

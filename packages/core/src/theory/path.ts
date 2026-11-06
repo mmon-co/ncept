@@ -16,6 +16,7 @@ export function stopRef(stop: Lesson, name: string): StopRef {
 /** Number is a future address, independent of Session attachment order. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
+  validUntil?: string;
   sections: readonly {
     /** Displayed milestone number: 0 for a first milestone no unclaimed Lesson precedes, else counting from 1. */
     readonly number: number;
@@ -52,6 +53,7 @@ export function readMissionPath(path: MissionPath, theory: PathTheory, context: 
   const estimateScope = prepareEstimate(theory, context);
   const estimate = estimateScope(path.sections.flatMap(({ lessons }) => lessons));
   return {
+    ...(path.validUntil === undefined ? {} : { validUntil: path.validUntil }),
     sections: path.sections.map((section, index) => ({
       number: index + (path.zeroBased ? 0 : 1),
       milestone: section.milestone,

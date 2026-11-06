@@ -1,6 +1,18 @@
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision, type StructureEdge } from "../../../src/patch";
 import { defaultTheory } from "../../../src/theory/default";
+import { readTheoryState } from "../../../src/theory";
+const now = "2026-11-06T00:00:00.000Z";
+const context = (graph: import("../../../src/patch").ResolvedGraph, targets: readonly NodeId[]) => ({
+  graph,
+  targets,
+  past: [],
+  observations: [],
+  activities: [],
+  now,
+  minutes: 20,
+  projection: defaultTheory.project(graph, readTheoryState(defaultTheory, graph, [], now)),
+});
 
 test("random grouped DAG paths preserve prerequisites, contiguous sections, cone coverage and lesson grouping", () => {
   // A fixed seed makes a failing graph reproducible without a property-testing dependency.
@@ -71,7 +83,7 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
       return nodes;
     };
     const expected = cone(targets);
-    const path = defaultTheory.path(graph, targets);
+    const path = defaultTheory.path(context(graph, targets));
     const seen = new Set<NodeId>();
     const claimed = new Set<NodeId>();
     for (const section of path.sections) {
@@ -161,7 +173,7 @@ test("independent target sections follow target order, not priority hints", () =
     },
   };
   const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
-  const path = defaultTheory.path(graph, ["node-conversation", "node-social"]);
+  const path = defaultTheory.path(context(graph, ["node-conversation", "node-social"]));
   expect(path.sections.map(({ milestone }) => milestone)).toEqual(["node-conversation", "node-social"]);
   expect(path.sections[0]?.lessons.filter((lesson) => !lesson.checkpoint).map(({ nodes }) => nodes)).toEqual([
     ["node-words"],

@@ -1,5 +1,5 @@
 import { dependentCones } from "./dependent-cone";
-import { nodePriority, pathDefault, pathProperty } from "./path";
+import { nodePriority, teachingPath, pathProperty } from "./path";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
 import type { Observation, ObservationId } from "../../observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
@@ -99,7 +99,7 @@ function prepareGraph(graph: ResolvedGraph) {
     coarse: coarseNodes(graph),
     cones: new Map(graph.nodes.map(({ id }) => [id, cone(id)])),
     priority: new Map(graph.nodes.map(({ id }) => [id, nodePriority(graph, id)])),
-    warnings: pathDefault(graph, targets).warnings,
+    warnings: teachingPath(graph, targets).warnings,
   };
 }
 type ProjectionGraph = ReturnType<typeof prepareGraph>;
