@@ -1,4 +1,5 @@
 import { chat, modes } from "./chat";
+import { describeDefaultObservation } from "./history";
 import { event } from "./event";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
 import { DEFAULT_THEORY_REF, initDefaultState, isCompletionOutcome } from "./state";
@@ -16,6 +17,7 @@ export const implementation = {
   estimate: estimateDefault,
   prepareEstimate: prepareEstimateDefault,
   path: pathDefault,
+  describeObservation: describeDefaultObservation,
   tags: defaultTags,
   outcomes: {
     completion: isCompletionOutcome,
