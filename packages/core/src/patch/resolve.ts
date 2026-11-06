@@ -785,6 +785,8 @@ function resolveBundle(
       !isMaterialMeta(material.meta)
     )
       throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}`);
+    if (!Array.isArray(material.about))
+      throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}: about must be a list`);
     if (new Set(material.about).size !== material.about.length || material.about.some((id) => !nodes.has(id)))
       throw new PatchCompileError(
         "dangling-material",
