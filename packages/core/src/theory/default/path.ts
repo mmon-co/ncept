@@ -19,7 +19,7 @@ import {
 } from "../theory";
 import { prepareEstimateDefault, progressDefault } from "./reading";
 import { DEFAULT_PARAMETERS, stateDefault } from "./state";
-import { DECAY, FACTOR } from "ts-fsrs";
+import { forgetting_curve } from "ts-fsrs";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
@@ -220,15 +220,15 @@ function packed(candidates: readonly NodeId[], context: PathContext): NodeId[] {
   return nodes;
 }
 
-/** Membership changes at retention thresholds; order changes when equal-priority
- * forgetting curves cross. Both are clock dependencies, unlike measured activity costs.
- * Use the same FSRS curve constants as the reducer, at millisecond clock precision.
+/** Invalidate at the next membership threshold or candidate rank change. FSRS rounds
+ * retrievability, so an unrounded analytic crossing would miss the first effective tick.
+ * Rank changes are conservative: the order may survive one, but cannot change before it.
  */
 function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<MissionPath, "validUntil"> {
   const now = Date.parse(context.now);
   const boundaries = context.projection.validUntil === undefined ? [] : [Date.parse(context.projection.validUntil)];
   const state = stateDefault(context.graph, context.observations, context.now);
-  const scheduled = context.graph.nodes.flatMap(({ id }) => {
+  for (const { id } of context.graph.nodes) {
     const node = state.nodes[id];
     const schedule = node?.schedule;
     if (
@@ -237,34 +237,29 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
       node.reviewCleared ||
       pathProperty(context.graph, id, "pedagogy:milestone") === true
     )
-      return [];
+      continue;
     const last = Date.parse(schedule.lastReview);
-    if (last > now) boundaries.push(now + 1); // A future-dated day grade is outside the nonnegative decay interval.
-    if (!schedule.lapsed) {
-      for (const retention of [DEFAULT_PARAMETERS.retention.due, DEFAULT_PARAMETERS.retention.fading]) {
-        const crossing = last + ((schedule.stability * (Math.pow(retention, 1 / DECAY) - 1)) / FACTOR) * 86_400_000;
-        // Membership uses strict '<': the first millisecond after equality is due.
-        if (crossing >= now) boundaries.push(Math.floor(crossing) + 1);
+    const at = (time: number) => forgetting_curve((time - last) / 86_400_000, schedule.stability);
+    const nextBelow = (threshold: number) => {
+      if (threshold <= 0 || at(now) < threshold) return;
+      let low = now,
+        high = now + 86_400_000;
+      while (at(high) >= threshold && high < 8_640_000_000_000_000)
+        high = Math.min(8_640_000_000_000_000, now + (high - now) * 2);
+      if (at(high) >= threshold) return;
+      while (high - low > 1) {
+        const mid = Math.floor(low + (high - low) / 2);
+        if (at(mid) < threshold) high = mid;
+        else low = mid;
       }
+      boundaries.push(high);
+    };
+    if (!schedule.lapsed) {
+      nextBelow(DEFAULT_PARAMETERS.retention.due);
+      nextBelow(DEFAULT_PARAMETERS.retention.fading);
     }
-    const rank = context.projection.nodes[id]?.find((tag) => tag.tag === "review:due")?.rank;
-    return rank === undefined
-      ? []
-      : [
-          {
-            last,
-            stability: schedule.stability,
-            priority: Math.round(rank - 1 + schedule.retrievability),
-          },
-        ];
-  });
-  for (const [index, a] of scheduled.entries())
-    for (const b of scheduled.slice(index + 1)) {
-      if (a.priority !== b.priority || a.stability === b.stability) continue;
-      const delta = (a.stability * (now - b.last) - b.stability * (now - a.last)) / (b.stability - a.stability);
-      // Expire just before a fractional crossing, and after an exact tie at this read.
-      if (delta >= 0) boundaries.push(Math.max(now + 1, Math.floor(now + delta)));
-    }
+    if (context.projection.nodes[id]?.some(({ tag }) => tag === "review:due")) nextBelow(schedule.retrievability);
+  }
   const expiry = Math.min(...boundaries);
   return Number.isFinite(expiry) ? { validUntil: new Date(expiry).toISOString() } : {};
 }
