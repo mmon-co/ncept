@@ -152,7 +152,12 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       const { unit, prefix } = chosen;
       if (prefix.length !== unit.nodes.length && unit.groupKey !== undefined)
         warn(unit.groupKey, groups.find((tag) => tag.name === unit.groupKey)?.nodes ?? unit.nodes);
-      section.lessons.push({ ...(unit.name === undefined ? {} : { name: unit.name }), nodes: prefix });
+      section.lessons.push({
+        kind: "lesson",
+        numbered: true,
+        ...(unit.name === undefined ? {} : { name: unit.name, tag: unit.name }),
+        nodes: prefix,
+      });
       for (const id of prefix) emitted.add(id);
       unit.nodes = unit.nodes.filter((id) => !prefix.includes(id));
       if (!unit.nodes.length) units.splice(units.indexOf(unit), 1);
@@ -166,6 +171,9 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
         lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
       );
     section.lessons.push({
+      kind: "checkpoint",
+      numbered: false,
+      milestone: section.milestone,
       nodes: [section.milestone],
       checkpoint: { milestone: section.milestone, required, ...(next === undefined ? { final: true } : {}) },
     });
@@ -177,6 +185,6 @@ export function pathDefault(graph: ResolvedGraph, targets: readonly NodeId[]): M
       lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
     )
   )
-    first.lessons.unshift({ nodes: [], checkpoint: { required: true } });
+    first.lessons.unshift({ kind: "checkpoint", numbered: false, nodes: [], checkpoint: { required: true } });
   return { sections, warnings: [...warnings.values()] };
 }

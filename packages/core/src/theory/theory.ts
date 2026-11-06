@@ -62,9 +62,16 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
 /** Graph-authored lesson membership uses the existing define-tag operation. */
 export const LESSON_TAG_PREFIX = "lesson:";
 export type Lesson = Readonly<{
+  /** A Theory-owned vocabulary; Core never interprets kind names. */
+  kind: string;
   name?: string;
   nodes: readonly NodeId[];
-  review?: true;
+  numbered: boolean;
+  /** An unnumbered stop's address relative to the preceding numbered stop (default 0). */
+  numberOffset?: number;
+  /** Optional captured identity facts, independent of future numbering. */
+  tag?: string;
+  milestone?: NodeId;
   /** The check-in after `milestone`; absent for the check-in before the first span. */
   checkpoint?: Readonly<{
     milestone?: NodeId;

@@ -4,11 +4,14 @@ import type { NodeId } from "./patch";
 export type SessionRef = string;
 
 /** A captured stop, independent of its changing position in the future path. */
-export type StopRef = Readonly<
-  | { kind: "lesson"; name: string; tag?: string; nodes: readonly NodeId[] }
-  | { kind: "review"; name: string; nodes: readonly NodeId[] }
-  | { kind: "checkpoint"; name: string; milestone?: NodeId }
->;
+export type StopRef = Readonly<{
+  kind: string;
+  name: string;
+  /** Historical checkpoints need not carry Nodes; future stops always do. */
+  nodes?: readonly NodeId[];
+  tag?: string;
+  milestone?: NodeId;
+}>;
 export type PastEntry = Readonly<
   | { kind: "session"; session: SessionRef; parent?: SessionRef; stop?: StopRef; at: string }
   | { kind: "ghost"; session?: SessionRef; act: number; nodes: readonly NodeId[]; at: string }
