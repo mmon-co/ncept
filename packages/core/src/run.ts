@@ -46,7 +46,7 @@ export function setActive(
   at: string,
   sessions: readonly RunSession[],
 ): { run: MissionRun; close: readonly SessionRef[] } {
-  if (run.retired) throw new Error("A retired Mission cannot change its active Session");
+  if (run.retired?.outcome === "abandoned") throw new Error("An abandoned Mission cannot change its active Session");
   if (target.kind === "none") {
     return {
       run: run.active === null ? run : { ...run, active: null },
