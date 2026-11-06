@@ -8,4 +8,4 @@ When it fails, tell apart:
 - **A regressed prerequisite:** propose its Review.
 - **A missing capability:** the error traces to no Node; make a `missing-capability` proposal.
 
-After two or three rounds without gain, offer the Chart aside.
+After two or three rounds without gain, offer to revisit the map in Chart.
