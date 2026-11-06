@@ -8,7 +8,7 @@ import {
   type Observation,
   type ObservationId,
   type Program,
-} from "../../observations";
+} from "@concept/core/observations";
 import {
   ASSESSMENT_GUIDANCE_INSTRUCTIONS,
   isNodeId,
@@ -17,8 +17,8 @@ import {
   metadataSetsForEntity,
   type NodeId,
   type ResolvedGraph,
-} from "../../patch";
-import type { ChatContext, Tool } from "../theory";
+} from "@concept/core/patch";
+import type { ChatContext, Tool } from "@concept/core/theory";
 import {
   electedObservations,
   isDefaultObservation,

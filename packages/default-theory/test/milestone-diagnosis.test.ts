@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
-import { readTheoryState, type ChatContext, type LessonSnapshot } from "../../../src/theory";
-import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "../../../src/theory/default";
+import { resolvePatchBundle, type PatchRevision } from "@concept/core/patch";
+import { readTheoryState, type ChatContext, type LessonSnapshot } from "@concept/core/theory";
+import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "@concept/default-theory";
 
 test("host milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
   const revision: PatchRevision = {

@@ -1,8 +1,8 @@
 import { dependentCones } from "./dependent-cone";
 import { nodePriority, teachingPath, pathProperty } from "./path";
-import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "../../patch";
-import type { Observation, ObservationId } from "../../observations";
-import type { MessageDescriptor, Tag, TheoryProjection } from "../theory";
+import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@concept/core/patch";
+import type { Observation, ObservationId } from "@concept/core/observations";
+import type { MessageDescriptor, Tag, TheoryProjection } from "@concept/core/theory";
 import { completionCaption } from "./completion";
 import {
   defaultProjectionBasis,

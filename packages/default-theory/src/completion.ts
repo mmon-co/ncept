@@ -1,6 +1,11 @@
-import { canonicalJson } from "../../digest";
-import { compareObservations, isObservationTimestamp, type Observation, type ObservationId } from "../../observations";
-import { isMaterialMeta, isNodeId, type NodeId } from "../../patch";
+import { canonicalJson } from "@concept/core/digest";
+import {
+  compareObservations,
+  isObservationTimestamp,
+  type Observation,
+  type ObservationId,
+} from "@concept/core/observations";
+import { isMaterialMeta, isNodeId, type NodeId } from "@concept/core/patch";
 import type { Claim, CompletionOutcome, Demonstration } from "./state";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };

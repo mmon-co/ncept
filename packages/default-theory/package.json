@@ -1,0 +1,17 @@
+{
+  "name": "@concept/default-theory",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./path": "./src/path.ts",
+    "./state": "./src/state.ts",
+    "./messages": "./src/messages.ts",
+    "./outcomes": "./src/outcomes.ts"
+  },
+  "dependencies": {
+    "@concept/core": "workspace:*",
+    "ts-fsrs": "^4.0.0",
+    "yaml": "^2.5.0"
+  }
+}

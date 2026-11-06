@@ -1,6 +1,14 @@
-import type { NodeId, ResolvedGraph } from "../../patch";
-import { isNumberedStop } from "../path";
-import type { Estimate, EstimateContext, Lesson, NodeProgress, Progress, Tag, TheoryProjection } from "../theory";
+import type { NodeId, ResolvedGraph } from "@concept/core/patch";
+import { isNumberedStop } from "@concept/core/theory/path";
+import type {
+  Estimate,
+  EstimateContext,
+  Lesson,
+  NodeProgress,
+  Progress,
+  Tag,
+  TheoryProjection,
+} from "@concept/core/theory";
 import { defaultTheoryMessages } from "./messages";
 import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing";
 

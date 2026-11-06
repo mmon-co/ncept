@@ -1,6 +1,6 @@
 import { evaluationTools } from "./evaluation";
 import { CATALOG_EVALUATION_OPERATIONS, CATALOG_MODE_TOOLS } from "./catalog-contract";
-import type { Tool } from "../theory";
+import type { Tool } from "@concept/core/theory";
 import type { DefaultState } from "./state";
 import { defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools } from "./tools";
 

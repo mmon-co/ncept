@@ -28,7 +28,7 @@ export const implementation = {
   chat,
   modes,
   event,
-} satisfies import("../theory").Theory<
+} satisfies import("@concept/core/theory").Theory<
   import("./state").DefaultState,
   {
     completion: import("./state").CompletionOutcome;

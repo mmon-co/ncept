@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type ExactPatchRef, type NodeId, type PatchRevision } from "../../../src/patch";
-import type { Observation } from "../../../src/observations";
-import { readTheoryState } from "../../../src/theory";
-import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState } from "../../../src/theory/default";
+import { resolvePatchBundle, type ExactPatchRef, type NodeId, type PatchRevision } from "@concept/core/patch";
+import type { Observation } from "@concept/core/observations";
+import { readTheoryState } from "@concept/core/theory";
+import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState } from "@concept/default-theory";
 
 // One equivalence property: retained/chunked public reads versus fresh init/step/read.
 // Seeds are reproducible; the existing retention/claims suites independently pin policy semantics.

@@ -1,4 +1,4 @@
-import { renderSpeech } from "../speaker";
+import { renderSpeech } from "@concept/core/theory/speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
 import {
   lastMetadataContribution,
@@ -6,10 +6,10 @@ import {
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
-} from "../../patch";
-import type { Program } from "../../observations";
-import type { ChatContext, ChatSetup } from "../theory";
-import type { HostCapability, SessionMode } from "../modes";
+} from "@concept/core/patch";
+import type { Program } from "@concept/core/observations";
+import type { ChatContext, ChatSetup } from "@concept/core/theory";
+import type { HostCapability, SessionMode } from "@concept/core/theory";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
 import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";

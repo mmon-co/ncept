@@ -1,7 +1,7 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
 import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading";
 import { projectDefault } from "./tags";
-import { contentDigest } from "../../digest";
+import { contentDigest } from "@concept/core/digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
 import {
   effectiveObservations,
@@ -14,10 +14,10 @@ import {
   type ObservationWrite,
   type Program,
   type SurfaceId,
-} from "../../observations";
-import { materialKey, projectVisualGraph, route, type NodeId } from "../../patch";
-import type { ChatContext, Tool } from "../theory";
-import { readMissionPath } from "../path";
+} from "@concept/core/observations";
+import { materialKey, projectVisualGraph, route, type NodeId } from "@concept/core/patch";
+import type { ChatContext, Tool } from "@concept/core/theory";
+import { readMissionPath } from "@concept/core/theory/path";
 import { pathDefault } from "./path";
 import { refinePendingHomes } from "./event";
 import {

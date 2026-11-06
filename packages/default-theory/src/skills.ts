@@ -1,6 +1,6 @@
 /** Pure default Skill catalog; build-time Markdown embedding lives in scripts/build-skills.ts. */
 import YAML from "yaml";
-import { parseSkillSource, type BuiltSkillBundle, type SkillMeta, type SkillResource } from "../skills";
+import { parseSkillSource, type BuiltSkillBundle, type SkillMeta, type SkillResource } from "@concept/core/theory";
 import { sources } from "./skills/sources";
 
 const SKILL_SOURCES: Readonly<Record<string, string>> = {

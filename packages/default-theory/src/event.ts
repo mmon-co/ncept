@@ -1,4 +1,4 @@
-import { renderSpeech } from "../speaker";
+import { renderSpeech } from "@concept/core/theory/speaker";
 import {
   judge,
   isObservationId,
@@ -8,9 +8,9 @@ import {
   type PlatformEvent,
   type Program,
   type Transcript,
-} from "../../observations";
-import { isNodeId, sameExactPatchRef, type NodeId } from "../../patch";
-import type { Context } from "../theory";
+} from "@concept/core/observations";
+import { isNodeId, sameExactPatchRef, type NodeId } from "@concept/core/patch";
+import type { Context } from "@concept/core/theory";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
 import {
   stateDefault,

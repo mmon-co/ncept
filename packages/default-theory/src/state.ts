@@ -1,6 +1,6 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
-import type { Speaker } from "../speaker";
-import { readTheoryState, type TheoryState } from "../theory";
+import type { Speaker } from "@concept/core/theory/speaker";
+import { readTheoryState, type TheoryState } from "@concept/core/theory";
 
 import { dependentCones } from "./dependent-cone";
 import {
@@ -22,7 +22,7 @@ import {
   type MetadataSet,
   type NodeId,
   type ResolvedGraph,
-} from "../../patch";
+} from "@concept/core/patch";
 import {
   compareObservations,
   isObservationId,
@@ -31,7 +31,7 @@ import {
   type Observation,
   type ObservationId,
   type SurfaceId,
-} from "../../observations";
+} from "@concept/core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
 export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" } as const;
@@ -65,7 +65,7 @@ export interface Demonstration {
   readonly task: string;
   readonly response: string;
   readonly evaluation?: {
-    readonly grader: import("../../observations").Grader;
+    readonly grader: import("@concept/core/observations").Grader;
     readonly criteria: readonly { readonly criterion: string; readonly probability: number }[];
     readonly message?: string;
     readonly watch?: ObservationId;

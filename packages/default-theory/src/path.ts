@@ -7,7 +7,7 @@ import {
   unscopedCopyTagName,
   type NodeId,
   type ResolvedGraph,
-} from "../../patch";
+} from "@concept/core/patch";
 import { dependentCones } from "./dependent-cone";
 import {
   LESSON_TAG_PREFIX,
@@ -16,7 +16,7 @@ import {
   type MissionPath,
   type MissionFuture,
   type PathContext,
-} from "../theory";
+} from "@concept/core/theory";
 import { prepareEstimateDefault, progressDefault } from "./reading";
 import { DEFAULT_PARAMETERS, stateDefault } from "./state";
 import { forgetting_curve } from "ts-fsrs";

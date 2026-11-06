@@ -1,4 +1,4 @@
-import type { Observation } from "../../observations";
+import type { Observation } from "@concept/core/observations";
 import {
   isClaim,
   isCompletionOutcome,

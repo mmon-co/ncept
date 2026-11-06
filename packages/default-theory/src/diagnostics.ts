@@ -1,6 +1,6 @@
-import type { NodeId, ResolvedGraph } from "../../patch";
-import type { Observation } from "../../observations";
-import type { NodeProgress } from "../theory";
+import type { NodeId, ResolvedGraph } from "@concept/core/patch";
+import type { Observation } from "@concept/core/observations";
+import type { NodeProgress } from "@concept/core/theory";
 import {
   isDemonstration,
   stateDefault,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { problemAttempts, type AttemptOutcome, type CheckResult } from "../../../src/theory/default";
+import { problemAttempts, type AttemptOutcome, type CheckResult } from "@concept/default-theory";
 
 const AT = "2026-10-06T09:11:54.268Z";
 

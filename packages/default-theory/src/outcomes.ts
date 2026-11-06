@@ -1,7 +1,7 @@
-import { isContentDigest } from "../../digest";
-import { isObservationTimestamp } from "../../observations";
+import { isContentDigest } from "@concept/core/digest";
+import { isObservationTimestamp } from "@concept/core/observations";
 import type { Demonstration, NodeRef } from "./state";
-import type { ExactPatchRef, NodeId } from "../../patch";
+import type { ExactPatchRef, NodeId } from "@concept/core/patch";
 export { isCompletionOutcome } from "./state";
 export type { CompletionOutcome } from "./state";
 

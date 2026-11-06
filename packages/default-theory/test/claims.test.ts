@@ -1,8 +1,8 @@
-import { readTheoryState } from "../../../src/theory";
+import { readTheoryState } from "@concept/core/theory";
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type PatchRevision } from "../../../src/patch";
-import type { Observation } from "../../../src/observations";
-import { defaultTheory, DEFAULT_THEORY_REF, type Claim, type Demonstration } from "../../../src/theory/default";
+import { resolvePatchBundle, type PatchRevision } from "@concept/core/patch";
+import type { Observation } from "@concept/core/observations";
+import { defaultTheory, DEFAULT_THEORY_REF, type Claim, type Demonstration } from "@concept/default-theory";
 
 test("claims and acquisition do not cover prerequisites", () => {
   const ref = { identity: "patch-claims", digest: `sha256:${"a".repeat(64)}` } as const;

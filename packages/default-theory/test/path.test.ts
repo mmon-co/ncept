@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type NodeId, type PatchRevision, type StructureEdge } from "../../../src/patch";
-import { defaultTheory } from "../../../src/theory/default";
-import { readTheoryState } from "../../../src/theory";
+import { resolvePatchBundle, type NodeId, type PatchRevision, type StructureEdge } from "@concept/core/patch";
+import { defaultTheory } from "@concept/default-theory";
+import { readTheoryState } from "@concept/core/theory";
 const now = "2026-11-06T00:00:00.000Z";
-const context = (graph: import("../../../src/patch").ResolvedGraph, targets: readonly NodeId[]) => ({
+const context = (graph: import("@concept/core/patch").ResolvedGraph, targets: readonly NodeId[]) => ({
   graph,
   targets,
   past: [],
