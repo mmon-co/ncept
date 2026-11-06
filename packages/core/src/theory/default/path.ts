@@ -18,6 +18,8 @@ import {
   type PathContext,
 } from "../theory";
 import { prepareEstimateDefault, progressDefault } from "./reading";
+import { DEFAULT_PARAMETERS, stateDefault } from "./state";
+import { DECAY, FACTOR } from "ts-fsrs";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
@@ -218,21 +220,53 @@ function packed(candidates: readonly NodeId[], context: PathContext): NodeId[] {
   return nodes;
 }
 
-/** Retention ranks vary continuously. A projected reading alone cannot promise the next
- * membership or rank crossing, so a retention-dependent future expires at the next clock
- * millisecond, not at the (possibly much later) completion expiry. Evidence-free previews
- * can retain the projection's own boundary. No timer or host polling preference lives here.
+/** Membership changes at retention thresholds; order changes when equal-priority
+ * forgetting curves cross. Both are clock dependencies, unlike measured activity costs.
+ * Use the same FSRS curve constants as the reducer, at millisecond clock precision.
  */
-function pathValidity(context: PathContext): Pick<MissionPath, "validUntil"> {
-  const retention = Object.values(context.projection.nodes).some((tags) =>
-    tags.some(({ tag }) => tag === "demonstrated" || tag === "probably-known" || tag.startsWith("review:")),
-  );
-  const boundaries = [
-    context.projection.validUntil,
-    ...(retention ? [new Date(Date.parse(context.now) + 1).toISOString()] : []),
-  ].filter((at) => at !== undefined);
-  const validUntil = boundaries.sort((a, b) => Date.parse(a) - Date.parse(b))[0];
-  return validUntil === undefined ? {} : { validUntil };
+function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<MissionPath, "validUntil"> {
+  const now = Date.parse(context.now);
+  const boundaries = context.projection.validUntil === undefined ? [] : [Date.parse(context.projection.validUntil)];
+  const state = stateDefault(context.graph, context.observations, context.now);
+  const scheduled = context.graph.nodes.flatMap(({ id }) => {
+    const node = state.nodes[id];
+    const schedule = node?.schedule;
+    if (
+      !scope.has(id) ||
+      !schedule ||
+      node.reviewCleared ||
+      pathProperty(context.graph, id, "pedagogy:milestone") === true
+    )
+      return [];
+    const last = Date.parse(schedule.lastReview);
+    if (last > now) boundaries.push(now + 1); // A future-dated day grade is outside the nonnegative decay interval.
+    if (!schedule.lapsed) {
+      for (const retention of [DEFAULT_PARAMETERS.retention.due, DEFAULT_PARAMETERS.retention.fading]) {
+        const crossing = last + ((schedule.stability * (Math.pow(retention, 1 / DECAY) - 1)) / FACTOR) * 86_400_000;
+        // Membership uses strict '<': the first millisecond after equality is due.
+        if (crossing >= now) boundaries.push(Math.floor(crossing) + 1);
+      }
+    }
+    const rank = context.projection.nodes[id]?.find((tag) => tag.tag === "review:due")?.rank;
+    return rank === undefined
+      ? []
+      : [
+          {
+            last,
+            stability: schedule.stability,
+            priority: Math.round(rank - 1 + schedule.retrievability),
+          },
+        ];
+  });
+  for (const [index, a] of scheduled.entries())
+    for (const b of scheduled.slice(index + 1)) {
+      if (a.priority !== b.priority || a.stability === b.stability) continue;
+      const delta = (a.stability * (now - b.last) - b.stability * (now - a.last)) / (b.stability - a.stability);
+      // Expire just before a fractional crossing, and after an exact tie at this read.
+      if (delta >= 0) boundaries.push(Math.max(now + 1, Math.floor(now + delta)));
+    }
+  const expiry = Math.min(...boundaries);
+  return Number.isFinite(expiry) ? { validUntil: new Date(expiry).toISOString() } : {};
 }
 
 /** The syllabus stays addressable as progress changes; only the future is upcoming.
@@ -254,7 +288,7 @@ export function pathDefault(context: PathContext): MissionFuture {
   );
   const maintenance: Lesson[] = due.length ? [{ kind: "review", numbered: false, nodes: due }] : [];
   if (context.retired?.outcome === "achieved" || targets === undefined)
-    return { ...path, ...pathValidity(context), future: maintenance };
+    return { ...path, ...pathValidity(context, scope), future: maintenance };
 
   const progress = progressDefault(graph, projection, [...scope]);
   const next = path.sections
@@ -282,7 +316,7 @@ export function pathDefault(context: PathContext): MissionFuture {
   }));
   return {
     ...path,
-    ...pathValidity(context),
+    ...pathValidity(context, scope),
     sections,
     future: [
       ...sections
