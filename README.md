@@ -8,7 +8,6 @@ Portable learning data, the default learning Theory, and local hosts for coding 
 | `packages/default-theory` | `@mmon-co/default-theory` | Learning algorithms, tutor Programs and Skills           |
 | `packages/local`          | `@mmon-co/local`          | File-backed Profile and Hub host library                 |
 | `packages/pi`             | `@mmon-co/pi`             | Official pi front end                                    |
-| `packages/local-mcp`      | `@mmon-co/mcp`            | Local stdio MCP server                                   |
 
 See each package's README for its entry points. The local packages join this mirror as they land in the source repository.
 
