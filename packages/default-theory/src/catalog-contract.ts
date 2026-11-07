@@ -57,7 +57,7 @@ export interface EvaluationToolInput {
 }
 
 export interface MaterialToolInput {
-  readonly op: "add" | "edit" | "remove" | "open" | "command";
+  readonly op: "add" | "add-many" | "edit" | "remove" | "open" | "command";
   /** Existing Playground identities remain the stored Material kinds. */
   readonly kind: string;
   readonly input: CatalogArguments;
