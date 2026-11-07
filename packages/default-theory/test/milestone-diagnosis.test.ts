@@ -64,7 +64,9 @@ test("host milestone diagnosis reaches check-in; numbered Lessons close from Mat
     regressedComponents: ["node-component"],
   };
   const program = close.run({ op: "record", kind: "close-recount", input: {} }, ctx);
-  expect(() => program.next()).toThrow("The host closes Lessons from their own Material records");
+  expect(() => program.next()).toThrow(
+    "The host closes Lessons when every focus Node\u0027s pedagogy:completion query holds",
+  );
   // The host supplies diagnosis in the Checkpoint opening, never a close-recount input.
   const opening = {
     kind: "checkpoint" as const,
