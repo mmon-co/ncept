@@ -1,10 +1,5 @@
 import { bundleForRevision, candidateRevision, emptyPatch, sameExactPatchRef, type Profile } from "../../src/index.js";
-import {
-  migrateTheoryProfile,
-  type Theory,
-  type TheoryMigration,
-  type TheoryRequirement,
-} from "../../src/theory/index.js";
+import { type Theory, type TheoryMigration, type TheoryRequirement } from "../../src/theory/index.js";
 
 const id = "synthetic-migration-theory";
 
@@ -65,11 +60,35 @@ export const syntheticMigrationTheory: Theory<void> = {
 export function syntheticOldProfile(): { requirement: TheoryRequirement; profile: Profile } {
   const base = candidateRevision("patch-synthetic-base", {
     ...emptyPatch(),
-    delta: { operations: [{ kind: "add-node", node: { id: "node-base" } }] },
+    delta: {
+      operations: [
+        { kind: "add-node", node: { id: "node-base" } },
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-base",
+            subjects: [{ kind: "node", id: "node-base" }],
+            properties: { "display:label": "Shared base" },
+          },
+        },
+      ],
+    },
   });
   const head = candidateRevision("patch-personal", {
     bases: [base.ref],
-    delta: { operations: [{ kind: "add-node", node: { id: "node-learning" } }] },
+    delta: {
+      operations: [
+        { kind: "add-node", node: { id: "node-learning" } },
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-learning",
+            subjects: [{ kind: "node", id: "node-learning" }],
+            properties: { "display:label": "Learning" },
+          },
+        },
+      ],
+    },
     metadata: { properties: { "toy:generation": 0 }, citations: [] },
   });
   return {
@@ -98,10 +117,4 @@ export function syntheticOldProfile(): { requirement: TheoryRequirement; profile
       ],
     },
   };
-}
-
-if (import.meta.main) {
-  const source = syntheticOldProfile();
-  const migrated = migrateTheoryProfile(syntheticMigrationTheory, source.requirement, source.profile);
-  console.log(JSON.stringify({ source, migrated }, null, 2));
 }
