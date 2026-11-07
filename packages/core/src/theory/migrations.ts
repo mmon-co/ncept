@@ -1,5 +1,5 @@
 import { tryParse } from "std-semver";
-import { resolvePatchBundle, revisionDigest } from "../patch/index.js";
+import { resolvePatchBundle, revisionDigest, type PatchContent } from "../patch/index.js";
 import type { Profile } from "../profile.js";
 import type { Theory, TheoryRequirement } from "./theory.js";
 
@@ -10,9 +10,11 @@ export type TheoryDataVersion = `${number}.${number}`;
 export type TheoryMigration = Readonly<{
   from: TheoryDataVersion;
   to: TheoryDataVersion;
+  /** Rewrite one Patch's content without mutating it; identity and revision minting belong to the caller. */
+  migratePatch(content: PatchContent): PatchContent;
   /**
-   * Return the live Profile in the next shape without mutating the input. Changed Patch
-   * content gets new exact references; hosts retain the old revisions as unread history.
+   * Apply migratePatch to live heads and rewrite Profile.log without mutating the input.
+   * Changed content gets new exact references; hosts retain old revisions as unread history.
    * Observations are in Profile.log, not a separate host-specific collection.
    */
   migrate(profile: Profile): Profile;
@@ -23,16 +25,46 @@ export type TheoryProfileMigrationResult = Readonly<{
   requirement: TheoryRequirement;
 }>;
 
+type MigrationTheory = Pick<Theory<unknown>, "id" | "version" | "migrations">;
+
+/**
+ * Compose pure Patch rewrites from a release's Theory range to the installed Theory.
+ * Refuse an invalid path before executing any step. The caller mints a new revision
+ * when content changes and keeps the immutable release revision as history.
+ * A same-minor range returns the input content unchanged.
+ */
+export function migrateTheoryPatchContent(
+  theory: MigrationTheory,
+  requirement: TheoryRequirement,
+  content: PatchContent,
+): PatchContent {
+  const { steps } = planTheoryMigration(theory, requirement);
+  let migrated = content;
+  for (const step of steps) migrated = step.migratePatch(migrated);
+  return migrated;
+}
+
 /**
  * Compose the steps from a Profile's stored minor pin to the supplied Theory, refusing
  * missing steps, newer data and different majors. Hosts persist data and the returned
  * pin together before resolving the Theory for ordinary reads.
  */
 export function migrateTheoryProfile(
-  theory: Pick<Theory<unknown>, "id" | "version" | "migrations">,
+  theory: MigrationTheory,
   requirement: TheoryRequirement,
   profile: Profile,
 ): TheoryProfileMigrationResult {
+  const { steps, requirement: migratedRequirement } = planTheoryMigration(theory, requirement);
+  validateLiveBundle(profile);
+  let migrated = profile;
+  for (const step of steps) {
+    migrated = step.migrate(migrated);
+    validateLiveBundle(migrated);
+  }
+  return { profile: migrated, requirement: migratedRequirement };
+}
+
+function planTheoryMigration(theory: MigrationTheory, requirement: TheoryRequirement) {
   const installed = tryParse(theory.version);
   const pin = /^~(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(requirement.range);
   if (!theory.id.trim() || installed === undefined || pin === null)
@@ -55,13 +87,7 @@ export function migrateTheoryProfile(
     steps.push(step);
   }
 
-  validateLiveBundle(profile);
-  let migrated = profile;
-  for (const step of steps) {
-    migrated = step.migrate(migrated);
-    validateLiveBundle(migrated);
-  }
-  return { profile: migrated, requirement: { theory: theory.id, range: `~${major}.${installed.minor}` } };
+  return { steps, requirement: { theory: theory.id, range: `~${major}.${installed.minor}` } };
 }
 
 function validateLiveBundle(profile: Profile): void {
