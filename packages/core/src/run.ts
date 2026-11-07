@@ -13,10 +13,17 @@ export type StopRef = Readonly<{
   tag?: string;
   milestone?: NodeId;
 }>;
+/** Exact releases and result forms, not a Notebook acceptance or a fabricated Session. */
+export type TheoryUpdate = Readonly<{
+  before: Readonly<{ theory: string; version: string; form: "legacy-choice" | "ordered-plan" }>;
+  after: Readonly<{ theory: string; version: string; form: "legacy-choice" | "ordered-plan" }>;
+}>;
 export type PastEntry = Readonly<
   | { kind: "session"; session: SessionRef; parent?: SessionRef; stop?: StopRef; at: string }
   | { kind: "ghost"; session?: SessionRef; act: number; nodes: readonly NodeId[]; at: string }
+  | { kind: "theory-updated"; update: TheoryUpdate; at: string }
   | { kind: "plan-changed"; act: number; at: string }
+  | { kind: "plan-changed"; update: TheoryUpdate; act?: never; at: string }
 >;
 function runObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -43,6 +50,16 @@ export function isPastEntry(value: unknown): value is PastEntry {
       (value.parent === undefined || sessionRef(value.parent)) &&
       (value.stop === undefined || isStopRef(value.stop))
     );
+  if (value.kind === "theory-updated" || (value.kind === "plan-changed" && value.update !== undefined)) {
+    const release = (fact: unknown) =>
+      runObject(fact) &&
+      typeof fact.theory === "string" &&
+      fact.theory.length > 0 &&
+      typeof fact.version === "string" &&
+      fact.version.length > 0 &&
+      (fact.form === "legacy-choice" || fact.form === "ordered-plan");
+    return runObject(value.update) && release(value.update.before) && release(value.update.after);
+  }
   if (typeof value.act !== "number" || !Number.isSafeInteger(value.act) || value.act < 0) return false;
   return (
     value.kind === "plan-changed" ||
