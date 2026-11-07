@@ -77,6 +77,9 @@ function content(value: unknown): value is PiContent {
       return false;
   }
 }
+function exchangeMessage(value: unknown): boolean {
+  return !object(value) || value.role === "user" || value.role === "assistant" || value.role === "toolResult";
+}
 function message(value: unknown): value is PiMessage {
   if (!object(value) || typeof value.timestamp !== "number" || !Number.isFinite(value.timestamp)) return false;
   if (value.role === "user" && typeof value.content === "string") return true;
@@ -122,7 +125,8 @@ export function parsePiSession(source: string): PiSession {
     )
       throw new Error("Invalid pi session entry at line " + (entries.length + 2));
     if (ids.has(value.id)) throw new Error("Duplicate pi session entry: " + value.id);
-    if (value.type === "message" && !message(value.message))
+    // pi also stores bashExecution and similar roles in message entries; only the exchange's roles are typed.
+    if (value.type === "message" && exchangeMessage(value.message) && !message(value.message))
       throw new Error("Invalid pi message at line " + (entries.length + 2));
     ids.add(value.id);
     // Narrow through the same entry guard, without coercing provider-specific fields.
