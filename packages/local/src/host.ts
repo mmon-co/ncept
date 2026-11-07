@@ -99,6 +99,8 @@ export interface Host {
   };
 }
 export interface HubOptions {
+  /** Product/version token for anonymous Hub reads; defaults to @mmon-co/local's installed version. */
+  readonly userAgent?: string;
   /** Application base URL, including /ncept on the hosted product. Defaults to https://co.mmon.co/ncept. */
   readonly url?: string;
   /** Outside the Profile; defaults to credentialsPath(). */

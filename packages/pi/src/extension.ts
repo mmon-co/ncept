@@ -15,6 +15,7 @@ import {
   type ModelRequest,
 } from "@mmon-co/local";
 
+const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
 const STATE = "mmon.session";
 type Selection = { mode: string; entry?: ModeEntry; resume?: string };
 
@@ -100,6 +101,7 @@ export default function mmon(pi: ExtensionAPI) {
     }
     host = await openHost({
       profileDir: ctx.cwd,
+      hub: { userAgent: "mmon-pi/" + version },
       theories,
       model,
       confirm: async (proposal) => {

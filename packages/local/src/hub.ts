@@ -1,6 +1,7 @@
 import { mkdtemp, rename, rm } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import {
   attachmentDigest,
   bundleForRevision,
@@ -118,6 +119,8 @@ export function connectHub(
 ): Host["hub"] {
   const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
   const resource = base + "/mcp";
+  const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
+  const headers = { "User-Agent": options.userAgent ?? "@mmon-co/local/" + version };
   async function connected<T>(
     operation: (call: <R>(name: string, args: Record<string, unknown>) => Promise<R>) => Promise<T>,
   ) {
@@ -164,14 +167,16 @@ export function connectHub(
     async pull(address) {
       const selected = releaseAddress(address, base);
       const endpoint = selected.base + releasePath(selected.patchId, selected.version);
-      const response: unknown = await (await fetched(endpoint)).json();
+      const response: unknown = await (await fetched(endpoint, { headers })).json();
       if (!object(response) || response.patchId !== selected.patchId || response.version !== selected.version)
         throw new Error("Hub release address mismatch");
       const bundle = verifiedBundle(response.bundle);
       if (bundle.terminal.identity !== selected.patchId) throw new Error("Hub release identity mismatch");
       const blobs = new Map<ContentDigest, Uint8Array>();
       for (const { hash } of attachments(bundle)) {
-        const bytes = new Uint8Array(await (await fetched(endpoint + "/attachments/" + hash)).arrayBuffer());
+        const bytes = new Uint8Array(
+          await (await fetched(endpoint + "/attachments/" + hash, { headers })).arrayBuffer(),
+        );
         if (attachmentDigest(bytes) !== hash) throw new Error("Hub attachment digest mismatch: " + hash);
         blobs.set(hash, bytes);
       }
