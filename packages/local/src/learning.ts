@@ -26,6 +26,7 @@ import {
   type Tool,
 } from "@mmon-co/core";
 import { openProfile } from "./directory.js";
+import { connectHub } from "./hub.js";
 import type {
   Host,
   HostChatSetup,
@@ -139,6 +140,15 @@ export class LearningHost<S> {
     const result = this.tail.then(operation);
     this.tail = result.catch(() => {});
     return result;
+  }
+  async reload(): Promise<void> {
+    this.pendingSwitch = undefined;
+    this.drafts.clear();
+    const { timezone } = localSettings(await this.runtime.profile.read());
+    this.runtime.timezone = checkedTimezone(
+      typeof timezone === "string" ? timezone : Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    await this.start();
   }
   async current(session: HostSession): Promise<LocalSession> {
     const state = sessionStates(await this.runtime.profile.read()).find(({ id }) => id === session.id);
@@ -587,9 +597,7 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
   );
   const learning = new LearningHost(new Runtime(profile, options.theories, options.model, timezone), options.confirm);
   await learning.start();
-  const unavailable = async (): Promise<never> => {
-    throw new Error("Hub transport is not connected");
-  };
+  const hub = connectHub(profile, options.theories, options.confirm, options.hub);
   return {
     profile,
     sessions: {
@@ -606,11 +614,16 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
     reading: () => learning.reading(),
     config: { read: () => learning.config(), update: (config) => learning.serial(() => learning.configure(config)) },
     hub: {
-      pull: unavailable,
-      signIn: unavailable,
-      publish: unavailable,
-      exportTo: unavailable,
-      importFrom: unavailable,
+      pull: (address) => learning.serial(() => hub.pull(address)),
+      signIn: () => learning.serial(() => hub.signIn()),
+      publish: (input) => learning.serial(() => hub.publish(input)),
+      exportTo: (destination) => learning.serial(() => hub.exportTo(destination)),
+      importFrom: (source) =>
+        learning.serial(async () => {
+          const result = await hub.importFrom(source);
+          await learning.reload();
+          return result;
+        }),
     },
   };
 }

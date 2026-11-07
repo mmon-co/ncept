@@ -98,7 +98,16 @@ export interface Host {
     update(config: HostConfig): Promise<void>;
   };
 }
+export interface HubOptions {
+  /** Application base URL, including /ncept on the hosted product. Defaults to https://co.mmon.co/ncept. */
+  readonly url?: string;
+  /** Outside the Profile; defaults to credentialsPath(). */
+  readonly credentialsFile?: string;
+  /** Front ends may present this URL themselves; otherwise the system browser is opened. */
+  readonly openUrl?: (url: string) => Promise<void>;
+}
 export interface OpenHostOptions<S> {
+  readonly hub?: HubOptions;
   readonly profileDir: string;
   /** Executable values supplied by the front end, resolved with Core's resolveTheory. */
   readonly theories: readonly Theory<S>[];

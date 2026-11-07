@@ -32,7 +32,8 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@mmon-co/core": "^0.1.0"
+    "@mmon-co/core": "^0.1.0",
+    "@modelcontextprotocol/sdk": "1.32.1"
   },
   "devDependencies": {
     "@mmon-co/default-theory": "^1.0.0",
