@@ -25,7 +25,8 @@ import {
   type SemanticOperation,
 } from "./model.js";
 import { resolvePatchBundle, resolveVariantBundle } from "./resolve.js";
-import { declaredPatchLocale, patchVariantMetadata, patchVersionInRange } from "./variants.js";
+import { satisfiesVersionRange } from "../version_range.js";
+import { declaredPatchLocale, patchVariantMetadata } from "./variants.js";
 
 export const PATCH_MACHINE_TRANSLATION = "patch:machine-translation";
 export const PATCH_TRANSLATE = "patch:translate";
@@ -102,7 +103,7 @@ export function translationHumanLayers(
       if (
         claim?.patchId !== source.terminal.identity ||
         claim.locale !== locale ||
-        !patchVersionInRange(sourceVersion, claim.range)
+        !satisfiesVersionRange(sourceVersion, claim.range)
       )
         return [];
       const { graph } = resolveVariantBundle(source, variant, sourceVersion);

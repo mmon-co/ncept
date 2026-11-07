@@ -1,4 +1,4 @@
-import { satisfies, tryParse, tryParseRange } from "std-semver";
+import { satisfiesVersionRange } from "../version_range.js";
 import { canonicalJson } from "../digest.js";
 import { candidateRevision } from "./release.js";
 import {
@@ -209,9 +209,8 @@ function variantOverlayBundle(
   const claim = owner.metadata.properties["patch:variant-of"];
   const prefix = `${source.terminal.identity}@`;
   if (typeof claim !== "string" || !claim.startsWith(prefix)) return { bundle: source, staleMasks: [], applied: false };
-  const version = tryParse(sourceVersion);
-  const range = tryParseRange(claim.slice(prefix.length));
-  if (!version || !range || !satisfies(version, range)) return { bundle: source, staleMasks: [], applied: false };
+  if (!satisfiesVersionRange(sourceVersion, claim.slice(prefix.length)))
+    return { bundle: source, staleMasks: [], applied: false };
 
   const base = owner.bases.find(({ identity }) => identity === source.terminal.identity);
   if (!base) throw new PatchCompileError("invalid-bundle", "patch:variant-of must name a direct base");
