@@ -109,7 +109,7 @@ export class HubAuth implements OAuthClientProvider {
   async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier" | "discovery") {
     if (scope === "all" || scope === "verifier") this.verifier = undefined;
     if (scope === "all") this.credentials = {};
-    else if (scope !== "verifier") delete this.credentials[scope === "client" ? "client" : scope];
+    else if (scope !== "verifier") delete this.credentials[scope];
     await this.save({});
   }
   private async save(change: Partial<Credentials>) {
