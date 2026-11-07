@@ -21,6 +21,8 @@ import {
   DEFAULT_THEORY_REQUIREMENT,
   jsonBytes,
   logBytes,
+  liveLogPath,
+  migrateProfileFiles,
   pack,
   parseManifest,
   sessionFilename,
@@ -73,7 +75,8 @@ async function filesAt(dir: string): Promise<Map<string, Uint8Array>> {
   const manifestBytes = await regular(dir, "profile.json");
   const manifest = parseManifest(manifestBytes);
   files.set("profile.json", manifestBytes);
-  files.set("log.jsonl", await regular(dir, "log.jsonl"));
+  const logPath = liveLogPath(manifest);
+  files.set(logPath, await regular(dir, logPath));
   for (const folder of ["patches", "blobs"]) {
     if (!(await lstat(join(dir, folder))).isDirectory()) throw new Error("Not a Profile directory: " + folder);
     for (const name of await readdir(join(dir, folder))) {
@@ -129,7 +132,15 @@ export interface ProfileDirectory {
 }
 export async function openProfile(dir: string, theories: readonly ConfiguredTheory[]): Promise<ProfileDirectory> {
   dir = resolve(dir);
-  const initial = await filesAt(dir);
+  const stored = await filesAt(dir);
+  const initial = migrateProfileFiles(stored, theories);
+  // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
+  // leaves either the old generation or the complete new one; retry never repeats a step.
+  for (const [path, bytes] of initial) {
+    if (path !== "profile.json" && !stored.has(path)) await immutable(dir, path, bytes);
+  }
+  const manifest = initial.get("profile.json");
+  if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
   const profile = validate(initial, theories);
   // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
   for (const filename of Object.values(profile.manifest.sessions)) {
@@ -179,7 +190,10 @@ export async function openProfile(dir: string, theories: readonly ConfiguredTheo
     appendLog: (entries) =>
       serial(async () => {
         const current = await read();
-        await atomic(dir, "log.jsonl", logBytes(mergeProfileLogs(current.log, entries)));
+        const bytes = logBytes(mergeProfileLogs(current.log, entries));
+        const manifest = { ...current.manifest, log: attachmentDigest(bytes) };
+        await immutable(dir, liveLogPath(manifest), bytes);
+        await atomic(dir, "profile.json", jsonBytes(manifest));
       }),
     addRevision: (identity, content) =>
       serial(async () => {
