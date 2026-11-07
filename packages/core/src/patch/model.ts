@@ -295,6 +295,7 @@ export interface VisualProjectionInput {
 
 export interface GraphCompilationInput {
   readonly bundle: ClosedPatchBundle;
+  readonly selection?: ReadonlyMap<PatchId, ExactPatchRef>;
   readonly attachedTags?: readonly GraphTag[];
   readonly query?: GraphQuery;
   readonly tags?: TagIndex;

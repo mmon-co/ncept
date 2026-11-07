@@ -57,6 +57,7 @@ export function revisionContent(revision: PatchRevision): PatchContent {
 export function bundleForRevision(
   terminal: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ClosedPatchBundle {
   const revisions = new Map<string, PatchRevision>();
   const active = new Set<string>();
@@ -81,7 +82,7 @@ export function bundleForRevision(
   };
   visit(terminal);
   const bundle = { terminal, revisions: [...revisions.values()] };
-  resolvePatchBundle(bundle);
+  resolvePatchBundle(bundle, undefined, selection);
   return bundle;
 }
 

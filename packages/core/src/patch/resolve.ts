@@ -449,9 +449,10 @@ export function resolvePatchBundleWithVariants(
   notebook: ClosedPatchBundle,
   layers: readonly PatchVariantLayer[],
   availablePlaygrounds?: ReadonlySet<string>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): VariantResolution {
   let projected = notebook;
-  let graph = resolvePatchBundle(notebook, availablePlaygrounds);
+  let graph = resolvePatchBundle(notebook, availablePlaygrounds, selection);
   const staleMasks: ExactContributionMask[] = [];
   for (const layer of layers) {
     try {
@@ -463,7 +464,7 @@ export function resolvePatchBundleWithVariants(
         availablePlaygrounds,
       );
       if (composed.bundle === projected) continue;
-      graph = resolvePatchBundle(composed.bundle, availablePlaygrounds);
+      graph = resolvePatchBundle(composed.bundle, availablePlaygrounds, selection);
       projected = composed.bundle;
       staleMasks.push(...composed.staleMasks);
     } catch (error) {
@@ -584,6 +585,7 @@ export function resolveAvailablePatchGraph(
   bases: readonly ClosedPatchBundle[],
   layers: readonly PatchVariantLayer[] = [],
   availablePlaygrounds?: ReadonlySet<string>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ResolvedGraph {
   const direct = new Set(terminal.bases.map(exactPatchRefKey));
   const supplied = new Set(bases.map((base) => exactPatchRefKey(base.terminal)));
@@ -598,7 +600,7 @@ export function resolveAvailablePatchGraph(
   ];
   if (supplied.size === direct.size) {
     const bundle = { terminal: terminal.ref, revisions: [...revisions(bases), terminal] };
-    const { graph } = resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds);
+    const { graph } = resolvePatchBundleWithVariants(bundle, layers, availablePlaygrounds, selection);
     if (sameExactPatchRef(graph.terminal, terminal.ref)) return graph;
     // Variant composition changes only the Notebook's base pointers, not its delta.
     // Its operations still belong to the recorded checkpoint, never the virtual revision.
@@ -634,6 +636,7 @@ export function resolveAvailablePatchGraph(
     availablePlaygrounds,
     undefined,
     projected.map((base) => base.terminal),
+    selection,
   );
 }
 
