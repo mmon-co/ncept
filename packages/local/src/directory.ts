@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -61,13 +61,21 @@ async function atomic(dir: string, path: string, bytes: Uint8Array): Promise<voi
   await rename(join(dir, temp), join(dir, path));
 }
 async function immutable(dir: string, path: string, bytes: Uint8Array): Promise<void> {
+  // Stage outside patches/: an interrupted write must not leave a truncated
+  // content-addressed file that prevents reopening even the old live generation.
+  const temp = join(dir, "." + randomUUID() + ".tmp");
   try {
-    await writeFile(join(dir, path), bytes, { flag: "wx" });
-  } catch (error) {
-    if (!existsError(error)) throw error;
-    const existing = await regular(dir, path);
-    if (existing.length !== bytes.length || existing.some((byte, index) => byte !== bytes[index]))
-      throw new Error("Conflicting immutable Profile file: " + path);
+    await writeFile(temp, bytes, { flag: "wx" });
+    try {
+      await link(temp, join(dir, path));
+    } catch (error) {
+      if (!existsError(error)) throw error;
+      const existing = await regular(dir, path);
+      if (existing.length !== bytes.length || existing.some((byte, index) => byte !== bytes[index]))
+        throw new Error("Conflicting immutable Profile file: " + path);
+    }
+  } finally {
+    await rm(temp, { force: true });
   }
 }
 async function filesAt(dir: string): Promise<Map<string, Uint8Array>> {
