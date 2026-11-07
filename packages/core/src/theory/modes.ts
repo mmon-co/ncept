@@ -56,6 +56,8 @@ export type SessionMode<S = unknown> = Readonly<{
   noteTemplates?: readonly MessageDescriptor[];
   entry: Readonly<{ required: boolean; kinds: readonly ModeEntry["kind"][] }>;
   capabilities: readonly HostCapability[];
+  /** Authoring keys this mode may edit without a graph proposal. */
+  metadataKeys?: readonly string[];
   switches: readonly ModeSwitchDefault[];
   setup(ctx: ChatContext<S>): Program<ChatSetup<S>>;
 }>;

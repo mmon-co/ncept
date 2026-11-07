@@ -35,6 +35,7 @@
     "@mmon-co/core": "^0.1.0"
   },
   "devDependencies": {
+    "@mmon-co/default-theory": "^1.0.0",
     "bun-types": "^1.3.14",
     "typescript": "5.9.3"
   },
