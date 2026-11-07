@@ -1,5 +1,6 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch/index.js";
 import type { ModeEntry, SessionMode } from "./modes.js";
+import type { TheoryMigration } from "./migrations.js";
 import type { MissionRun, MissionRunReading, StopRef } from "../run.js";
 import type { LessonReading } from "./path.js";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations.js";
@@ -244,6 +245,8 @@ export interface TheoryState<S> {
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly version: string;
+  /** Forward stored-data steps shipped with this Theory, independent of any host. */
+  readonly migrations?: readonly TheoryMigration[];
   initState(graph: ResolvedGraph): TheoryState<S>;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
