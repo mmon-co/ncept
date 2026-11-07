@@ -228,22 +228,27 @@ export class LearningHost<S> {
       platform({ kind: "local.session", session: { ...session, closed: true } }, session.surface),
     ];
   }
-  async close(session: HostSession): Promise<void> {
-    const current = await this.current(session);
-    const view = await this.runtime.snapshot();
-    let entries = await this.closing(current);
+  private async closingRun(current: LocalSession, profile: ValidatedProfile): Promise<readonly ProfileLogEntry[]> {
+    const known = sessionStates(profile);
+    const closing = new Set([current.id]);
+    for (const id of closing)
+      for (const child of known) if (!child.closed && child.parent === id) closing.add(child.id);
+    const entries: ProfileLogEntry[] = [];
     if (current.mission) {
-      const before = missionRun(view.profile, current.mission);
+      const before = missionRun(profile, current.mission);
       if (before.active === current.id) {
-        const result = setActive(before, { kind: "none" }, view.now, runs(sessionStates(view.profile)));
-        for (const ref of result.close.filter((ref) => ref !== current.id)) {
-          const aside = sessionStates(view.profile).find(({ id }) => id === ref);
-          if (aside) entries = [...entries, ...(await this.closing(aside))];
-        }
-        entries = [...entries, ...runEntries(before, result.run, view.now)];
+        const at = new Date().toISOString();
+        const result = setActive(before, { kind: "none" }, at, runs(known));
+        for (const id of result.close) closing.add(id);
+        entries.push(...runEntries(before, result.run, at));
       }
     }
-    await this.runtime.profile.appendLog(entries);
+    for (const session of known) if (closing.has(session.id)) entries.push(...(await this.closing(session)));
+    return entries;
+  }
+  async close(session: HostSession): Promise<void> {
+    const current = await this.current(session);
+    await this.runtime.profile.appendLog(await this.closingRun(current, await this.runtime.profile.read()));
   }
   async retireMission(id: string, outcome: "achieved" | "abandoned"): Promise<void> {
     const view = await this.runtime.snapshot();
@@ -363,9 +368,8 @@ export class LearningHost<S> {
         if (outgoing) entries.push(...(await this.closing(outgoing)));
       }
     }
-    if (pending?.to.then === "next" && pending.from.mission !== missionId)
-      entries.push(...(await this.closing(pending.from)));
-    else if (pending?.to.then === "next" && !missionId) entries.push(...(await this.closing(pending.from)));
+    if (pending?.to.then === "next" && (!missionId || pending.from.mission !== missionId))
+      entries.push(...(await this.closingRun(pending.from, view.profile)));
     const event = await this.runtime.event(
       { kind: "surface.open", surface: session.surface, format: "local", about },
       session,
