@@ -1,0 +1,54 @@
+{
+  "name": "@mmon-co/default-theory",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmon-co/mmon.git",
+    "directory": "packages/default-theory"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./path": {
+      "types": "./dist/path.d.ts",
+      "default": "./dist/path.js"
+    },
+    "./state": {
+      "types": "./dist/state.d.ts",
+      "default": "./dist/state.js"
+    },
+    "./messages": {
+      "types": "./dist/messages.d.ts",
+      "default": "./dist/messages.js"
+    },
+    "./outcomes": {
+      "types": "./dist/outcomes.d.ts",
+      "default": "./dist/outcomes.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../core build && bun build-skills.ts && tsc -p tsconfig.build.json",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@mmon-co/core": "^0.1.0",
+    "ts-fsrs": "^4.0.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

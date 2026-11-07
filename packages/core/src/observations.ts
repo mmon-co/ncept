@@ -1,6 +1,6 @@
-import type { Speaker } from "./theory/speaker";
+import type { Speaker } from "./theory/speaker.js";
 
-import type { ExactPatchRef, NodeId, ResolvedGraph } from "./patch";
+import { isNodeId, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch/index.js";
 
 export type ObservationId = `obs-${string}`;
 export type SurfaceId = `surface-${string}`;
@@ -147,6 +147,41 @@ export function* write<P>(observation: ObservationWrite<P>): Program<Observation
 }
 export function isObservationId(value: unknown): value is ObservationId {
   return typeof value === "string" && /^obs-.+/.test(value);
+}
+/** Core checks only the envelope. Payload vocabulary and meaning belong to the consuming Theory. */
+export function isObservation(value: unknown): value is Observation {
+  if (!observationObject(value)) return false;
+  const by = value.by;
+  const day = value.learnerDay;
+  return (
+    isObservationId(value.id) &&
+    isObservationTimestamp(value.at) &&
+    (by === "platform" || (observationObject(by) && observationText(by.theory) && observationText(by.version))) &&
+    Object.hasOwn(value, "payload") &&
+    value.payload !== undefined &&
+    (value.about === undefined || (Array.isArray(value.about) && value.about.every(isNodeId))) &&
+    (value.nodes === undefined || (Array.isArray(value.nodes) && value.nodes.every(isNodeId))) &&
+    (value.cites === undefined || (Array.isArray(value.cites) && value.cites.every(isObservationId))) &&
+    (value.surface === undefined || (typeof value.surface === "string" && /^surface-.+/.test(value.surface))) &&
+    (value.supersedes === undefined || isObservationId(value.supersedes)) &&
+    (value.standing === undefined ||
+      value.standing === "selected" ||
+      value.standing === "abandoned" ||
+      value.standing === "unscoped") &&
+    (value.materialPresent === undefined || typeof value.materialPresent === "boolean") &&
+    (day === undefined ||
+      (observationObject(day) &&
+        observationText(day.id) &&
+        isObservationTimestamp(day.start) &&
+        isObservationTimestamp(day.end) &&
+        Date.parse(day.start) < Date.parse(day.end)))
+  );
+}
+function observationObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function observationText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
 }
 /** Chronology of what observations record. It is not their acceptance order: identity carries no order,
  * and the host supplies the logically ordered sequence a theory reads.

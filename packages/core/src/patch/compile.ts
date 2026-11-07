@@ -1,5 +1,5 @@
-import { contentDigest } from "../digest";
-import { PatchCompileError } from "./errors";
+import { contentDigest } from "../digest.js";
+import { PatchCompileError } from "./errors.js";
 import type {
   ClosedPatchBundle,
   EdgeId,
@@ -11,13 +11,13 @@ import type {
   ResolvedGraph,
   SemanticDelta,
   VisualGraph,
-} from "./model";
-import { exactPatchRefKey, NODE_LABEL_PROPERTY } from "./model";
-import { metadataSetsForEntity } from "./metadata";
-import { nodeCascadedProperty } from "./guidance";
-import { projectVisualGraph } from "./project";
-import { resolvePatchBundle } from "./resolve";
-import { selectGraph } from "./select";
+} from "./model.js";
+import { exactPatchRefKey, NODE_LABEL_PROPERTY } from "./model.js";
+import { metadataSetsForEntity } from "./metadata.js";
+import { nodeCascadedProperty } from "./guidance.js";
+import { projectVisualGraph } from "./project.js";
+import { resolvePatchBundle } from "./resolve.js";
+import { selectGraph } from "./select.js";
 
 const HIGH_IN_DEGREE = 5;
 

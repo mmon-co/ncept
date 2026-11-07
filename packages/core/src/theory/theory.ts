@@ -1,15 +1,8 @@
-import type { ContentDigest } from "../digest";
-import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
-import type { ModeEntry, SessionMode } from "./modes";
-import type {
-  JsonSchema,
-  Observation,
-  ObservationId,
-  PlatformEvent,
-  Program,
-  SurfaceId,
-  TheoryRef,
-} from "../observations";
+import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch/index.js";
+import type { ModeEntry, SessionMode } from "./modes.js";
+import type { MissionRun, MissionRunReading, StopRef } from "../run.js";
+import type { LessonReading } from "./path.js";
+import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations.js";
 
 export type MessageDescriptor = Readonly<{
   id: string;
@@ -69,9 +62,16 @@ export type Context<S> = Readonly<{ now: string; graph: ResolvedGraph; state: S 
 /** Graph-authored lesson membership uses the existing define-tag operation. */
 export const LESSON_TAG_PREFIX = "lesson:";
 export type Lesson = Readonly<{
+  /** A Theory-owned vocabulary; Core never interprets kind names. */
+  kind: string;
   name?: string;
   nodes: readonly NodeId[];
-  review?: true;
+  numbered: boolean;
+  /** An unnumbered stop's address relative to the preceding numbered stop (default 0). */
+  numberOffset?: number;
+  /** Optional captured identity facts, independent of future numbering. */
+  tag?: string;
+  milestone?: NodeId;
   /** The check-in after `milestone`; absent for the check-in before the first span. */
   checkpoint?: Readonly<{
     milestone?: NodeId;
@@ -82,6 +82,8 @@ export type Lesson = Readonly<{
   }>;
 }>;
 export type MissionPath = Readonly<{
+  /** Earliest clock instant requiring a fresh path read; input changes always invalidate it. */
+  validUntil?: string;
   /** The first section's milestone is shown as 0 when no unclaimed Lesson precedes it, else 1. */
   zeroBased?: true;
   sections: readonly { readonly milestone: NodeId; readonly lessons: readonly Lesson[] }[];
@@ -93,8 +95,10 @@ export interface LessonActivity {
   readonly surface: string;
   readonly activeMs: number;
   readonly startedAt: string;
-  readonly reviewNodes?: readonly NodeId[];
-  readonly reviewSurfaces?: readonly string[];
+  /** Identity captured for this Session, independent of its current place in a Mission. */
+  readonly stop?: StopRef;
+  /** Related Material surfaces owned by the same Session. */
+  readonly relatedSurfaces?: readonly string[];
 }
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";
@@ -104,6 +108,8 @@ export type NodeProgress = Readonly<{
   display?: Tag;
   /** Localized state name, separate from the score's explanatory message. */
   caption?: MessageDescriptor;
+  /** The one count its completion rule waits on (k observations of the required number), when it has exactly one. */
+  count?: Readonly<{ k: number; required: number }>;
   /** Optional compact evidence summary, suitable beside a frontier or other host heading. */
   summary?: MessageDescriptor;
   /** Optional task-facing wording for a captured checklist, distinct from a general map state. */
@@ -118,6 +124,22 @@ export type EstimateContext = Readonly<{
   observations: readonly Observation[];
   activities: readonly LessonActivity[];
 }>;
+
+/** A value-only reading: omitted targets selects a graph-wide future without a Mission. */
+export type PathContext = EstimateContext &
+  Readonly<{
+    targets?: readonly NodeId[];
+    past: MissionRun["past"];
+    retired?: MissionRun["retired"];
+    now: string;
+    /** The host's effective Session budget, never a Theory preference. */
+    minutes: number;
+  }>;
+export type MissionFuture = MissionPath &
+  Readonly<{
+    /** Ordered upcoming stops; sections retain the structural syllabus and checkpoint addresses. */
+    future: readonly Lesson[];
+  }>;
 
 /** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
 export type LessonSnapshot = Readonly<{
@@ -165,6 +187,8 @@ export type MissionContext = Readonly<{
   nodes: readonly NodeId[];
   targets?: readonly NodeId[];
   priority: number;
+  /** Learner-scoped run reading. The host selects upcoming stops from readMissionPath. */
+  run?: MissionRunReading & Readonly<{ next: readonly LessonReading[] }>;
 }>;
 export type ChatContext<S> = Context<S> &
   Readonly<{
@@ -183,6 +207,8 @@ export type ChatContext<S> = Context<S> &
     missions?: readonly MissionContext[];
     /** Measured by the host from lesson Session activity, never by the theory. */
     lessonActivities?: readonly LessonActivity[];
+    /** Host budget for computed futures; absent means the host imposes no bound. */
+    sessionMinutes?: number;
     /** The fixed Lesson's current checklist, from the host's same reading as the header. */
     lesson?: LessonProgress;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
@@ -205,7 +231,7 @@ export type Skill = Readonly<{
   name: string;
   description: string;
   body: string;
-  resources?: readonly import("./skills").SkillResource[];
+  resources?: readonly import("./skills.js").SkillResource[];
 }>;
 /** A graph-bound replay of immutable observations in logical order. */
 export interface TheoryState<S> {
@@ -218,7 +244,6 @@ export interface TheoryState<S> {
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly version: string;
-  readonly digest: ContentDigest;
   initState(graph: ResolvedGraph): TheoryState<S>;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
@@ -227,10 +252,12 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   estimate(context: EstimateContext, lessons: readonly Lesson[]): Estimate;
   /** Reading-owned reuse, valid only for this immutable context snapshot. */
   prepareEstimate?(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate;
-  /** Stable graph-only stops. A theory without this method has no Lessons. */
-  path?(graph: ResolvedGraph, targets: readonly NodeId[]): MissionPath;
+  /** Compute the future from this reading, never persist it. A theory may have no stops. */
+  path?(context: PathContext): MissionFuture;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
+  /** A historical act's meaning, from its accepted evidence rather than present progress. */
+  describeObservation?(observation: Observation): string | undefined;
   readonly modes?: Readonly<Record<string, SessionMode<S>>>;
   readonly chat?: {
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
@@ -265,4 +292,7 @@ export function initListTheoryState<S>(
   };
 }
 
-export type TheoryRelease = Readonly<{ ref: TheoryRef; digest: ContentDigest }>;
+/** The exact version of a Theory that ran, as a lockfile records it: `1.0.0+<commit>`. */
+export type TheoryRelease = Readonly<{ theory: string; version: string }>;
+/** The range of a Theory a Profile accepts, as a manifest records it: `~1.0`. */
+export type TheoryRequirement = Readonly<{ theory: string; range: string }>;

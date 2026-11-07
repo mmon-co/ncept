@@ -1,7 +1,7 @@
-import { PatchCompileError } from "./errors";
-import { lastMetadataContribution, metadataSetsForEntity } from "./metadata";
-import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model";
-import { NODE_LABEL_PROPERTY } from "./model";
+import { PatchCompileError } from "./errors.js";
+import { lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
+import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model.js";
+import { NODE_LABEL_PROPERTY } from "./model.js";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): readonly MetadataSet[] {
   return metadataSetsForEntity(graph, { kind: "node", id: node });

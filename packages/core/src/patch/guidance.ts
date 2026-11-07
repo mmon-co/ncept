@@ -1,6 +1,11 @@
-import { PatchCompileError } from "./errors";
-import { isNodeId } from "./release";
-import { isMaterialMeta, metadataSetsForEntity, metadataSubjectAppliesToEntity, metadataSubjectKey } from "./metadata";
+import { PatchCompileError } from "./errors.js";
+import { isNodeId } from "./release.js";
+import {
+  isMaterialMeta,
+  metadataSetsForEntity,
+  metadataSubjectAppliesToEntity,
+  metadataSubjectKey,
+} from "./metadata.js";
 import {
   exactPatchRefKey,
   type ContributionProvenance,
@@ -8,7 +13,7 @@ import {
   type MetadataSubject,
   type NodeId,
   type ResolvedGraph,
-} from "./model";
+} from "./model.js";
 
 export type TagRef = { readonly name: string };
 export type GuidanceRef = TagRef | { readonly node: NodeId };

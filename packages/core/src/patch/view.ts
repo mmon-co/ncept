@@ -1,6 +1,6 @@
-import type { TagIndex } from "../theory/theory";
-import type { GraphQuery, ResolvedGraph, SelectedGraph } from "./model";
-import { selectGraph } from "./select";
+import type { TagIndex } from "../theory/theory.js";
+import type { GraphQuery, ResolvedGraph, SelectedGraph } from "./model.js";
+import { selectGraph } from "./select.js";
 
 export type ViewId = `view-${string}`;
 
