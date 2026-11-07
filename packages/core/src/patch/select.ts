@@ -1,7 +1,7 @@
-import type { TagIndex } from "../theory/theory";
-import { isContentDigest } from "../digest";
-import { PatchCompileError } from "./errors";
-import { materialKey, sameExactPatchRef } from "./model";
+import type { TagIndex } from "../theory/theory.js";
+import { isContentDigest } from "../digest.js";
+import { PatchCompileError } from "./errors.js";
+import { materialKey, sameExactPatchRef } from "./model.js";
 import type {
   EdgeId,
   ExactPatchRef,
@@ -12,7 +12,7 @@ import type {
   PatchId,
   ResolvedGraph,
   SelectedGraph,
-} from "./model";
+} from "./model.js";
 
 interface Fragment {
   readonly tags: Set<string>;

@@ -1,8 +1,8 @@
-import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch";
-import type { ModeEntry, SessionMode } from "./modes";
-import type { MissionRun, MissionRunReading, StopRef } from "../run";
-import type { LessonReading } from "./path";
-import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations";
+import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch/index.js";
+import type { ModeEntry, SessionMode } from "./modes.js";
+import type { MissionRun, MissionRunReading, StopRef } from "../run.js";
+import type { LessonReading } from "./path.js";
+import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations.js";
 
 export type MessageDescriptor = Readonly<{
   id: string;
@@ -231,7 +231,7 @@ export type Skill = Readonly<{
   name: string;
   description: string;
   body: string;
-  resources?: readonly import("./skills").SkillResource[];
+  resources?: readonly import("./skills.js").SkillResource[];
 }>;
 /** A graph-bound replay of immutable observations in logical order. */
 export interface TheoryState<S> {

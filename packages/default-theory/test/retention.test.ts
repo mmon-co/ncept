@@ -1,7 +1,7 @@
-import { readTheoryState } from "@concept/core/theory";
+import { readTheoryState } from "@mmon-co/core/theory";
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type NodeId, type PatchRevision } from "@concept/core/patch";
-import type { LearnerDay, Observation, ObservationId } from "@concept/core/observations";
+import { resolvePatchBundle, type NodeId, type PatchRevision } from "@mmon-co/core/patch";
+import type { LearnerDay, Observation, ObservationId } from "@mmon-co/core/observations";
 import {
   defaultTheory,
   DEFAULT_THEORY_REF,
@@ -10,7 +10,7 @@ import {
   type Grade,
   type Claim,
   type Demonstration,
-} from "@concept/default-theory";
+} from "@mmon-co/default-theory";
 
 const ref = { identity: "patch-retention", digest: `sha256:${"b".repeat(64)}` } as const;
 const nodes: NodeId[] = ["node-ancestor", "node-prerequisite", "node-dependent", "node-claim", "node-isolated"];

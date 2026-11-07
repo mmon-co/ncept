@@ -1,4 +1,4 @@
-import type { NodeId } from "@concept/core/patch";
+import type { NodeId } from "@mmon-co/core/patch";
 
 /** Host-derived Lesson outcome, not demonstration evidence or a learner label. */
 export type MilestoneDiagnosis = Readonly<{

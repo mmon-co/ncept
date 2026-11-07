@@ -1,6 +1,6 @@
-import { PatchCompileError } from "./errors";
-import type { NodeId, ResolvedGraph, StructureNode } from "./model";
-import { selectGraph } from "./select";
+import { PatchCompileError } from "./errors.js";
+import type { NodeId, ResolvedGraph, StructureNode } from "./model.js";
+import { selectGraph } from "./select.js";
 
 export type RouteResult =
   | { readonly kind: "found"; readonly nodes: readonly StructureNode[] }

@@ -1,6 +1,6 @@
-import type { NodeId, ResolvedGraph } from "@concept/core/patch";
-import type { Observation } from "@concept/core/observations";
-import type { NodeProgress } from "@concept/core/theory";
+import type { NodeId, ResolvedGraph } from "@mmon-co/core/patch";
+import type { Observation } from "@mmon-co/core/observations";
+import type { NodeProgress } from "@mmon-co/core/theory";
 import {
   isDemonstration,
   stateDefault,
@@ -8,7 +8,7 @@ import {
   type HomedRecord,
   type NodeState,
   type NodeSchedule,
-} from "./state";
+} from "./state.js";
 
 /** Decoded attempt facts; no host row identity or source-key policy lives here. */
 export type DefaultDemonstrationReading = Omit<Demonstration, "kind" | "node"> & {

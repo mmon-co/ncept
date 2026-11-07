@@ -1,11 +1,11 @@
-import { chat, modes } from "./chat";
-import { describeDefaultObservation } from "./history";
-import { event } from "./event";
-import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes";
-import { DEFAULT_THEORY_REF, initDefaultState, isCompletionOutcome } from "./state";
-import { defaultTags, projectDefault } from "./tags";
-import { pathDefault } from "./path";
-import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading";
+import { chat, modes } from "./chat.js";
+import { describeDefaultObservation } from "./history.js";
+import { event } from "./event.js";
+import { isAttemptOutcome, isQuizOutcome, isRecallOutcome } from "./outcomes.js";
+import { DEFAULT_THEORY_REF, initDefaultState, isCompletionOutcome } from "./state.js";
+import { defaultTags, projectDefault } from "./tags.js";
+import { pathDefault } from "./path.js";
+import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading.js";
 
 /** The single default implementation assembly. */
 export const implementation = {
@@ -28,12 +28,12 @@ export const implementation = {
   chat,
   modes,
   event,
-} satisfies import("@concept/core/theory").Theory<
-  import("./state").DefaultState,
+} satisfies import("@mmon-co/core/theory").Theory<
+  import("./state.js").DefaultState,
   {
-    completion: import("./state").CompletionOutcome;
-    recall: import("./outcomes").RecallOutcome;
-    quiz: import("./outcomes").QuizOutcome;
-    attempt: import("./outcomes").AttemptOutcome;
+    completion: import("./state.js").CompletionOutcome;
+    recall: import("./outcomes.js").RecallOutcome;
+    quiz: import("./outcomes.js").QuizOutcome;
+    attempt: import("./outcomes.js").AttemptOutcome;
   }
 >;

@@ -1,6 +1,6 @@
-import type { Program } from "../observations";
-import type { NodeId } from "../patch";
-import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "./theory";
+import type { Program } from "../observations.js";
+import type { NodeId } from "../patch/index.js";
+import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "./theory.js";
 
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
 export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" | "web" | "preferences" | "bash";

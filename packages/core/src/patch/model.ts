@@ -1,5 +1,5 @@
-import type { ContentDigest } from "../digest";
-import type { Tag, TagIndex } from "../theory/theory";
+import type { ContentDigest } from "../digest.js";
+import type { Tag, TagIndex } from "../theory/theory.js";
 
 export type PatchId = `patch-${string}`;
 export type NodeId = `node-${string}`;
