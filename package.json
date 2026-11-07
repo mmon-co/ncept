@@ -1,0 +1,17 @@
+{
+  "name": "mmon-open",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "for name in core default-theory local pi local-mcp; do if [ -f packages/$name/package.json ]; then bun run --cwd packages/$name build || exit; fi; done",
+    "typecheck": "bun run build && tsc --noEmit -p tsconfig.json",
+    "test": "bun test --parallel --timeout 30000"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14",
+    "typescript": "5.9.3"
+  }
+}

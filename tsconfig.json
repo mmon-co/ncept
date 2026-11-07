@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@mmon-co/core": ["./packages/core/src/index.ts"],
+      "@mmon-co/core/*": ["./packages/core/src/*"],
+      "@mmon-co/default-theory": ["./packages/default-theory/src/index.ts"],
+      "@mmon-co/default-theory/*": ["./packages/default-theory/src/*"],
+      "@mmon-co/local": ["./packages/local/src/index.ts"],
+      "@mmon-co/local/*": ["./packages/local/src/*"]
+    },
+    "lib": ["ESNext", "DOM"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "types": ["bun-types"]
+  },
+  "include": ["packages/**/*.ts"]
+}
