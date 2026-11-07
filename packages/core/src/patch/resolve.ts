@@ -42,6 +42,7 @@ function exactRelease(ref: ExactPatchRef): string {
 function orderRevisions(
   bundle: ClosedPatchBundle,
   roots: readonly ExactPatchRef[] = [bundle.terminal],
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): {
   readonly revisions: PatchRevision[];
   readonly closure: ReadonlyMap<string, ReadonlySet<string>>;
@@ -62,6 +63,14 @@ function orderRevisions(
     return revision;
   });
 
+  // A supplied bundle may retain the authored closure alongside its replacement.
+  const substitutedClosure = new Set<string>();
+  const retainAuthoredClosure = (ref: ExactPatchRef): void => {
+    const key = exactPatchRefKey(ref);
+    if (substitutedClosure.has(key)) return;
+    substitutedClosure.add(key);
+    revisions.get(key)?.bases.forEach(retainAuthoredClosure);
+  };
   const selectedByIdentity = new Map<PatchId, ExactPatchRef>();
   const active = new Set<string>();
   const applied = new Set<string>();
@@ -86,12 +95,14 @@ function orderRevisions(
     active.add(key);
     const dependencyClosure = new Set<string>();
     for (const base of revision.bases) {
-      const dependencyKey = exactPatchRefKey(base);
+      const selectedBase = selection?.get(base.identity) ?? base;
+      if (!sameExactPatchRef(base, selectedBase)) retainAuthoredClosure(base);
+      const dependencyKey = exactPatchRefKey(selectedBase);
       const dependency = revisions.get(dependencyKey);
       if (dependency === undefined)
         throw new PatchCompileError(
           "unresolvable-dependency",
-          `Patch revision ${base.identity}@${base.digest} is missing`,
+          `Patch revision ${selectedBase.identity}@${selectedBase.digest} is missing`,
         );
       visit(dependency);
       for (const member of closure.get(dependencyKey) ?? []) dependencyClosure.add(member);
@@ -103,7 +114,7 @@ function orderRevisions(
     ordered.push(revision);
   };
   terminals.forEach(visit);
-  if (ordered.length !== revisions.size)
+  if ([...revisions.keys()].some((key) => !applied.has(key) && !substitutedClosure.has(key)))
     throw new PatchCompileError("invalid-bundle", "closed Patch bundle contains unused revisions");
   return { revisions: ordered, closure };
 }
@@ -553,11 +564,14 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
+/** Resolve selected base identities at the host's chosen exact revisions. The bundle
+ * must include each reached selection; authored revisions may remain as unused history. */
 export function resolvePatchBundle(
   bundle: ClosedPatchBundle,
   availablePlaygrounds?: ReadonlySet<string>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ResolvedGraph {
-  return resolveBundle(bundle, availablePlaygrounds);
+  return resolveBundle(bundle, availablePlaygrounds, undefined, undefined, selection);
 }
 
 /** Read independently authorized direct bases without claiming a closed terminal bundle.
@@ -628,8 +642,9 @@ function resolveBundle(
   availablePlaygrounds?: ReadonlySet<string>,
   variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
   roots?: readonly ExactPatchRef[],
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ResolvedGraph {
-  const ordered = orderRevisions(bundle, roots);
+  const ordered = orderRevisions(bundle, roots, selection);
   const orderedRevisions = ordered.revisions;
   const collection: ContributionCollection = {
     nodes: new Map(),
@@ -651,6 +666,29 @@ function resolveBundle(
         sameExactPatchRef(revision.ref, bundle.terminal) && variantOperations?.has(index)
           ? variantOperations.get(index)
           : original;
+      if (operation?.kind === "mask-contribution") {
+        const mask = operation.mask;
+        const source = selection?.get(mask.source.identity);
+        if (source && !sameExactPatchRef(source, mask.source)) {
+          const target = collection.appliedRevisions.get(exactPatchRefKey(source));
+          const operationIndex = target?.delta.operations.findIndex(
+            (candidate) =>
+              matchesMask(candidate, mask) &&
+              (mask.property === undefined ||
+                (candidate.kind === "add-metadata-set" &&
+                  Object.hasOwn(candidate.metadataSet.properties, mask.property))),
+          );
+          if (operationIndex === undefined || operationIndex < 0)
+            staleMask(revision.ref, mask, "the selected source has no matching contribution");
+          collectOperation(
+            revision.ref,
+            { kind: "mask-contribution", mask: { ...mask, source, operationIndex } },
+            index,
+            collection,
+          );
+          return;
+        }
+      }
       if (operation) collectOperation(revision.ref, operation, index, collection);
     });
     collection.appliedRevisions.set(exactPatchRefKey(revision.ref), revision);
