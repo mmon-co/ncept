@@ -196,6 +196,50 @@ export class LearningHost<S> {
       };
     });
   }
+  async lessonEntry(missionId: string, number?: number): Promise<ModeEntry> {
+    const view = await this.runtime.snapshot();
+    const reading = (await this.missionReadings()).find(({ mission }) => mission.id === missionId);
+    if (!reading) throw new Error("Unknown Mission");
+    const context = {
+      graph: view.graph,
+      projection: view.theory.project(view.graph, view.state),
+      observations: view.observations,
+      activities: [],
+    };
+    const future = view.theory.path?.({
+      ...context,
+      targets: reading.mission.targets.map(({ node }) => node),
+      past: reading.run.past,
+      now: view.now,
+      minutes: 30,
+    });
+    if (!future) throw new Error("Theory provides no Mission path");
+    const path = readMissionPath(future, view.theory, context);
+    const section = path.sections.find(({ lessons }) =>
+      lessons.some(
+        (lesson) => lesson.kind === "lesson" && (number === undefined ? !lesson.cleared : lesson.number === number),
+      ),
+    );
+    const lesson = section?.lessons.find(
+      (lesson) => lesson.kind === "lesson" && (number === undefined ? !lesson.cleared : lesson.number === number),
+    );
+    if (!section || !lesson) throw new Error("No matching Lesson in this Mission");
+    return {
+      kind: "lesson",
+      lesson: {
+        mission: { id: reading.mission.id, statement: reading.mission.statement },
+        number: lesson.number,
+        of: path.lessonCount,
+        name: lesson.name ?? lesson.nodes.map((id) => stringProperty(view.graph, id, "display:label", id)).join(", "),
+        section: {
+          number: section.number,
+          milestone: section.milestone,
+          name: stringProperty(view.graph, section.milestone, "display:label", section.milestone),
+        },
+        nodes: lesson.nodes,
+      },
+    };
+  }
   async reading() {
     const view = await this.runtime.snapshot();
     return {

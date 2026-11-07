@@ -47,3 +47,5 @@ bun test packages/pi/test/pi-wiring.test.ts
 ```
 
 The SDK wiring smoke uses a scripted model with real host tools and pi Session files; it makes no paid or network requests.
+
+For a checkout-owned hosted endpoint, set `MMON_HUB_URL` to its Application base URL (including `/ncept`) before starting pi. `MMON_CREDENTIALS_FILE` selects an isolated credential file outside the Profile; login and logout use the same file. Omit both for the public product. OAuth uses pi's public CIMD identity, PKCE and the `patches publish learn` scopes; it does not require the issuer to enable dynamic registration.

@@ -103,6 +103,8 @@ export interface HubOptions {
   readonly userAgent?: string;
   /** Application base URL, including /ncept on the hosted product. Defaults to https://co.mmon.co/ncept. */
   readonly url?: string;
+  /** Public native-client metadata document for issuers using CIMD instead of dynamic registration. */
+  readonly clientMetadataUrl?: string;
   /** Outside the Profile; defaults to credentialsPath(). */
   readonly credentialsFile?: string;
   /** Front ends may present this URL themselves; otherwise the system browser is opened. */

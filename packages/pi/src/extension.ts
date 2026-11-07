@@ -64,8 +64,16 @@ export default function mmon(pi: ExtensionAPI) {
             {
               name: "reply",
               description: "Return the structured judgment.",
-              parameters: request.schema,
-              constrainedSampling: { type: "json_schema", strict: "prefer" },
+              // Tool arguments are always objects; a Theory may ask for a scalar.
+              parameters: {
+                type: "object",
+                properties: { value: request.schema },
+                required: ["value"],
+                additionalProperties: false,
+              },
+              // Theory schemas use full JSON Schema (for example uniqueItems), not
+              // OpenAI's strict subset. The host validates the returned judgment.
+              constrainedSampling: false,
             },
           ],
         },
@@ -77,7 +85,7 @@ export default function mmon(pi: ExtensionAPI) {
     const reply = response.content.find((part) => part.type === "toolCall" && part.name === "reply");
     if (!reply || reply.type !== "toolCall")
       throw new Error("The selected model did not return a structured judgment.");
-    return reply.arguments;
+    return reply.arguments.value;
   }
 
   function wasImportConfirmed(): boolean {
@@ -101,7 +109,12 @@ export default function mmon(pi: ExtensionAPI) {
     }
     host = await openHost({
       profileDir: ctx.cwd,
-      hub: { userAgent: "mmon-pi/" + version },
+      hub: {
+        userAgent: "mmon-pi/" + version,
+        clientMetadataUrl: "https://pi.dev/oauth/client.json",
+        url: process.env.MMON_HUB_URL,
+        credentialsFile: process.env.MMON_CREDENTIALS_FILE,
+      },
       theories,
       model,
       confirm: async (proposal) => {
@@ -528,7 +541,7 @@ export default function mmon(pi: ExtensionAPI) {
           ctx.ui.notify("Signed in to mmon.", "info");
           break;
         case "logout":
-          await rm(credentialsPath(), { force: true });
+          await rm(process.env.MMON_CREDENTIALS_FILE ?? credentialsPath(), { force: true });
           host = undefined;
           ctx.ui.notify("Signed out of mmon.", "info");
           break;

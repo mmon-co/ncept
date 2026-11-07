@@ -50,7 +50,12 @@ function safeName(value: unknown): string {
 const string = { type: "string" };
 const nodeList = { type: "array", items: { type: "string", pattern: "^node-" } };
 const graphProperties = {
-  operations: { type: "array", items: { type: "object" } },
+  operations: {
+    type: "array",
+    description:
+      'Core operations use kind, not op. Create a Node with {"kind":"add-node","node":{"id":"node-example"}}; its label and criterion are separate: {"kind":"add-metadata-set","metadataSet":{"id":"metadata-example","subjects":[{"kind":"node","id":"node-example"}],"properties":{"display:label":"Example","pedagogy:criterion":"Observable success","pedagogy:knowledge-type":"conceptual"}}}. A prerequisite edge is {"kind":"add-edge","edge":{"id":"edge-example","from":"node-prerequisite","to":"node-example"}}. Other kinds: define-tag {tag:{name,nodes,edges,metadataSets}}, add-material/edit-material {material:{playground,type,id,about,content:{kind:"blob",hash,mediaType},meta}}, remove-material {playground,id}, mask-contribution {mask:{source:{identity,digest},operationIndex,entity:{kind,id},property?}}. Prefer the material tool for local files. Metadata properties belong to metadata sets, never directly on Nodes.',
+    items: { type: "object" },
+  },
   targets: nodeList,
   citations: { type: "array", items: { type: "object" } },
   retractions: { type: "array", items: string },
@@ -287,11 +292,52 @@ export function hostTools<S>(
   }
   mount(
     "propose",
-    "Ask approval for a Mission (input.mission is a Core Mission), graph-diff/revision (input.operations or the current draft), or preferences (input.text). Mode switches use input.mode, input.then and input.entry and must follow the Theory's allowed switches. No proposed Profile change is applied before confirm.",
+    'Ask approval for a Mission, graph-diff/revision, or preferences. For mission, input.mission is {id,statement,targets:[{node,provenance:{identity,digest}}],priority}; the same id revises an existing Mission. A Mission may start with targets:[] before charting; after graph acceptance, use mission again to attach its targets with exact provenance from read graph. For graph-diff/revision, input:{} submits the current edit_graph_draft; input.targets optionally selects Node ids. For preferences, input.text is the new text. For mode, input is {mode,then,entry}; choose an allowed switch from context. Entry shapes: {kind:"goal",text}, {kind:"mission",id}, {kind:"target",node}, {kind:"review",nodes}, or {kind:"lesson",opening:{missionId,number}} (omit number for the next uncleared Lesson). Call mission without scope to include Missions not yet targeted; its path supplies Lesson numbers after targets are attached. No proposed Profile change is applied before confirm.',
     schema(
       {
         op: { enum: ["mission", "graph-diff", "revision", "preferences", "settings", "mode"] },
-        input: { type: "object" },
+        input: {
+          type: "object",
+          properties: {
+            mission: schema(
+              {
+                id: string,
+                statement: string,
+                targets: {
+                  type: "array",
+                  items: schema(
+                    {
+                      node: string,
+                      provenance: schema({ identity: string, digest: string }, ["identity", "digest"]),
+                    },
+                    ["node", "provenance"],
+                  ),
+                },
+                priority: { type: "number" },
+                guidance: { type: "array", items: { type: "object" } },
+                assessment: { type: "array", items: { type: "object" } },
+              },
+              ["id", "statement", "targets", "priority"],
+            ),
+            mode: string,
+            then: { enum: ["here", "next", "aside"] },
+            entry: {
+              type: "object",
+              properties: {
+                kind: { enum: ["goal", "mission", "target", "review", "lesson", "checkpoint"] },
+                text: string,
+                id: string,
+                node: string,
+                nodes: nodeList,
+                opening: schema({ missionId: string, number: { type: "integer", minimum: 1 } }, ["missionId"]),
+              },
+              description:
+                "For a Lesson use {kind:'lesson',opening:{missionId,number}}; omit number for the next uncleared Lesson. The host resolves the complete snapshot.",
+            },
+            ...graphProperties,
+            text: string,
+          },
+        },
         title: string,
         description: string,
       },
@@ -307,8 +353,16 @@ export function hostTools<S>(
         const allowed = selected?.switches.find(
           (item) => item.mode === mode && (input.then === undefined || item.then === input.then),
         );
-        if (!allowed) throw new Error("Mode switch is not allowed");
-        const to: ModeSwitch = { ...allowed, ...(input.entry === undefined ? {} : { entry: modeEntry(input.entry) }) };
+        if (!allowed)
+          throw new Error("Mode switch is not allowed. Allowed: " + JSON.stringify(selected?.switches ?? []));
+        let entry;
+        if (object(input.entry) && input.entry.kind === "lesson" && object(input.entry.opening)) {
+          const { missionId, number } = input.entry.opening;
+          if (number !== undefined && (typeof number !== "number" || !Number.isSafeInteger(number)))
+            throw new Error("Lesson number must be an integer");
+          entry = await host.lessonEntry(text(missionId, "Mission id"), number);
+        } else entry = input.entry === undefined ? undefined : modeEntry(input.entry);
+        const to: ModeSwitch = { ...allowed, ...(entry === undefined ? {} : { entry }) };
         await host.switchMode(session, to);
         return { content: { status: "switching" }, switch: to };
       }
@@ -332,7 +386,9 @@ export function hostTools<S>(
         };
       } else if (op === "mission") {
         if (!isMission(input.mission))
-          throw new Error("input.mission must be a Core Mission (id, statement, targets with provenance, priority)");
+          throw new Error(
+            "input.mission must be a Core Mission (id, statement, targets:[{node,provenance:{identity,digest}}], priority:number)",
+          );
         const mission = input.mission;
         const existing = (await host.missionReadings()).some((reading) => reading.mission.id === mission.id);
         apply = () => host.reviseMission(mission, !existing);

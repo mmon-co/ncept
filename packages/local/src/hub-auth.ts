@@ -47,9 +47,15 @@ export class HubAuth implements OAuthClientProvider {
     readonly resource: string,
     private readonly path: string,
     private readonly openUrl: (url: string) => Promise<void>,
+    readonly clientMetadataUrl?: string,
   ) {}
   static async open(resource: string, options: HubOptions): Promise<HubAuth> {
-    const provider = new HubAuth(resource, options.credentialsFile ?? credentialsPath(), options.openUrl ?? browser);
+    const provider = new HubAuth(
+      resource,
+      options.credentialsFile ?? credentialsPath(),
+      options.openUrl ?? browser,
+      options.clientMetadataUrl,
+    );
     provider.credentials = (await load(provider.path))[resource] ?? {};
     return provider;
   }
