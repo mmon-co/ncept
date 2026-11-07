@@ -1,6 +1,6 @@
-import type { Speaker } from "./theory/speaker";
+import type { Speaker } from "./theory/speaker.js";
 
-import { isNodeId, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch";
+import { isNodeId, type ExactPatchRef, type NodeId, type ResolvedGraph } from "./patch/index.js";
 
 export type ObservationId = `obs-${string}`;
 export type SurfaceId = `surface-${string}`;

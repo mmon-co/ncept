@@ -1,5 +1,5 @@
-import type { NodeId, ResolvedGraph } from "@concept/core/patch";
-import { isNumberedStop } from "@concept/core/theory/path";
+import type { NodeId, ResolvedGraph } from "@mmon-co/core/patch";
+import { isNumberedStop } from "@mmon-co/core/theory/path";
 import type {
   Estimate,
   EstimateContext,
@@ -8,9 +8,9 @@ import type {
   Progress,
   Tag,
   TheoryProjection,
-} from "@concept/core/theory";
-import { defaultTheoryMessages } from "./messages";
-import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing";
+} from "@mmon-co/core/theory";
+import { defaultTheoryMessages } from "./messages.js";
+import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing.js";
 
 /** Read a frozen default assessment through the same boundary as a live projection. */
 export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {

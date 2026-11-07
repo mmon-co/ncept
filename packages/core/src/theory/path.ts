@@ -1,6 +1,6 @@
-import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory";
-import type { NodeId } from "../patch";
-import type { StopRef } from "../run";
+import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory.js";
+import type { NodeId } from "../patch/index.js";
+import type { StopRef } from "../run.js";
 
 /** Freeze identity facts, not the stop's changing future position or numbering. */
 export function stopRef(stop: Lesson, name: string): StopRef {

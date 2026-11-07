@@ -1,7 +1,7 @@
-import { contentDigest, type ContentDigest } from "../digest";
-import { compileGraph } from "./compile";
-import { PatchCompileError } from "./errors";
-import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata";
+import { contentDigest, type ContentDigest } from "../digest.js";
+import { compileGraph } from "./compile.js";
+import { PatchCompileError } from "./errors.js";
+import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -16,8 +16,8 @@ import {
   type PatchRevision,
   type RootPatchDefinition,
   type SemanticDelta,
-} from "./model";
-import { resolvePatchBundle } from "./resolve";
+} from "./model.js";
+import { resolvePatchBundle } from "./resolve.js";
 
 export const PERSONAL_PATCH_ID = "patch-personal" as const;
 export class PatchContentError extends Error {}

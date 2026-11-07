@@ -1,8 +1,8 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
-import type { Speaker } from "@concept/core/theory/speaker";
-import { readTheoryState, type TheoryState } from "@concept/core/theory";
+import type { Speaker } from "@mmon-co/core/theory/speaker";
+import { readTheoryState, type TheoryState } from "@mmon-co/core/theory";
 
-import { dependentCones } from "./dependent-cone";
+import { dependentCones } from "./dependent-cone.js";
 import {
   COMPLETION_PROPERTY,
   compileCompletion,
@@ -11,7 +11,7 @@ import {
   type Completion,
   type CompletionObservation,
   type CompletionProgress,
-} from "./completion";
+} from "./completion.js";
 import {
   exactPatchRefKey,
   lastMetadataContribution,
@@ -22,7 +22,7 @@ import {
   type MetadataSet,
   type NodeId,
   type ResolvedGraph,
-} from "@concept/core/patch";
+} from "@mmon-co/core/patch";
 import {
   compareObservations,
   isObservationId,
@@ -31,7 +31,7 @@ import {
   type Observation,
   type ObservationId,
   type SurfaceId,
-} from "@concept/core/observations";
+} from "@mmon-co/core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
 export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" } as const;
@@ -65,7 +65,7 @@ export interface Demonstration {
   readonly task: string;
   readonly response: string;
   readonly evaluation?: {
-    readonly grader: import("@concept/core/observations").Grader;
+    readonly grader: import("@mmon-co/core/observations").Grader;
     readonly criteria: readonly { readonly criterion: string; readonly probability: number }[];
     readonly message?: string;
     readonly watch?: ObservationId;

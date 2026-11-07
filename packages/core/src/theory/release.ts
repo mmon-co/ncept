@@ -1,6 +1,6 @@
 import { satisfies, tryParse, tryParseRange } from "std-semver";
-import type { TheoryRelease, TheoryRequirement } from "./theory";
-export type { TheoryRelease, TheoryRequirement } from "./theory";
+import type { TheoryRelease, TheoryRequirement } from "./theory.js";
+export type { TheoryRelease, TheoryRequirement } from "./theory.js";
 
 type IdentifiedTheory = { readonly id: string; readonly version: string };
 

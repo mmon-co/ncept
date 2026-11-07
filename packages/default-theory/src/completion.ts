@@ -1,12 +1,12 @@
-import { canonicalJson } from "@concept/core/digest";
+import { canonicalJson } from "@mmon-co/core/digest";
 import {
   compareObservations,
   isObservationTimestamp,
   type Observation,
   type ObservationId,
-} from "@concept/core/observations";
-import { isMaterialMeta, isNodeId, type NodeId } from "@concept/core/patch";
-import type { Claim, CompletionOutcome, Demonstration } from "./state";
+} from "@mmon-co/core/observations";
+import { isMaterialMeta, isNodeId, type NodeId } from "@mmon-co/core/patch";
+import type { Claim, CompletionOutcome, Demonstration } from "./state.js";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 export type Field =

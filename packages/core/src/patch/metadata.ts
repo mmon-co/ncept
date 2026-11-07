@@ -1,18 +1,18 @@
-import { canonicalJson, isContentDigest } from "../digest";
-import { PatchCompileError } from "./errors";
+import { canonicalJson, isContentDigest } from "../digest.js";
+import { PatchCompileError } from "./errors.js";
 import {
   isPatchSkillEntries,
   isPatchToolEntries,
   PEDAGOGY_SKILLS_PROPERTY,
   PEDAGOGY_TOOLS_PROPERTY,
-} from "./capabilities";
+} from "./capabilities.js";
 import {
   isGuidanceEntries,
   GUIDANCE_PROPERTIES,
   PEDAGOGY_OPENING_PROPERTY,
   PEDAGOGY_FIRST_MESSAGE_PROPERTY,
   nodeCascadedProperty,
-} from "./guidance";
+} from "./guidance.js";
 import {
   exactPatchRefKey,
   type Attachment,
@@ -24,7 +24,7 @@ import {
   type MetadataValue,
   type PatchContent,
   type ResolvedGraph,
-} from "./model";
+} from "./model.js";
 
 /** Metadata scalars use the last contributing exact Patch, then its operation order.
  * A null contribution is a clear: it is transparent, so the latest non-null value beneath shows.

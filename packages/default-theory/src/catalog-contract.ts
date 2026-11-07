@@ -1,4 +1,4 @@
-import type { NodeId, TutorGuidanceEntry } from "@concept/core/patch";
+import type { NodeId, TutorGuidanceEntry } from "@mmon-co/core/patch";
 
 /**
  * Transport contracts for the catalog consolidation. These declarations mount nothing:

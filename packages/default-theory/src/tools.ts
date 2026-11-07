@@ -1,8 +1,8 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
-import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading";
-import { projectDefault } from "./tags";
-import { contentDigest } from "@concept/core/digest";
-import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract";
+import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading.js";
+import { projectDefault } from "./tags.js";
+import { contentDigest } from "@mmon-co/core/digest";
+import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract.js";
 import {
   effectiveObservations,
   isObservationId,
@@ -14,12 +14,12 @@ import {
   type ObservationWrite,
   type Program,
   type SurfaceId,
-} from "@concept/core/observations";
-import { materialKey, projectVisualGraph, route, type NodeId } from "@concept/core/patch";
-import type { ChatContext, Tool } from "@concept/core/theory";
-import { readMissionPath } from "@concept/core/theory/path";
-import { pathDefault } from "./path";
-import { refinePendingHomes } from "./event";
+} from "@mmon-co/core/observations";
+import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/core/patch";
+import type { ChatContext, Tool } from "@mmon-co/core/theory";
+import { readMissionPath } from "@mmon-co/core/theory/path";
+import { pathDefault } from "./path.js";
+import { refinePendingHomes } from "./event.js";
 import {
   activeDefaultRecords,
   completionNodeRef,
@@ -38,8 +38,14 @@ import {
   type DefaultState,
   type Demonstration,
   type Interpretation,
-} from "./state";
-import { defaultNodeState, defaultQueryTokens, indicatorsDefault, isDefaultKnown, isDefaultReviewable } from "./tags";
+} from "./state.js";
+import {
+  defaultNodeState,
+  defaultQueryTokens,
+  indicatorsDefault,
+  isDefaultKnown,
+  isDefaultReviewable,
+} from "./tags.js";
 
 type Ctx = ChatContext<DefaultState>;
 type DefaultTool = Tool<unknown, unknown, DefaultState>;

@@ -1,4 +1,4 @@
-import { renderSpeech } from "@concept/core/theory/speaker";
+import { renderSpeech } from "@mmon-co/core/theory/speaker";
 import {
   judge,
   isObservationId,
@@ -8,10 +8,10 @@ import {
   type PlatformEvent,
   type Program,
   type Transcript,
-} from "@concept/core/observations";
-import { isNodeId, sameExactPatchRef, type NodeId } from "@concept/core/patch";
-import type { Context } from "@concept/core/theory";
-import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes";
+} from "@mmon-co/core/observations";
+import { isNodeId, sameExactPatchRef, type NodeId } from "@mmon-co/core/patch";
+import type { Context } from "@mmon-co/core/theory";
+import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes.js";
 import {
   stateDefault,
   homeDefaultRecords,
@@ -25,7 +25,7 @@ import {
   nodeDayEvidence,
   defaultNodeCompletion,
   completionNodeRef,
-} from "./state";
+} from "./state.js";
 
 /** Entries after a Node's last summary; exactly eight remain verbatim. */
 const MEMORY_COMPACTION_THRESHOLD = 8;
