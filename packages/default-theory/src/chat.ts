@@ -10,11 +10,11 @@ import {
 import type { Program } from "@mmon-co/core/observations";
 import type { ChatContext, ChatSetup } from "@mmon-co/core/theory";
 import type { HostCapability, SessionMode } from "@mmon-co/core/theory";
-import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract.js";
+import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES, CATALOG_MODE_METADATA_KEYS } from "./catalog-contract.js";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state.js";
 import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills.js";
 import { catalogToolsForMode } from "./catalog.js";
-import { evaluationContext } from "./evaluation.js";
+import { evaluationContext, evaluateWatchedReply } from "./evaluation.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
@@ -184,7 +184,7 @@ function* setup(
  * evidence. The learner's saved preferences are not part of it: the Application assembles them
  * into the interactive conversation it is running, so no theory Program can read or cite them.
  */
-export const chat = { open: setup, turn: setup };
+export const chat = { open: setup, turn: setup, reply: evaluateWatchedReply };
 
 /** Host context follows the same roots that the default catalog admits. */
 function catalogCapabilities(mode: keyof typeof CATALOG_MODE_TOOLS): readonly HostCapability[] {
@@ -238,6 +238,7 @@ export const modes = {
     frontTab: "document",
     entry: { required: true, kinds: ["lesson", "review"] },
     capabilities: catalogCapabilities("lesson"),
+    metadataKeys: CATALOG_MODE_METADATA_KEYS.lesson,
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },
       { mode: "charting", then: "next", carry: { kind: "brief" } },
