@@ -1,4 +1,4 @@
-import { renderSpeech } from "@concept/core/theory/speaker";
+import { renderSpeech } from "@mmon-co/core/theory/speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
 import {
   lastMetadataContribution,
@@ -6,15 +6,15 @@ import {
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
-} from "@concept/core/patch";
-import type { Program } from "@concept/core/observations";
-import type { ChatContext, ChatSetup } from "@concept/core/theory";
-import type { HostCapability, SessionMode } from "@concept/core/theory";
-import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract";
-import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state";
-import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills";
-import { catalogToolsForMode } from "./catalog";
-import { evaluationContext } from "./evaluation";
+} from "@mmon-co/core/patch";
+import type { Program } from "@mmon-co/core/observations";
+import type { ChatContext, ChatSetup } from "@mmon-co/core/theory";
+import type { HostCapability, SessionMode } from "@mmon-co/core/theory";
+import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES } from "./catalog-contract.js";
+import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state.js";
+import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills.js";
+import { catalogToolsForMode } from "./catalog.js";
+import { evaluationContext } from "./evaluation.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";

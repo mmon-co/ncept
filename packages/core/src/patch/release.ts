@@ -1,7 +1,7 @@
-import { contentDigest, type ContentDigest } from "../digest";
-import { compileGraph } from "./compile";
-import { PatchCompileError } from "./errors";
-import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata";
+import { contentDigest, type ContentDigest } from "../digest.js";
+import { compileGraph } from "./compile.js";
+import { PatchCompileError } from "./errors.js";
+import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import {
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
@@ -16,8 +16,8 @@ import {
   type PatchRevision,
   type RootPatchDefinition,
   type SemanticDelta,
-} from "./model";
-import { resolvePatchBundle } from "./resolve";
+} from "./model.js";
+import { resolvePatchBundle } from "./resolve.js";
 
 export const PERSONAL_PATCH_ID = "patch-personal" as const;
 export class PatchContentError extends Error {}
@@ -57,6 +57,7 @@ export function revisionContent(revision: PatchRevision): PatchContent {
 export function bundleForRevision(
   terminal: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ClosedPatchBundle {
   const revisions = new Map<string, PatchRevision>();
   const active = new Set<string>();
@@ -75,13 +76,17 @@ export function bundleForRevision(
     if (revisions.has(key)) return;
     const revision = { ref, bases: content.bases, delta: content.delta, metadata: content.metadata };
     active.add(key);
-    for (const base of content.bases) visit(base);
+    for (const base of content.bases) {
+      visit(base);
+      const selected = selection?.get(base.identity);
+      if (selected) visit(selected);
+    }
     active.delete(key);
     revisions.set(key, revision);
   };
   visit(terminal);
   const bundle = { terminal, revisions: [...revisions.values()] };
-  resolvePatchBundle(bundle);
+  resolvePatchBundle(bundle, undefined, selection);
   return bundle;
 }
 

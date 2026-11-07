@@ -8,7 +8,7 @@ import {
   type Observation,
   type ObservationId,
   type Program,
-} from "@concept/core/observations";
+} from "@mmon-co/core/observations";
 import {
   ASSESSMENT_GUIDANCE_INSTRUCTIONS,
   isNodeId,
@@ -17,8 +17,8 @@ import {
   metadataSetsForEntity,
   type NodeId,
   type ResolvedGraph,
-} from "@concept/core/patch";
-import type { ChatContext, Tool } from "@concept/core/theory";
+} from "@mmon-co/core/patch";
+import type { ChatContext, Tool } from "@mmon-co/core/theory";
 import {
   electedObservations,
   isDefaultObservation,
@@ -26,7 +26,7 @@ import {
   assertDefaultRetraction,
   type DefaultState,
   type Demonstration,
-} from "./state";
+} from "./state.js";
 
 type Ctx = ChatContext<DefaultState>;
 interface Check {

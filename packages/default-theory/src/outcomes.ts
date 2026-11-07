@@ -1,9 +1,9 @@
-import { isContentDigest } from "@concept/core/digest";
-import { isObservationTimestamp } from "@concept/core/observations";
-import type { Demonstration, NodeRef } from "./state";
-import type { ExactPatchRef, NodeId } from "@concept/core/patch";
-export { isCompletionOutcome } from "./state";
-export type { CompletionOutcome } from "./state";
+import { isContentDigest } from "@mmon-co/core/digest";
+import { isObservationTimestamp } from "@mmon-co/core/observations";
+import type { Demonstration, NodeRef } from "./state.js";
+import type { ExactPatchRef, NodeId } from "@mmon-co/core/patch";
+export { isCompletionOutcome } from "./state.js";
+export type { CompletionOutcome } from "./state.js";
 
 /** Content captured when retrieval happened, not a pointer to an editable card. */
 export interface RecallOutcome {

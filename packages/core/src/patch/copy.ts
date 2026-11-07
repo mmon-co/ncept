@@ -3,8 +3,8 @@ import {
   isPatchToolEntries,
   PEDAGOGY_SKILLS_PROPERTY,
   PEDAGOGY_TOOLS_PROPERTY,
-} from "./capabilities";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES, type GuidanceEntry } from "./guidance";
+} from "./capabilities.js";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES, type GuidanceEntry } from "./guidance.js";
 import {
   materialKey,
   type EdgeId,
@@ -15,8 +15,8 @@ import {
   type ResolvedGraph,
   type SemanticDelta,
   type SemanticOperation,
-} from "./model";
-import { reifyView } from "./reify";
+} from "./model.js";
+import { reifyView } from "./reify.js";
 
 export type PatchInstanceId = `instance-${string}`;
 export interface PatchCopy {

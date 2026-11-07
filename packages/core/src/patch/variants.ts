@@ -1,7 +1,7 @@
-import { satisfies, tryParse, tryParseRange } from "std-semver";
-import { PatchCompileError } from "./errors";
-import { isPatchId } from "./release";
-import type { PatchMetadata } from "./model";
+import { validVersionRange, satisfiesVersionRange } from "../version_range.js";
+import { PatchCompileError } from "./errors.js";
+import { isPatchId } from "./release.js";
+import type { PatchMetadata } from "./model.js";
 
 export const PATCH_VARIANT_OF = "patch:variant-of";
 export const PATCH_VARIANT_LOCALE = "patch:locale";
@@ -70,7 +70,7 @@ function parseRangeReference(value: unknown, field: string): PatchVersionRange {
   if (separator < 1) return invalid(`${field} must be <patch-id>@<semver-range>`);
   const patchId = value.slice(0, separator);
   const range = value.slice(separator + 1);
-  if (!isPatchId(patchId) || range === "" || tryParseRange(range) === undefined)
+  if (!isPatchId(patchId) || range === "" || !validVersionRange(range))
     return invalid(`${field} must be <patch-id>@<semver-range>`);
   return { patchId, range };
 }
@@ -136,12 +136,6 @@ export function patchVariantMetadata(patchId: string, metadata: PatchMetadata): 
   return { ...(claim && { claim }), confirmations, canonicalVariants };
 }
 
-export function patchVersionInRange(version: string, range: string): boolean {
-  const parsedVersion = tryParse(version);
-  const parsedRange = tryParseRange(range);
-  return parsedVersion !== undefined && parsedRange !== undefined && satisfies(parsedVersion, parsedRange);
-}
-
 /** Interprets reciprocal claims for the source release in scope and each supplied current variant release. */
 export function readPatchVariants(
   source: PatchVariantRelease,
@@ -162,7 +156,8 @@ export function readPatchVariants(
     }
     examined.add(candidate.patchId);
     const confirmed =
-      patchVersionInRange(source.version, claim.range) && patchVersionInRange(candidate.version, confirmation.range);
+      satisfiesVersionRange(source.version, claim.range) &&
+      satisfiesVersionRange(candidate.version, confirmation.range);
     if (!confirmed) {
       claims.push({
         variantId: candidate.patchId,

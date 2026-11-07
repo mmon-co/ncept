@@ -1,5 +1,5 @@
-import { canonicalJson, isContentDigest } from "./digest";
-import { isObservation, isObservationTimestamp, type Observation } from "./observations";
+import { canonicalJson, isContentDigest } from "./digest.js";
+import { isObservation, isObservationTimestamp, type Observation } from "./observations.js";
 import {
   isGuidanceEntries,
   isNodeId,
@@ -8,8 +8,8 @@ import {
   type ExactPatchRef,
   type GuidanceEntry,
   type NodeId,
-} from "./patch";
-import { isPastEntry, type PastEntry, type SessionRef } from "./run";
+} from "./patch/index.js";
+import { isPastEntry, type PastEntry, type SessionRef } from "./run.js";
 
 /** Portable definition; presentation, tutor mechanics and publication source belong to the host. */
 export interface Mission {

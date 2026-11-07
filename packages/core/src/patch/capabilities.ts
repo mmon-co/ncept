@@ -1,7 +1,7 @@
-import { nodeMetadataCascade, type ResolvedGuidanceEntry } from "./guidance";
-import { isMaterialMeta } from "./metadata";
-import type { MaterialId, NodeId, ResolvedGraph } from "./model";
-import { isNodeId } from "./release";
+import { nodeMetadataCascade, type ResolvedGuidanceEntry } from "./guidance.js";
+import { isMaterialMeta } from "./metadata.js";
+import type { MaterialId, NodeId, ResolvedGraph } from "./model.js";
+import { isNodeId } from "./release.js";
 
 export const PEDAGOGY_SKILLS_PROPERTY = "pedagogy:skills";
 export const PEDAGOGY_TOOLS_PROPERTY = "pedagogy:tools";

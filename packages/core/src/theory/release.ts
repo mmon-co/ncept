@@ -1,6 +1,7 @@
-import { satisfies, tryParse, tryParseRange } from "std-semver";
-import type { TheoryRelease, TheoryRequirement } from "./theory";
-export type { TheoryRelease, TheoryRequirement } from "./theory";
+import { tryParse } from "std-semver";
+import { satisfiesVersionRange } from "../version_range.js";
+import type { TheoryRelease, TheoryRequirement } from "./theory.js";
+export type { TheoryRelease, TheoryRequirement } from "./theory.js";
 
 type IdentifiedTheory = { readonly id: string; readonly version: string };
 
@@ -12,11 +13,7 @@ export function theoryRelease(theory: IdentifiedTheory): TheoryRelease {
 
 /** Whether a recorded exact version is one a requirement's range accepts. */
 export function satisfiesTheory(release: TheoryRelease, requirement: TheoryRequirement): boolean {
-  const version = tryParse(release.version);
-  const range = tryParseRange(requirement.range);
-  return (
-    release.theory === requirement.theory && version !== undefined && range !== undefined && satisfies(version, range)
-  );
+  return release.theory === requirement.theory && satisfiesVersionRange(release.version, requirement.range);
 }
 
 /** Resolve a requirement over supplied executable values, never a repository or provider reference. */

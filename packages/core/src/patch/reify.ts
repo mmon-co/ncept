@@ -1,9 +1,9 @@
-import { canonicalJson } from "../digest";
-import { PatchCompileError } from "./errors";
-import { discoveryTags, sameMetadataSubjects } from "./metadata";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance";
-import { CAPABILITY_PROPERTIES } from "./capabilities";
-import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model";
+import { canonicalJson } from "../digest.js";
+import { PatchCompileError } from "./errors.js";
+import { discoveryTags, sameMetadataSubjects } from "./metadata.js";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance.js";
+import { CAPABILITY_PROPERTIES } from "./capabilities.js";
+import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -16,7 +16,7 @@ import type {
   ReificationTarget,
   SelectedGraph,
   SemanticOperation,
-} from "./model";
+} from "./model.js";
 
 /**
  * Which of the captured revision's own direct bases stay bases. Every other Patch in the

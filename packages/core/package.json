@@ -1,20 +1,65 @@
 {
-  "name": "@concept/core",
+  "name": "@mmon-co/core",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmon-co/mmon.git",
+    "directory": "packages/core"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./digest": "./src/digest.ts",
-    "./patch": "./src/patch/index.ts",
-    "./observations": "./src/observations.ts",
-    "./profile": "./src/profile.ts",
-    "./theory": "./src/theory/index.ts",
-    "./theory/path": "./src/theory/path.ts",
-    "./theory/speaker": "./src/theory/speaker.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./digest": {
+      "types": "./dist/digest.d.ts",
+      "default": "./dist/digest.js"
+    },
+    "./patch": {
+      "types": "./dist/patch/index.d.ts",
+      "default": "./dist/patch/index.js"
+    },
+    "./observations": {
+      "types": "./dist/observations.d.ts",
+      "default": "./dist/observations.js"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "default": "./dist/profile.js"
+    },
+    "./theory": {
+      "types": "./dist/theory/index.d.ts",
+      "default": "./dist/theory/index.js"
+    },
+    "./theory/path": {
+      "types": "./dist/theory/path.d.ts",
+      "default": "./dist/theory/path.js"
+    },
+    "./theory/speaker": {
+      "types": "./dist/theory/speaker.d.ts",
+      "default": "./dist/theory/speaker.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "bun run build"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "std-semver": "^1.0.8",
     "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

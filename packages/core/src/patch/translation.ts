@@ -1,13 +1,13 @@
-import { contentDigest } from "../digest";
-import { PatchCompileError } from "./errors";
+import { contentDigest } from "../digest.js";
+import { PatchCompileError } from "./errors.js";
 import {
   GUIDANCE_PROPERTIES,
   isGuidanceEntries,
   nodeCascadedProperty,
   PEDAGOGY_FIRST_MESSAGE_PROPERTY,
   PEDAGOGY_OPENING_PROPERTY,
-} from "./guidance";
-import { isAttachment, metadataSubjectAppliesToEntity } from "./metadata";
+} from "./guidance.js";
+import { isAttachment, metadataSubjectAppliesToEntity } from "./metadata.js";
 import {
   exactPatchRefKey,
   materialKey,
@@ -23,9 +23,10 @@ import {
   type PatchRevision,
   type ResolvedGraph,
   type SemanticOperation,
-} from "./model";
-import { resolvePatchBundle, resolveVariantBundle } from "./resolve";
-import { declaredPatchLocale, patchVariantMetadata, patchVersionInRange } from "./variants";
+} from "./model.js";
+import { resolvePatchBundle, resolveVariantBundle } from "./resolve.js";
+import { satisfiesVersionRange } from "../version_range.js";
+import { declaredPatchLocale, patchVariantMetadata } from "./variants.js";
 
 export const PATCH_MACHINE_TRANSLATION = "patch:machine-translation";
 export const PATCH_TRANSLATE = "patch:translate";
@@ -102,7 +103,7 @@ export function translationHumanLayers(
       if (
         claim?.patchId !== source.terminal.identity ||
         claim.locale !== locale ||
-        !patchVersionInRange(sourceVersion, claim.range)
+        !satisfiesVersionRange(sourceVersion, claim.range)
       )
         return [];
       const { graph } = resolveVariantBundle(source, variant, sourceVersion);

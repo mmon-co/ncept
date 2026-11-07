@@ -7,8 +7,8 @@ import {
   unscopedCopyTagName,
   type NodeId,
   type ResolvedGraph,
-} from "@concept/core/patch";
-import { dependentCones } from "./dependent-cone";
+} from "@mmon-co/core/patch";
+import { dependentCones } from "./dependent-cone.js";
 import {
   LESSON_TAG_PREFIX,
   tagIndex,
@@ -16,9 +16,9 @@ import {
   type MissionPath,
   type MissionFuture,
   type PathContext,
-} from "@concept/core/theory";
-import { prepareEstimateDefault, progressDefault } from "./reading";
-import { DEFAULT_PARAMETERS, stateDefault } from "./state";
+} from "@mmon-co/core/theory";
+import { prepareEstimateDefault, progressDefault } from "./reading.js";
+import { DEFAULT_PARAMETERS, stateDefault } from "./state.js";
 import { forgetting_curve } from "ts-fsrs";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
