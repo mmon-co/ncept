@@ -5,6 +5,8 @@ import {
   isPatchId,
   isProfileLogEntry,
   mergeProfileLogs,
+  migrateTheoryProfile,
+  type Theory,
   resolveTheory,
   revisionDigest,
   type ContentDigest,
@@ -23,13 +25,15 @@ export const DEFAULT_THEORY_REQUIREMENT: TheoryRequirement = { theory: "default"
 export interface ProfileManifest {
   readonly format: 1;
   readonly personal: ExactPatchRef;
+  /** Content-addressed live log snapshot; absent on the initial directory shape. */
+  readonly log?: ContentDigest;
   readonly theory: TheoryRequirement;
   /** Package names loaded by a local front end; never execute these while importing an exchange. */
   readonly theories: readonly string[];
   /** Only explicitly registered, trusted Sessions count; files merely present in sessions/ do not. */
   readonly sessions: Readonly<Record<string, string>>;
 }
-export type ConfiguredTheory = Readonly<{ id: string; version: string }>;
+export type ConfiguredTheory = Pick<Theory<unknown>, "id" | "version" | "migrations">;
 export interface ValidatedProfile extends Profile {
   readonly manifest: ProfileManifest;
   readonly blobs: ReadonlyMap<ContentDigest, Uint8Array>;
@@ -61,6 +65,7 @@ export function parseManifest(bytes: Uint8Array | undefined): ProfileManifest {
     !object(value) ||
     value.format !== 1 ||
     !exact(value.personal) ||
+    (value.log !== undefined && !isContentDigest(value.log)) ||
     !object(value.theory) ||
     typeof value.theory.theory !== "string" ||
     typeof value.theory.range !== "string" ||
@@ -81,6 +86,7 @@ export function parseManifest(bytes: Uint8Array | undefined): ProfileManifest {
   return {
     format: 1,
     personal: value.personal,
+    ...(value.log === undefined ? {} : { log: value.log }),
     theory: { theory: value.theory.theory, range: value.theory.range },
     theories: value.theories,
     sessions,
@@ -126,17 +132,25 @@ function requireAttachments(value: unknown, blobs: ReadonlyMap<ContentDigest, Ui
 }
 /** Pure validation; safe in a Convex action. No filesystem, package loading, or provider calls. */
 export function validate(files: ProfileFiles, theories: readonly ConfiguredTheory[]): ValidatedProfile {
-  const manifest = parseManifest(files.get("profile.json"));
+  const profile = validateStructure(files);
+  const { manifest } = profile;
   try {
     resolveTheory(manifest.theory, theories);
   } catch (error) {
     throw new Error("Profile Theory " + manifest.theory.theory + " " + manifest.theory.range + ": " + String(error));
   }
+  return profile;
+}
+export function liveLogPath(manifest: ProfileManifest): string {
+  return manifest.log === undefined ? "log.jsonl" : "log-" + manifest.log + ".jsonl";
+}
+function validateStructure(files: ProfileFiles): ValidatedProfile {
+  const manifest = parseManifest(files.get("profile.json"));
   const contents = new Map<ContentDigest, PatchContent>();
   const blobs = new Map<ContentDigest, Uint8Array>();
   const sessionPaths = new Set(Object.values(manifest.sessions).map((filename) => "sessions/" + filename));
   for (const [path, bytes] of files) {
-    if (path === "profile.json" || path === "log.jsonl" || sessionPaths.has(path)) continue;
+    if (path === "profile.json" || path === liveLogPath(manifest) || sessionPaths.has(path)) continue;
     if (path.startsWith("patches/") && path.endsWith(".json")) {
       const digest = path.slice(8, -5);
       const content = json(bytes, path);
@@ -160,7 +174,56 @@ export function validate(files: ProfileFiles, theories: readonly ConfiguredTheor
     parsePiSession(source);
     sessions.set(surface, source);
   }
-  return { manifest, patches, log: parseLog(files.get("log.jsonl")), blobs, sessions };
+  const log = files.get(liveLogPath(manifest));
+  if (manifest.log !== undefined && (!log || attachmentDigest(log) !== manifest.log))
+    throw new Error("Profile log digest mismatch");
+  return { manifest, patches, log: parseLog(log), blobs, sessions };
+}
+/** Migrate structurally valid live data before ordinary strict Theory resolution. */
+export function migrateProfileFiles(
+  files: ProfileFiles,
+  theories: readonly ConfiguredTheory[],
+): Map<string, Uint8Array> {
+  const current = validateStructure(files);
+  const matches = theories.filter((theory) => theory.id === current.manifest.theory.theory);
+  const theory = matches[0];
+  if (matches.length !== 1 || theory === undefined)
+    throw new Error("Profile migration needs exactly one supplied Theory implementation");
+  const requirement = current.manifest.theory;
+  // Web exchanges have also used exact release pins. Extract their stored minor,
+  // not the installed minor; broad caller-supplied ranges remain ordinary strict reads.
+  const exact = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.+-]+)?$/.exec(requirement.range);
+  const pin = exact ? { ...requirement, range: "~" + exact[1] + "." + exact[2] } : requirement;
+  if (!/^~\d+\.\d+$/.test(pin.range)) {
+    validate(files, theories);
+    return new Map(files);
+  }
+  let result;
+  try {
+    result = migrateTheoryProfile(theory, pin, current);
+  } catch (error) {
+    throw new Error("Profile Theory " + requirement.theory + " " + requirement.range + ": " + String(error));
+  }
+  const next = new Map(files);
+  if (result.requirement.range !== current.manifest.theory.range) {
+    for (const revision of result.profile.patches.revisions) {
+      const { ref, ...content } = revision;
+      const path = "patches/" + ref.digest + ".json";
+      next.set(path, jsonBytes(content));
+    }
+    const log = logBytes(result.profile.log);
+    const manifest = {
+      ...current.manifest,
+      personal: result.profile.patches.terminal,
+      theory: result.requirement,
+      log: attachmentDigest(log),
+    };
+    next.delete(liveLogPath(current.manifest));
+    next.set(liveLogPath(manifest), log);
+    next.set("profile.json", jsonBytes(manifest));
+  }
+  validate(next, theories);
+  return next;
 }
 /** Only exchange files belong in this map. The directory adapter excludes materials and untrusted sessions. */
 export function pack(files: ProfileFiles, theories: readonly ConfiguredTheory[]): Uint8Array {
@@ -172,7 +235,7 @@ export function unpack(
   theories: readonly ConfiguredTheory[],
   options: { cwd?: string } = {},
 ): Map<string, Uint8Array> {
-  const files = decodeTar(archive);
+  const files = migrateProfileFiles(decodeTar(archive), theories);
   const profile = validate(files, theories);
   if (options.cwd !== undefined)
     for (const filename of Object.values(profile.manifest.sessions)) {
