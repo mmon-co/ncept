@@ -141,9 +141,25 @@ function isOperation(value: unknown): value is SemanticOperation {
       return false;
   }
 }
+const operationShapes: Readonly<Record<string, string>> = {
+  "add-node": 'node.id must look like "node-example" (lowercase letters, digits and hyphens after "node-")',
+  "add-edge": 'edge.id must look like "edge-example"; edge.from and edge.to must be Node ids like "node-example"',
+  "add-metadata-set":
+    'metadataSet.id must look like "metadata-example"; subjects are {kind:"node",id:"node-example"}; properties are a flat object of metadata values',
+};
 export function operations(value: unknown): readonly SemanticOperation[] {
-  if (!Array.isArray(value) || !value.every(isOperation)) throw new Error("Invalid graph operations");
-  return value;
+  if (!Array.isArray(value)) throw new Error("Graph operations must be an array");
+  const bad = value.findIndex((item) => !isOperation(item));
+  if (bad < 0) return value;
+  const kind = object(value[bad]) ? value[bad].kind : undefined;
+  const shape = typeof kind === "string" ? operationShapes[kind] : undefined;
+  throw new Error(
+    "Invalid graph operation " +
+      bad +
+      (typeof kind === "string" ? " (" + kind + ")" : "") +
+      ": " +
+      (shape ?? "its kind and fields do not match any Core operation; see the tool description"),
+  );
 }
 function mappings(value: unknown): boolean {
   return Array.isArray(value) && value.every((pair) => object(pair) && nonempty(pair.source) && nonempty(pair.target));
