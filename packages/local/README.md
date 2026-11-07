@@ -27,7 +27,7 @@ Import `@mmon-co/local/exchange` in Convex actions or browsers; it has no Node i
 
 ## Host contract
 
-`openHost({ profileDir, theories, model, confirm })` runs the selected Theory over the directory. The front end supplies constrained JSON replies for `judge` and `assess` (including decision grading), confirms proposals, and carries out the conversation/carry in a returned mode switch. Native catalog members are mounted by their original names; the web's envelopes remain unchanged. `web` and `bash` are the front end's capabilities, not tools implemented here. Hub methods are connected by the separate transport implementation.
+`openHost({ profileDir, theories, model, confirm })` runs the selected Theory over the directory. The front end supplies constrained JSON replies for `judge` and `assess` (including decision grading), confirms proposals, and carries out the conversation/carry in a returned mode switch. Native catalog members are mounted by their original names; the web's envelopes remain unchanged. `web` and `bash` are the front end's capabilities, not tools implemented here. `host.hub` connects to the hosted Hub over anonymous HTTP and authenticated MCP.
 
 Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. The default Theory's modes are `empty`, `charting` (entries `goal`, `mission`, `target`, `checkpoint`), `authoring` and `lesson` (entries `lesson`, `review`); the turn's `context` lists each mode's entry kinds and allowed switches. A tool is `{ name, description, schema, run(input) }`:
 
@@ -46,6 +46,25 @@ The front end writes pi transcripts and registers their filenames against `sessi
 Graph drafts stay unsaved until a confirmed `propose`. Mission and guidance/graph proposals and preference changes use `confirm`; a refusal changes no Profile files. Materials use the `local` playground, immutable blob bytes and working copies under `materials/<node>/<material>/<filename>`. Opening preserves an existing working copy. Read-back returns both the saved body and current working-copy text. Other playgrounds' Materials remain readable as saved data without claiming a runner.
 
 `host.config.update({ ...await host.config.read(), timezone: "America/New_York" })` configures learner-days. The initial zone is the machine's IANA zone; each learner-day ends at 04:00 local, including across DST. At startup, the host raises `day.ended` once per elapsed day and records its receipt alongside the Theory's writes. No account or background daemon is needed.
+
+## Hub and web exchange
+
+```ts
+// No sign-in for a public or unlisted release. Exact addresses also work: patch-id@1.0.0.
+const ref = await host.hub.pull("https://co.mmon.co/ncept/hub/patch-example/releases/1.0.0");
+await host.hub.signIn(); // system browser, OAuth PKCE with a loopback callback
+const release = await host.hub.publish({ patch: ref, version: "1.0.0", title: "My map" });
+await host.hub.exportTo("web"); // local Profile replaces web Main after confirmation
+const imported = await host.hub.importFrom("web"); // web Profile replaces local directory after confirmation
+// Resume a moved trusted transcript in a suitable mode:
+await host.sessions.open({ mode: "authoring", resume: imported.sessions[0] });
+```
+
+Pull verifies the closed bundle and all attachment digests before adopting its root as a direct base of the personal Patch. Publish confirms the packaged content, uploads its blobs, then captures, names and publishes a public release. Account operations require `signIn` once; the MCP SDK discovers the protected resource and authorization server, registers the client, requests `patches publish learn`, and refreshes saved tokens when necessary. Credentials are private (`0600`), outside the Profile and exchange archive.
+
+`openHost({ ..., hub: { url, credentialsFile, openUrl } })` optionally overrides the Application base URL (default `https://co.mmon.co/ncept`), credential file (default `credentialsPath()`) and browser opening. Front ends running remotely can present the authorization URL themselves through `openUrl`; the browser must be able to reach the host machine’s loopback callback. HTTP is allowed only for loopback development URLs.
+
+Confirmation proposals distinguish `hub.publish`, `hub.export`, `hub.import` and `hub.choose-mission`. When the web allowance is insufficient, the host asks which Missions to keep, up to the remaining allowance, and includes the upgrade address in each proposal’s detail. Declining the final replacement leaves the live Profile unchanged. Import from web validates the archive before confirmation and stages it before replacement, retains the entire previous project directory as `<profileDir>.backup-<uuid>`, and relocates transcripts to the final directory. Reopen any active Session after replacing the Profile; unrelated old project files and Material working copies remain in the backup, not in the replacement.
 
 ## First use from this repository
 
