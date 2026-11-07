@@ -1,5 +1,6 @@
 import type {
   ChatSetup,
+  HostCapability,
   ExactPatchRef,
   JsonSchema,
   LessonReading,
@@ -37,7 +38,8 @@ export interface HostTool {
   readonly schema: JsonSchema;
   run(args: unknown): Promise<HostToolResult>;
 }
-export type HostChatSetup = Omit<ChatSetup, "tools"> & Readonly<{ tools: readonly HostTool[] }>;
+export type HostChatSetup = Omit<ChatSetup, "tools"> &
+  Readonly<{ tools: readonly HostTool[]; capabilities: readonly HostCapability[] }>;
 export interface HostSession {
   readonly id: SessionRef;
   readonly surface: string;
@@ -65,6 +67,8 @@ export interface ImportResult {
 export interface HostConfig {
   readonly theory: TheoryRequirement;
   readonly theories: readonly string[];
+  /** IANA zone for learner-days; defaults to the local machine's configured zone. */
+  readonly timezone?: string;
 }
 export interface Host {
   readonly profile: ProfileDirectory;
@@ -101,7 +105,4 @@ export interface OpenHostOptions<S> {
   readonly model: Model;
   readonly confirm: Confirm;
 }
-/** Shared contract only: the execution, Hub, pi and MCP tickets implement against these types. */
-export function openHost<S>(_options: OpenHostOptions<S>): Promise<Host> {
-  throw new Error("not implemented");
-}
+export { openHost } from "./learning.js";

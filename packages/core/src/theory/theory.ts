@@ -225,6 +225,8 @@ export type Tool<A = unknown, R = unknown, S = unknown> = Readonly<{
   name: string;
   description: string;
   schema: JsonSchema;
+  /** Native members of a transport catalog. Hosts may mount these instead of its envelope. */
+  members?: readonly Tool<unknown, unknown, S>[];
   run(args: A, ctx: ChatContext<S>): Program<R>;
 }>;
 export type Skill = Readonly<{
@@ -262,6 +264,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly chat?: {
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
     turn(ctx: ChatContext<S>): Program<ChatSetup<S>>;
+    /** A host-proven learner message identity, before preparing the next tutor turn. */
+    reply?(ctx: ChatContext<S>, message: string): Program<unknown>;
   };
   event(event: PlatformEvent, ctx: Context<S>): Program<void>;
 }

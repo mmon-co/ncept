@@ -1,6 +1,6 @@
 # @mmon-co/local
 
-MIT-licensed Profile directory and local host contract. Core owns Patch and log semantics; this package owns their files and the portable exchange tar.
+MIT-licensed Profile directory and learning host. Core owns Patch and log semantics; this package owns their files and the portable exchange tar.
 
 ## Directory API
 
@@ -27,7 +27,15 @@ Import `@mmon-co/local/exchange` in Convex actions or browsers; it has no Node i
 
 ## Host contract
 
-`src/host.ts` defines `openHost({ profileDir, theories, model, confirm })`, session setup and bound tools, mode-switch results, Mission/status readings, Hub and configuration APIs. `openHost` intentionally throws `not implemented`: execution and transport implementations build against this shared contract. The front end supplies constrained JSON model replies for `judge`/`assess`, confirms proposals, and carries out `here`/`next`/`aside` conversation changes.
+`openHost({ profileDir, theories, model, confirm })` runs the selected Theory over the directory. The front end supplies constrained JSON replies for `judge` and `assess` (including decision grading), confirms proposals, and carries out the conversation/carry in a returned mode switch. Native catalog members are mounted by their original names; the web's envelopes remain unchanged. `web` and `bash` are the front end's capabilities, not tools implemented here. Hub methods are connected by the separate transport implementation.
+
+Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. After a switch result, call `.open(result.switch)` for `next`/`aside`; for `here`, keep the same Session handle and request a fresh turn. `.close(session)` records its closing transcript through the Theory. Resume a closed Session with `.open({ mode, resume: session.id })`. Session identities, mode, scope, acceptance provenance and learner-day receipts are platform observations in `log.jsonl`, so they travel with the Profile.
+
+The front end writes pi transcripts and registers their filenames against `session.surface` after trust. `turn(session, { learnerMessage })` takes the selected learner **message entry id**, not message text; it runs a declared reply grader before setup. Reads follow the selected pi branch, and locally recorded evidence derives its standing from its acceptance branch. A library caller without a transcript still retains tool-recorded evidence, but has no closing conversation to record.
+
+Graph drafts stay unsaved until a confirmed `propose`. Mission and guidance/graph proposals and preference changes use `confirm`; a refusal changes no Profile files. Materials use the `local` playground, immutable blob bytes and working copies under `materials/<node>/<material>/<filename>`. Opening preserves an existing working copy. Read-back returns both the saved body and current working-copy text. Other playgrounds' Materials remain readable as saved data without claiming a runner.
+
+`host.config.update({ ...await host.config.read(), timezone: "America/New_York" })` configures learner-days. The initial zone is the machine's IANA zone; each learner-day ends at 04:00 local, including across DST. At startup, the host raises `day.ended` once per elapsed day and records its receipt alongside the Theory's writes. No account or background daemon is needed.
 
 ## First use from this repository
 
