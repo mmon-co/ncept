@@ -76,7 +76,11 @@ export function bundleForRevision(
     if (revisions.has(key)) return;
     const revision = { ref, bases: content.bases, delta: content.delta, metadata: content.metadata };
     active.add(key);
-    for (const base of content.bases) visit(base);
+    for (const base of content.bases) {
+      visit(base);
+      const selected = selection?.get(base.identity);
+      if (selected) visit(selected);
+    }
     active.delete(key);
     revisions.set(key, revision);
   };
