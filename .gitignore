@@ -1,0 +1,4 @@
+node_modules/
+dist/
+packages/default-theory/src/skills/sources.ts
+.env

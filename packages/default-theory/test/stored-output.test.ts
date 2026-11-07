@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision } from "@mmon-co/core/patch";
 import type { Observation, PlatformEvent, Program } from "@mmon-co/core/observations";
-import { readTheoryState, type Tag } from "@mmon-co/core/theory";
+import { readTheoryState, type Tag, type Theory } from "@mmon-co/core/theory";
 import {
   defaultTheory,
   DEFAULT_THEORY_REF,
@@ -296,6 +296,16 @@ function storedOutput() {
 
 test("default Theory stored output agrees with its major.minor snapshot", async () => {
   const version = DEFAULT_THEORY_REF.version.split(".").slice(0, 2).join(".");
+  const [major, minor] = version.split(".").map(Number);
+  if (minor !== undefined && minor > 0) {
+    const from = `${major}.${minor - 1}`;
+    const release: Pick<Theory<unknown>, "id" | "version" | "migrations"> = defaultTheory;
+    const incoming = (release.migrations ?? []).filter((step) => step.from === from && step.to === version);
+    expect(
+      incoming.length,
+      `Default Theory ${version} must ship exactly one incoming migration: from "${from}" to "${version}", even after refreshing its snapshot.`,
+    ).toBe(1);
+  }
   const snapshot = Bun.file(new URL(`./snapshots/stored-output.${version}.json`, import.meta.url));
   const actual = storedOutput();
   const refresh = "UPDATE_DEFAULT_THEORY_STORED_OUTPUT=1 bun test packages/default-theory/test/stored-output.test.ts";
