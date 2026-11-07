@@ -120,6 +120,7 @@ export interface ProfileDirectory {
   appendLog(entries: readonly ProfileLogEntry[]): Promise<void>;
   addRevision(identity: PatchId, content: PatchContent): Promise<ExactPatchRef>;
   setPersonal(ref: ExactPatchRef): Promise<void>;
+  configure(options: InitOptions): Promise<void>;
   addBlob(bytes: Uint8Array): Promise<ContentDigest>;
   /** Front ends call only after accepting project trust; raw pi files are never auto-enrolled. */
   registerSession(surface: string, filename: string, options: { trusted: boolean }): Promise<void>;
@@ -193,6 +194,7 @@ export async function openProfile(dir: string, theories: readonly ConfiguredTheo
         return revision.ref;
       }),
     setPersonal: (personal) => serial(() => manifestWith({ personal })),
+    configure: (options) => serial(() => manifestWith(options)),
     addBlob: (bytes) =>
       serial(async () => {
         const digest = attachmentDigest(bytes);
