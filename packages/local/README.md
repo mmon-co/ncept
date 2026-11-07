@@ -29,7 +29,17 @@ Import `@mmon-co/local/exchange` in Convex actions or browsers; it has no Node i
 
 `openHost({ profileDir, theories, model, confirm })` runs the selected Theory over the directory. The front end supplies constrained JSON replies for `judge` and `assess` (including decision grading), confirms proposals, and carries out the conversation/carry in a returned mode switch. Native catalog members are mounted by their original names; the web's envelopes remain unchanged. `web` and `bash` are the front end's capabilities, not tools implemented here. Hub methods are connected by the separate transport implementation.
 
-Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. After a switch result, call `.open(result.switch)` for `next`/`aside`; for `here`, keep the same Session handle and request a fresh turn. `.close(session)` records its closing transcript through the Theory. Resume a closed Session with `.open({ mode, resume: session.id })`. Session identities, mode, scope, acceptance provenance and learner-day receipts are platform observations in `log.jsonl`, so they travel with the Profile.
+Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. The default Theory's modes are `empty`, `charting` (entries `goal`, `mission`, `target`, `checkpoint`), `authoring` and `lesson` (entries `lesson`, `review`); the turn's `context` lists each mode's entry kinds and allowed switches. A tool is `{ name, description, schema, run(input) }`:
+
+```ts
+const session = await host.sessions.open({ mode: "charting", entry: { kind: "goal", text: "Learn addition" } });
+const setup = await host.sessions.turn(session, {});
+const claim = setup.tools.find((tool) => tool.name === "record_claim")!;
+await claim.run({ statement: "I can add one and one", stance: "knows" });
+await host.sessions.close(session);
+```
+
+After a switch result, call `.open(result.switch)` for `next`/`aside`; for `here`, keep the same Session handle and request a fresh turn. `.close(session)` records its closing transcript through the Theory. Resume a closed Session with `.open({ mode, resume: session.id })`. Session identities, mode, scope, acceptance provenance and learner-day receipts are platform observations in `log.jsonl`, so they travel with the Profile.
 
 The front end writes pi transcripts and registers their filenames against `session.surface` after trust. `turn(session, { learnerMessage })` takes the selected learner **message entry id**, not message text; it runs a declared reply grader before setup. Reads follow the selected pi branch, and locally recorded evidence derives its standing from its acceptance branch. A library caller without a transcript still retains tool-recorded evidence, but has no closing conversation to record.
 
