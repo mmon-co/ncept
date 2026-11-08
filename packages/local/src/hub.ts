@@ -6,6 +6,7 @@ import {
   attachmentDigest,
   bundleForRevision,
   candidateRevision,
+  exactPatchRefKey,
   isAttachment,
   isContentDigest,
   isPatchId,
@@ -20,6 +21,8 @@ import {
   type ContentDigest,
   type ExactPatchRef,
   type PatchContent,
+  type PatchRevision,
+  type TheoryRequirement,
 } from "@mmon-co/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -113,6 +116,18 @@ function verifiedBundle(value: unknown): ClosedPatchBundle {
   );
 }
 
+function theoryRequirement(value: unknown): TheoryRequirement {
+  if (
+    !object(value) ||
+    typeof value.theory !== "string" ||
+    !value.theory.trim() ||
+    typeof value.range !== "string" ||
+    !/^~(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value.range)
+  )
+    throw new Error("Invalid Hub release Theory requirement");
+  return { theory: value.theory, range: value.range };
+}
+
 export function connectHub(
   profile: ProfileDirectory,
   theories: readonly ConfiguredTheory[],
@@ -172,17 +187,25 @@ export function connectHub(
       const response: unknown = await (await fetched(endpoint, { headers })).json();
       if (!object(response) || response.patchId !== selected.patchId || response.version !== selected.version)
         throw new Error("Hub release address mismatch");
-      const requirement = response.theoryRequirement;
-      if (
-        !object(requirement) ||
-        typeof requirement.theory !== "string" ||
-        !requirement.theory.trim() ||
-        typeof requirement.range !== "string" ||
-        !/^~(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(requirement.range)
-      )
-        throw new Error("Invalid Hub release Theory requirement");
+      const requirement = theoryRequirement(response.theoryRequirement);
       const bundle = verifiedBundle(response.bundle);
       if (bundle.terminal.identity !== selected.patchId) throw new Error("Hub release identity mismatch");
+      const revisions = new Map(bundle.revisions.map((revision) => [exactPatchRefKey(revision.ref), revision]));
+      if (!Array.isArray(response.baseTheoryRequirements)) throw new Error("Invalid Hub base Theory requirements");
+      const baseRequirements = new Map<string, TheoryRequirement>();
+      for (const declaration of response.baseTheoryRequirements) {
+        if (
+          !object(declaration) ||
+          !object(declaration.ref) ||
+          !isPatchId(declaration.ref.identity) ||
+          !isContentDigest(declaration.ref.digest)
+        )
+          throw new Error("Invalid Hub base Theory requirement");
+        const key = exactPatchRefKey({ identity: declaration.ref.identity, digest: declaration.ref.digest });
+        if (!revisions.has(key) || baseRequirements.has(key) || key === exactPatchRefKey(bundle.terminal))
+          throw new Error("Invalid Hub base Theory requirement");
+        baseRequirements.set(key, theoryRequirement(declaration.requirement));
+      }
       const blobs = new Map<ContentDigest, Uint8Array>();
       for (const { hash } of attachments(bundle)) {
         const bytes = new Uint8Array(
@@ -193,26 +216,35 @@ export function connectHub(
       }
       const current = await profile.read();
       const theory = resolveTheory(current.manifest.theory, theories);
-      const release = bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, bundle.terminal));
-      if (!release) throw new Error("Missing Hub release revision");
-      let adoptedContent: PatchContent;
+      const migrated = new Map<string, PatchRevision>();
+      const visit = (ref: ExactPatchRef, inherited: TheoryRequirement): PatchRevision => {
+        const key = exactPatchRefKey(ref);
+        const held = migrated.get(key);
+        if (held) return held;
+        const revision = revisions.get(key);
+        if (!revision) throw new Error("Missing Hub release revision");
+        const pin = baseRequirements.get(key) ?? inherited;
+        const content = migrateTheoryPatchContent(theory, pin, revisionContent(revision));
+        const next = candidateRevision(ref.identity, {
+          ...content,
+          bases: content.bases.map((base) => visit(base, pin).ref),
+        });
+        migrated.set(key, next);
+        return next;
+      };
+      let adopted: PatchRevision;
       try {
-        adoptedContent = migrateTheoryPatchContent(
-          theory,
-          { theory: requirement.theory, range: requirement.range },
-          revisionContent(release),
-        );
+        adopted = visit(bundle.terminal, requirement);
       } catch (error) {
         throw new Error(
           "Cannot adopt Hub release; its publisher must republish for the installed Theory: " + String(error),
         );
       }
-      const adopted = candidateRevision(release.ref.identity, adoptedContent);
       const contents = new Map(
         current.patches.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]),
       );
       for (const revision of bundle.revisions) contents.set(revision.ref.digest, revisionContent(revision));
-      contents.set(adopted.ref.digest, adoptedContent);
+      for (const revision of migrated.values()) contents.set(revision.ref.digest, revisionContent(revision));
       const personal = current.patches.revisions.find(({ ref }) => sameExactPatchRef(ref, current.manifest.personal));
       if (!personal) throw new Error("Missing personal Patch");
       const content: PatchContent = {
@@ -226,8 +258,9 @@ export function connectHub(
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
       for (const revision of bundle.revisions)
         await profile.addRevision(revision.ref.identity, revisionContent(revision));
-      if (!sameExactPatchRef(adopted.ref, bundle.terminal))
-        await profile.addRevision(adopted.ref.identity, adoptedContent);
+      for (const revision of migrated.values())
+        if (!revisions.has(exactPatchRefKey(revision.ref)))
+          await profile.addRevision(revision.ref.identity, revisionContent(revision));
       await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
       return adopted.ref;
     },
