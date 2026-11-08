@@ -404,7 +404,7 @@ export const evaluationTools: readonly Tool<unknown, unknown, DefaultState>[] = 
   {
     name: "evaluation_override",
     description:
-      "Correct one clearly wrong delegated Record, retracting and replacing it with a reason. Learner disputes use the records Skill.",
+      "Correct one clearly wrong delegated or mechanically graded Record, retracting and replacing it with a reason. Learner disputes use the records Skill.",
     schema: {
       type: "object",
       additionalProperties: false,
@@ -427,9 +427,10 @@ export const evaluationTools: readonly Tool<unknown, unknown, DefaultState>[] = 
         original === undefined ||
         !isDefaultObservation(original) ||
         !isDemonstration(original.payload) ||
-        original.payload.evaluation === undefined
+        (original.payload.grader !== "mechanical" &&
+          (original.payload.evaluation === undefined || !("grader" in original.payload.evaluation)))
       )
-        throw new Error("Override requires a delegated demonstration");
+        throw new Error("Override requires a delegated or mechanically graded demonstration");
       if (input.outcome !== "success" && input.outcome !== "failure" && input.outcome !== "dont-know")
         throw new Error("Invalid override outcome");
       const reason = text(input.reason);

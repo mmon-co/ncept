@@ -265,9 +265,40 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
       task: payload.kind === "demonstration" ? payload.task : (payload.prompt ?? payload.statement),
     }));
 }
+function lessonCompletion(ctx: Ctx) {
+  const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
+  if (ctx.mode !== "lesson" || lesson === undefined) return undefined;
+  const nodes = lesson.nodes.map((node) => {
+    const completion = ctx.state.nodes[node]?.completion;
+    return {
+      node,
+      complete: completion?.complete ?? false,
+      query: completion?.query ?? "no completion set",
+      counts: completion?.counts ?? [],
+      needs:
+        completion?.query === undefined
+          ? "Set pedagogy:completion with edit_metadata; without a completion query this Node cannot complete."
+          : completion.complete
+            ? "Completion query holds."
+            : "Evidence satisfying the completion query; counts below are current matches and required totals.",
+    };
+  });
+  const complete = nodes.every(({ complete }) => complete);
+  return {
+    complete,
+    status: complete
+      ? "This Lesson's completion queries hold; the host owns closure and the next Lesson."
+      : "This Lesson stays open; the next Lesson is not cleared for starting.",
+    nodes,
+  };
+}
 function closeRecount(ctx: Ctx, rawPractising?: unknown) {
-  if (ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson"))
-    throw new Error("The host closes Lessons from their own Material records; close-recount is for Review.");
+  const lesson = lessonCompletion(ctx);
+  if (lesson !== undefined)
+    throw new Error(
+      "close_recount is for Review. The host closes Lessons when every focus Node's pedagogy:completion query holds.\n" +
+        JSON.stringify(lesson),
+    );
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
   const directions = practising.map((entry) => {
@@ -611,7 +642,11 @@ const recordDemonstration = {
     if (!isDemonstration(payload)) throw new Error("Invalid demonstration");
     const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
     const id = yield* write(observation);
-    return { observation: { ...observation, id }, citations: [id] };
+    const lesson =
+      ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson")
+        ? lessonCompletion({ ...ctx, state: stateDefault(ctx.graph, yield* read.observations({}), ctx.now) })
+        : undefined;
+    return { observation: { ...observation, id }, citations: [id], ...(lesson === undefined ? {} : { lesson }) };
   },
 } satisfies DefaultTool;
 
