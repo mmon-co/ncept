@@ -1,5 +1,15 @@
 import { tryParse } from "std-semver";
-import { resolvePatchBundle, revisionDigest, type PatchContent } from "../patch/index.js";
+import {
+  candidateRevision,
+  exactPatchRefKey,
+  resolvePatchBundle,
+  revisionContent,
+  revisionDigest,
+  type ClosedPatchBundle,
+  type ExactPatchRef,
+  type PatchContent,
+  type PatchRevision,
+} from "../patch/index.js";
 import type { Profile } from "../profile.js";
 import type { Theory, TheoryRequirement } from "./theory.js";
 
@@ -42,6 +52,39 @@ export function migrateTheoryPatchContent(
   let migrated = content;
   for (const step of steps) migrated = step.migratePatch(migrated);
   return migrated;
+}
+
+/**
+ * Migrate every revision a closed bundle reaches, relinking bases to their migrated references.
+ * A revision uses its own declaration from `declared`, else the one of the revision that
+ * reached it; the terminal falls back to `root`. Returns every migrated revision (unchanged
+ * content keeps its reference) and the migrated terminal.
+ */
+export function migrateTheoryPatchClosure(
+  theory: MigrationTheory,
+  bundle: ClosedPatchBundle,
+  root: TheoryRequirement,
+  declared: ReadonlyMap<string, TheoryRequirement> = new Map(),
+): Readonly<{ terminal: PatchRevision; revisions: readonly PatchRevision[] }> {
+  const revisions = new Map(bundle.revisions.map((revision) => [exactPatchRefKey(revision.ref), revision]));
+  const migrated = new Map<string, PatchRevision>();
+  const visit = (ref: ExactPatchRef, inherited: TheoryRequirement): PatchRevision => {
+    const key = exactPatchRefKey(ref);
+    const held = migrated.get(key);
+    if (held) return held;
+    const revision = revisions.get(key);
+    if (!revision) throw new Error("Incomplete Patch closure");
+    const pin = declared.get(key) ?? inherited;
+    const content = migrateTheoryPatchContent(theory, pin, revisionContent(revision));
+    const next = candidateRevision(ref.identity, {
+      ...content,
+      bases: content.bases.map((base) => visit(base, pin).ref),
+    });
+    migrated.set(key, next);
+    return next;
+  };
+  const terminal = visit(bundle.terminal, root);
+  return { terminal, revisions: [...migrated.values()] };
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   isAttachment,
   isContentDigest,
   isPatchId,
-  migrateTheoryPatchContent,
+  migrateTheoryPatchClosure,
   releasePrecedenceKey,
   resolveTheory,
   resolvePatchBundle,
@@ -216,25 +216,15 @@ export function connectHub(
       }
       const current = await profile.read();
       const theory = resolveTheory(current.manifest.theory, theories);
-      const migrated = new Map<string, PatchRevision>();
-      const visit = (ref: ExactPatchRef, inherited: TheoryRequirement): PatchRevision => {
-        const key = exactPatchRefKey(ref);
-        const held = migrated.get(key);
-        if (held) return held;
-        const revision = revisions.get(key);
-        if (!revision) throw new Error("Missing Hub release revision");
-        const pin = baseRequirements.get(key) ?? inherited;
-        const content = migrateTheoryPatchContent(theory, pin, revisionContent(revision));
-        const next = candidateRevision(ref.identity, {
-          ...content,
-          bases: content.bases.map((base) => visit(base, pin).ref),
-        });
-        migrated.set(key, next);
-        return next;
-      };
+      let migrated: readonly PatchRevision[];
       let adopted: PatchRevision;
       try {
-        adopted = visit(bundle.terminal, requirement);
+        ({ terminal: adopted, revisions: migrated } = migrateTheoryPatchClosure(
+          theory,
+          bundle,
+          requirement,
+          baseRequirements,
+        ));
       } catch (error) {
         throw new Error(
           "Cannot adopt Hub release; its publisher must republish for the installed Theory: " + String(error),
@@ -244,7 +234,7 @@ export function connectHub(
         current.patches.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]),
       );
       for (const revision of bundle.revisions) contents.set(revision.ref.digest, revisionContent(revision));
-      for (const revision of migrated.values()) contents.set(revision.ref.digest, revisionContent(revision));
+      for (const revision of migrated) contents.set(revision.ref.digest, revisionContent(revision));
       const personal = current.patches.revisions.find(({ ref }) => sameExactPatchRef(ref, current.manifest.personal));
       if (!personal) throw new Error("Missing personal Patch");
       const content: PatchContent = {
@@ -258,7 +248,7 @@ export function connectHub(
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
       for (const revision of bundle.revisions)
         await profile.addRevision(revision.ref.identity, revisionContent(revision));
-      for (const revision of migrated.values())
+      for (const revision of migrated)
         if (!revisions.has(exactPatchRefKey(revision.ref)))
           await profile.addRevision(revision.ref.identity, revisionContent(revision));
       await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
