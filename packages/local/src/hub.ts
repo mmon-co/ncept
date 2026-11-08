@@ -9,7 +9,9 @@ import {
   isAttachment,
   isContentDigest,
   isPatchId,
+  migrateTheoryPatchContent,
   releasePrecedenceKey,
+  resolveTheory,
   resolvePatchBundle,
   revisionContent,
   sameExactPatchRef,
@@ -170,6 +172,15 @@ export function connectHub(
       const response: unknown = await (await fetched(endpoint, { headers })).json();
       if (!object(response) || response.patchId !== selected.patchId || response.version !== selected.version)
         throw new Error("Hub release address mismatch");
+      const requirement = response.theoryRequirement;
+      if (
+        !object(requirement) ||
+        typeof requirement.theory !== "string" ||
+        !requirement.theory.trim() ||
+        typeof requirement.range !== "string" ||
+        !/^~(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(requirement.range)
+      )
+        throw new Error("Invalid Hub release Theory requirement");
       const bundle = verifiedBundle(response.bundle);
       if (bundle.terminal.identity !== selected.patchId) throw new Error("Hub release identity mismatch");
       const blobs = new Map<ContentDigest, Uint8Array>();
@@ -181,15 +192,32 @@ export function connectHub(
         blobs.set(hash, bytes);
       }
       const current = await profile.read();
+      const theory = resolveTheory(current.manifest.theory, theories);
+      const release = bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, bundle.terminal));
+      if (!release) throw new Error("Missing Hub release revision");
+      let adoptedContent: PatchContent;
+      try {
+        adoptedContent = migrateTheoryPatchContent(
+          theory,
+          { theory: requirement.theory, range: requirement.range },
+          revisionContent(release),
+        );
+      } catch (error) {
+        throw new Error(
+          "Cannot adopt Hub release; its publisher must republish for the installed Theory: " + String(error),
+        );
+      }
+      const adopted = candidateRevision(release.ref.identity, adoptedContent);
       const contents = new Map(
         current.patches.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]),
       );
       for (const revision of bundle.revisions) contents.set(revision.ref.digest, revisionContent(revision));
+      contents.set(adopted.ref.digest, adoptedContent);
       const personal = current.patches.revisions.find(({ ref }) => sameExactPatchRef(ref, current.manifest.personal));
       if (!personal) throw new Error("Missing personal Patch");
       const content: PatchContent = {
         ...revisionContent(personal),
-        bases: [...personal.bases.filter((ref) => ref.identity !== bundle.terminal.identity), bundle.terminal],
+        bases: [...personal.bases.filter((ref) => ref.identity !== adopted.ref.identity), adopted.ref],
       };
       const next = candidateRevision(personal.ref.identity, content);
       contents.set(next.ref.digest, content);
@@ -198,8 +226,10 @@ export function connectHub(
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
       for (const revision of bundle.revisions)
         await profile.addRevision(revision.ref.identity, revisionContent(revision));
+      if (!sameExactPatchRef(adopted.ref, bundle.terminal))
+        await profile.addRevision(adopted.ref.identity, adoptedContent);
       await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
-      return bundle.terminal;
+      return adopted.ref;
     },
     async signIn() {
       await (await HubAuth.open(resource, options)).signIn();
