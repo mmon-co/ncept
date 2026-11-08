@@ -1,22 +1,34 @@
-import { bundleForRevision, candidateRevision, emptyPatch, sameExactPatchRef, type Profile } from "../../src/index.js";
+import {
+  bundleForRevision,
+  candidateRevision,
+  emptyPatch,
+  sameExactPatchRef,
+  type PatchContent,
+  type Profile,
+} from "../../src/index.js";
 import { type Theory, type TheoryMigration, type TheoryRequirement } from "../../src/theory/index.js";
 
 const id = "synthetic-migration-theory";
 
 function advance(from: number, to: number): TheoryMigration {
+  const migratePatch = (content: PatchContent): PatchContent => {
+    if (content.metadata.properties["toy:generation"] !== from)
+      throw new Error(`Expected synthetic generation ${from}`);
+    return {
+      ...content,
+      metadata: { ...content.metadata, properties: { ...content.metadata.properties, "toy:generation": to } },
+    };
+  };
   return {
     from: `1.${from}`,
     to: `1.${to}`,
+    migratePatch,
     migrate(profile) {
       const head = profile.patches.revisions.find((revision) =>
         sameExactPatchRef(revision.ref, profile.patches.terminal),
       );
-      if (!head || head.metadata.properties["toy:generation"] !== from)
-        throw new Error(`Expected synthetic generation ${from}`);
-      const next = candidateRevision(head.ref.identity, {
-        ...head,
-        metadata: { ...head.metadata, properties: { ...head.metadata.properties, "toy:generation": to } },
-      });
+      if (!head) throw new Error("Missing synthetic head");
+      const next = candidateRevision(head.ref.identity, migratePatch(head));
       const contents = new Map(profile.patches.revisions.map((revision) => [revision.ref.digest, revision]));
       contents.set(next.ref.digest, next);
       return {

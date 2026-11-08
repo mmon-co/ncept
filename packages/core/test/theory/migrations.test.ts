@@ -1,7 +1,44 @@
 import { expect, test } from "bun:test";
-import { revisionDigest, sameExactPatchRef } from "../../src/patch/index.js";
-import { migrateTheoryProfile, resolveTheory } from "../../src/theory/index.js";
+import { revisionContent, revisionDigest, sameExactPatchRef } from "../../src/patch/index.js";
+import { migrateTheoryPatchContent, migrateTheoryProfile, resolveTheory } from "../../src/theory/index.js";
 import { syntheticMigrationTheory, syntheticOldProfile } from "../fixtures/theory-migrations.js";
+
+test("Theory migrations compose pure Patch-content rewrites from 1.0 to 1.2 without mutating the release", () => {
+  const { requirement, profile } = syntheticOldProfile();
+  const head = profile.patches.revisions.find((revision) => sameExactPatchRef(revision.ref, profile.patches.terminal));
+  if (!head) throw new Error("Missing synthetic head");
+  const content = revisionContent(head);
+  const checkpoint = JSON.stringify(profile);
+  const migrated = migrateTheoryPatchContent(syntheticMigrationTheory, requirement, content);
+  expect(migrated).toEqual({
+    ...content,
+    metadata: { ...content.metadata, properties: { ...content.metadata.properties, "toy:generation": 2 } },
+  });
+  expect(JSON.stringify(profile)).toBe(checkpoint);
+  expect(revisionDigest(migrated)).not.toBe(head.ref.digest);
+  expect(migrateTheoryPatchContent({ ...syntheticMigrationTheory, version: "1.0.9+patch" }, requirement, content)).toBe(
+    content,
+  );
+
+  let executed = false;
+  expect(() =>
+    migrateTheoryPatchContent(
+      {
+        ...syntheticMigrationTheory,
+        migrations: syntheticMigrationTheory.migrations?.slice(0, 1).map((step) => ({
+          ...step,
+          migratePatch(value) {
+            executed = true;
+            return step.migratePatch(value);
+          },
+        })),
+      },
+      requirement,
+      content,
+    ),
+  ).toThrow("Missing Theory migration from 1.1 to 1.2");
+  expect(executed).toBe(false);
+});
 
 test("Theory migrations compose adjacent Profile rewrites from 1.0 to 1.2 and refuse a gap", () => {
   const { requirement, profile } = syntheticOldProfile();
