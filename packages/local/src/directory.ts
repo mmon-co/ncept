@@ -78,13 +78,21 @@ async function immutable(dir: string, path: string, bytes: Uint8Array): Promise<
     await rm(temp, { force: true });
   }
 }
-async function filesAt(dir: string): Promise<Map<string, Uint8Array>> {
+async function filesAt(dir: string, retries = 3): Promise<Map<string, Uint8Array>> {
   const files = new Map<string, Uint8Array>();
   const manifestBytes = await regular(dir, "profile.json");
   const manifest = parseManifest(manifestBytes);
   files.set("profile.json", manifestBytes);
   const logPath = liveLogPath(manifest);
-  files.set(logPath, await regular(dir, logPath));
+  try {
+    files.set(logPath, await regular(dir, logPath));
+  } catch (error) {
+    // An append may retire this snapshot after we read its manifest, even in
+    // another process. Resolve the live generation again, but bound corruption retries.
+    if (retries > 0 && error instanceof Error && "code" in error && error.code === "ENOENT")
+      return filesAt(dir, retries - 1);
+    throw error;
+  }
   for (const folder of ["patches", "blobs"]) {
     if (!(await lstat(join(dir, folder))).isDirectory()) throw new Error("Not a Profile directory: " + folder);
     for (const name of await readdir(join(dir, folder))) {
@@ -202,6 +210,11 @@ export async function openProfile(dir: string, theories: readonly ConfiguredTheo
         const manifest = { ...current.manifest, log: attachmentDigest(bytes) };
         await immutable(dir, liveLogPath(manifest), bytes);
         await atomic(dir, "profile.json", jsonBytes(manifest));
+        // Only retire the previously live snapshot, never migration history or
+        // the unchanged snapshot produced by an empty/duplicate append.
+        const previous = liveLogPath(current.manifest);
+        if (current.manifest.log !== undefined && previous !== liveLogPath(manifest))
+          await rm(join(dir, previous), { force: true });
       }),
     addRevision: (identity, content) =>
       serial(async () => {

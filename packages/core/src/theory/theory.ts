@@ -262,7 +262,7 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   /** A historical act's meaning, from its accepted evidence rather than present progress. */
-  describeObservation?(observation: Observation): string | undefined;
+  describeObservation?(observation: Observation): MessageDescriptor | undefined;
   readonly modes?: Readonly<Record<string, SessionMode<S>>>;
   readonly chat?: {
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
