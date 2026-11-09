@@ -145,6 +145,24 @@ export function parsePiSession(source: string): PiSession {
     entries,
   };
 }
+/** pi resumes at the last appended entry, including metadata after branching back.
+ * Return its ancestors in conversation order; complete sessions must contain every parent. */
+export function piActiveBranch<T extends Pick<PiSessionEntry, "id" | "parentId">>(entries: readonly T[]): T[] {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const chain: T[] = [];
+  const seen = new Set<string>();
+  let id = entries.at(-1)?.id ?? null;
+  while (id !== null) {
+    if (seen.has(id)) throw new Error("Cyclic pi conversation");
+    seen.add(id);
+    const entry = byId.get(id);
+    if (!entry) throw new Error("Incomplete pi conversation branch");
+    chain.push(entry);
+    id = entry.parentId;
+  }
+  return chain.reverse();
+}
+
 export function serializePiSession(session: PiSession): string {
   const source = [session.header, ...session.entries].map((entry) => JSON.stringify(entry)).join("\n") + "\n";
   parsePiSession(source);
