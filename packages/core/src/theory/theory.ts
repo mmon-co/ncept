@@ -100,6 +100,30 @@ export interface LessonActivity {
   /** Related Material surfaces owned by the same Session. */
   readonly relatedSurfaces?: readonly string[];
 }
+
+/** Measurement before the host has assembled its complete related membership. */
+export type LessonActivityHeader = Omit<LessonActivity, "relatedSurfaces">;
+
+/** One neutral membership page, addressed by the activity's primary surface. */
+export type LessonActivityMembership = Readonly<{
+  surface: string;
+  relatedSurfaces: readonly string[];
+}>;
+
+/** Call after every membership page has arrived; Theory still receives complete values. */
+export function completeLessonActivities(
+  headers: readonly LessonActivityHeader[],
+  membership: Iterable<LessonActivityMembership>,
+): LessonActivity[] {
+  const related = new Map<string, string[]>();
+  for (const page of membership) {
+    let surfaces = related.get(page.surface);
+    if (surfaces === undefined) related.set(page.surface, (surfaces = []));
+    for (const surface of page.relatedSurfaces) surfaces.push(surface);
+  }
+  return headers.map((header) => ({ ...header, relatedSurfaces: related.get(header.surface) ?? [] }));
+}
+
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";
   /** Latest effective self-report, independently of acquisition status. */
