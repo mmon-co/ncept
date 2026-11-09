@@ -27,7 +27,7 @@ import {
 import type { ProfileDirectory } from "./directory.js";
 import type { HostSession, Model } from "./host.js";
 import type { ValidatedProfile } from "./exchange.js";
-import { object, parsePiSession } from "./sessions.js";
+import { object, parsePiSession, piActiveBranch } from "./sessions.js";
 import { learnerDayAt } from "./days.js";
 import { isMaterial, isObjectIdentity, isSurface, modeEntry, nodeIds, nonempty } from "./inputs.js";
 
@@ -88,16 +88,7 @@ export function transcript(profile: ValidatedProfile, surface: SurfaceId, span?:
   const source = profile.sessions.get(surface);
   if (source === undefined) return { surface, span: span ?? { from: "", to: "" }, turns: [] };
   const session = parsePiSession(source);
-  const entries = new Map(session.entries.map((entry) => [entry.id, entry]));
-  const selected = [];
-  const visited = new Set<string>();
-  let entry = session.entries.at(-1);
-  while (entry) {
-    if (visited.has(entry.id)) throw new Error("Cycle in pi Session branch");
-    visited.add(entry.id);
-    selected.unshift(entry);
-    entry = entry.parentId === null ? undefined : entries.get(entry.parentId);
-  }
+  const selected = piActiveBranch(session.entries);
   let turns: Transcript["turns"][number][] = selected.flatMap((entry) => {
     const message = entry.message;
     if (!message || (message.role !== "user" && message.role !== "assistant")) return [];
@@ -186,18 +177,7 @@ export class Runtime<S> {
       let selected = true;
       if (source && typeof receipt.entry === "string") {
         const session = parsePiSession(source);
-        const entries = new Map(session.entries.map((entry) => [entry.id, entry]));
-        let cursor = session.entries.at(-1);
-        const visited = new Set<string>();
-        selected = false;
-        while (cursor && !visited.has(cursor.id)) {
-          visited.add(cursor.id);
-          if (cursor.id === receipt.entry) {
-            selected = true;
-            break;
-          }
-          cursor = cursor.parentId === null ? undefined : entries.get(cursor.parentId);
-        }
+        selected = piActiveBranch(session.entries).some((entry) => entry.id === receipt.entry);
       }
       for (const id of receipt.observations)
         if (typeof id === "string") standing.set(id, selected ? "selected" : "abandoned");
