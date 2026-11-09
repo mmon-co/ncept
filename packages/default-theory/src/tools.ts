@@ -676,13 +676,9 @@ export const defaultRecordingTools = [
     *run(raw, ctx) {
       const fields = ["material", "node", "item", "task", "response", "outcome", "unaided"];
       const input = args(raw, fields, fields);
-      const identity = args(input.material, ["playground", "id"], ["playground", "id"]);
-      const material = ctx.graph.materials.find(
-        (candidate) => candidate.playground === identity.playground && candidate.id === identity.id,
-      );
-      if (material === undefined) throw new Error("Expected an existing Material");
+      const rawIdentity = args(input.material, ["playground", "id"], ["playground", "id"]);
+      const identity = { playground: string(rawIdentity.playground), id: string(rawIdentity.id) };
       const node = nodeId(input.node);
-      if (!material.about.includes(node)) throw new Error("Node is outside the Material's scope");
       const item = string(input.item);
       const task = string(input.task);
       if (!item.trim() || !task.trim() || typeof input.unaided !== "boolean")
@@ -696,8 +692,8 @@ export const defaultRecordingTools = [
           isDefaultObservation(observation) &&
           (observation.surface === ctx.surface || session.has(observation.id)) &&
           isDemonstration(observation.payload) &&
-          observation.payload.material?.playground === material.playground &&
-          observation.payload.material.id === material.id &&
+          observation.payload.material?.playground === identity.playground &&
+          observation.payload.material.id === identity.id &&
           observation.payload.item === item,
       );
       if (existing.length)
@@ -706,6 +702,12 @@ export const defaultRecordingTools = [
           records: existing.map(({ id }) => id),
           correction: "Use evaluation_override with the Record identity, corrected outcome and reason.",
         };
+      // Inline runner Materials need not belong to the Patch; their captured Records above suffice.
+      const material = ctx.graph.materials.find(
+        (candidate) => candidate.playground === identity.playground && candidate.id === identity.id,
+      );
+      if (material === undefined) throw new Error("Expected an existing Material");
+      if (!material.about.includes(node)) throw new Error("Node is outside the Material's scope");
       const problem = {
         id: item,
         about: [node],
