@@ -19,7 +19,8 @@ import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/co
 import type { ChatContext, Tool } from "@mmon-co/core/theory";
 import { readMissionPath } from "@mmon-co/core/theory/path";
 import { pathDefault } from "./path.js";
-import { refinePendingHomes } from "./event.js";
+import { event, refinePendingHomes } from "./event.js";
+import { isAttemptOutcome } from "./outcomes.js";
 import {
   activeDefaultRecords,
   completionNodeRef,
@@ -28,6 +29,7 @@ import {
   emptyNodeMemory,
   interpretationsDefault,
   isClaim,
+  isDefaultObservation,
   isDemonstration,
   isRetrievalOpenerDemonstration,
   isTeaching,
@@ -616,7 +618,7 @@ const recordDemonstration = {
     "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
     "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
     "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
-    "A Material emits its own outcome once its Problem or card is assessed, with the grader its assessment declares (mechanical for a keyed or matched answer, learner for a self-graded card); do not duplicate it. An option's optional error string remains verbatim in the response.",
+    "For an answer to a Material item, use record_material_attempt. A runner records its own outcome; correct a wrong runner grade with evaluation_override and a reason. An option's optional error string remains verbatim in the response.",
     "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
   ].join(" "),
   schema: schema(
@@ -652,6 +654,100 @@ const recordDemonstration = {
 
 export const defaultRecordingTools = [
   recordDemonstration,
+  {
+    name: "record_material_attempt" as const,
+    description:
+      "Record a learner's chat answer to an existing Material's item, on any host. Supply the Material's playground and id, stable item id, assessed Node, verbatim task and response, outcome and unaided status fixed when posing (help makes it aided). The tutor grades success/failure; an explicit I don't know is dont-know. Ordinary conversational checks use record_demonstration. If this Session already has the item's outcome, return its Records without duplicating it; correct a wrong grade with evaluation_override and a reason.",
+    schema: schema(
+      {
+        material: schema({ playground: { type: "string", minLength: 1 }, id: { type: "string", minLength: 1 } }, [
+          "playground",
+          "id",
+        ]),
+        node: nodeProperty,
+        item: { type: "string", minLength: 1 },
+        task: { type: "string", minLength: 1 },
+        response: { type: "string" },
+        outcome: { enum: ["success", "failure", "dont-know"] },
+        unaided: { type: "boolean" },
+      },
+      ["material", "node", "item", "task", "response", "outcome", "unaided"],
+    ),
+    *run(raw, ctx) {
+      const fields = ["material", "node", "item", "task", "response", "outcome", "unaided"];
+      const input = args(raw, fields, fields);
+      const identity = args(input.material, ["playground", "id"], ["playground", "id"]);
+      const material = ctx.graph.materials.find(
+        (candidate) => candidate.playground === identity.playground && candidate.id === identity.id,
+      );
+      if (material === undefined) throw new Error("Expected an existing Material");
+      const node = nodeId(input.node);
+      if (!material.about.includes(node)) throw new Error("Node is outside the Material's scope");
+      const item = string(input.item);
+      const task = string(input.task);
+      if (!item.trim() || !task.trim() || typeof input.unaided !== "boolean")
+        throw new Error("Supply an item, posed task and unaided status");
+      if (input.outcome !== "success" && input.outcome !== "failure" && input.outcome !== "dont-know")
+        throw new Error("Invalid Material attempt outcome");
+      const observations = yield* read.observations();
+      const session = new Set(ctx.sessionObservations ?? []);
+      const existing = effectiveObservations(electedObservations(observations), ctx.now).filter(
+        (observation) =>
+          isDefaultObservation(observation) &&
+          (observation.surface === ctx.surface || session.has(observation.id)) &&
+          isDemonstration(observation.payload) &&
+          observation.payload.material?.playground === material.playground &&
+          observation.payload.material.id === material.id &&
+          observation.payload.item === item,
+      );
+      if (existing.length)
+        return {
+          alreadyRecorded: true,
+          records: existing.map(({ id }) => id),
+          correction: "Use evaluation_override with the Record identity, corrected outcome and reason.",
+        };
+      const problem = {
+        id: item,
+        about: [node],
+        prompt: task,
+        answer: { kind: "text" },
+        grader: { by: "tutor" },
+      };
+      const payload = {
+        kind: "attempt",
+        problem: { ...problem, digest: contentDigest(problem) },
+        response: string(input.response),
+        assessment: {
+          correct: input.outcome === "success",
+          grader: input.outcome === "dont-know" ? "learner" : "tutor",
+          ...(input.unaided ? {} : { aided: true }),
+          ...(input.outcome === "dont-know" ? { dontKnow: true } : {}),
+        },
+        revision: ctx.graph.terminal,
+      };
+      if (!isAttemptOutcome(payload)) throw new Error("Invalid Material attempt");
+      yield* event(
+        {
+          kind: "outcome",
+          material: { playground: material.playground, id: material.id },
+          at: ctx.now,
+          surface: ctx.surface,
+          about: [node],
+          payload,
+        },
+        ctx,
+      );
+      const before = new Set(observations.map(({ id }) => id));
+      const after = yield* read.observations();
+      const records = after.filter(({ id }) => !before.has(id));
+      const lesson = lessonCompletion({ ...ctx, state: stateDefault(ctx.graph, after, ctx.now) });
+      return {
+        observations: records,
+        citations: records.map(({ id }) => id),
+        ...(lesson === undefined ? {} : { lesson }),
+      };
+    },
+  },
   {
     name: "record_retrieval_opener" as const,
     description:

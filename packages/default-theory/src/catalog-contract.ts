@@ -47,6 +47,7 @@ export interface EvaluationToolInput {
   /** Required for record; artifact filing is a host operation, not theory evidence. */
   readonly kind?:
     | "demonstration"
+    | "material-attempt"
     | "retrieval-opener"
     | "teaching"
     | "claim-attachment"
