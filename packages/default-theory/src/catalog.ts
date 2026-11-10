@@ -26,6 +26,7 @@ function program(name: string): DefaultTool {
 }
 const records: Readonly<Record<string, string>> = {
   demonstration: "record_demonstration",
+  "material-attempt": "record_material_attempt",
   "retrieval-opener": "record_retrieval_opener",
   teaching: "record_teaching",
   "claim-attachment": "attach_claim",
@@ -114,10 +115,11 @@ export function resolveDefaultCatalogProgram(
   }
 }
 
-/** Only envelopes are mounted; original Programs remain available to internal host paths. */
+/** Web hosts mount envelopes; native hosts mount their declared members. */
 export const defaultCatalogTools: readonly DefaultTool[] = [
   {
     name: "theory",
+    members: theoryReadings,
     description:
       "Read theory facts. Node inputs name existing Nodes from the graph, never Session identities. Interpretations return source handles: retrieval context, never labels or evidence. Trail defaults to limit 20; follow continueCursor, restart on stale cursor.",
     schema: {
@@ -156,9 +158,10 @@ function evaluationCatalogTool(mode: string | undefined): DefaultTool {
   const recording = operations.some(({ op }) => op === "record");
   return {
     name: "evaluation",
+    members: operations.map(({ tool }) => tool),
     description:
       operations === evaluationOperations
-        ? "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Override corrects a delegated Record; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned."
+        ? "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one response (message selects original learner media). Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Record/material-attempt grades a Material item answered in chat; an existing item outcome is returned without duplication. Override corrects a delegated or Material Record with a reason; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned."
         : "Record evidence that needs no grading: claim records self-report; retract corrects evidence. Nothing here grades a response; graded checks happen in a Lesson's Materials. Artifact filing is host-owned.",
     schema: {
       type: "object",

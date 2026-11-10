@@ -47,6 +47,7 @@ export interface EvaluationToolInput {
   /** Required for record; artifact filing is a host operation, not theory evidence. */
   readonly kind?:
     | "demonstration"
+    | "material-attempt"
     | "retrieval-opener"
     | "teaching"
     | "claim-attachment"
@@ -134,6 +135,7 @@ export const CATALOG_MODE_TOOLS = {
     "propose",
     "web_search",
     "fetch_page",
+    "code",
     "bash",
     "undo",
   ],
@@ -148,6 +150,7 @@ export const CATALOG_MODE_TOOLS = {
     "propose",
     "web_search",
     "fetch_page",
+    "code",
     "bash",
     "undo",
     "material",
@@ -162,6 +165,7 @@ export const CATALOG_MODE_TOOLS = {
     "edit_metadata",
     "evaluation",
     "propose",
+    "code",
     "bash",
     "undo",
     "fetch_page",

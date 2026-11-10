@@ -1,0 +1,46 @@
+{
+  "name": "@mmon-co/local",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmon-co/mmon.git",
+    "directory": "packages/local"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./exchange": {
+      "types": "./dist/exchange.d.ts",
+      "default": "./dist/exchange.js"
+    },
+    "./sessions": {
+      "types": "./dist/sessions.d.ts",
+      "default": "./dist/sessions.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run --cwd ../core build && tsc -p tsconfig.build.json",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@mmon-co/core": "^0.1.0",
+    "@modelcontextprotocol/sdk": "1.32.1"
+  },
+  "devDependencies": {
+    "@mmon-co/default-theory": "^1.0.0",
+    "bun-types": "^1.3.14",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

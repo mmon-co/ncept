@@ -1,5 +1,6 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch/index.js";
 import type { ModeEntry, SessionMode } from "./modes.js";
+import type { TheoryMigration } from "./migrations.js";
 import type { MissionRun, MissionRunReading, StopRef } from "../run.js";
 import type { LessonReading } from "./path.js";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations.js";
@@ -229,6 +230,8 @@ export type Tool<A = unknown, R = unknown, S = unknown> = Readonly<{
   name: string;
   description: string;
   schema: JsonSchema;
+  /** Native members of a transport catalog. Hosts may mount these instead of its envelope. */
+  members?: readonly Tool<unknown, unknown, S>[];
   run(args: A, ctx: ChatContext<S>): Program<R>;
 }>;
 export type Skill = Readonly<{
@@ -248,6 +251,8 @@ export interface TheoryState<S> {
 export interface Theory<S, Outcomes extends Record<string, unknown> = Record<string, unknown>> {
   readonly id: string;
   readonly version: string;
+  /** Forward stored-data steps shipped with this Theory, independent of any host. */
+  readonly migrations?: readonly TheoryMigration[];
   initState(graph: ResolvedGraph): TheoryState<S>;
   project(graph: ResolvedGraph, state: S): TheoryProjection;
   /** Works on fresh and bounded published projections; absent captured Nodes remain open/unavailable. */
@@ -261,11 +266,13 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   /** A historical act's meaning, from its accepted evidence rather than present progress. */
-  describeObservation?(observation: Observation): string | undefined;
+  describeObservation?(observation: Observation): MessageDescriptor | undefined;
   readonly modes?: Readonly<Record<string, SessionMode<S>>>;
   readonly chat?: {
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
     turn(ctx: ChatContext<S>): Program<ChatSetup<S>>;
+    /** A host-proven learner message identity, before preparing the next tutor turn. */
+    reply?(ctx: ChatContext<S>, message: string): Program<unknown>;
   };
   /** Pure declaration over the accepted event alone: true means event would emit no work.
    * Omission keeps contextual delivery. Hosts may settle consecutive declared-empty hooks together.
