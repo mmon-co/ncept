@@ -27,6 +27,7 @@ export const implementation = {
   },
   chat,
   modes,
+  noEventHook: (input) => input.kind === "surface.open" || input.kind === "object.put" || input.kind === "mission",
   event,
 } satisfies import("@mmon-co/core/theory").Theory<
   import("./state.js").DefaultState,

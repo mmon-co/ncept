@@ -267,6 +267,10 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
     open(ctx: ChatContext<S>): Program<ChatSetup<S>>;
     turn(ctx: ChatContext<S>): Program<ChatSetup<S>>;
   };
+  /** Pure declaration over the accepted event alone: true means event would emit no work.
+   * Omission keeps contextual delivery. Hosts may settle consecutive declared-empty hooks together.
+   */
+  noEventHook?(event: PlatformEvent): boolean;
   event(event: PlatformEvent, ctx: Context<S>): Program<void>;
 }
 /** The pure state operation, derived from the theory's defining reducer. */
