@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Embed the default Theory's Markdown so published code needs no filesystem or host assets. */
 export function buildDefaultSkillSources(): void {
+  // Hash the executable closure, including Core and installed dependencies. Index/release
+  // stay outside that closure, so the digest does not depend on itself or the Application.
   const sourceDir = join(import.meta.dirname, "src/skills/");
+  const root = join(import.meta.dirname, "src");
+  const release = join(root, "release.ts");
+
   const entries = readdirSync(sourceDir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md")
     .map((entry) => join(entry.parentPath, entry.name).slice(sourceDir.length))
@@ -16,10 +22,23 @@ export function buildDefaultSkillSources(): void {
     entries.join("\n") +
     "\n} as const;\n";
   const generated = join(sourceDir, "sources.ts");
-  if (existsSync(generated) && readFileSync(generated, "utf8") === next) return;
-  const scratch = generated + "." + process.pid;
-  writeFileSync(scratch, next);
-  renameSync(scratch, generated);
+  if (!existsSync(generated) || readFileSync(generated, "utf8") !== next) {
+    const scratch = generated + "." + process.pid;
+    writeFileSync(scratch, next);
+    renameSync(scratch, generated);
+  }
+  const bundle = Bun.spawnSync(
+    ["bun", "build", "./src/implementation.ts", "--target=browser", "--format=esm", "--minify"],
+    { cwd: import.meta.dirname },
+  );
+  if (bundle.exitCode !== 0) throw new Error("Unable to bundle Theory content: " + bundle.stderr.toString());
+  const identity =
+    "export const theoryContent = " + JSON.stringify(createHash("sha256").update(bundle.stdout).digest("hex")) + ";\n";
+  if (!existsSync(release) || readFileSync(release, "utf8") !== identity) {
+    const scratch = release + "." + process.pid;
+    writeFileSync(scratch, identity);
+    renameSync(scratch, release);
+  }
 }
 
 if (import.meta.main) buildDefaultSkillSources();
