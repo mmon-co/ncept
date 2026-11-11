@@ -1,7 +1,7 @@
 /**
  * Scripted first use of Markdown quiz answers through the public local host.
  * No deployment, account, secret or paid model:
- * bun packages/local/scripts/try-material-answers.ts [unused-profile-directory] [packet.json]
+ * bun packages/local/scripts/try-material-answers.ts [--retake] [unused-profile-directory] [packet.json]
  */
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -16,7 +16,8 @@ function tool(setup: HostChatSetup, name: string) {
   assert(found, "Missing native tool " + name);
   return found;
 }
-const retained = process.argv[2];
+const retake = process.argv.includes("--retake");
+const [retained, outputPath] = process.argv.slice(2).filter((arg) => arg !== "--retake");
 const dir = retained ? resolve(retained) : await mkdtemp(join(tmpdir(), "mmon-material-answers-"));
 const node = "node-fraction-unit";
 const material = { playground: "local", id: "fraction-unit-check-1" };
@@ -36,7 +37,7 @@ try {
             "display:label": "Fractions name equal parts of a whole",
             "pedagogy:criterion": "Identify the unit whole and explain equal fractional parts.",
             "pedagogy:completion": {
-              count: 2,
+              count: retake ? 1 : 2,
               of: {
                 all: [
                   {
@@ -97,26 +98,29 @@ try {
       text: "# Fraction unit check\n\n1. A pizza is cut into four equal pieces. What is the unit whole?\n2. What does one quarter of that pizza mean?\n\nAnswers: the whole pizza; one of four equal pieces.\n",
     },
   });
-  const replies = [
-    {
-      item: "whole",
-      task: "A pizza is cut into four equal pieces. What is the unit whole?",
-      response: "The whole pizza.",
-    },
-    { item: "quarter", task: "What does one quarter of that pizza mean?", response: "One of the four equal pieces." },
-  ];
+  const whole = { item: "whole", task: "A pizza is cut into four equal pieces. What is the unit whole?" };
+  const replies = retake
+    ? [
+        { ...whole, response: "One slice.", outcome: "failure" },
+        { ...whole, response: "The whole pizza.", outcome: "success" },
+      ]
+    : [
+        { ...whole, response: "The whole pizza.", outcome: "success" },
+        {
+          item: "quarter",
+          task: "What does one quarter of that pizza mean?",
+          response: "One of the four equal pieces.",
+          outcome: "success",
+        },
+      ];
   const recorded = [];
+  const retries = [];
   for (const reply of replies) {
     const setup = await host.sessions.turn(session, { learnerMessage: reply.response });
-    recorded.push(
-      await tool(setup, "record_material_attempt").run({
-        material,
-        node,
-        ...reply,
-        outcome: "success",
-        unaided: true,
-      }),
-    );
+    const input = { material, node, ...reply, unaided: true };
+    const record = tool(setup, "record_material_attempt");
+    recorded.push(await record.run(input));
+    if (retake) retries.push(await record.run(input));
   }
   const beforeClose = await host.reading();
   const observations = (await host.profile.read()).log.filter(isObservation);
@@ -145,13 +149,14 @@ try {
     material: made.content,
     replies,
     recorded,
+    ...(retake ? { retries } : {}),
     attempts,
     beforeClose: beforeClose.missions,
     afterClose: afterClose.missions,
   };
   const json = JSON.stringify(packet, null, 2) + "\n";
-  if (process.argv[3]) {
-    const output = resolve(process.argv[3]);
+  if (outputPath) {
+    const output = resolve(outputPath);
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, json);
   }
