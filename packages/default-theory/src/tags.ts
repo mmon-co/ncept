@@ -1,5 +1,5 @@
 import { dependentCones } from "./dependent-cone.js";
-import { nodePriority, teachingPath, pathProperty } from "./path.js";
+import { nodePriority, teachingPath, pathProperty, nodeAllowsReview } from "./path.js";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
 import type { Observation, ObservationId } from "@mmon-co/ncept-core/observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "@mmon-co/ncept-core/theory";
@@ -60,14 +60,14 @@ export const defaultQueryTokens = {
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
   "review:due": select(
     (node, graph, id) =>
-      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      nodeAllowsReview(graph, id) &&
       !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
   ),
   "review:fading": select(
     (node, graph, id) =>
-      pathProperty(graph, id, "pedagogy:milestone") !== true &&
+      nodeAllowsReview(graph, id) &&
       !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),

@@ -32,6 +32,13 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
   )?.value;
 }
 
+/** Milestones and one-off steps keep their evidence without entering Review. */
+export function nodeAllowsReview(graph: ResolvedGraph, node: NodeId): boolean {
+  return (
+    pathProperty(graph, node, "pedagogy:milestone") !== true && pathProperty(graph, node, "pedagogy:review") !== false
+  );
+}
+
 /** Default-theory hint: an absolute integer, higher first, inherited from tags. */
 export function nodePriority(graph: ResolvedGraph, node: NodeId): number {
   const value = nodeCascadedProperty(graph, node, "pedagogy:priority");
@@ -250,13 +257,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
   for (const { id } of context.graph.nodes) {
     const node = state.nodes[id];
     const schedule = node?.schedule;
-    if (
-      !scope.has(id) ||
-      !schedule ||
-      node.reviewCleared ||
-      pathProperty(context.graph, id, "pedagogy:milestone") === true
-    )
-      continue;
+    if (!scope.has(id) || !schedule || node.reviewCleared || !nodeAllowsReview(context.graph, id)) continue;
     const last = Date.parse(schedule.lastReview);
     const at = (time: number) => forgetting_curve((time - last) / 86_400_000, schedule.stability);
     const nextBelow = (threshold: number) => {
