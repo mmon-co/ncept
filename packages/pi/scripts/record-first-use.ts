@@ -1,11 +1,11 @@
-// Optional encounter recorder: MMON_RECORD=/private/path.jsonl pi -e /path/to/this/file.ts
+// Optional encounter recorder: NCEPT_RECORD=/private/path.jsonl pi -e /path/to/this/file.ts
 // Records prompts, tools and model replies, never provider credentials.
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function recordFirstUse(pi: ExtensionAPI) {
-  const path = process.env.MMON_RECORD ?? "";
-  if (!path) throw new Error("Set MMON_RECORD to an unused private JSONL path.");
+  const path = process.env.NCEPT_RECORD ?? "";
+  if (!path) throw new Error("Set NCEPT_RECORD to an unused private JSONL path.");
   const recorded = new WeakSet<object>();
   function save(type: string, value: unknown) {
     appendFileSync(path, JSON.stringify({ type, value }).replaceAll(process.cwd(), "$PROFILE") + "\n");

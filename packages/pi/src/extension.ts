@@ -16,7 +16,7 @@ import {
 } from "@mmon-co/ncept-local";
 
 const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
-const STATE = "mmon.session";
+const STATE = "ncept.session";
 type Selection = { mode: string; entry?: ModeEntry; resume?: string };
 
 function storedSession(ctx: ExtensionContext): string | undefined {
@@ -28,7 +28,7 @@ function storedSession(ctx: ExtensionContext): string | undefined {
 }
 
 /** One extension instance belongs to one pi session, including after /resume. */
-export default function mmon(pi: ExtensionAPI) {
+export default function ncept(pi: ExtensionAPI) {
   let host: Host | undefined;
   let active: HostSession | undefined;
   let context: ExtensionContext;
@@ -112,8 +112,8 @@ export default function mmon(pi: ExtensionAPI) {
       hub: {
         userAgent: "ncept-pi/" + version,
         clientMetadataUrl: "https://pi.dev/oauth/client.json",
-        url: process.env.MMON_HUB_URL,
-        credentialsFile: process.env.MMON_CREDENTIALS_FILE,
+        url: process.env.NCEPT_HUB_URL,
+        credentialsFile: process.env.NCEPT_CREDENTIALS_FILE,
       },
       theories,
       model,
@@ -198,7 +198,7 @@ export default function mmon(pi: ExtensionAPI) {
         {
           name: "hub",
           description:
-            "Pull a Hub release by address without an account. In authoring mode, publish the current personal Patch and its bases/Materials as a release after learner confirmation; /mmon login signs in first.",
+            "Pull a Hub release by address without an account. In authoring mode, publish the current personal Patch and its bases/Materials as a release after learner confirmation; /ncept login signs in first.",
           schema: {
             type: "object",
             properties: {
@@ -287,7 +287,7 @@ export default function mmon(pi: ExtensionAPI) {
   async function dashboard(ctx: ExtensionContext) {
     const reading = await (await getHost(ctx)).reading();
     ctx.ui.setWidget(
-      "mmon",
+      "ncept",
       [
         "Me",
         ...reading.missions
@@ -321,7 +321,7 @@ export default function mmon(pi: ExtensionAPI) {
       active = opened;
       mounted = undefined;
       pi.appendEntry(STATE, { id: opened.id });
-      if (carry) pi.sendMessage({ customType: "mmon.carry", content: carry, display: false });
+      if (carry) pi.sendMessage({ customType: "ncept.carry", content: carry, display: false });
       if (kickoff) pi.sendUserMessage(kickoff);
       return;
     }
@@ -330,7 +330,7 @@ export default function mmon(pi: ExtensionAPI) {
       ...(parentSession ? { parentSession } : {}),
       setup: async (sm) => {
         sm.appendCustomEntry(STATE, { id: opened.id });
-        if (carry) sm.appendCustomMessageEntry("mmon.carry", carry, false);
+        if (carry) sm.appendCustomMessageEntry("ncept.carry", carry, false);
       },
       withSession: async (fresh) => {
         if (kickoff) await fresh.sendUserMessage(kickoff);
@@ -347,7 +347,7 @@ export default function mmon(pi: ExtensionAPI) {
     await dashboard(ctx);
   });
   pi.on("before_agent_start", async (event, ctx) => {
-    ctx.ui.setWidget("mmon", undefined);
+    ctx.ui.setWidget("ncept", undefined);
     gradeReply = event.messageType === "user";
     const setup = await prepare(ctx);
     event.systemPromptOptions.contextFiles = [];
@@ -398,11 +398,11 @@ export default function mmon(pi: ExtensionAPI) {
     if (event.reason === "quit") await host.sessions.close(active);
   });
   pi.on("agent_settled", (_event, ctx) => {
-    if (transition) pi.sendUserMessage("/mmon-next", { expandPromptTemplates: true });
-    else if (active) ctx.ui.setStatus("mmon", active.mode);
+    if (transition) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
+    else if (active) ctx.ui.setStatus("ncept", active.mode);
   });
 
-  pi.registerCommand("mmon-next", {
+  pi.registerCommand("ncept-next", {
     description: "Continue a tutor-requested Session switch",
     handler: async (_args, ctx) => {
       if (!transition) return;
@@ -530,20 +530,20 @@ export default function mmon(pi: ExtensionAPI) {
       await dashboard(ctx);
     },
   });
-  pi.registerCommand("mmon", {
-    description: "mmon login | logout | export-to-web | import-from-web",
+  pi.registerCommand("ncept", {
+    description: "ncept login | logout | export-to-web | import-from-web",
     handler: async (args, ctx) => {
       const h = await getHost(ctx);
       await sync(ctx);
       switch (args.trim()) {
         case "login":
           await h.hub.signIn();
-          ctx.ui.notify("Signed in to mmon.", "info");
+          ctx.ui.notify("Signed in to Common Concept.", "info");
           break;
         case "logout":
-          await rm(process.env.MMON_CREDENTIALS_FILE ?? credentialsPath(), { force: true });
+          await rm(process.env.NCEPT_CREDENTIALS_FILE ?? credentialsPath(), { force: true });
           host = undefined;
-          ctx.ui.notify("Signed out of mmon.", "info");
+          ctx.ui.notify("Signed out of Common Concept.", "info");
           break;
         case "export-to-web":
           await h.hub.exportTo("web");
@@ -568,7 +568,7 @@ export default function mmon(pi: ExtensionAPI) {
           break;
         }
         default:
-          ctx.ui.notify("Usage: /mmon login | logout | export-to-web | import-from-web", "info");
+          ctx.ui.notify("Usage: /ncept login | logout | export-to-web | import-from-web", "info");
       }
     },
   });

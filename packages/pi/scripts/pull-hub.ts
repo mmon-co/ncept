@@ -11,7 +11,7 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { initProject } from "../src/init";
-import mmon from "../src/extension";
+import ncept from "../src/extension";
 
 const address = process.argv[2];
 if (!address) throw new Error("Usage: bun packages/pi/scripts/pull-hub.ts <public-release-url>");
@@ -29,7 +29,7 @@ try {
     noSkills: true,
     noPromptTemplates: true,
     noThemes: true,
-    extensionFactories: [mmon],
+    extensionFactories: [ncept],
   });
   await loader.reload();
   const modelRuntime = await ModelRuntime.create({

@@ -22,7 +22,7 @@ import {
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { openProfile } from "@mmon-co/ncept-local";
 import { initProject } from "../src/init";
-import mmon from "../src/extension";
+import ncept from "../src/extension";
 
 // The package boundary's one wiring smoke: real pi persistence and tool dispatch,
 // with a scripted provider, no account, network, or paid model.
@@ -33,11 +33,11 @@ test("pi project tutors through the local host and resumes its trusted transcrip
   const errors: string[] = [];
   const prompts: string[] = [];
   const toolSets: string[][] = [];
-  const provider = "mmon-scripted";
+  const provider = "ncept-scripted";
   const model: Model<Api> = {
     id: "tutor",
     name: "Scripted tutor",
-    api: "mmon-scripted-api",
+    api: "ncept-scripted-api",
     provider,
     baseUrl: "http://localhost",
     reasoning: false,
@@ -118,7 +118,7 @@ test("pi project tutors through the local host and resumes its trusted transcrip
         agentsFilesOverride: () => ({
           agentsFiles: [{ path: "/global/AGENTS.md", content: "GLOBAL_CODING_CONTEXT_MUST_NOT_LEAK" }],
         }),
-        extensionFactories: [scripted, mmon],
+        extensionFactories: [scripted, ncept],
       });
       await loader.reload();
       const result = await createAgentSession({
