@@ -397,7 +397,9 @@ export default function ncept(pi: ExtensionAPI) {
     await sync(ctx);
     if (event.reason === "quit") await host.sessions.close(active);
   });
-  pi.on("agent_settled", (_event, ctx) => {
+  pi.on("agent_settled", async (_event, ctx) => {
+    await sync(ctx);
+    if (!transition && active && host) transition = await host.sessions.settle(active);
     if (transition) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
     else if (active) ctx.ui.setStatus("ncept", active.mode);
   });

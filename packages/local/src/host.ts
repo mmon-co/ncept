@@ -75,6 +75,8 @@ export interface Host {
   readonly sessions: {
     open(input: Readonly<{ mode: string; entry?: ModeEntry; resume?: SessionRef }>): Promise<HostSession>;
     turn(session: HostSession, input: Readonly<{ learnerMessage?: string }>): Promise<HostChatSetup>;
+    /** After the conversation stops, close a completed Lesson and return its next surface. */
+    settle(session: HostSession): Promise<ModeSwitch | undefined>;
     close(session: HostSession): Promise<void>;
   };
   readonly missions: {
