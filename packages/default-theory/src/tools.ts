@@ -696,13 +696,11 @@ export const defaultRecordingTools = [
           observation.payload.material?.playground === identity.playground &&
           observation.payload.material.id === identity.id &&
           observation.payload.item === item &&
-          // Material surfaces belong to runners; chat retries match the entire recorded attempt.
+          // Material surfaces belong to runners; a chat retry repeats the recorded Node, task and response, so a regrade of it stays an override.
           (observation.surface !== ctx.surface ||
             (observation.payload.node.node === node &&
               observation.payload.task === task &&
-              observation.payload.response === response &&
-              observation.payload.outcome === input.outcome &&
-              observation.payload.unaided === input.unaided)),
+              observation.payload.response === response)),
       );
       if (existing.length)
         return {
