@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { catalogToolsForMode, resolveDefaultCatalogProgram } from "@mmon-co/default-theory";
+import { catalogToolsForMode, resolveDefaultCatalogProgram } from "@mmon-co/ncept-default-theory";
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null && key in value

@@ -1,6 +1,6 @@
-import type { MessageDescriptor } from "@mmon-co/core/theory";
+import type { MessageDescriptor } from "@mmon-co/ncept-core/theory";
 import { defaultTheoryMessages } from "./messages.js";
-import type { Observation } from "@mmon-co/core/observations";
+import type { Observation } from "@mmon-co/ncept-core/observations";
 import {
   isClaim,
   isCompletionOutcome,

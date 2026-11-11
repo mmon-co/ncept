@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type ExactPatchRef, type NodeId, type PatchRevision } from "@mmon-co/core/patch";
-import type { Observation } from "@mmon-co/core/observations";
-import { readTheoryState } from "@mmon-co/core/theory";
-import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState } from "@mmon-co/default-theory";
+import { resolvePatchBundle, type ExactPatchRef, type NodeId, type PatchRevision } from "@mmon-co/ncept-core/patch";
+import type { Observation } from "@mmon-co/ncept-core/observations";
+import { readTheoryState } from "@mmon-co/ncept-core/theory";
+import { defaultTheory, DEFAULT_THEORY_REF, type Completion, type DefaultState } from "@mmon-co/ncept-default-theory";
 
 // One equivalence property: retained/chunked public reads versus fresh init/step/read.
 // Seeds are reproducible; the existing retention/claims suites independently pin policy semantics.

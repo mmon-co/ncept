@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type NodeId, type PatchRevision, type StructureEdge } from "@mmon-co/core/patch";
-import { defaultTheory } from "@mmon-co/default-theory";
-import { readTheoryState } from "@mmon-co/core/theory";
+import { resolvePatchBundle, type NodeId, type PatchRevision, type StructureEdge } from "@mmon-co/ncept-core/patch";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
+import { readTheoryState } from "@mmon-co/ncept-core/theory";
 const now = "2026-11-06T00:00:00.000Z";
-const context = (graph: import("@mmon-co/core/patch").ResolvedGraph, targets: readonly NodeId[]) => ({
+const context = (graph: import("@mmon-co/ncept-core/patch").ResolvedGraph, targets: readonly NodeId[]) => ({
   graph,
   targets,
   past: [],

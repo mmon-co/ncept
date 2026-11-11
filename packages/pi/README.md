@@ -1,4 +1,4 @@
-# @mmon-co/pi
+# @mmon-co/ncept-pi
 
 The official pi learning front end over the MIT-licensed [local Profile host](../local/README.md). Your Profile is an ordinary directory; pi's accounts, models, theme, keybindings and global extensions stay yours. Coding projects do not load this package.
 
@@ -7,7 +7,7 @@ The official pi learning front end over the MIT-licensed [local Profile host](..
 Install [pi](https://pi.dev), then:
 
 ```sh
-npx @mmon-co/pi init ~/learn
+npx @mmon-co/ncept-pi init ~/learn
 cd ~/learn
 pi
 ```

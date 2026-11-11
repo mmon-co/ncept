@@ -1,4 +1,4 @@
-import { renderSpeech } from "@mmon-co/core/theory/speaker";
+import { renderSpeech } from "@mmon-co/ncept-core/theory/speaker";
 import {
   judge,
   isObservationId,
@@ -8,9 +8,9 @@ import {
   type PlatformEvent,
   type Program,
   type Transcript,
-} from "@mmon-co/core/observations";
-import { isNodeId, sameExactPatchRef, type NodeId } from "@mmon-co/core/patch";
-import type { Context } from "@mmon-co/core/theory";
+} from "@mmon-co/ncept-core/observations";
+import { isNodeId, sameExactPatchRef, type NodeId } from "@mmon-co/ncept-core/patch";
+import type { Context } from "@mmon-co/ncept-core/theory";
 import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes.js";
 import {
   stateDefault,

@@ -1,21 +1,21 @@
 # Default Theory
 
-`@mmon-co/default-theory` implements Core's `Theory` interface. It depends on `@mmon-co/core` through public exports, just as a third-party Theory does; Core does not depend on it. The web Application selects it explicitly. FSRS retention, acquisition, Mission futures, tutor Programs and pedagogical Skills live here. Hosts supply persistence, model calls and their own mechanics.
+`@mmon-co/ncept-default-theory` implements Core's `Theory` interface. It depends on `@mmon-co/ncept-core` through public exports, just as a third-party Theory does; Core does not depend on it. The web Application selects it explicitly. FSRS retention, acquisition, Mission futures, tutor Programs and pedagogical Skills live here. Hosts supply persistence, model calls and their own mechanics.
 
 ## Use
 
-Import `defaultTheory` and `DEFAULT_THEORY_REQUIREMENT` from `@mmon-co/default-theory`. The executable keeps its identity `default`, version `1.0.0+<commit>` (`dev` outside a deploy) and new-Profile range `~1.0`. This package move changes neither stored observations nor Profile requirements and needs no data migration.
+Import `defaultTheory` and `DEFAULT_THEORY_REQUIREMENT` from `@mmon-co/ncept-default-theory`. The executable keeps its identity `default`, version `1.0.0+<commit>` (`dev` outside a deploy) and new-Profile range `~1.0`. This package move changes neither stored observations nor Profile requirements and needs no data migration.
 
-The root exports the implementation's public operations and types. Focused exports are `@mmon-co/default-theory/path`, `/state`, `/messages` and `/outcomes`.
+The root exports the implementation's public operations and types. Focused exports are `@mmon-co/ncept-default-theory/path`, `/state`, `/messages` and `/outcomes`.
 
-Node.js 20.19+ is supported. Published exports are ESM JavaScript with TypeScript declarations. Install with `npm install @mmon-co/default-theory`; no TypeScript runtime or host assets are needed.
+Node.js 20.19+ is supported. Published exports are ESM JavaScript with TypeScript declarations. Install with `npm install @mmon-co/ncept-default-theory`; no TypeScript runtime or host assets are needed.
 
 From the repository root, install workspace dependencies with `bun install --frozen-lockfile`, then build and try the package:
 
 ```sh
 bun run --cwd packages/default-theory build
 cd packages/default-theory
-node --input-type=module -e 'import { defaultTheory, DEFAULT_THEORY_REQUIREMENT, skillBody } from "@mmon-co/default-theory"; import { resolveTheory } from "@mmon-co/core/theory"; console.log(resolveTheory(DEFAULT_THEORY_REQUIREMENT, [defaultTheory]).version); console.log(skillBody("mission"));'
+node --input-type=module -e 'import { defaultTheory, DEFAULT_THEORY_REQUIREMENT, skillBody } from "@mmon-co/ncept-default-theory"; import { resolveTheory } from "@mmon-co/ncept-core/theory"; console.log(resolveTheory(DEFAULT_THEORY_REQUIREMENT, [defaultTheory]).version); console.log(skillBody("mission"));'
 ```
 
 The Skills' Markdown is the source. `build-skills.ts` embeds it in Git-ignored `src/skills/sources.ts`; the build compiles that into JavaScript with the rest of the package. The repository's `build:skills` task uses the same generator for the Convex bundler. Workspace tsconfig paths resolve imports to source. Existing algorithm tests live in `test/`: `bun test --parallel packages/default-theory/test`.
@@ -42,7 +42,7 @@ The observation vocabulary is this package's public data contract, not a Core vo
 
 Core's `Observation` envelope carries identity, time, scope, support and the producing Theory's exact version. Its payload remains opaque to Core. The exported payload types and guards define what this Theory recognizes:
 
-| Payload | Public type and guard from `@mmon-co/default-theory/outcomes` | Captured evidence |
+| Payload | Public type and guard from `@mmon-co/ncept-default-theory/outcomes` | Captured evidence |
 | --- | --- | --- |
 | `completion` | `CompletionOutcome`, `isCompletionOutcome` | Playground and scope, exact Node provenance, complete/incomplete and optional validity boundary |
 | `recall` | `RecallOutcome`, `isRecallOutcome` | Card content and Nodes at retrieval, learner answer and recall grade |
@@ -51,7 +51,7 @@ Core's `Observation` envelope carries identity, time, scope, support and the pro
 
 `practiceAttempts` and `problemAttempts` derive per-Node `Demonstration` evidence from captured practice payloads without consulting today's editable Materials. `NodeRef` is `{ node, provenance }`, where `provenance` is the exact authoring Patch revision (`{ identity, digest }`). Captured values are historical evidence, not pointers that a later content edit can reinterpret silently.
 
-Record payload types are exported from `@mmon-co/default-theory/state` and the root as the `DefaultPayload` union. Their `kind` discriminates the following vocabulary:
+Record payload types are exported from `@mmon-co/ncept-default-theory/state` and the root as the `DefaultPayload` union. Their `kind` discriminates the following vocabulary:
 
 | Kind | Type | Recorded meaning |
 | --- | --- | --- |

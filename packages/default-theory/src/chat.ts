@@ -1,4 +1,4 @@
-import { renderSpeech } from "@mmon-co/core/theory/speaker";
+import { renderSpeech } from "@mmon-co/ncept-core/theory/speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
 import {
   lastMetadataContribution,
@@ -6,10 +6,10 @@ import {
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
   type NodeId,
-} from "@mmon-co/core/patch";
-import type { Program } from "@mmon-co/core/observations";
-import type { ChatContext, ChatSetup } from "@mmon-co/core/theory";
-import type { HostCapability, SessionMode } from "@mmon-co/core/theory";
+} from "@mmon-co/ncept-core/patch";
+import type { Program } from "@mmon-co/ncept-core/observations";
+import type { ChatContext, ChatSetup } from "@mmon-co/ncept-core/theory";
+import type { HostCapability, SessionMode } from "@mmon-co/ncept-core/theory";
 import { CATALOG_MODE_TOOLS, CATALOG_MODE_TITLES, CATALOG_MODE_METADATA_KEYS } from "./catalog-contract.js";
 import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from "./state.js";
 import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills.js";

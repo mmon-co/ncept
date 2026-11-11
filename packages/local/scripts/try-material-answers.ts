@@ -7,8 +7,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { composePatch, emptyPatch, isObservation, type LessonSnapshot } from "@mmon-co/core";
-import { defaultTheory, isDemonstration } from "@mmon-co/default-theory";
+import { composePatch, emptyPatch, isObservation, type LessonSnapshot } from "@mmon-co/ncept-core";
+import { defaultTheory, isDemonstration } from "@mmon-co/ncept-default-theory";
 import { init, openHost, openProfile, type HostChatSetup } from "../src/index.js";
 
 function tool(setup: HostChatSetup, name: string) {

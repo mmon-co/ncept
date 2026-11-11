@@ -3,7 +3,7 @@ import { initProject } from "./init.js";
 
 const [command, directory, ...extra] = process.argv.slice(2);
 if (command !== "init" || !directory || extra.length) {
-  console.error("Usage: npx @mmon-co/pi init <dir>");
+  console.error("Usage: npx @mmon-co/ncept-pi init <dir>");
   process.exitCode = 1;
 } else {
   try {

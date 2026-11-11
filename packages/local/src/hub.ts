@@ -23,7 +23,7 @@ import {
   type PatchContent,
   type PatchRevision,
   type TheoryRequirement,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { HubAuth } from "./hub-auth.js";
@@ -137,13 +137,13 @@ export function connectHub(
   const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
   const resource = base + "/mcp";
   const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
-  const headers = { "User-Agent": options.userAgent ?? "@mmon-co/local/" + version };
+  const headers = { "User-Agent": options.userAgent ?? "@mmon-co/ncept-local/" + version };
   async function connected<T>(
     operation: (call: <R>(name: string, args: Record<string, unknown>) => Promise<R>) => Promise<T>,
   ) {
     const provider = await HubAuth.open(resource, options);
     if (!provider.tokens()) throw new Error("Sign in first with host.hub.signIn()");
-    const client = new Client({ name: "@mmon-co/local", version: "0.1.0" });
+    const client = new Client({ name: "@mmon-co/ncept-local", version: "0.1.0" });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(resource), { authProvider: provider }));
       return await operation(async <R>(name: string, args: Record<string, unknown>): Promise<R> => {

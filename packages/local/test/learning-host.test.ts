@@ -2,8 +2,8 @@ import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composePatch, emptyPatch, isObservation, type Mission } from "@mmon-co/core";
-import { defaultTheory } from "@mmon-co/default-theory";
+import { composePatch, emptyPatch, isObservation, type Mission } from "@mmon-co/ncept-core";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { init, openHost, openProfile, type HostChatSetup, type Model } from "../src/index";
 
 const dirs: string[] = [];

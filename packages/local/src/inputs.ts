@@ -17,7 +17,7 @@ import {
   type SemanticOperation,
   type SurfaceId,
   type ObjectId,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import { object } from "./sessions.js";
 
 function record(value: unknown): Record<string, unknown> {

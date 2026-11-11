@@ -8,7 +8,7 @@ import {
   type Observation,
   type ObservationId,
   type Program,
-} from "@mmon-co/core/observations";
+} from "@mmon-co/ncept-core/observations";
 import {
   ASSESSMENT_GUIDANCE_INSTRUCTIONS,
   isNodeId,
@@ -17,8 +17,8 @@ import {
   metadataSetsForEntity,
   type NodeId,
   type ResolvedGraph,
-} from "@mmon-co/core/patch";
-import type { ChatContext, Tool } from "@mmon-co/core/theory";
+} from "@mmon-co/ncept-core/patch";
+import type { ChatContext, Tool } from "@mmon-co/ncept-core/theory";
 import {
   electedObservations,
   isDefaultObservation,

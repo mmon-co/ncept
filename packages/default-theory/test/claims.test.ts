@@ -1,8 +1,8 @@
-import { readTheoryState } from "@mmon-co/core/theory";
+import { readTheoryState } from "@mmon-co/ncept-core/theory";
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type PatchRevision } from "@mmon-co/core/patch";
-import type { Observation } from "@mmon-co/core/observations";
-import { defaultTheory, DEFAULT_THEORY_REF, type Claim, type Demonstration } from "@mmon-co/default-theory";
+import { resolvePatchBundle, type PatchRevision } from "@mmon-co/ncept-core/patch";
+import type { Observation } from "@mmon-co/ncept-core/observations";
+import { defaultTheory, DEFAULT_THEORY_REF, type Claim, type Demonstration } from "@mmon-co/ncept-default-theory";
 
 test("claims and acquisition do not cover prerequisites", () => {
   const ref = { identity: "patch-claims", digest: `sha256:${"a".repeat(64)}` } as const;

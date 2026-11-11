@@ -1,7 +1,7 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
 import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading.js";
 import { projectDefault } from "./tags.js";
-import { contentDigest } from "@mmon-co/core/digest";
+import { contentDigest } from "@mmon-co/ncept-core/digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract.js";
 import {
   effectiveObservations,
@@ -14,10 +14,10 @@ import {
   type ObservationWrite,
   type Program,
   type SurfaceId,
-} from "@mmon-co/core/observations";
-import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/core/patch";
-import type { ChatContext, Tool } from "@mmon-co/core/theory";
-import { readMissionPath } from "@mmon-co/core/theory/path";
+} from "@mmon-co/ncept-core/observations";
+import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/ncept-core/patch";
+import type { ChatContext, Tool } from "@mmon-co/ncept-core/theory";
+import { readMissionPath } from "@mmon-co/ncept-core/theory/path";
 import { pathDefault } from "./path.js";
 import { event, refinePendingHomes } from "./event.js";
 import { isAttemptOutcome } from "./outcomes.js";

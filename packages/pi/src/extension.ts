@@ -2,8 +2,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { createRequire } from "node:module";
 import type { ExtensionAPI, ExtensionContext, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { ModeEntry, Theory } from "@mmon-co/core";
-import { defaultTheory } from "@mmon-co/default-theory";
+import type { ModeEntry, Theory } from "@mmon-co/ncept-core";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import {
   credentialsPath,
   openHost,
@@ -13,7 +13,7 @@ import {
   type HostChatSetup,
   type ModeSwitch,
   type ModelRequest,
-} from "@mmon-co/local";
+} from "@mmon-co/ncept-local";
 
 const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
 const STATE = "mmon.session";
@@ -98,19 +98,19 @@ export default function mmon(pi: ExtensionAPI) {
     if (host) return host;
     const manifest: unknown = JSON.parse(await readFile(join(ctx.cwd, "profile.json"), "utf8"));
     if (!manifest || typeof manifest !== "object" || !("theories" in manifest) || !Array.isArray(manifest.theories))
-      throw new Error("Not an mmon Profile. Run npx @mmon-co/pi init <dir> first.");
+      throw new Error("Not an mmon Profile. Run npx @mmon-co/ncept-pi init <dir> first.");
     const require = createRequire(join(ctx.cwd, "profile.json"));
     const theories: Theory<unknown>[] = [];
     for (const name of manifest.theories) {
       if (typeof name !== "string") throw new Error("Invalid Theory package name");
-      const module = name === "@mmon-co/default-theory" ? { defaultTheory } : await import(require.resolve(name));
+      const module = name === "@mmon-co/ncept-default-theory" ? { defaultTheory } : await import(require.resolve(name));
       const theory: Theory<unknown> = module.defaultTheory ?? module.default ?? module.theory;
       theories.push(theory);
     }
     host = await openHost({
       profileDir: ctx.cwd,
       hub: {
-        userAgent: "mmon-pi/" + version,
+        userAgent: "ncept-pi/" + version,
         clientMetadataUrl: "https://pi.dev/oauth/client.json",
         url: process.env.MMON_HUB_URL,
         credentialsFile: process.env.MMON_CREDENTIALS_FILE,

@@ -15,7 +15,7 @@ import {
   type PatchId,
   type ProfileLogEntry,
   type TheoryRequirement,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import {
   DEFAULT_THEORY_PACKAGES,
   DEFAULT_THEORY_REQUIREMENT,

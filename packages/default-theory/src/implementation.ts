@@ -28,7 +28,7 @@ export const implementation = {
   chat,
   modes,
   event,
-} satisfies import("@mmon-co/core/theory").Theory<
+} satisfies import("@mmon-co/ncept-core/theory").Theory<
   import("./state.js").DefaultState,
   {
     completion: import("./state.js").CompletionOutcome;

@@ -23,7 +23,7 @@ import {
   type Theory,
   type Transcript,
   type TranscriptSpan,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import type { ProfileDirectory } from "./directory.js";
 import type { HostSession, Model } from "./host.js";
 import type { ValidatedProfile } from "./exchange.js";

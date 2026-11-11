@@ -19,15 +19,15 @@ import {
   type Api,
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
-import { defaultTheory } from "@mmon-co/default-theory";
-import { openProfile } from "@mmon-co/local";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
+import { openProfile } from "@mmon-co/ncept-local";
 import { initProject } from "../src/init";
 import mmon from "../src/extension";
 
 // The package boundary's one wiring smoke: real pi persistence and tool dispatch,
 // with a scripted provider, no account, network, or paid model.
 test("pi project tutors through the local host and resumes its trusted transcript", async () => {
-  const root = await mkdtemp(join(tmpdir(), "mmon-pi-"));
+  const root = await mkdtemp(join(tmpdir(), "ncept-pi-"));
   const cwd = join(root, "profile");
   const agentDir = join(root, "agent");
   const errors: string[] = [];
@@ -95,7 +95,7 @@ test("pi project tutors through the local host and resumes its trusted transcrip
   try {
     await initProject(cwd);
     const settings = JSON.parse(await readFile(join(cwd, ".pi/settings.json"), "utf8"));
-    expect(settings).toEqual({ packages: ["npm:@mmon-co/pi"], sessionDir: "sessions" });
+    expect(settings).toEqual({ packages: ["npm:@mmon-co/ncept-pi"], sessionDir: "sessions" });
     // Keep the test offline; production init uses the published package.
     await writeFile(join(cwd, ".pi/settings.json"), JSON.stringify({ sessionDir: "sessions" }));
     const settingsManager = SettingsManager.inMemory(

@@ -15,7 +15,7 @@ import mmon from "../src/extension";
 
 const address = process.argv[2];
 if (!address) throw new Error("Usage: bun packages/pi/scripts/pull-hub.ts <public-release-url>");
-const root = await mkdtemp(join(tmpdir(), "mmon-pi-pull-"));
+const root = await mkdtemp(join(tmpdir(), "ncept-pi-pull-"));
 try {
   const cwd = await initProject(join(root, "profile"));
   const agentDir = join(root, "agent");

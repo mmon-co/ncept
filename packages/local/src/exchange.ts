@@ -15,12 +15,12 @@ import {
   type Profile,
   type ProfileLogEntry,
   type TheoryRequirement,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import { object, parsePiSession, relocatePiSession } from "./sessions.js";
 import { decodeTar, encodeTar, type ProfileFiles } from "./tar.js";
 export type { ProfileFiles } from "./tar.js";
 
-export const DEFAULT_THEORY_PACKAGES = ["@mmon-co/default-theory"] as const;
+export const DEFAULT_THEORY_PACKAGES = ["@mmon-co/ncept-default-theory"] as const;
 export const DEFAULT_THEORY_REQUIREMENT: TheoryRequirement = { theory: "default", range: "~1.0" };
 export interface ProfileManifest {
   readonly format: 1;

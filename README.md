@@ -7,7 +7,7 @@ Learn in [pi](https://pi.dev) from a Profile directory you own. Your chosen pi m
 Install pi, then:
 
 ```sh
-npx @mmon-co/pi init ~/learn
+npx @mmon-co/ncept-pi init ~/learn
 cd ~/learn
 pi
 ```
@@ -24,12 +24,12 @@ Your model's own account and costs remain separate from mmon. See [the pi packag
 
 ## Packages
 
-| Workspace                 | Package                   | Role                                                     |
-| ------------------------- | ------------------------- | -------------------------------------------------------- |
-| `packages/core`           | `@mmon-co/core`           | Patches, observations, Profiles and the Theory interface |
-| `packages/default-theory` | `@mmon-co/default-theory` | Learning algorithms, tutor Programs and Skills           |
-| `packages/local`          | `@mmon-co/local`          | File-backed Profile and Hub host library                 |
-| `packages/pi`             | `@mmon-co/pi`             | Official pi front end                                    |
+| Workspace | Package | Role |
+| --- | --- | --- |
+| `packages/core` | `@mmon-co/ncept-core` | Patches, observations, Profiles and the Theory interface |
+| `packages/default-theory` | `@mmon-co/ncept-default-theory` | Learning algorithms, tutor Programs and Skills |
+| `packages/local` | `@mmon-co/ncept-local` | File-backed Profile and Hub host library |
+| `packages/pi` | `@mmon-co/ncept-pi` | Official pi front end |
 
 MIT licensed. This is a history-preserving mirror of the source monorepo's open packages.
 

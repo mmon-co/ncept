@@ -1,6 +1,6 @@
 import { evaluationTools } from "./evaluation.js";
 import { CATALOG_EVALUATION_OPERATIONS, CATALOG_MODE_TOOLS } from "./catalog-contract.js";
-import type { Tool } from "@mmon-co/core/theory";
+import type { Tool } from "@mmon-co/ncept-core/theory";
 import type { DefaultState } from "./state.js";
 import { defaultInstrumentTools, defaultRecordingTools, defaultBackgroundTools } from "./tools.js";
 
