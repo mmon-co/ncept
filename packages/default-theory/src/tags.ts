@@ -1,8 +1,8 @@
 import { dependentCones } from "./dependent-cone.js";
 import { nodePriority, teachingPath, pathProperty } from "./path.js";
-import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@mmon-co/core/patch";
-import type { Observation, ObservationId } from "@mmon-co/core/observations";
-import type { MessageDescriptor, Tag, TheoryProjection } from "@mmon-co/core/theory";
+import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
+import type { Observation, ObservationId } from "@mmon-co/ncept-core/observations";
+import type { MessageDescriptor, Tag, TheoryProjection } from "@mmon-co/ncept-core/theory";
 import { completionCaption } from "./completion.js";
 import {
   defaultProjectionBasis,

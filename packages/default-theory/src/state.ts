@@ -1,6 +1,6 @@
 import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
-import type { Speaker } from "@mmon-co/core/theory/speaker";
-import { readTheoryState, type TheoryState } from "@mmon-co/core/theory";
+import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";
+import { readTheoryState, type TheoryState } from "@mmon-co/ncept-core/theory";
 
 import { dependentCones } from "./dependent-cone.js";
 import {
@@ -22,7 +22,7 @@ import {
   type MetadataSet,
   type NodeId,
   type ResolvedGraph,
-} from "@mmon-co/core/patch";
+} from "@mmon-co/ncept-core/patch";
 import {
   compareObservations,
   isObservationId,
@@ -31,7 +31,7 @@ import {
   type Observation,
   type ObservationId,
   type SurfaceId,
-} from "@mmon-co/core/observations";
+} from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
 export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" } as const;
@@ -66,7 +66,7 @@ export interface Demonstration {
   readonly response: string;
   readonly evaluation?:
     | {
-        readonly grader: import("@mmon-co/core/observations").Grader;
+        readonly grader: import("@mmon-co/ncept-core/observations").Grader;
         readonly criteria: readonly { readonly criterion: string; readonly probability: number }[];
         readonly message?: string;
         readonly watch?: ObservationId;

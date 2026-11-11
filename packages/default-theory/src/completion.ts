@@ -1,11 +1,11 @@
-import { canonicalJson } from "@mmon-co/core/digest";
+import { canonicalJson } from "@mmon-co/ncept-core/digest";
 import {
   compareObservations,
   isObservationTimestamp,
   type Observation,
   type ObservationId,
-} from "@mmon-co/core/observations";
-import { isMaterialMeta, isNodeId, type NodeId } from "@mmon-co/core/patch";
+} from "@mmon-co/ncept-core/observations";
+import { isMaterialMeta, isNodeId, type NodeId } from "@mmon-co/ncept-core/patch";
 import type { Claim, CompletionOutcome, Demonstration } from "./state.js";
 
 export type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };

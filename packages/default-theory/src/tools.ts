@@ -1,7 +1,7 @@
 /* eslint-disable require-yield -- Zero-effect tools are synchronous Programs, not plain values. */
 import { prepareEstimateDefault, progressDefault, estimateDefault } from "./reading.js";
 import { projectDefault } from "./tags.js";
-import { contentDigest } from "@mmon-co/core/digest";
+import { contentDigest } from "@mmon-co/ncept-core/digest";
 import { CATALOG_MAX_PAGE_SIZE, CATALOG_PAGE_SIZE } from "./catalog-contract.js";
 import {
   effectiveObservations,
@@ -14,10 +14,10 @@ import {
   type ObservationWrite,
   type Program,
   type SurfaceId,
-} from "@mmon-co/core/observations";
-import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/core/patch";
-import type { ChatContext, Tool } from "@mmon-co/core/theory";
-import { readMissionPath } from "@mmon-co/core/theory/path";
+} from "@mmon-co/ncept-core/observations";
+import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/ncept-core/patch";
+import type { ChatContext, Tool } from "@mmon-co/ncept-core/theory";
+import { readMissionPath } from "@mmon-co/ncept-core/theory/path";
 import { pathDefault } from "./path.js";
 import { event, refinePendingHomes } from "./event.js";
 import { isAttemptOutcome } from "./outcomes.js";
@@ -657,7 +657,7 @@ export const defaultRecordingTools = [
   {
     name: "record_material_attempt" as const,
     description:
-      "Record a learner's chat answer to an existing Material's item, on any host. Supply the Material's playground and id, stable item id, assessed Node, verbatim task and response, outcome and unaided status fixed when posing (help makes it aided). The tutor grades success/failure; an explicit I don't know is dont-know. Ordinary conversational checks use record_demonstration. If this Session already has the item's outcome, return its Records without duplicating it; correct a wrong grade with evaluation_override and a reason.",
+      "Record a learner's chat answer to an existing Material's item, on any host. Supply the Material's playground and id, stable item id, assessed Node, verbatim task and response, outcome and unaided status fixed when posing (help makes it aided). The tutor grades success/failure; an explicit I don't know is dont-know. Ordinary conversational checks use record_demonstration. An identical retry returns its existing Record; a later different answer is a new attempt. A runner's outcome stays the record; correct a wrong grade with evaluation_override and a reason.",
     schema: schema(
       {
         material: schema({ playground: { type: "string", minLength: 1 }, id: { type: "string", minLength: 1 } }, [
@@ -681,6 +681,7 @@ export const defaultRecordingTools = [
       const node = nodeId(input.node);
       const item = string(input.item);
       const task = string(input.task);
+      const response = string(input.response);
       if (!item.trim() || !task.trim() || typeof input.unaided !== "boolean")
         throw new Error("Supply an item, posed task and unaided status");
       if (input.outcome !== "success" && input.outcome !== "failure" && input.outcome !== "dont-know")
@@ -694,7 +695,12 @@ export const defaultRecordingTools = [
           isDemonstration(observation.payload) &&
           observation.payload.material?.playground === identity.playground &&
           observation.payload.material.id === identity.id &&
-          observation.payload.item === item,
+          observation.payload.item === item &&
+          // Material surfaces belong to runners; a chat retry repeats the recorded Node, task and response, so a regrade of it stays an override.
+          (observation.surface !== ctx.surface ||
+            (observation.payload.node.node === node &&
+              observation.payload.task === task &&
+              observation.payload.response === response)),
       );
       if (existing.length)
         return {
@@ -718,7 +724,7 @@ export const defaultRecordingTools = [
       const payload = {
         kind: "attempt",
         problem: { ...problem, digest: contentDigest(problem) },
-        response: string(input.response),
+        response,
         assessment: {
           correct: input.outcome === "success",
           grader: input.outcome === "dont-know" ? "learner" : "tutor",

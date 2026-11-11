@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { emptyPatch, type ProfileLogEntry } from "@mmon-co/core";
+import { emptyPatch, type ProfileLogEntry } from "@mmon-co/ncept-core";
 import {
   init,
   jsonBytes,

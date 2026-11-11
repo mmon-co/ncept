@@ -1,16 +1,12 @@
 import { implementation } from "./implementation.js";
 
-/** The deploy's commit as semver build metadata, which range matching ignores; `dev` outside a deploy. */
-const buildMetadata = () => (typeof process === "undefined" ? undefined : process.env.CONCEPT_COMMIT) || "dev";
+import { theoryContent } from "./release.js";
 
-/** One executable, assembled without a provider, store, scheduler or host reference. */
+/** Build metadata identifies the Theory's source and dependencies; semver ranges ignore it. */
 export const defaultTheory = {
   ...implementation,
-  /** The exact version `1.0.0+<commit>`, read when asked so the deployment's environment is the one consulted. */
-  get version() {
-    return `${implementation.version}+${buildMetadata()}`;
-  },
-} satisfies Omit<typeof implementation, "version"> & { version: string };
+  version: `${implementation.version}+${theoryContent}`,
+};
 /** The range a new Profile accepts: the default Theory's current minor, which a patch deploy keeps. */
 export const DEFAULT_THEORY_REQUIREMENT = { theory: defaultTheory.id, range: "~1.0" } as const;
 export * from "./path.js";

@@ -7,7 +7,7 @@ import {
   unscopedCopyTagName,
   type NodeId,
   type ResolvedGraph,
-} from "@mmon-co/core/patch";
+} from "@mmon-co/ncept-core/patch";
 import { dependentCones } from "./dependent-cone.js";
 import {
   LESSON_TAG_PREFIX,
@@ -16,7 +16,7 @@ import {
   type MissionPath,
   type MissionFuture,
   type PathContext,
-} from "@mmon-co/core/theory";
+} from "@mmon-co/ncept-core/theory";
 import { prepareEstimateDefault, progressDefault } from "./reading.js";
 import { DEFAULT_PARAMETERS, stateDefault } from "./state.js";
 import { forgetting_curve } from "ts-fsrs";

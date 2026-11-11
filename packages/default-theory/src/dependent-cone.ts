@@ -1,4 +1,4 @@
-import type { NodeId, ResolvedGraph } from "@mmon-co/core/patch";
+import type { NodeId, ResolvedGraph } from "@mmon-co/ncept-core/patch";
 
 /** Share adjacency, not results: each strict cone is independently visited and sorted. */
 export function dependentCones(graph: ResolvedGraph): (node: NodeId) => readonly NodeId[] {

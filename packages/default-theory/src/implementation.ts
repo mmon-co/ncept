@@ -29,7 +29,7 @@ export const implementation = {
   modes,
   noEventHook: (input) => input.kind === "surface.open" || input.kind === "object.put" || input.kind === "mission",
   event,
-} satisfies import("@mmon-co/core/theory").Theory<
+} satisfies import("@mmon-co/ncept-core/theory").Theory<
   import("./state.js").DefaultState,
   {
     completion: import("./state.js").CompletionOutcome;

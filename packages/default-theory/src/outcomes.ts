@@ -1,7 +1,7 @@
-import { isContentDigest } from "@mmon-co/core/digest";
-import { isObservationTimestamp } from "@mmon-co/core/observations";
+import { isContentDigest } from "@mmon-co/ncept-core/digest";
+import { isObservationTimestamp } from "@mmon-co/ncept-core/observations";
 import type { Demonstration, NodeRef } from "./state.js";
-import type { ExactPatchRef, NodeId } from "@mmon-co/core/patch";
+import type { ExactPatchRef, NodeId } from "@mmon-co/ncept-core/patch";
 export { isCompletionOutcome } from "./state.js";
 export type { CompletionOutcome } from "./state.js";
 

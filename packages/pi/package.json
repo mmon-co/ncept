@@ -1,5 +1,5 @@
 {
-  "name": "@mmon-co/pi",
+  "name": "@mmon-co/ncept-pi",
   "version": "0.1.0",
   "description": "Learn in pi from a Profile directory you own",
   "keywords": [
@@ -8,11 +8,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmon-co/mmon.git",
+    "url": "git+https://github.com/mmon-co/ncept.git",
     "directory": "packages/pi"
   },
   "bin": {
-    "mmon-pi": "dist/cli.js"
+    "ncept-pi": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -32,9 +32,9 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@mmon-co/core": "^0.1.0",
-    "@mmon-co/default-theory": "^1.0.0",
-    "@mmon-co/local": "^0.1.0"
+    "@mmon-co/ncept-core": "^0.1.0",
+    "@mmon-co/ncept-default-theory": "^1.0.0",
+    "@mmon-co/ncept-local": "^0.1.0"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "1.5.0",

@@ -1,6 +1,6 @@
-import type { NodeId, ResolvedGraph } from "@mmon-co/core/patch";
-import type { Observation } from "@mmon-co/core/observations";
-import type { NodeProgress } from "@mmon-co/core/theory";
+import type { NodeId, ResolvedGraph } from "@mmon-co/ncept-core/patch";
+import type { Observation } from "@mmon-co/ncept-core/observations";
+import type { NodeProgress } from "@mmon-co/ncept-core/theory";
 import {
   isDemonstration,
   stateDefault,

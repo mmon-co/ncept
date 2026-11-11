@@ -1,6 +1,6 @@
-import { isNodeId, type ResolvedGraph } from "@mmon-co/core/patch";
-import type { Observation } from "@mmon-co/core/observations";
-import type { LessonActivity } from "@mmon-co/core/theory";
+import { isNodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
+import type { Observation } from "@mmon-co/ncept-core/observations";
+import type { LessonActivity } from "@mmon-co/ncept-core/theory";
 import { isDemonstration, initDefaultState } from "./state.js";
 
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;

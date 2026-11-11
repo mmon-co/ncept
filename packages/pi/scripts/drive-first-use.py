@@ -1,9 +1,9 @@
 """Public pi RPC encounter driver; Python 3 standard library, no model replaced by default.
 Run from the repository root:
   python3 packages/pi/scripts/drive-first-use.py /absolute/profile '/missions'
-MMON_MODEL=release-scripted/tutor selects the checked no-paid transport provider.
-MMON_SESSION=<absolute-jsonl> resumes exactly that transcript; MMON_CONTINUE=1 resumes latest.
-MMON_RECORD captures live model requests with record-first-use.ts; MMON_EVENTS captures RPC.
+NCEPT_MODEL=release-scripted/tutor selects the checked no-paid transport provider.
+NCEPT_SESSION=<absolute-jsonl> resumes exactly that transcript; NCEPT_CONTINUE=1 resumes latest.
+NCEPT_RECORD captures live model requests with record-first-use.ts; NCEPT_EVENTS captures RPC.
 Confirmations are automatically accepted: use only your disposable encounter Profile/account.
 """
 import json
@@ -17,17 +17,17 @@ profile = Path(sys.argv[1]).resolve()
 env = dict(os.environ)
 env.pop("PI_CODING_AGENT_SESSION_DIR", None)
 command = ["pi", "--mode", "rpc", "--approve", "--offline", "--no-mcp",
-           "--model", env.get("MMON_MODEL", "openrouter/openai/gpt-6-luna"), "--thinking", "low"]
-if env.get("MMON_MODEL") == "release-scripted/tutor":
+           "--model", env.get("NCEPT_MODEL", "openrouter/openai/gpt-6-luna"), "--thinking", "low"]
+if env.get("NCEPT_MODEL") == "release-scripted/tutor":
     command += ["-e", str(root / "packages/pi/scripts/encounter-provider.ts")]
-if env.get("MMON_SESSION"):
-    command += ["--session", env["MMON_SESSION"]]
-elif env.get("MMON_CONTINUE"):
+if env.get("NCEPT_SESSION"):
+    command += ["--session", env["NCEPT_SESSION"]]
+elif env.get("NCEPT_CONTINUE"):
     command += ["--continue"]
-if env.get("MMON_RECORD"):
+if env.get("NCEPT_RECORD"):
     command += ["-e", str(root / "packages/pi/scripts/record-first-use.ts")]
 process = subprocess.Popen(command, cwd=profile, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-events = open(env["MMON_EVENTS"], "a") if env.get("MMON_EVENTS") else None
+events = open(env["NCEPT_EVENTS"], "a") if env.get("NCEPT_EVENTS") else None
 
 def send(value):
     process.stdin.write((json.dumps(value) + "\n").encode())

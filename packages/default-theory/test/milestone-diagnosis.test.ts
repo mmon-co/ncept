@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { resolvePatchBundle, type PatchRevision } from "@mmon-co/core/patch";
-import { readTheoryState, type ChatContext, type LessonSnapshot } from "@mmon-co/core/theory";
-import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "@mmon-co/default-theory";
+import { resolvePatchBundle, type PatchRevision } from "@mmon-co/ncept-core/patch";
+import { readTheoryState, type ChatContext, type LessonSnapshot } from "@mmon-co/ncept-core/theory";
+import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "@mmon-co/ncept-default-theory";
 
 test("host milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
   const revision: PatchRevision = {

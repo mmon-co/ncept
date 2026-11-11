@@ -13,7 +13,7 @@ import type {
   SessionRef,
   Theory,
   TheoryRequirement,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import type { ProfileDirectory } from "./directory.js";
 
 /** The host supplies both judge and assess with the concrete JSON reply schema. */
@@ -99,7 +99,7 @@ export interface Host {
   };
 }
 export interface HubOptions {
-  /** Product/version token for anonymous Hub reads; defaults to @mmon-co/local's installed version. */
+  /** Product/version token for anonymous Hub reads; defaults to @mmon-co/ncept-local's installed version. */
   readonly userAgent?: string;
   /** Application base URL, including /ncept on the hosted product. Defaults to https://co.mmon.co/ncept. */
   readonly url?: string;

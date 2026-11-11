@@ -1,4 +1,4 @@
-import type { LearnerDay } from "@mmon-co/core";
+import type { LearnerDay } from "@mmon-co/ncept-core";
 
 /** Same 04:00 local boundary as the web; resolve each end independently across DST. */
 export function learnerDayAt(at: string, timezone: string): LearnerDay {

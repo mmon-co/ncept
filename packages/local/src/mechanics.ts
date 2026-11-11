@@ -1,4 +1,4 @@
-import type { Skill } from "@mmon-co/core";
+import type { Skill } from "@mmon-co/ncept-core";
 
 /** The mechanics Skill from docs/attachments/local-host-mechanics.md. */
 export const mechanics: Skill = {

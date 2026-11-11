@@ -1,10 +1,10 @@
 {
-  "name": "@mmon-co/default-theory",
+  "name": "@mmon-co/ncept-default-theory",
   "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmon-co/mmon.git",
+    "url": "git+https://github.com/mmon-co/ncept.git",
     "directory": "packages/default-theory"
   },
   "files": [
@@ -40,7 +40,7 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@mmon-co/core": "^0.1.0",
+    "@mmon-co/ncept-core": "^0.1.0",
     "ts-fsrs": "^4.0.0",
     "yaml": "^2.5.0"
   },

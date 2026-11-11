@@ -24,7 +24,7 @@ import {
   type SessionMode,
   type Theory,
   type Tool,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import { openProfile } from "./directory.js";
 import { connectHub } from "./hub.js";
 import type {

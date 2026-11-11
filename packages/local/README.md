@@ -1,12 +1,12 @@
-# @mmon-co/local
+# @mmon-co/ncept-local
 
 MIT-licensed Profile directory and learning host. Core owns Patch and log semantics; this package owns their files and the portable exchange tar.
 
 ## Directory API
 
 ```ts
-import { init, openProfile, unpackDirectory } from "@mmon-co/local";
-import { defaultTheory } from "@mmon-co/default-theory";
+import { init, openProfile, unpackDirectory } from "@mmon-co/ncept-local";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
 
 await init("/path/to/learn");
 const profile = await openProfile("/path/to/learn", [defaultTheory]);
@@ -15,7 +15,7 @@ const tar = await profile.pack();
 await unpackDirectory(tar, "/path/to/moved-profile", [defaultTheory]);
 ```
 
-`init` creates an empty personal Patch, empty log and reserved directories in an ordinary project directory. `profile.json` contains `format: 1`, `personal`, `theory` (Core's requirement), `theories` (package names, initially `@mmon-co/default-theory`) and `sessions` (surface → pi filename). Account credentials live at `credentialsPath()`, outside the Profile, in `~/.config/mmon/credentials.json`.
+`init` creates an empty personal Patch, empty log and reserved directories in an ordinary project directory. `profile.json` contains `format: 1`, `personal`, `theory` (Core's requirement), `theories` (package names, initially `@mmon-co/ncept-default-theory`) and `sessions` (surface → pi filename). Account credentials live at `credentialsPath()`, outside the Profile, in `~/.config/mmon/credentials.json`.
 
 `openProfile` and `unpack` migrate a stored minor pin (or an exact web-export release) with the supplied executable Theory’s `migrations` before strict resolution. Broad requirements still use strict resolution without migration. Migration writes new immutable Patch revisions and a content-addressed log snapshot, then atomically switches `profile.json`’s personal head, Theory requirement and optional `log` digest together. Interrupted writes leave the old generation active; reopening retries pure steps from that generation. Old revision/log files remain unread history. Host futures are rebuilt from the migrated Profile; captured Session transcripts are not rewritten as futures.
 
@@ -25,7 +25,7 @@ pi chooses `sessions/<timestamp>_<sessionId>.jsonl`. After project trust, use `r
 
 ## Pure exchange
 
-Import `@mmon-co/local/exchange` in Convex actions or browsers; it has no Node imports. `pack(files, theories)`, `unpack(tar, theories, { cwd })` and `validate(files, theories)` use a map of relative paths to bytes and supplied Theory identities. Package names in the manifest are data, not imports. The uncompressed ustar contains only `profile.json`, its selected log (`log.jsonl` initially, `log-<digest>.jsonl` after a write), `patches/`, `blobs/` and registered `sessions/`; the directory adapter leaves working copies in `materials/` and unrelated project files behind. Unsupported tar entry types, unsafe paths and duplicate paths are refused. `unpackDirectory` requires unused reserved directories rather than merging into an existing Profile.
+Import `@mmon-co/ncept-local/exchange` in Convex actions or browsers; it has no Node imports. `pack(files, theories)`, `unpack(tar, theories, { cwd })` and `validate(files, theories)` use a map of relative paths to bytes and supplied Theory identities. Package names in the manifest are data, not imports. The uncompressed ustar contains only `profile.json`, its selected log (`log.jsonl` initially, `log-<digest>.jsonl` after a write), `patches/`, `blobs/` and registered `sessions/`; the directory adapter leaves working copies in `materials/` and unrelated project files behind. Unsupported tar entry types, unsafe paths and duplicate paths are refused. `unpackDirectory` requires unused reserved directories rather than merging into an existing Profile.
 
 ## Host contract
 

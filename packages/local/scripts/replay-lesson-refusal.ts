@@ -7,8 +7,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { composePatch, emptyPatch, type SemanticOperation, type Mission, type LessonSnapshot } from "@mmon-co/core";
-import { defaultTheory } from "@mmon-co/default-theory";
+import {
+  composePatch,
+  emptyPatch,
+  type SemanticOperation,
+  type Mission,
+  type LessonSnapshot,
+} from "@mmon-co/ncept-core";
+import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { init, openHost, openProfile, type HostChatSetup } from "../src/index.js";
 
 interface Call {

@@ -1,10 +1,10 @@
 {
-  "name": "@mmon-co/core",
+  "name": "@mmon-co/ncept-core",
   "version": "0.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmon-co/mmon.git",
+    "url": "git+https://github.com/mmon-co/ncept.git",
     "directory": "packages/core"
   },
   "files": [

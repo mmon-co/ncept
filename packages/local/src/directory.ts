@@ -15,7 +15,7 @@ import {
   type PatchId,
   type ProfileLogEntry,
   type TheoryRequirement,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import {
   DEFAULT_THEORY_PACKAGES,
   DEFAULT_THEORY_REQUIREMENT,
@@ -44,7 +44,7 @@ import {
 
 /** Account credentials never belong to a Profile or its exchange tar. */
 export function credentialsPath(home = homedir()): string {
-  return join(home, ".config", "mmon", "credentials.json");
+  return join(home, ".config", "ncept", "credentials.json");
 }
 function existsError(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "EEXIST";

@@ -1,5 +1,5 @@
-import type { NodeId, ResolvedGraph } from "@mmon-co/core/patch";
-import { isNumberedStop } from "@mmon-co/core/theory/path";
+import type { NodeId, ResolvedGraph } from "@mmon-co/ncept-core/patch";
+import { isNumberedStop } from "@mmon-co/ncept-core/theory/path";
 import type {
   Estimate,
   EstimateContext,
@@ -8,7 +8,7 @@ import type {
   Progress,
   Tag,
   TheoryProjection,
-} from "@mmon-co/core/theory";
+} from "@mmon-co/ncept-core/theory";
 import { defaultTheoryMessages } from "./messages.js";
 import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing.js";
 

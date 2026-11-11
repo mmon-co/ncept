@@ -1,6 +1,6 @@
 // No-paid transport driver: load with pi -e <this file> --model release-scripted/tutor.
 // It publishes only on an explicit "Publish this checkpoint" prompt; all tools run for real.
-// Not pedagogical evidence. MMON_CONTEXT_RECORD captures the received context privately.
+// Not pedagogical evidence. NCEPT_CONTEXT_RECORD captures the received context privately.
 import { appendFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
@@ -44,8 +44,8 @@ export default function encounter(pi: ExtensionAPI) {
     maxTokens: 1024,
   };
   function stream(_model: Model<Api>, context: TranscriptContext) {
-    if (process.env.MMON_CONTEXT_RECORD)
-      appendFileSync(process.env.MMON_CONTEXT_RECORD, JSON.stringify(context) + "\n", { mode: 0o600 });
+    if (process.env.NCEPT_CONTEXT_RECORD)
+      appendFileSync(process.env.NCEPT_CONTEXT_RECORD, JSON.stringify(context) + "\n", { mode: 0o600 });
     const reply = getCurrentTools(context.messages).find(({ name }) => name === "reply");
     const user = context.messages.findLastIndex((message) => message.role === "user");
     const last = JSON.stringify(context.messages[user]);

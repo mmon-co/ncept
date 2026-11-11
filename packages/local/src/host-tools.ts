@@ -22,7 +22,7 @@ import {
   type NodeId,
   type PatchContent,
   type Skill,
-} from "@mmon-co/core";
+} from "@mmon-co/ncept-core";
 import type { HostTool, HostToolResult, ModeSwitch } from "./host.js";
 import type { LearningHost } from "./learning.js";
 import { localPayload, platform, sessionStates, transcript, type LocalSession } from "./runtime.js";
