@@ -3,7 +3,7 @@
 import { setSystemTime } from "bun:test";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { canonicalJson, nodeCascadedProperty } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { openHost, type HostSession, type PiMessage, type PiSessionEntry } from "@mmon-co/ncept-local";
@@ -31,7 +31,12 @@ type Reply = { choices: { message: Message }[]; usage?: { cost?: number }; error
 type Row = { request: unknown; response: unknown };
 const rows: Row[] = await readFile(tape).then(
   (bytes) =>
-    (tape.endsWith(".gz") ? gunzipSync(bytes).toString("utf8") : bytes.toString("utf8"))
+    (tape.endsWith(".br")
+      ? brotliDecompressSync(bytes).toString("utf8")
+      : tape.endsWith(".gz")
+        ? gunzipSync(bytes).toString("utf8")
+        : bytes.toString("utf8")
+    )
       .trim()
       .split("\n")
       .filter(Boolean)
