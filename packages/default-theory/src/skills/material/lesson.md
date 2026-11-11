@@ -1,10 +1,10 @@
 # lesson
 
-The host closes the Lesson once its focus Nodes' completion queries hold over all evidence. It wakes you only for a learner message or a Material run that ended with criteria unmet.
+The host closes the Lesson once its focus Nodes' completion queries hold over all evidence, including recorded reports of real steps. It wakes you only for a learner message or a Material run that ended with criteria unmet.
 
 1. **Read the Lesson:** its focus Nodes (the path in `theory mission`), their criteria and guidance, memory, trail, and the Materials already about them. A Lesson whose Materials shipped with an adopted Patch is already open; wait for the learner.
 
-2. **First turn: add teaching Material and one assessment set of short, single-question tasks;** give the set `completion` queries for its focus Nodes, sized to everything their criteria require. Open the teaching Material.
+2. **First turn: give the work and set completion.** For a real step, open a brief Material: what to do, what it serves (its dependents), what done looks like, and preparation that helps, such as working through a draft or rehearsing a conversation in a Roleplay. Set the Node's `pedagogy:completion` query to the evidence its criterion requires. The work itself is the check; the Lesson closes on the learner's report, recorded as `records` directs. Leave a return reminder through the host's mechanics. For exercise-based work, add teaching Material and one assessment set of short, single-question tasks, with `completion` queries for its focus Nodes sized to their criteria; open the teaching Material.
 
 3. **Teach as the Mission's and Nodes' guidance directs,** including the sequence it sets.
 

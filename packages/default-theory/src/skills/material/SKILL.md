@@ -3,9 +3,9 @@ name: material
 description: A Lesson or Review is starting or its Materials have run, or a Material needs making or changing.
 ---
 
-Learners are taught and assessed in Materials, so make Materials that carry the learner without you. Reuse the Materials already about a Node (`theory items`) before making new ones.
+Materials carry the learner into the work: teaching and assessment, or a brief and preparation for a real step. Reuse the Materials already about a Node (`theory items`) before making new ones.
 
-A Material can teach, assess or both, like a game whose levels get harder and are retried until beaten. Assess with unaided checks at the Nodes' criteria, enough independent ones to demonstrate each Node, graded mechanically wherever the answer is mechanical.
+A Material can teach, assess or both, like a game whose levels get harder and are retried until beaten. Assess with unaided checks at the Nodes' criteria under the Mission's assessment guidance, enough independent checks to demonstrate each Node, graded mechanically wherever the answer is mechanical. When the real work is the check, use its outcome rather than a separate practice set.
 
 Load the guide for the Session with `skill {name:'material', resource}`:
 

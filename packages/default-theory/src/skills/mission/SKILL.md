@@ -14,9 +14,10 @@ A Mission is a concretely demonstrable long term goal that the learner wants dir
 3. **Interview the learner maieutically.** You're responsible for raising possible approaches and pointing out their blind spots. They're responsible for deciding what exactly they want. If the learner seems unaware of something relevant (eg existing materials, pedagogical approaches, or lines of thought), you should tell them about it rather than affirming what they feel to be novel. Don't be afraid to be a bit disagreeable. Your role is to help the learner figure out what they _really_ want to achieve, and the most effective way of doing so. Don't always take the learner's words at face value.
 
    Interview in waves, modeling the mission scope as a frontier of clarity expanding into fog. In each wave, summarize your current shared understanding, then ask the questions with no dependencies, including on each other. If a question you want to ask depends on the answer to another question you're asking, save the dependent one for next round. Continue until the understanding is sufficient to start concretely "resolving" the mission into nodes. Such an understanding should include
-   - exactly what the learner wants to be able to do, by when (if there's a time constraint), and why
+   - exactly what the learner wants to accomplish or be able to do, by when (if there's a time constraint), and why
    - what's not included, and how the learner's situation and motives differ from the assumptions of "typical" adjacent pedagogy
    - the learner's existing context - what they already know that might give them a head start or allow certain transfers/analogies
    - the learner's pedagogical preferences, especially as informed by their past experience of what's been effective or not
+   - whether they want capabilities checked on their real work rather than exercises; settle what work and what standard
 
-4. **Backbrief, record, and proceed to charting.** Give a full backbrief and propose the Mission from it, with the learner's preferences and context as its teaching guidance so later Sessions don't ask again. Once the learner accepts, start charting.
+4. **Backbrief, record, and proceed to charting.** Give a full backbrief and propose the Mission from it, with the learner's preferences and context as its teaching guidance and the agreed work and standard as its assessment guidance, overriding generic criteria, so later Sessions don't ask again. Once the learner accepts, start charting.

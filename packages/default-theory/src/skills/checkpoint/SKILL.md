@@ -11,7 +11,7 @@ A checkpoint adjusts a Mission in progress to what its Lessons have shown.
 
 2. **Diagnose.** Warnings and outcomes point at a cause without proving it; read the task and response they cite first.
    - The goal moved: revise the Mission (see `mission`).
-   - The milestone failed: a follow-up Lesson under a simpler condition from its ladder, a blocking Review for components that regressed, or new Nodes for what the map missed, framed as fixing the map, not the learner.
+   - The milestone failed: re-chart a plan that didn't work in the world; for a capability miss, a follow-up Lesson under a simpler condition from its ladder, a blocking Review for components that regressed, or new Nodes for what the map missed. Fix the map, not the learner.
    - The map is wrong (grain, Edges, order, method): edit it (see `chart`). An edited Node keeps its Records, so change its criterion only while it still asserts the same capability; otherwise replace it.
    - A Record is wrong: that's a recording error, corrected in a Lesson, not a content problem.
 
