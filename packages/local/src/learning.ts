@@ -304,6 +304,18 @@ export class LearningHost<S> {
     const current = await this.current(session);
     await this.runtime.profile.appendLog(await this.closingRun(current, await this.runtime.profile.read()));
   }
+  async settle(session: HostSession): Promise<ModeSwitch | undefined> {
+    const current = await this.current(session);
+    if (current.closed || current.mode !== "lesson" || current.entry?.kind !== "lesson") return;
+    if (!(await this.context(current)).lesson?.complete) return;
+    await this.close(current);
+    return {
+      mode: "charting",
+      then: "next",
+      carry: { kind: "brief" },
+      entry: { kind: "mission", id: current.entry.lesson.mission.id },
+    };
+  }
   async retireMission(id: string, outcome: "achieved" | "abandoned"): Promise<void> {
     const view = await this.runtime.snapshot();
     if (!missions(view.profile).some((mission) => mission.id === id)) throw new Error("Unknown Mission");
@@ -647,6 +659,7 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
     sessions: {
       open: (input) => learning.serial(() => learning.open(input)),
       turn: (session, input) => learning.serial(() => learning.turn(session, input.learnerMessage)),
+      settle: (session) => learning.serial(() => learning.settle(session)),
       close: (session) => learning.serial(() => learning.close(session)),
     },
     missions: {

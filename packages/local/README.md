@@ -38,8 +38,10 @@ const session = await host.sessions.open({ mode: "charting", entry: { kind: "goa
 const setup = await host.sessions.turn(session, {});
 const claim = setup.tools.find((tool) => tool.name === "record_claim")!;
 await claim.run({ statement: "I can add one and one", stance: "knows" });
-await host.sessions.close(session);
+const next = await host.sessions.settle(session);
 ```
+
+After the whole conversation turn stops and its transcript is saved, call `.settle(session)`. It closes a completed Lesson through the same lifecycle as `.close` and returns a Charting switch for its Mission; an unfinished Lesson stays open. Keep the Session open across all tool batches and the tutor's final reply.
 
 After a switch result, call `.open(result.switch)` for `next`/`aside`; for `here`, keep the same Session handle and request a fresh turn. `.close(session)` records its closing transcript through the Theory. Resume a closed Session with `.open({ mode, resume: session.id })`. Session identities, mode, scope, acceptance provenance and learner-day receipts are platform observations in `log.jsonl`, so they travel with the Profile.
 
