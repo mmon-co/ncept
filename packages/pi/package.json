@@ -25,6 +25,10 @@
     ".": {
       "types": "./dist/init.d.ts",
       "default": "./dist/init.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
     }
   },
   "scripts": {

@@ -14,6 +14,7 @@ import {
   type ModeSwitch,
   type ModelRequest,
 } from "@mmon-co/ncept-local";
+import { ADOPT_SESSION, OPEN_SESSION, type OpenSession } from "./events.js";
 
 const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
 const STATE = "ncept.session";
@@ -159,20 +160,19 @@ export default function ncept(pi: ExtensionAPI) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
       throw error;
     }
-    if (relative(join(ctx.cwd, "sessions"), dirname(file)) !== "")
-      throw new Error(
-        "pi sessions must be stored in this Profile's sessions directory. Remove --session-dir or PI_CODING_AGENT_SESSION_DIR overrides.",
-      );
     const entries = ctx.sessionManager.getEntries();
     const leaf = ctx.sessionManager.getLeafEntry();
     // The local host follows the last entry's branch, including after /tree.
     const selected = leaf ? [...entries.filter((entry) => entry.id !== leaf.id), leaf] : entries;
     const source = [header, ...selected].map((entry) => JSON.stringify(entry)).join("\n") + "\n";
     parsePiSession(source);
-    await mkdir(dirname(file), { recursive: true });
     // Pi owns file creation. Refresh only a file it has persisted, preserving
     // the selected /tree branch for the host without racing its exclusive create.
-    await writeFile(file, source);
+    // A session pi keeps elsewhere (a --session-dir override, such as bb's pi
+    // bridge) is mirrored, since the Profile carries every transcript.
+    const sessions = join(ctx.cwd, "sessions");
+    await mkdir(sessions, { recursive: true });
+    await writeFile(relative(sessions, dirname(file)) === "" ? file : join(sessions, basename(file)), source);
     await host.profile.registerSession(active.surface, basename(file), { trusted: ctx.isProjectTrusted() });
   }
 
@@ -325,6 +325,28 @@ export default function ncept(pi: ExtensionAPI) {
       if (kickoff) pi.sendUserMessage(kickoff);
       return;
     }
+    let claimed: (() => Promise<void>) | undefined;
+    const handoff: OpenSession = {
+      session: opened.id,
+      mode: opened.mode,
+      aside,
+      ...(kickoff ? { kickoff } : {}),
+      ...(carry ? { carry } : {}),
+      claim: (open) => {
+        claimed ??= open;
+      },
+    };
+    pi.events.emit(OPEN_SESSION, handoff);
+    if (claimed) {
+      try {
+        await claimed();
+      } catch (error) {
+        await h.sessions.close(opened);
+        active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
+        throw error;
+      }
+      return;
+    }
     const parentSession = ctx.sessionManager.getSessionFile();
     const result = await ctx.newSession({
       ...(parentSession ? { parentSession } : {}),
@@ -343,6 +365,12 @@ export default function ncept(pi: ExtensionAPI) {
     }
   }
 
+  pi.events.on(ADOPT_SESSION, (data) => {
+    if (!data || typeof data !== "object" || !("session" in data) || typeof data.session !== "string") return;
+    pi.appendEntry(STATE, { id: data.session });
+    if ("carry" in data && typeof data.carry === "string" && data.carry)
+      pi.sendMessage({ customType: "ncept.carry", content: data.carry, display: false });
+  });
   pi.on("session_start", async (_event, ctx) => {
     await dashboard(ctx);
   });
