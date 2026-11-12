@@ -117,11 +117,17 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
   return {
     async reading() {
       const view = await runtime.snapshot();
-      const dueReview = [...tagIndex(view.theory.project(view.graph, view.state))("review:due")];
+      const projection = view.theory.project(view.graph, view.state);
+      const progress = view.theory.progress(
+        view.graph,
+        projection,
+        view.graph.nodes.map(({ id }) => id),
+      );
+      const dueReview = [...tagIndex(projection)("review:due")];
       const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
       return {
         missions: readMissions(view, true),
-        nodes: view.graph.nodes.map(({ id }) => ({ id, label: label(id) })),
+        nodes: view.graph.nodes.map(({ id }) => ({ id, label: label(id), status: progress[id]?.status ?? "open" })),
         dueReview: dueReview.map((id) => ({ id, label: label(id) })),
         sessions: sessionStates(view.profile).map((session) => ({
           ...session,
