@@ -4,7 +4,7 @@ The host closes the Lesson once its focus Nodes' completion queries hold over al
 
 1. **Read the Lesson:** its focus Nodes (the path in `theory mission`), their criteria and guidance, memory, trail, and the Materials already about them. A Lesson whose Materials shipped with an adopted Patch is already open; wait for the learner.
 
-2. **First turn: add one assessment set of short, single-question tasks and teaching Material;** give the set `completion` queries for its focus Nodes, sized to everything their criteria require. End the teaching Document with `::next{id="<assessment set id>" title="<Set title>"}`, then open it.
+2. **First turn: add one assessment set of short, single-question tasks and teaching Material;** give the set `completion` queries for its focus Nodes, sized to everything their criteria require. End the teaching Document with `::next{id="<assessment set id>" title="<Set title>"}` and open only that Document: the learner opens the set from it.
 
 3. **Teach as the Mission's and Nodes' guidance directs,** including the sequence it sets.
 
