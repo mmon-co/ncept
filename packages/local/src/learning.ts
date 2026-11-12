@@ -55,7 +55,10 @@ import type { ValidatedProfile } from "./exchange.js";
 import { isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
 
-function readMissions<S>(view: Awaited<ReturnType<Runtime<S>["snapshot"]>>): readonly MissionReading[] {
+function readMissions<S>(
+  view: Awaited<ReturnType<Runtime<S>["snapshot"]>>,
+  complete = false,
+): readonly MissionReading[] {
   const projection = view.theory.project(view.graph, view.state);
   const sessions = runs(sessionStates(view.profile));
   return missions(view.profile).map((mission) => {
@@ -69,12 +72,12 @@ function readMissions<S>(view: Awaited<ReturnType<Runtime<S>["snapshot"]>>): rea
       minutes: 30,
       ...(run.retired ? { retired: run.retired } : {}),
     });
-    const structured = path
-      ? readMissionPath(path, view.theory, context).sections.flatMap(({ lessons }) => lessons)
-      : [];
+    const itinerary = path ? readMissionPath(path, view.theory, context) : undefined;
+    const structured = itinerary?.sections.flatMap(({ lessons }) => lessons) ?? [];
     return {
       mission,
-      run: readMissionRun(run, sessions),
+      run: readMissionRun(run, sessions, complete ? run.past.length : 20),
+      path: itinerary,
       next: (path?.future ?? [])
         .filter((stop) => {
           if (!stop.checkpoint || stop.checkpoint.required) return true;
@@ -117,7 +120,8 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
       const dueReview = [...tagIndex(view.theory.project(view.graph, view.state))("review:due")];
       const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
       return {
-        missions: readMissions(view),
+        missions: readMissions(view, true),
+        nodes: view.graph.nodes.map(({ id }) => ({ id, label: label(id) })),
         dueReview: dueReview.map((id) => ({ id, label: label(id) })),
         sessions: sessionStates(view.profile).map((session) => ({
           ...session,

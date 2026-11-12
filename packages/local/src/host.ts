@@ -4,6 +4,7 @@ import type {
   ExactPatchRef,
   JsonSchema,
   LessonReading,
+  MissionPathReading,
   Mission,
   MissionRunReading,
   ModeEntry,
@@ -50,6 +51,7 @@ export interface MissionReading {
   readonly mission: Mission;
   readonly run: MissionRunReading;
   readonly next: readonly LessonReading[];
+  readonly path?: MissionPathReading;
 }
 export interface HostReading {
   readonly missions: readonly MissionReading[];
