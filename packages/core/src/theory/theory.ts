@@ -101,6 +101,10 @@ export interface LessonActivity {
   /** Related Material surfaces owned by the same Session. */
   readonly relatedSurfaces?: readonly string[];
 }
+
+/** Measurement before the host has assembled its complete related membership. */
+export type LessonActivityHeader = Omit<LessonActivity, "relatedSurfaces">;
+
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";
   /** Latest effective self-report, independently of acquisition status. */
@@ -270,6 +274,10 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
     /** A host-proven learner message identity, before preparing the next tutor turn. */
     reply?(ctx: ChatContext<S>, message: string): Program<unknown>;
   };
+  /** Pure declaration over the accepted event alone: true means event would emit no work.
+   * Omission keeps contextual delivery. Hosts may settle consecutive declared-empty hooks together.
+   */
+  noEventHook?(event: PlatformEvent): boolean;
   event(event: PlatformEvent, ctx: Context<S>): Program<void>;
 }
 /** The pure state operation, derived from the theory's defining reducer. */
