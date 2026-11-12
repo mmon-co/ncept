@@ -401,12 +401,9 @@ export class LearningHost<S> {
     const before = missionRun(view.profile, id);
     const cleared = setActive(before, { kind: "none" }, view.now, runs(sessionStates(view.profile)));
     const after = retire(cleared.run, outcome, view.now);
-    const entries: ProfileLogEntry[] = [...runEntries(before, after, view.now)];
-    for (const ref of cleared.close) {
-      const session = sessionStates(view.profile).find(({ id }) => id === ref);
-      if (session) entries.push(...(await this.closing(session)));
-    }
-    await this.runtime.profile.appendLog(entries);
+    // Retirement changes the Mission run. Its conversations may still be mid-turn;
+    // their processes own Session closure and can finish recording that turn.
+    await this.runtime.profile.appendLog(runEntries(before, after, view.now));
   }
   async begin(intent: SessionIntent): Promise<HostSession> {
     if (intent.kind === "new-mission") return this.open({ mode: "charting" });
