@@ -400,6 +400,7 @@ export default function ncept(pi: ExtensionAPI) {
     event.systemPromptOptions.contextFiles = [];
     event.systemPromptOptions.skills = [];
     event.systemPromptOptions.appendSystemPrompt = "";
+    event.systemPromptOptions.forceSystemPrompt = undefined;
     event.systemPromptOptions.customPrompt = setup ? prompt(setup) : "Return the host's continuation to the learner.";
     event.systemPromptOptions.sections = {};
   });
