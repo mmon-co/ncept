@@ -1,7 +1,7 @@
 import { mkdtemp, rename, rm } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
+import metadata from "../package.json" with { type: "json" };
 import {
   attachmentDigest,
   bundleForRevision,
@@ -136,8 +136,7 @@ export function connectHub(
 ): Host["hub"] {
   const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
   const resource = base + "/mcp";
-  const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
-  const headers = { "User-Agent": options.userAgent ?? "@mmon-co/ncept-local/" + version };
+  const headers = { "User-Agent": options.userAgent ?? "@mmon-co/ncept-local/" + metadata.version };
   async function connected<T>(
     operation: (call: <R>(name: string, args: Record<string, unknown>) => Promise<R>) => Promise<T>,
   ) {
