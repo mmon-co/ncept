@@ -13,6 +13,7 @@ import {
   tagIndex,
   type HostCapability,
   type LessonProgress,
+  type LessonReading,
   type Mission,
   type MissionRun,
   type ModeEntry,
@@ -35,6 +36,7 @@ import type {
   MissionReading,
   ModeSwitch,
   OpenHostOptions,
+  SessionOpening,
 } from "./host.js";
 import { checkedTimezone, learnerDayAt } from "./days.js";
 import {
@@ -50,7 +52,7 @@ import { hostTools } from "./host-tools.js";
 import { mechanics } from "./mechanics.js";
 import type { ValidatedProfile } from "./exchange.js";
 import { isSurface, modeEntry } from "./inputs.js";
-import { parsePiSession } from "./sessions.js";
+import { object, parsePiSession } from "./sessions.js";
 
 function identity(): string {
   return crypto.randomUUID();
@@ -184,15 +186,21 @@ export class LearningHost<S> {
       return {
         mission,
         run: readMissionRun(run, sessions),
-        next: (path?.future ?? []).map(
-          (lesson, index) =>
-            structured.find(
-              (item) =>
-                item.kind === lesson.kind &&
-                item.tag === lesson.tag &&
-                JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
-            ) ?? { ...lesson, number: index + 1, cleared: false },
-        ),
+        next: (path?.future ?? [])
+          .filter((stop) => {
+            if (!stop.checkpoint || stop.checkpoint.required) return true;
+            const progress = view.theory.progress(view.graph, projection, stop.nodes);
+            return stop.nodes.some((node) => !progress[node] || progress[node].status === "open");
+          })
+          .map(
+            (lesson, index) =>
+              structured.find(
+                (item) =>
+                  item.kind === lesson.kind &&
+                  item.tag === lesson.tag &&
+                  JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
+              ) ?? { ...lesson, number: index + 1, cleared: false },
+          ),
       };
     });
   }
@@ -329,7 +337,55 @@ export class LearningHost<S> {
     }
     await this.runtime.profile.appendLog(entries);
   }
-  async open(input: { mode: string; entry?: ModeEntry; resume?: string }): Promise<HostSession> {
+  async open(input: SessionOpening): Promise<HostSession> {
+    const skipMission = input.skip?.mission;
+    let skipped: readonly LessonReading[] = [];
+    if (input.skip) {
+      if (input.resume || input.entry) throw new Error("A skip cannot resume or supply an entry");
+      const reading = (await this.missionReadings()).find(({ mission }) => mission.id === input.skip?.mission);
+      if (!reading) throw new Error("Unknown Mission");
+      if (reading.run.retired) throw new Error("A finished Mission can only continue or resume a Session");
+      const view = await this.runtime.snapshot();
+      const context = { graph: view.graph, projection: view.theory.project(view.graph, view.state), observations: view.observations, activities: [] };
+      const future = view.theory.path?.({ ...context, targets: reading.mission.targets.map(({ node }) => node), past: reading.run.past, now: view.now, minutes: 30 });
+      if (!future) throw new Error("Theory provides no Mission path");
+      const stops = readMissionPath(future, view.theory, context).sections.flatMap(({ lessons }) => lessons);
+      const frozen = reading.run.past.find((entry) => entry.kind === "session" && entry.session === reading.run.active);
+      const frozenStop = frozen?.kind === "session" ? frozen.stop : undefined;
+      const activeIndex = frozenStop
+        ? stops.findIndex(
+            (stop) =>
+              stop.kind === frozenStop.kind &&
+              stop.nodes.length === frozenStop.nodes?.length &&
+              stop.nodes.every((node) => frozenStop.nodes?.includes(node)),
+          )
+        : -1;
+      const now = activeIndex >= 0 ? activeIndex : stops.findIndex((stop) => !stop.cleared);
+      const skip = input.skip;
+      const index =
+        skip.kind === "skip-lesson"
+          ? now + 1
+          : stops.findIndex(
+              (stop) =>
+                stop.kind === skip.stop.kind &&
+                stop.number === skip.stop.number &&
+                stop.checkpoint?.milestone === skip.stop.checkpoint?.milestone,
+            );
+      if (index < 0 || !stops[index])
+        throw new Error("This Mission has no following stop; revise the route or finish it");
+      if (skip.kind === "skip-to") {
+        if (now < 0 || index <= now) throw new Error("Choose a stop after the current stop");
+        skipped = stops.slice(now, index);
+      }
+      const stop = stops[index];
+      const entry: ModeEntry =
+        stop.kind === "review"
+          ? { kind: "review", nodes: stop.nodes }
+          : stop.checkpoint
+            ? { kind: "mission", id: reading.mission.id }
+            : await this.lessonEntry(reading.mission.id, stop.number);
+      input = { mode: stop.checkpoint ? "charting" : "lesson", entry };
+    }
     const view = await this.runtime.snapshot();
     const known = sessionStates(view.profile);
     let resumed = input.resume ? known.find(({ id }) => id === input.resume) : undefined;
@@ -380,7 +436,7 @@ export class LearningHost<S> {
           ? entry.lesson.mission.id
           : entry?.kind === "checkpoint"
             ? entry.missionId
-            : pending?.from.mission);
+            : (skipMission ?? pending?.from.mission));
     const mission = missionId ? missions(view.profile).find(({ id }) => id === missionId) : undefined;
     if (missionId && !mission) throw new Error("Unknown Mission");
     const about: readonly NodeId[] =
@@ -441,6 +497,37 @@ export class LearningHost<S> {
       session,
     );
     entries.push(...event.entries, platform({ kind: "local.session", session }, session.surface));
+    if (skipped.length) {
+      const nodes = [...new Set(skipped.flatMap((stop) => stop.nodes))];
+      const ctx = { ...(await this.runtime.context(session)), about: nodes };
+      const selected = view.theory.modes?.lesson;
+      const setup = selected ? await this.runtime.execute(selected.setup(ctx), session) : undefined;
+      const flatten = (tools: readonly Tool<unknown, unknown, S>[]): readonly Tool<unknown, unknown, S>[] =>
+        tools.flatMap((tool) => (tool.members ? flatten(tool.members) : [tool]));
+      const tools = flatten(setup?.tools ?? []);
+      const record = tools.find((tool) => tool.name === "record_claim");
+      const attach = tools.find((tool) => tool.name === "attach_claim");
+      if (!record || !attach) throw new Error("The theory needs claim recording and attachment");
+      const recordClaim = record.run;
+      const attachClaim = attach.run;
+      function* claims() {
+        for (const node of nodes) {
+          const result = yield* recordClaim(
+            {
+              statement: "I already know " + stringProperty(view.graph, node, "display:label", node) + ".",
+              prompt: "Skip to a later stop, marking the intervening stops as known",
+              stance: "knows",
+            },
+            ctx,
+          );
+          if (!object(result) || !object(result.observation) || typeof result.observation.id !== "string")
+            throw new Error("Claim recording returned no observation identity");
+          const id = result.observation.id;
+          yield* attachClaim({ record: id, nodes: [node] }, ctx);
+        }
+      }
+      entries.push(...(await this.runtime.prepare(claims(), session)).entries);
+    }
     await this.runtime.profile.appendLog(entries);
     if (pending) this.pendingSwitch = undefined;
     return session;
