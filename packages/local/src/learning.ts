@@ -54,6 +54,7 @@ import { mechanics } from "./mechanics.js";
 import type { ValidatedProfile } from "./exchange.js";
 import { isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
+import { reviewStop, sessionLength } from "./session-policy.js";
 
 function readMissions<S>(
   view: Awaited<ReturnType<Runtime<S>["snapshot"]>>,
@@ -69,7 +70,7 @@ function readMissions<S>(
       targets: mission.targets.map(({ node }) => node),
       past: run.past,
       now: view.now,
-      minutes: 30,
+      minutes: sessionLength(localSettings(view.profile)),
       ...(run.retired ? { retired: run.retired } : {}),
     });
     const itinerary = path ? readMissionPath(path, view.theory, context) : undefined;
@@ -290,7 +291,7 @@ export class LearningHost<S> {
       targets: reading.mission.targets.map(({ node }) => node),
       past: reading.run.past,
       now: view.now,
-      minutes: 30,
+      minutes: sessionLength(localSettings(view.profile)),
     });
     if (!future) throw new Error("Theory provides no Mission path");
     const path = readMissionPath(future, view.theory, context);
@@ -408,9 +409,18 @@ export class LearningHost<S> {
   async begin(intent: SessionIntent): Promise<HostSession> {
     if (intent.kind === "new-mission") return this.open({ mode: "charting" });
     if (intent.kind === "review") {
-      const { dueReview } = await this.reading();
-      if (!dueReview.length) throw new Error("No review due");
-      return this.open({ mode: "lesson", entry: { kind: "review", nodes: dueReview } });
+      const view = await this.runtime.snapshot();
+      const stop = reviewStop(view.theory, {
+        graph: view.graph,
+        projection: view.theory.project(view.graph, view.state),
+        observations: view.observations,
+        activities: [],
+        past: [],
+        now: view.now,
+        minutes: sessionLength(localSettings(view.profile)),
+      });
+      if (!stop?.nodes.length) throw new Error("No review due");
+      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes } });
     }
     if (!("missionId" in intent)) throw new Error("Expected a Mission entry");
     const reading = (await this.missionReadings()).find(({ mission }) => mission.id === intent.missionId);
@@ -459,7 +469,7 @@ export class LearningHost<S> {
         targets: reading.mission.targets.map(({ node }) => node),
         past: reading.run.past,
         now: view.now,
-        minutes: 30,
+        minutes: sessionLength(localSettings(view.profile)),
       });
       if (!future) throw new Error("Theory provides no Mission path");
       const stops = readMissionPath(future, view.theory, context).sections.flatMap(({ lessons }) => lessons);
@@ -823,13 +833,19 @@ export class LearningHost<S> {
     };
   }
   async config(): Promise<HostConfig> {
-    const { manifest } = await this.runtime.profile.read();
-    return { theory: manifest.theory, theories: manifest.theories, timezone: this.runtime.timezone };
+    const profile = await this.runtime.profile.read();
+    return {
+      theory: profile.manifest.theory,
+      theories: profile.manifest.theories,
+      timezone: this.runtime.timezone,
+      sessionLength: sessionLength(localSettings(profile)),
+    };
   }
   async configure(config: HostConfig): Promise<void> {
     const timezone = checkedTimezone(config.timezone ?? this.runtime.timezone);
+    const minutes = sessionLength(config);
     await this.runtime.profile.configure({ theory: config.theory, theories: config.theories });
-    await this.runtime.profile.appendLog([platform({ kind: "local.config", timezone })]);
+    await this.runtime.profile.appendLog([platform({ kind: "local.config", timezone, sessionLength: minutes })]);
     this.runtime.timezone = timezone;
   }
   async start(): Promise<void> {

@@ -49,7 +49,7 @@ The front end writes pi transcripts and registers their filenames against `sessi
 
 Graph drafts stay unsaved until a confirmed `propose`. Mission and guidance/graph proposals and preference changes use `confirm`; a refusal changes no Profile files. Materials use the `local` playground, immutable blob bytes and working copies under `materials/<node>/<material>/<filename>`. Opening preserves an existing working copy. Read-back returns both the saved body and current working-copy text. Other playgrounds' Materials remain readable as saved data without claiming a runner.
 
-`host.config.update({ ...await host.config.read(), timezone: "America/New_York" })` configures learner-days. The initial zone is the machine's IANA zone; each learner-day ends at 04:00 local, including across DST. At startup, the host raises `day.ended` once per elapsed day and records its receipt alongside the Theory's writes. No account or background daemon is needed.
+`host.config.update({ ...await host.config.read(), timezone: "America/New_York" })` configures learner-days. The initial zone is the machine's IANA zone; each learner-day ends at 04:00 local, including across DST. At startup, the host raises `day.ended` once per elapsed day and records its receipt alongside the Theory's writes. No account or background daemon is needed. Set `sessionLength` through the same config API to choose the Session budget in minutes (default 20). Review opens the Theory’s budgeted maintenance stop, preserving its Node order; the due count still describes all due Nodes.
 
 ## Hub and web exchange
 
