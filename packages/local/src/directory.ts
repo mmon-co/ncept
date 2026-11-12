@@ -164,33 +164,39 @@ async function locked<T>(dir: string, operation: () => Promise<T>): Promise<T> {
     await release();
   }
 }
-export async function openProfile(dir: string, theories: readonly ConfiguredTheory[]): Promise<ProfileDirectory> {
+export async function openProfile(
+  dir: string,
+  theories: readonly ConfiguredTheory[],
+  options: { readOnly?: boolean } = {},
+): Promise<ProfileDirectory> {
   dir = resolve(dir);
-  await locked(dir, async () => {
-    const stored = await filesAt(dir);
-    const initial = migrateProfileFiles(stored, theories);
-    // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
-    // leaves either the old generation or the complete new one; retry never repeats a step.
-    for (const [path, bytes] of initial) {
-      if (path !== "profile.json" && !stored.has(path)) await immutable(dir, path, bytes);
-    }
-    const manifest = initial.get("profile.json");
-    if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
-    const profile = validate(initial, theories);
-    // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
-    for (const filename of Object.values(profile.manifest.sessions)) {
-      const path = "sessions/" + filename;
-      const bytes = initial.get(path);
-      if (bytes) {
-        const source = new TextDecoder().decode(bytes);
-        if (parsePiSession(source).header.cwd !== dir)
-          await atomic(dir, path, utf8.encode(relocatePiSession(source, dir)));
+  if (!options.readOnly)
+    await locked(dir, async () => {
+      const stored = await filesAt(dir);
+      const initial = migrateProfileFiles(stored, theories);
+      // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
+      // leaves either the old generation or the complete new one; retry never repeats a step.
+      for (const [path, bytes] of initial) {
+        if (path !== "profile.json" && !stored.has(path)) await immutable(dir, path, bytes);
       }
-    }
-  });
+      const manifest = initial.get("profile.json");
+      if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
+      const profile = validate(initial, theories);
+      // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
+      for (const filename of Object.values(profile.manifest.sessions)) {
+        const path = "sessions/" + filename;
+        const bytes = initial.get(path);
+        if (bytes) {
+          const source = new TextDecoder().decode(bytes);
+          if (parsePiSession(source).header.cwd !== dir)
+            await atomic(dir, path, utf8.encode(relocatePiSession(source, dir)));
+        }
+      }
+    });
   // Queue this handle's writes before contending with other handles and processes.
   let tail: Promise<unknown> = Promise.resolve();
   function serial<T>(operation: () => Promise<T>): Promise<T> {
+    if (options.readOnly) return Promise.reject(new Error("Cannot write through a read-only Profile"));
     const result = tail.then(() => locked(dir, operation));
     tail = result.catch(() => {});
     return result;

@@ -55,6 +55,80 @@ import type { ValidatedProfile } from "./exchange.js";
 import { isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
 
+async function readMissions<S>(runtime: Runtime<S>): Promise<readonly MissionReading[]> {
+  const view = await runtime.snapshot();
+  const projection = view.theory.project(view.graph, view.state);
+  const sessions = runs(sessionStates(view.profile));
+  return missions(view.profile).map((mission) => {
+    const run = missionRun(view.profile, mission.id);
+    const context = { graph: view.graph, projection, observations: view.observations, activities: [] };
+    const path = view.theory.path?.({
+      ...context,
+      targets: mission.targets.map(({ node }) => node),
+      past: run.past,
+      now: view.now,
+      minutes: 30,
+      ...(run.retired ? { retired: run.retired } : {}),
+    });
+    const structured = path
+      ? readMissionPath(path, view.theory, context).sections.flatMap(({ lessons }) => lessons)
+      : [];
+    return {
+      mission,
+      run: readMissionRun(run, sessions),
+      next: (path?.future ?? [])
+        .filter((stop) => {
+          if (!stop.checkpoint || stop.checkpoint.required) return true;
+          const progress = view.theory.progress(view.graph, projection, stop.nodes);
+          return stop.nodes.some((node) => !progress[node] || progress[node].status === "open");
+        })
+        .map((lesson, index) => ({
+          ...(structured.find(
+            (item) =>
+              item.kind === lesson.kind &&
+              item.tag === lesson.tag &&
+              JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
+          ) ?? { ...lesson, number: index + 1, cleared: false }),
+          name:
+            lesson.name ??
+            lesson.nodes.map((node) => stringProperty(view.graph, node, "display:label", node)).join(", "),
+        })),
+    };
+  });
+}
+
+/** Read current learning state without day processing, receipts, configuration writes or model calls. */
+export async function openLearningReader<S>(profileDir: string, theories: readonly Theory<S>[]) {
+  const profile = await openProfile(profileDir, theories, { readOnly: true });
+  const settings = localSettings(await profile.read());
+  const timezone = checkedTimezone(
+    typeof settings.timezone === "string" ? settings.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone,
+  );
+  const runtime = new Runtime(
+    profile,
+    theories,
+    async () => {
+      throw new Error("A learning read cannot request a model");
+    },
+    timezone,
+  );
+  return {
+    async reading() {
+      const view = await runtime.snapshot();
+      const dueReview = [...tagIndex(view.theory.project(view.graph, view.state))("review:due")];
+      const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
+      return {
+        missions: await readMissions(runtime),
+        dueReview: dueReview.map((id) => ({ id, label: label(id) })),
+        sessions: sessionStates(view.profile).map((session) => ({
+          ...session,
+          nodes: session.about.map((id) => ({ id, label: label(id) })),
+        })),
+      };
+    },
+  };
+}
+
 function identity(): string {
   return crypto.randomUUID();
 }
@@ -167,45 +241,7 @@ export class LearningHost<S> {
     return selected;
   }
   async missionReadings(): Promise<readonly MissionReading[]> {
-    const view = await this.runtime.snapshot();
-    const projection = view.theory.project(view.graph, view.state);
-    const sessions = runs(sessionStates(view.profile));
-    return missions(view.profile).map((mission) => {
-      const run = missionRun(view.profile, mission.id);
-      const context = { graph: view.graph, projection, observations: view.observations, activities: [] };
-      const path = view.theory.path?.({
-        ...context,
-        targets: mission.targets.map(({ node }) => node),
-        past: run.past,
-        now: view.now,
-        minutes: 30,
-        ...(run.retired ? { retired: run.retired } : {}),
-      });
-      const structured = path
-        ? readMissionPath(path, view.theory, context).sections.flatMap(({ lessons }) => lessons)
-        : [];
-      return {
-        mission,
-        run: readMissionRun(run, sessions),
-        next: (path?.future ?? [])
-          .filter((stop) => {
-            if (!stop.checkpoint || stop.checkpoint.required) return true;
-            const progress = view.theory.progress(view.graph, projection, stop.nodes);
-            return stop.nodes.some((node) => !progress[node] || progress[node].status === "open");
-          })
-          .map((lesson, index) => ({
-            ...(structured.find(
-              (item) =>
-                item.kind === lesson.kind &&
-                item.tag === lesson.tag &&
-                JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
-            ) ?? { ...lesson, number: index + 1, cleared: false }),
-            name:
-              lesson.name ??
-              lesson.nodes.map((node) => stringProperty(view.graph, node, "display:label", node)).join(", "),
-          })),
-      };
-    });
+    return readMissions(this.runtime);
   }
   async lessonEntry(missionId: string, number?: number): Promise<ModeEntry> {
     const view = await this.runtime.snapshot();
