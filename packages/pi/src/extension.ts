@@ -1,7 +1,12 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { createRequire } from "node:module";
-import type { ExtensionAPI, ExtensionContext, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  ExtensionCommandContext,
+  BuildSystemPromptOptions,
+} from "@earendil-works/pi-coding-agent";
 import type { ModeEntry, Theory } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import {
@@ -40,6 +45,7 @@ export default function ncept(pi: ExtensionAPI) {
   const graded = new Set<string>();
   let gradeReply = false;
   let relayingContinuation = false;
+  let promptOptions: BuildSystemPromptOptions | undefined;
   let importConfirmed = false;
 
   async function model(request: ModelRequest): Promise<unknown> {
@@ -400,9 +406,14 @@ export default function ncept(pi: ExtensionAPI) {
     event.systemPromptOptions.contextFiles = [];
     event.systemPromptOptions.skills = [];
     event.systemPromptOptions.appendSystemPrompt = "";
-    event.systemPromptOptions.forceSystemPrompt = undefined;
+    promptOptions = event.systemPromptOptions;
     event.systemPromptOptions.customPrompt = setup ? prompt(setup) : "Return the host's continuation to the learner.";
     event.systemPromptOptions.sections = {};
+  });
+  pi.on("agent_start", () => {
+    // Global prompt renderers can run after before_agent_start; discard their
+    // forced projection once every renderer has seen the tutor-owned options.
+    if (promptOptions) promptOptions.forceSystemPrompt = undefined;
   });
   pi.on("context_with_system", async (event, ctx) => {
     if (relayingContinuation)
