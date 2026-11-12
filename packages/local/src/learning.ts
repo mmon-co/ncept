@@ -529,7 +529,11 @@ export class LearningHost<S> {
           : pending?.to.then === "aside"
             ? { kind: "aside" as const, session: id }
             : { kind: "new" as const, session: id, stop };
-      const result = setActive(before, target, view.now, runs(known));
+      // A fresh front end adopting an open aside keeps it beside its parent.
+      const result =
+        resumed?.parent === before.active && !resumed.closed
+          ? { run: before, close: [] }
+          : setActive(before, target, view.now, runs(known));
       entries.push(...runEntries(before, result.run, view.now));
       for (const ref of result.close) {
         const outgoing = known.find(({ id }) => id === ref);
