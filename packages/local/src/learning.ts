@@ -192,15 +192,17 @@ export class LearningHost<S> {
             const progress = view.theory.progress(view.graph, projection, stop.nodes);
             return stop.nodes.some((node) => !progress[node] || progress[node].status === "open");
           })
-          .map(
-            (lesson, index) =>
-              structured.find(
-                (item) =>
-                  item.kind === lesson.kind &&
-                  item.tag === lesson.tag &&
-                  JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
-              ) ?? { ...lesson, number: index + 1, cleared: false },
-          ),
+          .map((lesson, index) => ({
+            ...(structured.find(
+              (item) =>
+                item.kind === lesson.kind &&
+                item.tag === lesson.tag &&
+                JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
+            ) ?? { ...lesson, number: index + 1, cleared: false }),
+            name:
+              lesson.name ??
+              lesson.nodes.map((node) => stringProperty(view.graph, node, "display:label", node)).join(", "),
+          })),
       };
     });
   }
@@ -346,8 +348,19 @@ export class LearningHost<S> {
       if (!reading) throw new Error("Unknown Mission");
       if (reading.run.retired) throw new Error("A finished Mission can only continue or resume a Session");
       const view = await this.runtime.snapshot();
-      const context = { graph: view.graph, projection: view.theory.project(view.graph, view.state), observations: view.observations, activities: [] };
-      const future = view.theory.path?.({ ...context, targets: reading.mission.targets.map(({ node }) => node), past: reading.run.past, now: view.now, minutes: 30 });
+      const context = {
+        graph: view.graph,
+        projection: view.theory.project(view.graph, view.state),
+        observations: view.observations,
+        activities: [],
+      };
+      const future = view.theory.path?.({
+        ...context,
+        targets: reading.mission.targets.map(({ node }) => node),
+        past: reading.run.past,
+        now: view.now,
+        minutes: 30,
+      });
       if (!future) throw new Error("Theory provides no Mission path");
       const stops = readMissionPath(future, view.theory, context).sections.flatMap(({ lessons }) => lessons);
       const frozen = reading.run.past.find((entry) => entry.kind === "session" && entry.session === reading.run.active);
