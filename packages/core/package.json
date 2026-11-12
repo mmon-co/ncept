@@ -48,7 +48,6 @@
     }
   },
   "scripts": {
-    "fixture:theory-migration": "bun scripts/theory-migration-fixture.ts",
     "build": "tsc -p tsconfig.build.json",
     "prepack": "bun run build"
   },
