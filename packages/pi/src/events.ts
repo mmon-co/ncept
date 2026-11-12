@@ -1,3 +1,5 @@
+import type { HostSession, SessionIntent } from "@mmon-co/ncept-local";
+
 /**
  * Channels on pi's shared extension bus (`pi.events`) that let another front end
  * layered over this extension (a bb thread per Session, say) own where Sessions open.
@@ -30,3 +32,11 @@ export type OpenSession = {
  */
 export const ADOPT_SESSION = "ncept:adopt-session";
 export type AdoptSession = { readonly session: string; readonly carry?: string };
+
+/** A front end starts a fresh conversation from a learner entry, after session_start.
+ * The tutoring extension alone resolves the entry and writes the Profile. */
+export const BEGIN_SESSION = "ncept:begin-session";
+export type BeginSession = {
+  readonly intent: SessionIntent;
+  claim(begin: () => Promise<HostSession>): void;
+};

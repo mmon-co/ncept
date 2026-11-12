@@ -20,7 +20,7 @@ import {
   type ModelRequest,
   type SessionOpening,
 } from "@mmon-co/ncept-local";
-import { ADOPT_SESSION, OPEN_SESSION, type OpenSession } from "./events.js";
+import { ADOPT_SESSION, BEGIN_SESSION, OPEN_SESSION, type BeginSession, type OpenSession } from "./events.js";
 
 const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
 const STATE = "ncept.session";
@@ -32,6 +32,27 @@ function storedSession(ctx: ExtensionContext): string | undefined {
     .findLast((entry) => entry.type === "custom" && entry.customType === STATE);
   if (saved?.type !== "custom" || !saved.data || typeof saved.data !== "object") return undefined;
   return "id" in saved.data && typeof saved.data.id === "string" ? saved.data.id : undefined;
+}
+
+function isBeginSession(value: unknown): value is BeginSession {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("claim" in value) ||
+    typeof value.claim !== "function" ||
+    !("intent" in value)
+  )
+    return false;
+  const intent = value.intent;
+  if (!intent || typeof intent !== "object" || !("kind" in intent)) return false;
+  if (intent.kind === "new-mission" || intent.kind === "review") return true;
+  if (!("missionId" in intent) || typeof intent.missionId !== "string") return false;
+  return (
+    intent.kind === "continue" ||
+    intent.kind === "revise-lesson" ||
+    intent.kind === "revise-route" ||
+    (intent.kind === "tell-tutor" && "request" in intent && typeof intent.request === "string")
+  );
 }
 
 /** One extension instance belongs to one pi session, including after /resume. */
@@ -391,6 +412,18 @@ export default function ncept(pi: ExtensionAPI) {
     else pendingEnter = finish;
   }
 
+  pi.events.on(BEGIN_SESSION, (data) => {
+    if (!isBeginSession(data)) return;
+    const request = data;
+    request.claim(async () => {
+      if (storedSession(context)) return session(context);
+      active = await (await getHost(context)).sessions.begin(request.intent);
+      mounted = undefined;
+      pi.appendEntry(STATE, { id: active.id });
+      await sync(context);
+      return active;
+    });
+  });
   pi.events.on(ADOPT_SESSION, (data) => {
     if (!data || typeof data !== "object" || !("session" in data) || typeof data.session !== "string") return;
     pi.appendEntry(STATE, { id: data.session });

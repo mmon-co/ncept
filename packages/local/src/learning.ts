@@ -37,6 +37,7 @@ import type {
   ModeSwitch,
   OpenHostOptions,
   SessionOpening,
+  SessionIntent,
 } from "./host.js";
 import { checkedTimezone, learnerDayAt } from "./days.js";
 import {
@@ -339,6 +340,38 @@ export class LearningHost<S> {
     }
     await this.runtime.profile.appendLog(entries);
   }
+  async begin(intent: SessionIntent): Promise<HostSession> {
+    if (intent.kind === "new-mission") return this.open({ mode: "charting" });
+    if (intent.kind === "review") {
+      const { dueReview } = await this.reading();
+      if (!dueReview.length) throw new Error("No review due");
+      return this.open({ mode: "lesson", entry: { kind: "review", nodes: dueReview } });
+    }
+    if (!("missionId" in intent)) throw new Error("Expected a Mission entry");
+    const reading = (await this.missionReadings()).find(({ mission }) => mission.id === intent.missionId);
+    if (!reading || reading.run.retired?.outcome === "abandoned") throw new Error("Mission is not available");
+    const { mission, run, next } = reading;
+    if (intent.kind === "continue" && run.active) return this.open({ mode: "empty", resume: run.active });
+    if (run.retired && intent.kind !== "continue")
+      throw new Error("A finished Mission can only continue or resume a Session");
+    if (intent.kind === "tell-tutor" && !intent.request.trim())
+      throw new Error("Tell the tutor what you want to change");
+    if (intent.kind === "revise-lesson") {
+      const view = await this.runtime.snapshot();
+      const active = sessionStates(view.profile).find(({ id }) => id === run.active);
+      if (active?.entry?.kind !== "lesson") throw new Error("There is no active Lesson to revise");
+      return this.open({ mode: "lesson", entry: active.entry });
+    }
+    if (intent.kind === "tell-tutor" || intent.kind === "revise-route" || !mission.targets.length)
+      return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
+    const stop = next[0];
+    if (stop?.kind === "review")
+      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes }, mission: mission.id });
+    if (run.retired) throw new Error("No review is due for this finished Mission");
+    if (!stop) throw new Error("This Mission has no following stop; revise the route or finish it");
+    if (stop.checkpoint) return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
+    return this.open({ mode: "lesson", entry: await this.lessonEntry(mission.id, stop.number) });
+  }
   async open(input: SessionOpening): Promise<HostSession> {
     const skipMission = input.skip?.mission;
     let skipped: readonly LessonReading[] = [];
@@ -449,7 +482,7 @@ export class LearningHost<S> {
           ? entry.lesson.mission.id
           : entry?.kind === "checkpoint"
             ? entry.missionId
-            : (skipMission ?? pending?.from.mission));
+            : (input.mission ?? skipMission ?? pending?.from.mission));
     const mission = missionId ? missions(view.profile).find(({ id }) => id === missionId) : undefined;
     if (missionId && !mission) throw new Error("Unknown Mission");
     const about: readonly NodeId[] =
@@ -758,6 +791,7 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
     profile,
     sessions: {
       open: (input) => learning.serial(() => learning.open(input)),
+      begin: (intent) => learning.serial(() => learning.begin(intent)),
       turn: (session, input) => learning.serial(() => learning.turn(session, input.learnerMessage)),
       settle: (session) => learning.serial(() => learning.settle(session)),
       close: (session) => learning.serial(() => learning.close(session)),

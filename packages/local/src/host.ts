@@ -70,14 +70,20 @@ export interface HostConfig {
   /** IANA zone for learner-days; defaults to the local machine's configured zone. */
   readonly timezone?: string;
 }
-export type SessionOpening = Readonly<{ mode: string; entry?: ModeEntry; resume?: SessionRef }> &
+export type SessionOpening = Readonly<{ mode: string; entry?: ModeEntry; resume?: SessionRef; mission?: string }> &
   Readonly<{
     skip?: { mission: string; kind: "skip-lesson" } | { mission: string; kind: "skip-to"; stop: LessonReading };
   }>;
+/** Learner entry controls; resolved against current Profile state by its writing tutor. */
+export type SessionIntent =
+  | Readonly<{ kind: "continue" | "revise-lesson" | "revise-route"; missionId: string }>
+  | Readonly<{ kind: "tell-tutor"; missionId: string; request: string }>
+  | Readonly<{ kind: "new-mission" | "review" }>;
 export interface Host {
   readonly profile: ProfileDirectory;
   readonly sessions: {
     open(input: SessionOpening): Promise<HostSession>;
+    begin(intent: SessionIntent): Promise<HostSession>;
     turn(session: HostSession, input: Readonly<{ learnerMessage?: string }>): Promise<HostChatSetup>;
     /** After the conversation stops, close a completed Lesson and return its next surface. */
     settle(session: HostSession): Promise<ModeSwitch | undefined>;
