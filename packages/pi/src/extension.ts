@@ -340,6 +340,8 @@ export default function ncept(pi: ExtensionAPI) {
     if (claimed) {
       try {
         await claimed();
+        // This pi session stays visible; its next message resumes the closed Session.
+        if (!aside) active = undefined;
       } catch (error) {
         await h.sessions.close(opened);
         active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
