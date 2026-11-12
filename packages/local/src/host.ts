@@ -74,10 +74,14 @@ export interface HostConfig {
 }
 export type SessionOpening = Readonly<{ mode: string; entry?: ModeEntry; resume?: SessionRef; mission?: string }> &
   Readonly<{
-    skip?: { mission: string; kind: "skip-lesson" } | { mission: string; kind: "skip-to"; stop: LessonReading };
+    skip?:
+      | { mission: string; kind: "skip-lesson" }
+      | { mission: string; kind: "skip-to"; stop: Pick<LessonReading, "kind" | "number" | "checkpoint"> };
   }>;
 /** Learner entry controls; resolved against current Profile state by its writing tutor. */
 export type SessionIntent =
+  | Readonly<{ kind: "skip-lesson"; missionId: string }>
+  | Readonly<{ kind: "skip-to"; missionId: string; stop: Pick<LessonReading, "kind" | "number" | "checkpoint"> }>
   | Readonly<{ kind: "continue" | "revise-lesson" | "revise-route"; missionId: string }>
   | Readonly<{ kind: "tell-tutor"; missionId: string; request: string }>
   | Readonly<{ kind: "new-mission" | "review" }>;

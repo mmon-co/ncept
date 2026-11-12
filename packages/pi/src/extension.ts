@@ -49,6 +49,15 @@ function isBeginSession(value: unknown): value is BeginSession {
   if (!("missionId" in intent) || typeof intent.missionId !== "string") return false;
   return (
     intent.kind === "continue" ||
+    intent.kind === "skip-lesson" ||
+    (intent.kind === "skip-to" &&
+      "stop" in intent &&
+      !!intent.stop &&
+      typeof intent.stop === "object" &&
+      "kind" in intent.stop &&
+      typeof intent.stop.kind === "string" &&
+      "number" in intent.stop &&
+      typeof intent.stop.number === "number") ||
     intent.kind === "revise-lesson" ||
     intent.kind === "revise-route" ||
     (intent.kind === "tell-tutor" && "request" in intent && typeof intent.request === "string")

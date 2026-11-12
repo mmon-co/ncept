@@ -416,6 +416,8 @@ export class LearningHost<S> {
     if (intent.kind === "continue" && run.active) return this.open({ mode: "empty", resume: run.active });
     if (run.retired && intent.kind !== "continue")
       throw new Error("A finished Mission can only continue or resume a Session");
+    if (intent.kind === "skip-lesson" || intent.kind === "skip-to")
+      return this.open({ mode: "lesson", skip: { ...intent, mission: mission.id } });
     if (intent.kind === "tell-tutor" && !intent.request.trim())
       throw new Error("Tell the tutor what you want to change");
     if (intent.kind === "revise-lesson") {
