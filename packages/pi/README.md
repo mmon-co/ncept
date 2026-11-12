@@ -15,6 +15,7 @@ pi
 Accept pi's one-time project trust prompt. The dashboard above the editor shows Missions, next stops and due review, and clears when you speak. A fresh conversation is a chat Session.
 
 - `/learn <goal>` charts what you want to learn. `/learn` offers Missions and their next stops; `/learn <mission-id>` opens a particular Mission.
+- `/skip` in a Mission Lesson skips this Lesson or ahead to a later planned stop, recording the skipped Nodes as claimed known.
 - `/review` opens the due review batch; `/author [goal]` opens an authoring Session.
 - `/missions` shows the dashboard again.
 - `/hub pull <release-url or patch@version>` adopts a release without an account. You can also paste an address and ask the tutor to pull it.
@@ -31,7 +32,7 @@ Models and grading use the model currently selected in pi, through pi's provider
 
 ## Front ends over this extension
 
-A front end layered over pi can own where Sessions open, a new window or thread per Session say, through pi's shared extension bus. When a Session opens while the current pi session already holds a conversation, the extension emits `ncept:open-session` with the opened Session, its kickoff message, its hidden carry and whether it is aside; a listener that calls `claim` opens it itself, and the current pi session stays as it is. The claimant can return a learner-facing continuation (a link, for example); a tutor-requested switch returns it in the tool result so the tutor can finish the outgoing turn normally. In the fresh pi session, the front end emits `ncept:adopt-session` with the Session and carry before the first prompt. The channels and payload types are exported from `@mmon-co/ncept-pi/events`.
+A front end layered over pi can own where Sessions open, a new window or thread per Session say, through pi's shared extension bus. When a Session opens while the current pi session already holds a conversation, the extension emits `ncept:open-session` with the opened Session, its kickoff message, its hidden carry and whether it is aside; a listener that calls `claim` opens it itself, and the current pi session stays visible for the learner to archive. Its next message resumes its previous host Session before the turn. The claimant can return a learner-facing continuation (a link, for example); a tutor-requested switch returns it in the tool result so the tutor can finish the outgoing turn normally. In the fresh pi session, the front end emits `ncept:adopt-session` with the Session and carry before the first prompt. The channels and payload types are exported from `@mmon-co/ncept-pi/events`.
 
 ## Development first use
 

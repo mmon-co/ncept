@@ -7,7 +7,7 @@ import type {
   ExtensionCommandContext,
   BuildSystemPromptOptions,
 } from "@earendil-works/pi-coding-agent";
-import type { ModeEntry, Theory } from "@mmon-co/ncept-core";
+import type { Theory } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import {
   credentialsPath,
@@ -18,12 +18,13 @@ import {
   type HostChatSetup,
   type ModeSwitch,
   type ModelRequest,
+  type SessionOpening,
 } from "@mmon-co/ncept-local";
 import { ADOPT_SESSION, OPEN_SESSION, type OpenSession } from "./events.js";
 
 const { version }: { version: string } = createRequire(import.meta.url)("../package.json");
 const STATE = "ncept.session";
-type Selection = { mode: string; entry?: ModeEntry; resume?: string };
+type Selection = SessionOpening;
 
 function storedSession(ctx: ExtensionContext): string | undefined {
   const saved = ctx.sessionManager
@@ -328,8 +329,8 @@ export default function ncept(pi: ExtensionAPI) {
     const old = active;
     const empty = !ctx.sessionManager.getBranch().some((entry) => entry.type === "message");
     await sync(ctx);
-    // Closing records the old conversation; /resume reopens it.
-    if (old && !aside) await h.sessions.close(old);
+    // Skip admission needs the current stop; it closes the outgoing Mission Session itself.
+    if (old && !aside && !selection.skip) await h.sessions.close(old);
     const opened = await h.sessions.open(selection);
     if (empty) {
       active = opened;
@@ -354,6 +355,8 @@ export default function ncept(pi: ExtensionAPI) {
     if (claimed) {
       try {
         const continuation = await claimed();
+        // This pi session stays visible; its next message resumes the closed Session.
+        if (!aside) active = undefined;
         if (continuation && ctx.newSession)
           pi.sendMessage(
             { customType: "ncept.continuation", content: continuation, display: false },
@@ -570,6 +573,43 @@ export default function ncept(pi: ExtensionAPI) {
           "Let's continue this Mission.",
         );
       else await enter(ctx, { mode: "charting", entry: { kind: "goal", text: args.trim() } }, args.trim());
+    },
+  });
+  pi.registerCommand("skip", {
+    description: "Skip this Lesson or go to a later planned stop",
+    handler: async (_args, ctx) => {
+      const h = await getHost(ctx);
+      const current = await session(ctx);
+      if (current.mode !== "lesson" || current.entry?.kind !== "lesson") {
+        ctx.ui.notify("Open a Mission Lesson to skip.", "info");
+        return;
+      }
+      const lesson = current.entry.lesson;
+      const missionId = lesson.mission.id;
+      const reading = (await h.missions.list()).find(({ mission }) => mission.id === missionId);
+      const index =
+        reading?.next.findIndex(
+          (stop) =>
+            stop.kind === "lesson" &&
+            stop.nodes.length === lesson.nodes.length &&
+            stop.nodes.every((node) => lesson.nodes.includes(node)),
+        ) ?? -1;
+      const later = reading?.next.slice(index >= 0 ? index + 1 : 0) ?? [];
+      const options = later.map((stop) => stop.kind + " " + stop.number + " — " + (stop.name ?? stop.nodes.join(", ")));
+      const selected = await ctx.ui.select("Skip… Lessons in between are marked probably known.", [
+        "Just this lesson",
+        ...options,
+      ]);
+      if (!selected) return;
+      const stop = later[options.indexOf(selected)];
+      const skip =
+        selected === "Just this lesson"
+          ? { mission: missionId, kind: "skip-lesson" as const }
+          : stop
+            ? { mission: missionId, kind: "skip-to" as const, stop }
+            : undefined;
+      if (!skip) return;
+      await enter(ctx, { mode: "lesson", skip }, "Let's continue this Mission.");
     },
   });
   pi.registerCommand("review", {

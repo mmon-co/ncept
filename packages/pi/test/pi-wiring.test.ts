@@ -195,6 +195,11 @@ test.each([
         expect(errors).toEqual([]);
         expect(session.sessionFile).toBe(file);
         expect(handoffs).toEqual([expect.objectContaining({ mode: "charting", kickoff: "subtraction", aside: false })]);
+        await session.prompt("One more question about addition");
+        expect(errors).toEqual([]);
+        expect(prompts.at(-1)).toContain('"kind":"goal","text":"addition"');
+        expect(session.getLastAssistantText()).toBe("What would you like to learn next?");
+        expect(Object.keys((await profile.read()).manifest.sessions)).toHaveLength(1);
         session.dispose();
         session = await open(SessionManager.create(cwd, sessions), handoffs[0]?.session);
         await session.prompt("subtraction");
