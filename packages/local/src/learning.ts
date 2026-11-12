@@ -55,8 +55,7 @@ import type { ValidatedProfile } from "./exchange.js";
 import { isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
 
-async function readMissions<S>(runtime: Runtime<S>): Promise<readonly MissionReading[]> {
-  const view = await runtime.snapshot();
+function readMissions<S>(view: Awaited<ReturnType<Runtime<S>["snapshot"]>>): readonly MissionReading[] {
   const projection = view.theory.project(view.graph, view.state);
   const sessions = runs(sessionStates(view.profile));
   return missions(view.profile).map((mission) => {
@@ -118,15 +117,38 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
       const dueReview = [...tagIndex(view.theory.project(view.graph, view.state))("review:due")];
       const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
       return {
-        missions: await readMissions(runtime),
+        missions: readMissions(view),
         dueReview: dueReview.map((id) => ({ id, label: label(id) })),
         sessions: sessionStates(view.profile).map((session) => ({
           ...session,
+          title: sessionTitle(session, view.profile, label),
+          missionLabel: missions(view.profile).find((mission) => mission.id === session.mission)?.statement,
           nodes: session.about.map((id) => ({ id, label: label(id) })),
         })),
       };
     },
   };
+}
+
+function sessionTitle(session: LocalSession, profile: ValidatedProfile, label: (id: NodeId) => string): string {
+  const entry = session.entry;
+  const mode = session.mode.charAt(0).toUpperCase() + session.mode.slice(1);
+  let title = mode;
+  if (entry?.kind === "review") title = "Review · " + entry.nodes.length + " due";
+  else {
+    const name =
+      entry?.kind === "lesson"
+        ? entry.lesson.name
+        : entry?.kind === "mission"
+          ? missions(profile).find((mission) => mission.id === entry.id)?.statement
+          : entry?.kind === "target"
+            ? label(entry.node)
+            : entry?.kind === "goal"
+              ? entry.text
+              : undefined;
+    if (name) title += " · " + name;
+  }
+  return title.slice(0, 200);
 }
 
 function identity(): string {
@@ -241,7 +263,7 @@ export class LearningHost<S> {
     return selected;
   }
   async missionReadings(): Promise<readonly MissionReading[]> {
-    return readMissions(this.runtime);
+    return readMissions(await this.runtime.snapshot());
   }
   async lessonEntry(missionId: string, number?: number): Promise<ModeEntry> {
     const view = await this.runtime.snapshot();
