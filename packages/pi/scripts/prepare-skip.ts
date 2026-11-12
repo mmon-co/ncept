@@ -75,6 +75,17 @@ const opened = await host.sessions.open({
 console.log(JSON.stringify({ profile: cwd, session: opened.id, stops: reading.next }, null, 2));
 console.log("cd " + JSON.stringify(cwd) + " && pi --session " + JSON.stringify(join(cwd, "sessions", "skip.jsonl")));
 // pi resumes the prepared host Session through the same extension state used in a conversation.
+// The transcript already holds an exchange, as a Lesson under way does: /skip then leaves it for a new pi
+// session; a transcript with no messages is replaced in place and keeps its file, which the old surface owns.
+const stamp = new Date().toISOString();
+const usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
 await writeFile(
   join(cwd, "sessions", "skip.jsonl"),
   [
@@ -86,6 +97,29 @@ await writeFile(
       timestamp: new Date().toISOString(),
       customType: "ncept.session",
       data: { id: opened.id },
+    },
+    {
+      type: "message",
+      id: "skip-user",
+      parentId: "skip-state",
+      timestamp: stamp,
+      message: { role: "user", content: "Let's begin.", timestamp: Date.now() },
+    },
+    {
+      type: "message",
+      id: "skip-reply",
+      parentId: "skip-user",
+      timestamp: stamp,
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Here is the first stop." }],
+        api: "release-scripted-api",
+        provider: "release-scripted",
+        model: "tutor",
+        usage,
+        stopReason: "stop",
+        timestamp: Date.now(),
+      },
     },
   ]
     .map((line) => JSON.stringify(line))

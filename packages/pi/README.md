@@ -15,6 +15,7 @@ pi
 Accept pi's one-time project trust prompt. The dashboard above the editor shows Missions, next stops and due review, and clears when you speak. A fresh conversation is a chat Session.
 
 - `/learn <goal>` charts what you want to learn. `/learn` offers Missions and their next stops; `/learn <mission-id>` opens a particular Mission.
+- `/skip` in a Mission Lesson skips this Lesson or ahead to a later planned stop, recording the skipped Nodes as claimed known.
 - `/review` opens the due review batch; `/author [goal]` opens an authoring Session.
 - `/missions` shows the dashboard again.
 - `/hub pull <release-url or patch@version>` adopts a release without an account. You can also paste an address and ask the tutor to pull it.
