@@ -2,6 +2,7 @@ import { link, lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "no
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { lock, lockSync } from "proper-lockfile";
 import {
   attachmentDigest,
   candidateRevision,
@@ -146,32 +147,51 @@ export interface ProfileDirectory {
   writeSession(surface: string, session: PiSession, options: { trusted: boolean }): Promise<string>;
   pack(): Promise<Uint8Array>;
 }
+async function locked<T>(dir: string, operation: () => Promise<T>): Promise<T> {
+  let release: () => void | Promise<void>;
+  try {
+    // The uncontended path avoids callback round trips for each filesystem step.
+    release = lockSync(dir);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ELOCKED")) throw error;
+    release = await lock(dir, {
+      retries: { forever: true, minTimeout: 10, maxTimeout: 100, randomize: true },
+    });
+  }
+  try {
+    return await operation();
+  } finally {
+    await release();
+  }
+}
 export async function openProfile(dir: string, theories: readonly ConfiguredTheory[]): Promise<ProfileDirectory> {
   dir = resolve(dir);
-  const stored = await filesAt(dir);
-  const initial = migrateProfileFiles(stored, theories);
-  // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
-  // leaves either the old generation or the complete new one; retry never repeats a step.
-  for (const [path, bytes] of initial) {
-    if (path !== "profile.json" && !stored.has(path)) await immutable(dir, path, bytes);
-  }
-  const manifest = initial.get("profile.json");
-  if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
-  const profile = validate(initial, theories);
-  // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
-  for (const filename of Object.values(profile.manifest.sessions)) {
-    const path = "sessions/" + filename;
-    const bytes = initial.get(path);
-    if (bytes) {
-      const source = new TextDecoder().decode(bytes);
-      if (parsePiSession(source).header.cwd !== dir)
-        await atomic(dir, path, utf8.encode(relocatePiSession(source, dir)));
+  await locked(dir, async () => {
+    const stored = await filesAt(dir);
+    const initial = migrateProfileFiles(stored, theories);
+    // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
+    // leaves either the old generation or the complete new one; retry never repeats a step.
+    for (const [path, bytes] of initial) {
+      if (path !== "profile.json" && !stored.has(path)) await immutable(dir, path, bytes);
     }
-  }
-  // Serialize this handle's mutations, including read/merge/write of the immutable-identity log.
+    const manifest = initial.get("profile.json");
+    if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
+    const profile = validate(initial, theories);
+    // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
+    for (const filename of Object.values(profile.manifest.sessions)) {
+      const path = "sessions/" + filename;
+      const bytes = initial.get(path);
+      if (bytes) {
+        const source = new TextDecoder().decode(bytes);
+        if (parsePiSession(source).header.cwd !== dir)
+          await atomic(dir, path, utf8.encode(relocatePiSession(source, dir)));
+      }
+    }
+  });
+  // Queue this handle's writes before contending with other handles and processes.
   let tail: Promise<unknown> = Promise.resolve();
   function serial<T>(operation: () => Promise<T>): Promise<T> {
-    const result = tail.then(operation);
+    const result = tail.then(() => locked(dir, operation));
     tail = result.catch(() => {});
     return result;
   }
