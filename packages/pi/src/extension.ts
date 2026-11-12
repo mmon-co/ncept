@@ -404,7 +404,18 @@ export default function ncept(pi: ExtensionAPI) {
     event.systemPromptOptions.sections = {};
   });
   pi.on("context_with_system", async (event, ctx) => {
-    if (relayingContinuation) return;
+    if (relayingContinuation)
+      return {
+        messages: [
+          {
+            role: "system",
+            content: "Return the host's continuation to the learner.",
+            toolsAdded: [],
+            timestamp: Date.now(),
+          },
+          ...event.messages.filter((message) => message.role !== "system"),
+        ],
+      };
     // before_agent_start precedes persistence of the starting user message. Grade
     // only once pi has assigned its real entry id, before the provider sees it.
     const learner = ctx.sessionManager
