@@ -71,6 +71,8 @@ export interface HostConfig {
   readonly theories: readonly string[];
   /** IANA zone for learner-days; defaults to the local machine's configured zone. */
   readonly timezone?: string;
+  /** Positive Session budget in minutes; defaults to 20. */
+  readonly sessionLength?: number;
 }
 export type SessionOpening = Readonly<{ mode: string; entry?: ModeEntry; resume?: SessionRef; mission?: string }> &
   Readonly<{

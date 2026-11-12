@@ -22,6 +22,10 @@
       "types": "./dist/exchange.d.ts",
       "default": "./dist/exchange.js"
     },
+    "./session-policy": {
+      "types": "./dist/session-policy.d.ts",
+      "default": "./dist/session-policy.js"
+    },
     "./sessions": {
       "types": "./dist/sessions.d.ts",
       "default": "./dist/sessions.js"
