@@ -39,6 +39,7 @@ export default function ncept(pi: ExtensionAPI) {
   const ownTools = new Set<string>();
   const graded = new Set<string>();
   let gradeReply = false;
+  let relayingContinuation = false;
   let importConfirmed = false;
 
   async function model(request: ModelRequest): Promise<unknown> {
@@ -346,7 +347,13 @@ export default function ncept(pi: ExtensionAPI) {
     pi.events.emit(OPEN_SESSION, handoff);
     if (claimed) {
       try {
-        return await claimed();
+        const continuation = await claimed();
+        if (continuation && ctx.newSession)
+          pi.sendMessage(
+            { customType: "ncept.continuation", content: continuation, display: false },
+            { triggerTurn: true },
+          );
+        return continuation;
       } catch (error) {
         await h.sessions.close(opened);
         active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
@@ -386,15 +393,18 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.on("before_agent_start", async (event, ctx) => {
     ctx.ui.setWidget("ncept", undefined);
+    relayingContinuation = event.messageType === "custom" && event.message.customType === "ncept.continuation";
     gradeReply = event.messageType === "user";
-    const setup = await prepare(ctx);
+    const setup = relayingContinuation ? undefined : await prepare(ctx);
+    if (relayingContinuation) pi.setActiveTools([]);
     event.systemPromptOptions.contextFiles = [];
     event.systemPromptOptions.skills = [];
     event.systemPromptOptions.appendSystemPrompt = "";
-    event.systemPromptOptions.customPrompt = prompt(setup);
+    event.systemPromptOptions.customPrompt = setup ? prompt(setup) : "Return the host's continuation to the learner.";
     event.systemPromptOptions.sections = {};
   });
   pi.on("context_with_system", async (event, ctx) => {
+    if (relayingContinuation) return;
     // before_agent_start precedes persistence of the starting user message. Grade
     // only once pi has assigned its real entry id, before the provider sees it.
     const learner = ctx.sessionManager
