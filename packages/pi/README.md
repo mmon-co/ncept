@@ -31,7 +31,7 @@ Models and grading use the model currently selected in pi, through pi's provider
 
 ## Front ends over this extension
 
-A front end layered over pi can own where Sessions open, a new window or thread per Session say, through pi's shared extension bus. When a Session opens while the current pi session already holds a conversation, the extension emits `ncept:open-session` with the opened Session, its kickoff message, its hidden carry and whether it is aside; a listener that calls `claim` opens it itself, and the current pi session stays as it is. In the fresh pi session, the front end emits `ncept:adopt-session` with the Session and carry before the first prompt. The channels and payload types are exported from `@mmon-co/ncept-pi/events`.
+A front end layered over pi can own where Sessions open, a new window or thread per Session say, through pi's shared extension bus. When a Session opens while the current pi session already holds a conversation, the extension emits `ncept:open-session` with the opened Session, its kickoff message, its hidden carry and whether it is aside; a listener that calls `claim` opens it itself, and the current pi session stays as it is. The claimant can return a learner-facing continuation (a link, for example); a tutor-requested switch returns it in the tool result so the tutor can finish the outgoing turn normally. In the fresh pi session, the front end emits `ncept:adopt-session` with the Session and carry before the first prompt. The channels and payload types are exported from `@mmon-co/ncept-pi/events`.
 
 ## Development first use
 

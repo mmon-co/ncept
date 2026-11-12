@@ -19,8 +19,9 @@ export type OpenSession = {
   readonly carry?: string;
   /** The previous Session stays open beside the new one. */
   readonly aside: boolean;
-  /** Take over opening; a rejection closes the new Session and keeps the current one. */
-  claim(open: () => Promise<void>): void;
+  /** Take over opening; return a learner-facing continuation for the tutor's tool result.
+   * A rejection closes the new Session and keeps the current one. */
+  claim(open: () => Promise<void | string>): void;
 };
 
 /**

@@ -35,6 +35,7 @@ export default function ncept(pi: ExtensionAPI) {
   let context: ExtensionContext;
   let mounted: HostChatSetup | undefined;
   let transition: ModeSwitch | undefined;
+  let pendingEnter: ((ctx: ExtensionCommandContext) => Promise<void>) | undefined;
   const ownTools = new Set<string>();
   const graded = new Set<string>();
   let gradeReply = false;
@@ -258,8 +259,14 @@ export default function ncept(pi: ExtensionAPI) {
             };
             await prepare(toolCtx);
           } else if (result.switch) {
-            transition = result.switch;
-            toolCtx.abort();
+            const to = result.switch;
+            const carry = await carryFor(toolCtx, to);
+            const continuation = await enter(toolCtx, to, "Continue.", carry, to.then === "aside");
+            return {
+              content: [{ type: "text", text: JSON.stringify({ status: "opened", continuation }) }],
+              details: result,
+              terminate: !!pendingEnter || !continuation,
+            };
           }
           return { content: [{ type: "text", text: JSON.stringify(result.content ?? null) }], details: result };
         },
@@ -304,7 +311,7 @@ export default function ncept(pi: ExtensionAPI) {
   }
 
   async function enter(
-    ctx: ExtensionCommandContext,
+    ctx: ExtensionContext & Partial<Pick<ExtensionCommandContext, "newSession">>,
     selection: Selection,
     kickoff?: string,
     carry?: string,
@@ -325,7 +332,7 @@ export default function ncept(pi: ExtensionAPI) {
       if (kickoff) pi.sendUserMessage(kickoff);
       return;
     }
-    let claimed: (() => Promise<void>) | undefined;
+    let claimed: (() => Promise<void | string>) | undefined;
     const handoff: OpenSession = {
       session: opened.id,
       mode: opened.mode,
@@ -339,30 +346,33 @@ export default function ncept(pi: ExtensionAPI) {
     pi.events.emit(OPEN_SESSION, handoff);
     if (claimed) {
       try {
-        await claimed();
+        return await claimed();
       } catch (error) {
         await h.sessions.close(opened);
         active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
         throw error;
       }
-      return;
     }
-    const parentSession = ctx.sessionManager.getSessionFile();
-    const result = await ctx.newSession({
-      ...(parentSession ? { parentSession } : {}),
-      setup: async (sm) => {
-        sm.appendCustomEntry(STATE, { id: opened.id });
-        if (carry) sm.appendCustomMessageEntry("ncept.carry", carry, false);
-      },
-      withSession: async (fresh) => {
-        if (kickoff) await fresh.sendUserMessage(kickoff);
-      },
-    });
-    if (result.cancelled) {
-      await h.sessions.close(opened);
-      active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
-      ctx.ui.notify("Session switch cancelled.", "info");
-    }
+    const finish = async (command: Pick<ExtensionCommandContext, "newSession">) => {
+      const parentSession = ctx.sessionManager.getSessionFile();
+      const result = await command.newSession({
+        ...(parentSession ? { parentSession } : {}),
+        setup: async (sm) => {
+          sm.appendCustomEntry(STATE, { id: opened.id });
+          if (carry) sm.appendCustomMessageEntry("ncept.carry", carry, false);
+        },
+        withSession: async (fresh) => {
+          if (kickoff) await fresh.sendUserMessage(kickoff);
+        },
+      });
+      if (result.cancelled) {
+        await h.sessions.close(opened);
+        active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
+        ctx.ui.notify("Session switch cancelled.", "info");
+      }
+    };
+    if (ctx.newSession) await finish({ newSession: ctx.newSession });
+    else pendingEnter = finish;
   }
 
   pi.events.on(ADOPT_SESSION, (data) => {
@@ -427,70 +437,78 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.on("agent_settled", async (_event, ctx) => {
     await sync(ctx);
-    if (!transition && active && host) transition = await host.sessions.settle(active);
-    if (transition) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
+    if (!pendingEnter && !transition && active && host) transition = await host.sessions.settle(active);
+    if (pendingEnter || transition) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
     else if (active) ctx.ui.setStatus("ncept", active.mode);
   });
 
+  async function carryFor(ctx: ExtensionContext, to: Exclude<ModeSwitch, { then: "here" }>): Promise<string> {
+    let carry: string;
+    if (to.carry.kind === "brief") {
+      const recent = ctx.sessionManager
+        .getBranch()
+        .flatMap((entry) => {
+          if (entry.type !== "message" || (entry.message.role !== "user" && entry.message.role !== "assistant"))
+            return [];
+          const content = entry.message.content;
+          const text =
+            typeof content === "string"
+              ? content
+              : content
+                  .filter((part) => part.type === "text")
+                  .map((part) => part.text)
+                  .join("\n");
+          return text ? [{ role: entry.message.role, text: text.slice(-2000) }] : [];
+        })
+        .slice(-6);
+      carry =
+        to.carry.text ??
+        "Previous Session (recent conversation):\n" +
+          JSON.stringify(recent) +
+          "\nNext entry:\n" +
+          JSON.stringify(to.entry ?? {});
+    } else {
+      const messages = ctx.sessionManager
+        .getBranch()
+        .flatMap((entry) =>
+          entry.type === "message" && ["user", "assistant"].includes(entry.message.role) ? [entry.message] : [],
+        );
+      if (to.carry.kind === "full") carry = JSON.stringify(messages);
+      else {
+        if (!ctx.model) throw new Error("Choose a pi model before carrying a Session.");
+        const response = await ctx.modelRegistry
+          .streamSimple(
+            ctx.model,
+            {
+              systemPrompt: "Summarize the learning conversation for the next tutor. Focus: " + to.carry.focus,
+              messages: [{ role: "user", content: JSON.stringify(messages), timestamp: Date.now() }],
+            },
+            { signal: ctx.signal },
+          )
+          .result();
+        if (response.stopReason === "error" || response.stopReason === "aborted")
+          throw new Error(response.errorMessage ?? "Carry interrupted");
+        carry = response.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n");
+      }
+    }
+    return carry;
+  }
   pi.registerCommand("ncept-next", {
     description: "Continue a tutor-requested Session switch",
     handler: async (_args, ctx) => {
-      if (!transition) return;
+      if (pendingEnter) {
+        const finish = pendingEnter;
+        pendingEnter = undefined;
+        await finish(ctx);
+        return;
+      }
+      if (!transition || transition.then === "here") return;
       const to = transition;
       transition = undefined;
-      let carry: string;
-      if (to.then === "here") return;
-      if (to.carry.kind === "brief") {
-        const recent = ctx.sessionManager
-          .getBranch()
-          .flatMap((entry) => {
-            if (entry.type !== "message" || (entry.message.role !== "user" && entry.message.role !== "assistant"))
-              return [];
-            const content = entry.message.content;
-            const text =
-              typeof content === "string"
-                ? content
-                : content
-                    .filter((part) => part.type === "text")
-                    .map((part) => part.text)
-                    .join("\n");
-            return text ? [{ role: entry.message.role, text: text.slice(-2000) }] : [];
-          })
-          .slice(-6);
-        carry =
-          to.carry.text ??
-          "Previous Session (recent conversation):\n" +
-            JSON.stringify(recent) +
-            "\nNext entry:\n" +
-            JSON.stringify(to.entry ?? {});
-      } else {
-        const messages = ctx.sessionManager
-          .getBranch()
-          .flatMap((entry) =>
-            entry.type === "message" && ["user", "assistant"].includes(entry.message.role) ? [entry.message] : [],
-          );
-        if (to.carry.kind === "full") carry = JSON.stringify(messages);
-        else {
-          if (!ctx.model) throw new Error("Choose a pi model before carrying a Session.");
-          const response = await ctx.modelRegistry
-            .streamSimple(
-              ctx.model,
-              {
-                systemPrompt: "Summarize the learning conversation for the next tutor. Focus: " + to.carry.focus,
-                messages: [{ role: "user", content: JSON.stringify(messages), timestamp: Date.now() }],
-              },
-              { signal: ctx.signal },
-            )
-            .result();
-          if (response.stopReason === "error" || response.stopReason === "aborted")
-            throw new Error(response.errorMessage ?? "Carry interrupted");
-          carry = response.content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join("\n");
-        }
-      }
-      await enter(ctx, to, "Continue.", carry, to.then === "aside");
+      await enter(ctx, to, "Continue.", await carryFor(ctx, to), to.then === "aside");
     },
   });
   pi.registerCommand("learn", {
@@ -534,12 +552,13 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.registerCommand("author", {
     description: "Author a learning map and Materials",
-    handler: async (args, ctx) =>
-      enter(
+    handler: async (args, ctx) => {
+      await enter(
         ctx,
         { mode: "authoring", ...(args.trim() ? { entry: { kind: "goal", text: args.trim() } as const } : {}) },
         args.trim() || "Let's author a learning map.",
-      ),
+      );
+    },
   });
   pi.registerCommand("missions", {
     description: "Show Missions and next stops",
