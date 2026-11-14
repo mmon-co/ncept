@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
   createAgentSession,
+  createCodemodeExtension,
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
@@ -63,9 +64,12 @@ test.each([
       maxTokens: 1024,
     };
     let calls = 0;
+    let materialWritten = false;
     function stream(_model: Model<Api>, context: TranscriptContext) {
       prompts.push(getCurrentSystemPrompt(context.messages));
       toolSets.push(getCurrentTools(context.messages).map(({ name }) => name));
+      const writeMaterial = !materialWritten && toolSets.at(-1)?.includes("material");
+      if (writeMaterial) materialWritten = true;
       const output: AssistantMessage = {
         role: "assistant",
         content:
@@ -74,15 +78,28 @@ test.each([
                 {
                   type: "toolCall",
                   id: "claim-call",
-                  name: "record_claim",
-                  arguments: { statement: "I can add one and one", stance: "knows" },
+                  name: "codemode",
+                  arguments: {
+                    code: 'text(await tools.record_claim({statement: "I can add one and one", stance: "knows"}));',
+                  },
                 },
               ]
-            : [{ type: "text", text: "What would you like to learn next?" }],
+            : writeMaterial
+              ? [
+                  {
+                    type: "toolCall",
+                    id: "material-call",
+                    name: "codemode",
+                    arguments: {
+                      code: 'text(await tools.material({op: "add", input: {id: "addition-notes", about: [], filename: "addition.md", mediaType: "text/markdown", text: "One and one make two."}}));',
+                    },
+                  },
+                ]
+              : [{ type: "text", text: "What would you like to learn next?" }],
         api: model.api,
         provider,
         model: model.id,
-        stopReason: calls === 1 ? "toolUse" : "stop",
+        stopReason: calls === 1 || writeMaterial ? "toolUse" : "stop",
         timestamp: Date.now(),
         usage: {
           input: 0,
@@ -111,13 +128,24 @@ test.each([
     try {
       await initProject(cwd);
       const settings = JSON.parse(await readFile(join(cwd, ".pi/settings.json"), "utf8"));
-      expect(settings).toEqual({ packages: ["npm:@mmon-co/ncept-pi"], sessionDir: "sessions" });
+      expect(settings).toEqual({
+        packages: ["npm:@mmon-co/ncept-pi"],
+        sessionDir: "sessions",
+        codemode: { mode: "on" },
+      });
       // Keep the test offline; production init uses the published package.
-      await writeFile(join(cwd, ".pi/settings.json"), JSON.stringify({ sessionDir: "sessions" }));
-      const settingsManager = SettingsManager.inMemory(
-        { compaction: { enabled: false }, retry: { enabled: false } },
-        { projectTrusted: true },
+      await writeFile(join(cwd, ".pi/settings.json"), JSON.stringify({ ...settings, packages: [] }));
+      await mkdir(agentDir, { recursive: true });
+      await writeFile(
+        join(agentDir, "settings.json"),
+        JSON.stringify({
+          codemode: { mode: "only", inlineBudget: 0 },
+          defaultTools: ["+codemode"],
+          compaction: { enabled: false },
+          retry: { enabled: false },
+        }),
       );
+      const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
       const modelRuntime = await ModelRuntime.create({
         authPath: join(agentDir, "auth.json"),
         modelsPath: join(agentDir, "models.json"),
@@ -140,7 +168,7 @@ test.each([
           agentsFilesOverride: () => ({
             agentsFiles: [{ path: "/global/AGENTS.md", content: "GLOBAL_CODING_CONTEXT_MUST_NOT_LEAK" }],
           }),
-          extensionFactories: [scripted, ncept, claimer, adopter],
+          extensionFactories: [createCodemodeExtension(), scripted, ncept, claimer, adopter],
         });
         await loader.reload();
         const result = await createAgentSession({
@@ -172,6 +200,9 @@ test.each([
         expect(prompts[0]).toContain("Tutor base");
         expect(prompts[0]).toContain('"kind":"goal","text":"addition"');
         expect(prompts.every((prompt) => !prompt.includes("GLOBAL_CODING_CONTEXT_MUST_NOT_LEAK"))).toBe(true);
+        expect(toolSets[0]).toContain("skill");
+        expect(toolSets[0]).toContain("query");
+        expect(toolSets[0]).toContain("codemode");
         expect(toolSets[0]).toContain("record_claim");
         expect(toolSets[0]).toContain("bash");
         expect(toolSets[0]).not.toContain("record_demonstration");
@@ -184,7 +215,17 @@ test.each([
         expect(await readFile(file, "utf8")).toContain("claim-call");
         expect(await readFile(join(cwd, "sessions", basename(file)), "utf8")).toContain("claim-call");
         session.dispose();
+        // An older Profile gains the project override for its next pi start.
+        await writeFile(
+          join(cwd, ".pi/settings.json"),
+          JSON.stringify({ packages: [], sessionDir: "sessions", codemode: { inlineBudget: 17 } }),
+        );
         session = await open(SessionManager.open(file));
+        expect(JSON.parse(await readFile(join(cwd, ".pi/settings.json"), "utf8"))).toEqual({
+          packages: [],
+          sessionDir: "sessions",
+          codemode: { inlineBudget: 17, mode: "on" },
+        });
         await session.prompt("Let's continue");
         expect(errors).toEqual([]);
         expect(prompts.at(-1)).toContain('"kind":"goal","text":"addition"');
@@ -209,6 +250,16 @@ test.each([
         if (!adopted) throw new Error("pi did not persist the adopted Session");
         expect(await readFile(join(cwd, "sessions", basename(adopted)), "utf8")).toContain("CARRIED_CONTEXT");
         expect(Object.keys((await profile.read()).manifest.sessions)).toHaveLength(2);
+
+        await session.prompt("/author addition notes");
+        session.dispose();
+        session = await open(SessionManager.create(cwd, sessions), handoffs.at(-1)?.session);
+        await session.prompt("Write addition notes.");
+        expect(errors).toEqual([]);
+        expect(toolSets.at(-1)).toEqual(expect.arrayContaining(["skill", "query", "material", "codemode"]));
+        expect(await readFile(join(cwd, "materials/unscoped/addition-notes/addition.md"), "utf8")).toBe(
+          "One and one make two.",
+        );
       } finally {
         session.dispose();
       }
