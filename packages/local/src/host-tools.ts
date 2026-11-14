@@ -526,7 +526,9 @@ export function hostTools<S>(
   if (metadataKeys.length) {
     mount(
       "edit_metadata",
-      "Edit this mode's authorized metadata keys on existing Nodes: " + metadataKeys.join(", "),
+      "Edit this mode's authorized metadata keys on existing Nodes: " +
+        metadataKeys.join(", ") +
+        ". Material completion queries use the created Material's identity; local file-item attempts, including card recalls, have playground local.",
       schema({ nodes: nodeList, properties: { type: "object" } }, ["nodes", "properties"]),
       async (raw, session) => {
         const attached = nodes(raw.nodes);
