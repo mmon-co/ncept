@@ -564,9 +564,7 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
-/** The Notebook's direct bindings select each base's exact revision: a retained dependent may
- * still author an older compatible release. Ranges are admitted by the host before the bundle is
- * used; no authored revision or historical checkpoint is rewritten. */
+/** Direct Notebook bindings select resolution without rewriting authored history. */
 export function notebookSelection(bundle: ClosedPatchBundle): ReadonlyMap<PatchId, ExactPatchRef> {
   const terminal = bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, bundle.terminal));
   if (!terminal) throw new Error("Notebook terminal unavailable");
