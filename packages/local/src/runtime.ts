@@ -1,5 +1,6 @@
 import {
-  bundleForRevision,
+  notebookBundleForRevision,
+  notebookSelection,
   candidateRevision,
   effectiveObservations,
   isObservation,
@@ -153,9 +154,9 @@ export class Runtime<S> {
           if (!isContentDigest(digest)) throw new Error("Invalid revision filename");
           contents.set(digest, JSON.parse(new TextDecoder().decode(bytes)));
         }
-      bundle = bundleForRevision(ref, contents);
+      bundle = notebookBundleForRevision(ref, contents);
     }
-    const graph = resolvePatchBundle(bundle, new Set(["local"]));
+    const graph = resolvePatchBundle(bundle, new Set(["local"]), notebookSelection(bundle));
     const now = new Date().toISOString();
     const observations = this.observations(profile, now);
     return {
@@ -189,7 +190,11 @@ export class Runtime<S> {
         learnerDay: learnerDayAt(observation.at, this.timezone),
         ...(object(observation.payload) && object(observation.payload.material)
           ? {
-              materialPresent: resolvePatchBundle(profile.patches).materials.some(
+              materialPresent: resolvePatchBundle(
+                profile.patches,
+                undefined,
+                notebookSelection(profile.patches),
+              ).materials.some(
                 (material) =>
                   object(observation.payload) &&
                   object(observation.payload.material) &&
@@ -351,8 +356,8 @@ export class Runtime<S> {
     const revision = candidateRevision(view.graph.terminal.identity, content);
     const contents = new Map(view.bundle.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]));
     contents.set(revision.ref.digest, content);
-    const bundle = bundleForRevision(revision.ref, contents);
-    const graph = resolvePatchBundle(bundle, new Set(["local"]));
+    const bundle = notebookBundleForRevision(revision.ref, contents);
+    const graph = resolvePatchBundle(bundle, new Set(["local"]), notebookSelection(bundle));
     const profile = {
       ...view.profile,
       patches: bundle,
