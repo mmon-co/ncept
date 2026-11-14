@@ -5,6 +5,9 @@ import {
   metadataSetsForEntity,
   NODE_CRITERION_PROPERTY,
   NODE_LABEL_PROPERTY,
+  PEDAGOGY_OPENING_PROPERTY,
+  PEDAGOGY_FIRST_MESSAGE_PROPERTY,
+  nodeCascadedProperty,
   type NodeId,
 } from "@mmon-co/ncept-core/patch";
 import type { Program } from "@mmon-co/ncept-core/observations";
@@ -15,6 +18,7 @@ import { isDefaultObservation, isMemory, memoryDefault, type DefaultState } from
 import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./skills.js";
 import { catalogToolsForMode } from "./catalog.js";
 import { evaluationContext, evaluateWatchedReply } from "./evaluation.js";
+import { lessonOpening, openingLanguage } from "./opening.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
@@ -142,6 +146,38 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
     : text;
 }
 
+function tutorOpening(ctx: ChatContext<DefaultState>): string | undefined {
+  if (!ctx.opening) return undefined;
+  const entry = ctx.entry;
+  const nodes = entry?.kind === "lesson" ? entry.lesson.nodes : [];
+  const lesson =
+    entry?.kind === "lesson"
+      ? lessonOpening(
+          ctx.graph,
+          nodes,
+          ctx.missions?.find(({ id }) => id === entry.lesson.mission.id),
+        )
+      : undefined;
+  return [
+    "Initial tutor-led turn (host context, not learner speech). " +
+      (lesson?.instruction ?? "Begin this Session in its selected mode."),
+    openingLanguage(ctx.opening.latestLearnerMessage),
+    lesson === undefined ? undefined : "Lesson opening facts: " + JSON.stringify(lesson.facts),
+    nodes.length === 0
+      ? undefined
+      : "Authored Node openings (context for when each Node is reached; firstMessage is addressed to the learner): " +
+        JSON.stringify(
+          nodes.map((node) => ({
+            node,
+            firstAction: nodeCascadedProperty(ctx.graph, node, PEDAGOGY_OPENING_PROPERTY),
+            firstMessage: nodeCascadedProperty(ctx.graph, node, PEDAGOGY_FIRST_MESSAGE_PROPERTY),
+          })),
+        ),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function* setup(
   ctx: ChatContext<DefaultState>,
   mode?: "empty" | "charting" | "authoring" | "lesson",
@@ -153,6 +189,7 @@ function* setup(
     prompt,
     context: [
       ...evaluationContext(ctx),
+      tutorOpening(ctx),
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
@@ -173,7 +210,9 @@ function* setup(
               })),
             })}`,
           ]),
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     skills: chatSkills(mode),
     tools: catalogToolsForMode(mode ?? "lesson"),
   };
