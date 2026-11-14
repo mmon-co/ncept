@@ -564,6 +564,16 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
+/** Ranges are admitted by the host before this bundle is used. The Notebook's direct
+ * bindings select resolution; no authored revision or historical checkpoint is rewritten. */
+export function notebookSelection(bundle: ClosedPatchBundle): ReadonlyMap<PatchId, ExactPatchRef> {
+  const terminal = bundle.revisions.find(
+    ({ ref }) => ref.identity === bundle.terminal.identity && ref.digest === bundle.terminal.digest,
+  );
+  if (!terminal) throw new Error("Notebook terminal unavailable");
+  return new Map(terminal.bases.map((ref) => [ref.identity, ref]));
+}
+
 /** Resolve selected base identities at the host's chosen exact revisions. The bundle
  * must include each reached selection; authored revisions may remain as unused history. */
 export function resolvePatchBundle(

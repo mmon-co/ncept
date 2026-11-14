@@ -164,7 +164,13 @@ function validateStructure(files: ProfileFiles): ValidatedProfile {
       blobs.set(digest, bytes);
     } else throw new Error("Unexpected Profile exchange file: " + path);
   }
-  const patches = bundleForRevision(manifest.personal, contents);
+  const personal = contents.get(manifest.personal.digest);
+  if (!personal) throw new Error("Notebook content unavailable");
+  const patches = bundleForRevision(
+    manifest.personal,
+    contents,
+    new Map(personal.bases.map((base) => [base.identity, base])),
+  );
   for (const content of contents.values()) requireAttachments(content, blobs);
   const sessions = new Map<string, string>();
   for (const [surface, filename] of Object.entries(manifest.sessions)) {

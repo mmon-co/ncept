@@ -1,5 +1,6 @@
 import {
   bundleForRevision,
+  notebookSelection,
   candidateRevision,
   effectiveObservations,
   isObservation,
@@ -153,9 +154,11 @@ export class Runtime<S> {
           if (!isContentDigest(digest)) throw new Error("Invalid revision filename");
           contents.set(digest, JSON.parse(new TextDecoder().decode(bytes)));
         }
-      bundle = bundleForRevision(ref, contents);
+      const personal = contents.get(ref.digest);
+      if (!personal) throw new Error("Notebook content unavailable");
+      bundle = bundleForRevision(ref, contents, new Map(personal.bases.map((base) => [base.identity, base])));
     }
-    const graph = resolvePatchBundle(bundle, new Set(["local"]));
+    const graph = resolvePatchBundle(bundle, new Set(["local"]), notebookSelection(bundle));
     const now = new Date().toISOString();
     const observations = this.observations(profile, now);
     return {
@@ -351,8 +354,9 @@ export class Runtime<S> {
     const revision = candidateRevision(view.graph.terminal.identity, content);
     const contents = new Map(view.bundle.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]));
     contents.set(revision.ref.digest, content);
-    const bundle = bundleForRevision(revision.ref, contents);
-    const graph = resolvePatchBundle(bundle, new Set(["local"]));
+    const selection = new Map(content.bases.map((base) => [base.identity, base]));
+    const bundle = bundleForRevision(revision.ref, contents, selection);
+    const graph = resolvePatchBundle(bundle, new Set(["local"]), selection);
     const profile = {
       ...view.profile,
       patches: bundle,
