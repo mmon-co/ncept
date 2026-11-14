@@ -15,8 +15,10 @@ export type OpenSession = {
   /** The opened host Session, already recorded in the Profile. */
   readonly session: string;
   readonly mode: string;
-  /** The first learner message for the new conversation. */
+  /** Starting text for the new conversation. */
   readonly kickoff?: string;
+  /** The learner supplied this text, rather than a host continuation. */
+  readonly learnerKickoff?: boolean;
   /** Context the next tutor needs from this conversation, hidden from the learner. */
   readonly carry?: string;
   /** The previous Session stays open beside the new one. */
