@@ -2,6 +2,7 @@ import { tryParse } from "std-semver";
 import {
   candidateRevision,
   exactPatchRefKey,
+  notebookSelection,
   resolvePatchBundle,
   notebookSelection,
   revisionContent,
