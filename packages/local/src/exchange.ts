@@ -1,6 +1,6 @@
 import {
   attachmentDigest,
-  bundleForRevision,
+  notebookBundleForRevision,
   isContentDigest,
   isPatchId,
   isProfileLogEntry,
@@ -164,7 +164,7 @@ function validateStructure(files: ProfileFiles): ValidatedProfile {
       blobs.set(digest, bytes);
     } else throw new Error("Unexpected Profile exchange file: " + path);
   }
-  const patches = bundleForRevision(manifest.personal, contents);
+  const patches = notebookBundleForRevision(manifest.personal, contents);
   for (const content of contents.values()) requireAttachments(content, blobs);
   const sessions = new Map<string, string>();
   for (const [surface, filename] of Object.entries(manifest.sessions)) {
