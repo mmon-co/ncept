@@ -279,6 +279,8 @@ export default function ncept(pi: ExtensionAPI) {
       pi.registerTool({
         name: tool.name,
         label: tool.name,
+        // The tutor owns native declarations even in a global codemode-only loadout.
+        exposure: "model-only",
         description: tool.description,
         parameters: tool.schema,
         async execute(_id, input, _signal, _onUpdate, toolCtx) {
