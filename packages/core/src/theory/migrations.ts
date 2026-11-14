@@ -4,7 +4,6 @@ import {
   exactPatchRefKey,
   notebookSelection,
   resolvePatchBundle,
-  notebookSelection,
   revisionContent,
   revisionDigest,
   type ClosedPatchBundle,
