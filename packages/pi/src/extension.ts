@@ -219,7 +219,7 @@ export default function ncept(pi: ExtensionAPI) {
     if (ownTools.has(name)) return !!mounted?.tools.some((tool) => tool.name === name);
     if (
       mounted?.capabilities.includes("bash") &&
-      ["bash", "powershell", "edit", "write", "grep", "find", "ls"].includes(name)
+      ["bash", "powershell", "edit", "write", "grep", "find", "ls", "codemode"].includes(name)
     )
       return true;
     return !!mounted?.capabilities.includes("web") && /web|search|browse|fetch/i.test(name + " " + description);
@@ -279,8 +279,6 @@ export default function ncept(pi: ExtensionAPI) {
       pi.registerTool({
         name: tool.name,
         label: tool.name,
-        // The tutor owns native declarations even in a global codemode-only loadout.
-        exposure: "model-only",
         description: tool.description,
         parameters: tool.schema,
         async execute(_id, input, _signal, _onUpdate, toolCtx) {
@@ -445,6 +443,14 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.on("session_start", async (_event, ctx) => {
     await dashboard(ctx);
+    const path = join(ctx.cwd, ".pi/settings.json");
+    const settings = JSON.parse(await readFile(path, "utf8"));
+    if (settings.codemode?.mode === undefined) {
+      // Project settings keep native tools declared under an agent-directory "only" loadout.
+      // Existing Profiles pick this up on their next pi start.
+      settings.codemode = { ...settings.codemode, mode: "on" };
+      await writeFile(path, JSON.stringify(settings, null, 2) + "\n");
+    }
   });
   pi.on("before_agent_start", async (event, ctx) => {
     ctx.ui.setWidget("ncept", undefined);
