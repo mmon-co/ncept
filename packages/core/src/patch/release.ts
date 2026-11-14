@@ -53,6 +53,16 @@ export function revisionContent(revision: PatchRevision): PatchContent {
   return { bases: revision.bases, delta: revision.delta, metadata: revision.metadata };
 }
 
+/** The closure of a Notebook revision, with its direct bindings selecting the resolved bases. */
+export function notebookBundleForRevision(
+  ref: ExactPatchRef,
+  contents: ReadonlyMap<ContentDigest, PatchContent>,
+): ClosedPatchBundle {
+  const content = contents.get(ref.digest);
+  if (!content) throw new Error("Notebook content unavailable");
+  return bundleForRevision(ref, contents, new Map(content.bases.map((base) => [base.identity, base])));
+}
+
 /** Compute and verify the exact transitive closure from host-supplied content only. */
 export function bundleForRevision(
   terminal: ExactPatchRef,
