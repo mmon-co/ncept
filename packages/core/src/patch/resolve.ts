@@ -564,6 +564,15 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
+/** The Notebook's direct bindings select each base's exact revision: a retained dependent may
+ * still author an older compatible release. Ranges are admitted by the host before the bundle is
+ * used; no authored revision or historical checkpoint is rewritten. */
+export function notebookSelection(bundle: ClosedPatchBundle): ReadonlyMap<PatchId, ExactPatchRef> {
+  const terminal = bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, bundle.terminal));
+  if (!terminal) throw new Error("Notebook terminal unavailable");
+  return new Map(terminal.bases.map((ref) => [ref.identity, ref]));
+}
+
 /** Resolve selected base identities at the host's chosen exact revisions. The bundle
  * must include each reached selection; authored revisions may remain as unused history. */
 export function resolvePatchBundle(

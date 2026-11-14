@@ -2,6 +2,7 @@ import { tryParse } from "std-semver";
 import {
   candidateRevision,
   exactPatchRefKey,
+  notebookSelection,
   resolvePatchBundle,
   revisionContent,
   revisionDigest,
@@ -139,5 +140,5 @@ function validateLiveBundle(profile: Profile): void {
       throw new Error(`Theory migration Patch content does not match ${revision.ref.identity}@${revision.ref.digest}`);
   }
   // Resolution checks the exact closure, including duplicate/unused revisions and base conflicts.
-  resolvePatchBundle(profile.patches);
+  resolvePatchBundle(profile.patches, undefined, notebookSelection(profile.patches));
 }
