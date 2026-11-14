@@ -782,6 +782,16 @@ export class LearningHost<S> {
       view = await this.runtime.snapshot();
       ctx = await this.context(session);
     }
+    if (learnerMessage === undefined && transcript(view.profile, session.surface).turns.length === 0) {
+      const latest = sessionStates(view.profile)
+        .flatMap(({ surface }) => transcript(view.profile, surface).turns)
+        .filter(({ speaker, text }) => speaker.kind === "learner" && text.trim() !== "")
+        .sort((a, b) => b.at.localeCompare(a.at))[0];
+      ctx = {
+        ...ctx,
+        opening: { latestLearnerMessage: latest ? Array.from(latest.text).slice(0, 400).join("") : undefined },
+      };
+    }
     const selected = this.mode(view.theory, session.mode, session.entry);
     const program = selected ? selected.setup(ctx) : view.theory.chat?.turn(ctx);
     if (!program) throw new Error("Theory does not provide a tutor setup");

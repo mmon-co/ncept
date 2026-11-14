@@ -207,6 +207,8 @@ export type ChatContext<S> = Context<S> &
     unscopedNodes?: readonly NodeId[];
     /** Tutor text on the current conversation branch, before this turn; not recorded evidence. */
     tutorMessages?: readonly string[];
+    /** Present for a tutor-led opening, before any speech in this Session. */
+    opening?: Readonly<{ latestLearnerMessage?: string }>;
     /** Evidence accepted in this Session, including its Material surfaces. */
     sessionObservations?: readonly ObservationId[];
     missions?: readonly MissionContext[];

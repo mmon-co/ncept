@@ -375,7 +375,9 @@ export default function ncept(pi: ExtensionAPI) {
       session: opened.id,
       mode: opened.mode,
       aside,
-      ...(kickoff ? { kickoff } : {}),
+      ...(kickoff
+        ? { kickoff, learnerKickoff: selection.entry?.kind === "goal" && selection.entry.text === kickoff }
+        : {}),
       ...(carry ? { carry } : {}),
       claim: (open) => {
         claimed ??= open;

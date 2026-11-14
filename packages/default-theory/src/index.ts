@@ -21,6 +21,7 @@ export * from "./tags.js";
 export * from "./outcomes.js";
 export * from "./roleplay.js";
 export * from "./chat.js";
+export * from "./opening.js";
 export * from "./tools.js";
 export * from "./skills.js";
 export * from "./catalog-contract.js";
