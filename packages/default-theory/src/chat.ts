@@ -83,8 +83,13 @@ function officialDocuments(ctx: ChatContext<DefaultState>): ProductDocument[] {
 }
 
 function linkedDocuments(documents: readonly ProductDocument[], messages: readonly string[]): ProductDocument[] {
-  return documents.filter(({ documentId }) =>
-    messages.some((text) => text.includes(`${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(documentId)}`)),
+  // A linked official title still counts as offered when the tutor mistypes its destination.
+  return documents.filter(({ documentId, label }) =>
+    messages.some(
+      (text) =>
+        text.includes(`${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(documentId)}`) ||
+        text.includes(`[${label}](${COMMON_CONCEPT_DOCUMENT_URL}`),
+    ),
   );
 }
 
