@@ -161,9 +161,9 @@ export default function ncept(pi: ExtensionAPI) {
       confirm: async (proposal) => {
         const detail = JSON.stringify(proposal.detail, null, 2);
         let message = proposal.description + "\n\n" + detail;
-        // bb's pi bridge cancels a confirm whose message exceeds 8192 characters, which pi
-        // reports as a refusal; a graph diff's detail runs far past that, so it goes to a file.
-        if (message.length > 8000) {
+        // bb's pi bridge cancels confirms over 8192 characters. Plain pi can show
+        // the full proposal; only the bridge needs a file for an oversized detail.
+        if (process.env.BB_THREAD_ID && message.length > 8000) {
           const file = join(
             "proposals",
             new Date().toISOString().replace(/[:.]/g, "-") + "-" + proposal.kind + ".json",
@@ -294,7 +294,22 @@ export default function ncept(pi: ExtensionAPI) {
           if (!mounted) throw new Error("No active learning mode.");
           const currentTool = mounted.tools.find((candidate) => candidate.name === tool.name);
           if (!currentTool) throw new Error("Tool is not mounted in this mode.");
-          const result = await currentTool.run(input);
+          let result = await currentTool.run(input);
+          // Pi returns false for both No and dismissal, so its tutor cannot infer
+          // a refusal from the local host's boolean-confirmation result.
+          if (
+            result.content &&
+            typeof result.content === "object" &&
+            "status" in result.content &&
+            result.content.status === "refused"
+          )
+            result = {
+              ...result,
+              content: {
+                status: "not-accepted",
+                message: "The learner declined or did not answer. No change was applied.",
+              },
+            };
           if (result.switch && result.switch.then === "here") {
             active = {
               ...current,

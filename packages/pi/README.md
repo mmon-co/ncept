@@ -53,4 +53,10 @@ bun test packages/pi/test/pi-wiring.test.ts
 
 The SDK wiring smoke uses a scripted model with real host tools and pi Session files; it makes no paid or network requests.
 
+### Oversized Map confirmations
+
+`bun packages/pi/scripts/confirm-first-use.ts /tmp/ncept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
+
+Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without ncept's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/ncept-confirm-profile` and remove the scratch directory.
+
 For a checkout-owned hosted endpoint, set `NCEPT_HUB_URL` to its Application base URL (including `/ncept`) before starting pi. `NCEPT_CREDENTIALS_FILE` selects an isolated credential file outside the Profile; login and logout use the same file. Omit both for the public product. OAuth uses pi's public CIMD identity, PKCE and the `patches publish learn` scopes; it does not require the issuer to enable dynamic registration.
