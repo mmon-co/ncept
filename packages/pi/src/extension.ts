@@ -226,14 +226,9 @@ export default function ncept(pi: ExtensionAPI) {
     await host.profile.registerSession(active.surface, basename(file), { trusted: ctx.isProjectTrusted() });
   }
 
-  function permitted(name: string, description: string): boolean {
-    if (ownTools.has(name)) return !!mounted?.tools.some((tool) => tool.name === name);
-    if (
-      mounted?.capabilities.includes("bash") &&
-      ["bash", "powershell", "edit", "write", "grep", "find", "ls", "codemode"].includes(name)
-    )
-      return true;
-    return !!mounted?.capabilities.includes("web") && /web|search|browse|fetch/i.test(name + " " + description);
+  // The mode governs ncept's own tools; the learner's harness tools stay theirs in every mode.
+  function permitted(name: string): boolean {
+    return !ownTools.has(name) || !!mounted?.tools.some((tool) => tool.name === name);
   }
 
   async function prepare(ctx: ExtensionContext, learnerMessage?: string): Promise<HostChatSetup> {
@@ -325,7 +320,7 @@ export default function ncept(pi: ExtensionAPI) {
     pi.setActiveTools(
       pi
         .getAllTools()
-        .filter((tool) => permitted(tool.name, tool.description))
+        .filter((tool) => permitted(tool.name))
         .map(({ name }) => name),
     );
     return mounted;
@@ -534,8 +529,7 @@ export default function ncept(pi: ExtensionAPI) {
     };
   });
   pi.on("tool_call", (event) => {
-    const tool = pi.getAllTools().find(({ name }) => name === event.toolName);
-    if (!tool || !permitted(tool.name, tool.description))
+    if (!permitted(event.toolName))
       return { block: true, reason: "This tool is not mounted in the current learning mode." };
   });
   pi.on("turn_end", async (_event, ctx) => {
