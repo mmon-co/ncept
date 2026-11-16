@@ -925,21 +925,10 @@ export class LearningHost<S> {
     }
     if (typeof localSettings(view.profile).timezone !== "string")
       await this.runtime.profile.appendLog([platform({ kind: "local.config", timezone: this.runtime.timezone })]);
-    const profile = await this.runtime.profile.read();
-    const known = sessionStates(profile);
-    const active = new Set(missions(profile).map((mission) => missionRun(profile, mission.id).active));
-    const open = new Set(
-      known.filter((session) => !session.closed && !session.closing && active.has(session.id)).map(({ id }) => id),
-    );
-    for (const id of open)
-      for (const session of known)
-        if (!session.closed && !session.closing && session.parent === id) open.add(session.id);
-    const pending = known.filter((session) => !session.closed && !open.has(session.id));
-    if (pending.length) {
-      await this.runtime.profile.appendLog(pending.flatMap((session) => this.markClosing(session)));
-      // Recovery must not delay startup of a thread receiving a Session handoff.
-      void this.closePending().catch(this.onCloseError);
-    }
+    // Only persisted closing tokens record an interrupted close. An unmarked Session
+    // may still be live in another host, including Charting without a Mission run.
+    // Recovery must not delay startup of a thread receiving a Session handoff.
+    void this.closePending().catch(this.onCloseError);
   }
 }
 export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
