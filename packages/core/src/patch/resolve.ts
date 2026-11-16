@@ -784,17 +784,16 @@ function resolveBundle(
   }
   materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
   for (const contribution of tagContributions) {
-    const tag: GraphTag = {
-      ...contribution,
+    const existing = tags.get(contribution.name);
+    tags.set(contribution.name, {
+      name: contribution.name,
       authority: "patch",
-      nodes: contribution.nodes.filter((id) => nodes.has(id)),
-      edges: contribution.edges.filter((id) => edges.has(id)),
-      metadataSets: contribution.metadataSets.filter((id) => metadataSets.has(id)),
-    };
-    const existing = tags.get(tag.name);
-    if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(tag))
-      throw new PatchCompileError("duplicate-entity", `conflicting tag '${tag.name}'`);
-    tags.set(tag.name, tag);
+      nodes: [...new Set([...(existing?.nodes ?? []), ...contribution.nodes])].filter((id) => nodes.has(id)).sort(),
+      edges: [...new Set([...(existing?.edges ?? []), ...contribution.edges])].filter((id) => edges.has(id)).sort(),
+      metadataSets: [...new Set([...(existing?.metadataSets ?? []), ...contribution.metadataSets])]
+        .filter((id) => metadataSets.has(id))
+        .sort(),
+    });
   }
   const orderedNodes = sorted(nodes.values());
   const orderedEdges = sorted(edges.values());

@@ -273,8 +273,8 @@ function approximateReport(
 }
 
 /**
- * Elaborations retain their coarse Node's method. An authored tag definition is the complete
- * membership choice, including explicit exclusions; generated discovery tags describe immutable
+ * Elaborations retain their coarse Node's method. An explicit definition chooses this delta's
+ * membership; retained bases still supply their own. Generated discovery tags describe immutable
  * release closures, not an authored strand.
  */
 function carryElaborationTags(
