@@ -55,7 +55,20 @@ The SDK wiring smoke uses a scripted model with real host tools and pi Session f
 
 ### Oversized Map confirmations
 
-`bun packages/pi/scripts/confirm-first-use.ts /tmp/ncept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
+From a bb project shell, launch the learner surface directly:
+
+```sh
+bun run --cwd packages/pi build
+bun packages/pi/scripts/confirm-first-use.ts --bb /tmp/ncept-confirm-profile
+```
+
+Use an unused Profile path. The launcher opens a top-level bb Pi thread, waits up to two minutes for its oversized Map confirmation, and prints `READY` with the pending interaction. No account, seed, deployment or model request is needed. It records the owned thread in the Profile. After the encounter, stop that thread, remove its trust entry and delete the Profile with:
+
+```sh
+bun packages/pi/scripts/confirm-first-use.ts --cleanup /tmp/ncept-confirm-profile
+```
+
+Without `--bb`, `bun packages/pi/scripts/confirm-first-use.ts /tmp/ncept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
 
 Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without ncept's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/ncept-confirm-profile` and remove the scratch directory.
 

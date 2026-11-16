@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { ProjectTrustStore } from "@earendil-works/pi-coding-agent";
@@ -13,8 +14,23 @@ if (process.argv[2] === "--untrust") {
   trust.set(resolve(directory), null);
   process.exit(0);
 }
-const directory = process.argv[2];
-if (!directory) throw new Error("Usage: bun packages/pi/scripts/confirm-first-use.ts <unused-profile-directory>");
+const launch = process.argv[2] === "--bb";
+const cleanup = process.argv[2] === "--cleanup";
+const directory = process.argv[launch || cleanup ? 3 : 2];
+if (!directory)
+  throw new Error("Usage: bun packages/pi/scripts/confirm-first-use.ts [--bb|--cleanup] <profile-directory>");
+const runBB = (...args: string[]) => execFileSync("bb", args, { encoding: "utf8", timeout: 15000 });
+const manifest = join(resolve(directory), ".confirm-bb.json");
+if (cleanup) {
+  const state: { thread: string } = JSON.parse(await readFile(manifest, "utf8"));
+  runBB("thread", "stop", state.thread);
+  trust.set(resolve(directory), null);
+  await rm(resolve(directory), { recursive: true });
+  console.log("Stopped " + state.thread + "; removed scratch Profile and trust entry.");
+  process.exit(0);
+}
+const project = process.env.BB_PROJECT_ID;
+if (launch && !project) throw new Error("--bb needs BB_PROJECT_ID from a bb project shell");
 const dir = await initProject(directory);
 const host = await openHost({
   profileDir: dir,
@@ -61,6 +77,41 @@ await writeFile(
 // scratch directory this command created, so its offline provider can load.
 trust.set(dir, true);
 console.log("Prepared and trusted offline authoring Profile: " + dir);
+if (launch && project) {
+  const thread: { id: string } = JSON.parse(
+    runBB(
+      "thread",
+      "spawn",
+      "--project",
+      project,
+      "--environment",
+      dir,
+      "--provider",
+      "pi",
+      "--model",
+      "bb-local/worker-completion",
+      "--prompt",
+      "Propose a Map",
+      "--title",
+      "Offline Map confirmation",
+      "--json",
+    ),
+  );
+  if (!thread.id) throw new Error("bb did not return a thread ID");
+  await writeFile(manifest, JSON.stringify({ thread: thread.id }) + "\n");
+  console.log("Surface: @thread:" + thread.id);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const interactions: unknown = JSON.parse(runBB("thread", "interactions", "list", thread.id, "--json"));
+    if (Array.isArray(interactions) && interactions.length > 0) {
+      console.log("READY: oversized Map awaits the learner in " + thread.id);
+      console.log(JSON.stringify(interactions, null, 2));
+      console.log("Cleanup: bun packages/pi/scripts/confirm-first-use.ts --cleanup " + JSON.stringify(dir));
+      process.exit(0);
+    }
+    await Bun.sleep(2000);
+  }
+  throw new Error("No confirmation after two minutes; inspect " + thread.id + ". Cleanup with --cleanup " + dir);
+}
 console.log(
   "Plain pi: cd " +
     JSON.stringify(dir) +
