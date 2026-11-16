@@ -16,6 +16,7 @@ import type {
   ReificationTarget,
   SelectedGraph,
   SemanticOperation,
+  TaggedSet,
 } from "./model.js";
 
 /**
@@ -34,7 +35,8 @@ interface Inheritance {
   readonly bases: readonly ExactPatchRef[];
   readonly closure: ReadonlyMap<string, PatchRevision>;
   readonly masks: readonly ExactContributionMask[];
-  readonly definedTags: ReadonlySet<string>;
+  readonly definedTags: ReadonlyMap<string, readonly TaggedSet[]>;
+  readonly generatedTags: ReadonlySet<string>;
 }
 
 function requireRevision(bundle: ClosedPatchBundle, ref: ExactPatchRef): PatchRevision {
@@ -92,14 +94,17 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
 
   const selectedSets = new Map<MetadataSetId, MetadataSet>(view.metadataSets.map((set) => [set.id, set]));
   const masks: ExactContributionMask[] = [];
-  const definedTags = new Set<string>();
+  const definedTags = new Map<string, TaggedSet[]>();
+  const generatedTags = new Set<string>();
   for (const revision of closure.values()) {
     const source = revision.ref;
     for (const label of discoveryTags(revision.metadata.properties))
-      definedTags.add(`patch:${source.identity}:${label}`);
+      generatedTags.add(`patch:${source.identity}:${label}`);
     revision.delta.operations.forEach((operation, operationIndex) => {
       if (operation.kind === "define-tag") {
-        definedTags.add(operation.tag.name);
+        const contributions = definedTags.get(operation.tag.name) ?? [];
+        contributions.push(operation.tag);
+        definedTags.set(operation.tag.name, contributions);
         return;
       }
       if (operation.kind === "mask-contribution") return;
@@ -154,7 +159,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
           masks.push({ source, operationIndex, entity, property });
     });
   }
-  return { bases, closure, masks, definedTags };
+  return { bases, closure, masks, definedTags, generatedTags };
 }
 
 /**
@@ -165,7 +170,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
 export function reifyView(view: SelectedGraph, target: ReificationTarget, retained?: RetainedBases): PatchContent {
   const inherited: Inheritance = retained
     ? inheritance(view, retained)
-    : { bases: [], closure: new Map(), masks: [], definedTags: new Set() };
+    : { bases: [], closure: new Map(), masks: [], definedTags: new Map(), generatedTags: new Set() };
   const masked = new Set(
     inherited.masks
       .filter((mask) => mask.property === undefined)
@@ -274,12 +279,19 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
         (tag) =>
           (tag.authority === "patch" || referencedTags.has(tag.name)) &&
           (!generatedPatchTags.has(tag.name) || referencedTags.has(tag.name)) &&
-          !inherited.definedTags.has(tag.name),
+          !inherited.generatedTags.has(tag.name),
       )
-      .map(({ name, nodes, edges, metadataSets }) => ({
-        kind: "define-tag" as const,
-        tag: { name, nodes, edges, metadataSets },
-      })),
+      .flatMap(({ name, nodes, edges, metadataSets }) => {
+        const supplied = inherited.definedTags.get(name) ?? [];
+        const tag = {
+          name,
+          nodes: nodes.filter((id) => !supplied.some((base) => base.nodes.includes(id))),
+          edges: edges.filter((id) => !supplied.some((base) => base.edges.includes(id))),
+          metadataSets: metadataSets.filter((id) => !supplied.some((base) => base.metadataSets.includes(id))),
+        };
+        if (supplied.length > 0 && !tag.nodes.length && !tag.edges.length && !tag.metadataSets.length) return [];
+        return [{ kind: "define-tag" as const, tag }];
+      }),
   ];
 
   return {
