@@ -208,6 +208,10 @@ export async function openProfile(
     const files = await filesAt(dir);
     const manifest = { ...parseManifest(files.get("profile.json")), ...change };
     files.set("profile.json", jsonBytes(manifest));
+    // A surface re-registered to another file (bb's edit-message rewinds onto a fresh pi session)
+    // leaves its previous transcript on disk, outside the exchange.
+    const kept = new Set(Object.values(manifest.sessions).map((filename) => "sessions/" + filename));
+    for (const path of files.keys()) if (path.startsWith("sessions/") && !kept.has(path)) files.delete(path);
     for (const filename of Object.values(manifest.sessions)) {
       const path = "sessions/" + filename;
       if (!files.has(path)) files.set(path, await regular(dir, path));
