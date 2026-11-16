@@ -21,7 +21,7 @@ Accept pi's one-time project trust prompt. The dashboard above the editor shows 
 - `/hub pull <release-url or patch@version>` adopts a release without an account. You can also paste an address and ask the tutor to pull it.
 - `/ncept login` signs in once through the browser; `/ncept logout` removes the saved Common Concept credential. These are separate from pi's model accounts.
 - In authoring, ask the tutor to publish: its `hub` tool packages the current personal Patch, bases and Materials and confirms public publication. Publishing needs a free Common Concept account, not a subscription.
-- `/ncept export-to-web` replaces web Main with this Profile after confirmation (and, if needed, choosing the Missions that fit the web allowance).
+- `/ncept export-to-web` replaces web Main with this Profile after confirmation; every Mission moves with it.
 - `/ncept import-from-web` replaces this Profile after confirmation, preserving the old project in the host's backup directory. pi project settings are restored; `/resume` can continue imported Sessions.
 
 Every conversation is pi's own JSONL under `sessions/`. `/resume` continues one, `/tree` selects its branch, and `/new` starts a fresh chat. Host mode switches open next or aside pi Sessions with the Theory's declared carry. Observations, Mission progress, saved Materials and trusted Session associations live in the Profile and travel with its exchange archive. A session pi keeps elsewhere (`--session-dir`, `PI_CODING_AGENT_SESSION_DIR`, or a front end such as bb's pi bridge) is mirrored into `sessions/`, so the Profile still carries every transcript.
