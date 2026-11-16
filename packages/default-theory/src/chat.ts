@@ -88,7 +88,7 @@ function linkedDocuments(documents: readonly ProductDocument[], messages: readon
     messages.some(
       (text) =>
         text.includes(`${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(documentId)}`) ||
-        text.includes(`[${label}](${COMMON_CONCEPT_DOCUMENT_URL}`),
+        text.replace(/\]\(\s+/g, "](").includes(`[${label}](${COMMON_CONCEPT_DOCUMENT_URL}`),
     ),
   );
 }
