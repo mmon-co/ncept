@@ -114,6 +114,23 @@ test("a Profile directory round-trips, retaining transcripts and relocating pi c
   }
 });
 
+test("a surface re-registered to a new pi session file keeps a valid Profile", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mmon-resession-"));
+  try {
+    await init(root);
+    const directory = await openProfile(root, theories);
+    const session = (id: string): PiSession => ({
+      header: { type: "session", version: 3, id, timestamp: at, cwd: root },
+      entries: [],
+    });
+    await directory.writeSession("surface-one", session("session-one"), { trusted: true });
+    const second = await directory.writeSession("surface-one", session("session-two"), { trusted: true });
+    expect((await directory.read()).manifest.sessions).toEqual({ "surface-one": second });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("Profile exchange refuses tampered content, a broken base chain and malformed log lines with their reasons", async () => {
   const root = await mkdtemp(join(tmpdir(), "mmon-corrupt-"));
   try {
