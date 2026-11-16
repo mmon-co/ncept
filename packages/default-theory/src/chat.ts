@@ -82,6 +82,12 @@ function officialDocuments(ctx: ChatContext<DefaultState>): ProductDocument[] {
   });
 }
 
+function linkedDocuments(documents: readonly ProductDocument[], messages: readonly string[]): ProductDocument[] {
+  return documents.filter(({ documentId }) =>
+    messages.some((text) => text.includes(`${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(documentId)}`)),
+  );
+}
+
 /** Exclude Document links already carried by tutor text, in this conversation or a closed Session. */
 function recommendableAffordances(
   ctx: ChatContext<DefaultState>,
@@ -95,6 +101,7 @@ function recommendableAffordances(
         : [],
     ),
   ];
+  const offered = new Set(linkedDocuments(documents, told).map(({ node }) => node));
   return documents.flatMap((document) => {
     const state = ctx.state.nodes[document.node];
     const raiseWhen = metadataValue(ctx, document.node, RAISE_WHEN_PROPERTY);
@@ -104,7 +111,7 @@ function recommendableAffordances(
       state.featureUses.length !== 0 ||
       typeof raiseWhen !== "string" ||
       raiseWhen.trim() === "" ||
-      told.some((text) => text.includes(documentUrl))
+      offered.has(document.node)
     )
       return [];
     return [{ ...document, raiseWhen, documentUrl }];
@@ -185,11 +192,17 @@ function* setup(
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = tutorSystemPrompt(mode);
+  const offered = linkedDocuments(officialDocuments(ctx), ctx.tutorMessages ?? []);
   return {
     prompt,
     context: [
       ...evaluationContext(ctx),
       tutorOpening(ctx),
+      ...(offered.length
+        ? [
+            `Application help already offered in this Session (once-only asides):\n${JSON.stringify(offered)}\nKeep subsequent replies on the learner's task unless they ask for more application help.`,
+          ]
+        : []),
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
