@@ -140,7 +140,7 @@ export function hostTools<S>(
       run: (raw) =>
         host.serial(async () => {
           const session = await host.current(opened);
-          if (session.closed || session.mode !== opened.mode)
+          if (session.closed || session.closing || session.mode !== opened.mode)
             throw new Error("Tool belongs to an inactive Session mode");
           const result = await run(args(raw), session);
           if (!object(result.content) || result.content.status !== "refused") {

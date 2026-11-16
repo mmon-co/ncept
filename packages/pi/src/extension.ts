@@ -157,6 +157,7 @@ export default function ncept(pi: ExtensionAPI) {
       },
       theories,
       model,
+      onCloseError: (error) => context.ui.notify("Session close failed: " + String(error), "error"),
       confirm: async (proposal) => {
         const detail = JSON.stringify(proposal.detail, null, 2);
         let message = proposal.description + "\n\n" + detail;
@@ -306,6 +307,7 @@ export default function ncept(pi: ExtensionAPI) {
               ...(result.switch.entry ? { entry: result.switch.entry } : {}),
             };
             await prepare(toolCtx);
+            closePending(h, toolCtx);
           } else if (result.switch) {
             const to = result.switch;
             const carry = await carryFor(toolCtx, to);
@@ -358,6 +360,10 @@ export default function ncept(pi: ExtensionAPI) {
     );
   }
 
+  function closePending(h: Host, ctx: ExtensionContext) {
+    void h.sessions.closePending().catch((error) => ctx.ui.notify("Session close failed: " + String(error), "error"));
+  }
+
   async function enter(
     ctx: ExtensionContext & Partial<Pick<ExtensionCommandContext, "newSession">>,
     selection: Selection,
@@ -370,7 +376,7 @@ export default function ncept(pi: ExtensionAPI) {
     const empty = !ctx.sessionManager.getBranch().some((entry) => entry.type === "message");
     await sync(ctx);
     // Skip admission needs the current stop; it closes the outgoing Mission Session itself.
-    if (old && !aside && !selection.skip) await h.sessions.close(old);
+    if (old && !aside && !selection.skip) await h.sessions.end(old);
     const opened = await h.sessions.open(selection);
     if (empty) {
       active = opened;
@@ -378,6 +384,7 @@ export default function ncept(pi: ExtensionAPI) {
       pi.appendEntry(STATE, { id: opened.id });
       if (carry) pi.sendMessage({ customType: "ncept.carry", content: carry, display: false });
       if (kickoff) pi.sendUserMessage(kickoff);
+      closePending(h, ctx);
       return;
     }
     let claimed: (() => Promise<void | string>) | undefined;
@@ -404,15 +411,18 @@ export default function ncept(pi: ExtensionAPI) {
             { customType: "ncept.continuation", content: continuation, display: false },
             { triggerTurn: true },
           );
+        closePending(h, ctx);
         return continuation;
       } catch (error) {
-        await h.sessions.close(opened);
+        await h.sessions.end(opened);
         active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
+        closePending(h, ctx);
         throw error;
       }
     }
     const finish = async (command: Pick<ExtensionCommandContext, "newSession">) => {
       const parentSession = ctx.sessionManager.getSessionFile();
+      let destination = ctx;
       const result = await command.newSession({
         ...(parentSession ? { parentSession } : {}),
         setup: async (sm) => {
@@ -420,14 +430,17 @@ export default function ncept(pi: ExtensionAPI) {
           if (carry) sm.appendCustomMessageEntry("ncept.carry", carry, false);
         },
         withSession: async (fresh) => {
+          destination = fresh;
+          context = fresh;
           if (kickoff) await fresh.sendUserMessage(kickoff);
         },
       });
       if (result.cancelled) {
-        await h.sessions.close(opened);
+        await h.sessions.end(opened);
         active = old ? await h.sessions.open({ mode: old.mode, resume: old.id }) : undefined;
         ctx.ui.notify("Session switch cancelled.", "info");
       }
+      closePending(h, destination);
     };
     if (ctx.newSession) await finish({ newSession: ctx.newSession });
     else pendingEnter = finish;

@@ -36,6 +36,8 @@ export interface LocalSession extends HostSession {
   readonly surface: SurfaceId;
   readonly about: readonly NodeId[];
   readonly closed: boolean;
+  /** Identifies a pending close; resuming the Session clears it. */
+  readonly closing?: string;
   readonly mission?: string;
   readonly parent?: string;
 }
@@ -76,6 +78,7 @@ export function sessionStates(profile: ValidatedProfile): readonly LocalSession[
         surface: session.surface,
         mode: session.mode,
         closed: session.closed,
+        ...(typeof session.closing === "string" ? { closing: session.closing } : {}),
         about: nodeIds(session.about),
         ...(session.entry === undefined ? {} : { entry: modeEntry(session.entry) }),
         ...(typeof session.mission === "string" ? { mission: session.mission } : {}),
