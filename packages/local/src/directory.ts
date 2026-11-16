@@ -137,7 +137,8 @@ export interface ProfileDirectory {
   readonly dir: string;
   read(): Promise<ValidatedProfile>;
   files(): Promise<ProfileFiles>;
-  appendLog(entries: readonly ProfileLogEntry[]): Promise<void>;
+  /** A conditional append checks the current Profile while holding its write lock. */
+  appendLog(entries: readonly ProfileLogEntry[], accept?: (current: ValidatedProfile) => boolean): Promise<void>;
   addRevision(identity: PatchId, content: PatchContent): Promise<ExactPatchRef>;
   setPersonal(ref: ExactPatchRef): Promise<void>;
   configure(options: InitOptions): Promise<void>;
@@ -233,9 +234,10 @@ export async function openProfile(
     dir,
     read,
     files: () => filesAt(dir),
-    appendLog: (entries) =>
+    appendLog: (entries, accept) =>
       serial(async () => {
         const current = await read();
+        if (accept && !accept(current)) return;
         const bytes = logBytes(mergeProfileLogs(current.log, entries));
         const manifest = { ...current.manifest, log: attachmentDigest(bytes) };
         await immutable(dir, liveLogPath(manifest), bytes);

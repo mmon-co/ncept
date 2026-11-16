@@ -414,11 +414,12 @@ export class LearningHost<S> {
             const before = await this.current(session);
             if (before.closed || before.closing !== key) return;
             const entries = await this.closing(before);
-            await this.serial(async () => {
-              const current = await this.current(session);
-              // A learner may have resumed this Session while its judge was running.
-              if (!current.closed && current.closing === key) await this.runtime.profile.appendLog(entries);
-            });
+            // Check under the Profile write lock: another process may have resumed it.
+            await this.runtime.profile.appendLog(entries, (profile) =>
+              sessionStates(profile).some(
+                (current) => current.id === session.id && !current.closed && current.closing === key,
+              ),
+            );
           } finally {
             await release();
           }
