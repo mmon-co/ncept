@@ -26,6 +26,8 @@ import {
   type Theory,
   type Tool,
 } from "@mmon-co/ncept-core";
+import { join } from "node:path";
+import { lock } from "proper-lockfile";
 import { openProfile } from "./directory.js";
 import { connectHub } from "./hub.js";
 import type {
@@ -198,7 +200,7 @@ function missions(profile: ValidatedProfile): readonly Mission[] {
 function runs(sessions: readonly LocalSession[]): readonly RunSession[] {
   return sessions.map((session) => ({
     ref: session.id,
-    open: !session.closed,
+    open: !session.closed && !session.closing,
     ...(session.parent === undefined ? {} : { parent: session.parent }),
   }));
 }
@@ -241,10 +243,12 @@ function runEntries(before: MissionRun, after: MissionRun, at: string): readonly
 export class LearningHost<S> {
   private tail: Promise<unknown> = Promise.resolve();
   private pendingSwitch?: { from: LocalSession; to: ModeSwitch };
+  private readonly closeJobs = new Map<string, Promise<void>>();
   readonly drafts = new Map<string, { base: string; content: PatchContent }>();
   constructor(
     readonly runtime: Runtime<S>,
     readonly confirm: OpenHostOptions<S>["confirm"],
+    readonly onCloseError: (error: unknown) => void = (error) => console.error("Session close failed:", error),
   ) {}
   serial<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.tail.then(operation);
@@ -359,10 +363,15 @@ export class LearningHost<S> {
     );
     return [
       ...event.entries,
-      platform({ kind: "local.session", session: { ...session, closed: true } }, session.surface),
+      platform({ kind: "local.session", session: { ...session, closing: undefined, closed: true } }, session.surface),
     ];
   }
-  private async closingRun(current: LocalSession, profile: ValidatedProfile): Promise<readonly ProfileLogEntry[]> {
+  private markClosing(session: LocalSession): readonly ProfileLogEntry[] {
+    return session.closed || session.closing
+      ? []
+      : [platform({ kind: "local.session", session: { ...session, closing: identity() } }, session.surface)];
+  }
+  private endingRun(current: LocalSession, profile: ValidatedProfile): readonly ProfileLogEntry[] {
     const known = sessionStates(profile);
     const closing = new Set([current.id]);
     for (const id of closing)
@@ -377,18 +386,61 @@ export class LearningHost<S> {
         entries.push(...runEntries(before, result.run, at));
       }
     }
-    for (const session of known) if (closing.has(session.id)) entries.push(...(await this.closing(session)));
+    for (const session of known) if (closing.has(session.id)) entries.push(...this.markClosing(session));
     return entries;
   }
-  async close(session: HostSession): Promise<void> {
+  async end(session: HostSession): Promise<void> {
     const current = await this.current(session);
-    await this.runtime.profile.appendLog(await this.closingRun(current, await this.runtime.profile.read()));
+    await this.runtime.profile.appendLog(this.endingRun(current, await this.runtime.profile.read()));
+  }
+  async closePending(): Promise<void> {
+    const pending = sessionStates(await this.runtime.profile.read()).filter(
+      (session) => !session.closed && session.closing,
+    );
+    const failures: unknown[] = [];
+    for (const session of pending) {
+      const key = session.closing;
+      if (!key) continue;
+      let job = this.closeJobs.get(key);
+      if (!job) {
+        job = (async () => {
+          // The receiving thread's startup sweep may meet the source's background close.
+          // Lock only this close, leaving the Profile writable throughout model calls.
+          const release = await lock(join(this.runtime.profile.dir, ".close-" + encodeURIComponent(key)), {
+            realpath: false,
+            retries: { forever: true, minTimeout: 10, maxTimeout: 100, randomize: true },
+          });
+          try {
+            const before = await this.current(session);
+            if (before.closed || before.closing !== key) return;
+            const entries = await this.closing(before);
+            // Check under the Profile write lock: another process may have resumed it.
+            await this.runtime.profile.appendLog(entries, (profile) =>
+              sessionStates(profile).some(
+                (current) => current.id === session.id && !current.closed && current.closing === key,
+              ),
+            );
+          } finally {
+            await release();
+          }
+        })();
+        this.closeJobs.set(key, job);
+      }
+      try {
+        await job;
+      } catch (error) {
+        failures.push(error);
+      } finally {
+        this.closeJobs.delete(key);
+      }
+    }
+    if (failures.length) throw new AggregateError(failures, "Session close failed");
   }
   async settle(session: HostSession): Promise<ModeSwitch | undefined> {
     const current = await this.current(session);
-    if (current.closed || current.mode !== "lesson" || current.entry?.kind !== "lesson") return;
+    if (current.closed || current.closing || current.mode !== "lesson" || current.entry?.kind !== "lesson") return;
     if (!(await this.context(current)).lesson?.complete) return;
-    await this.close(current);
+    await this.end(current);
     return {
       mode: "charting",
       then: "next",
@@ -614,11 +666,11 @@ export class LearningHost<S> {
       entries.push(...runEntries(before, result.run, view.now));
       for (const ref of result.close) {
         const outgoing = known.find(({ id }) => id === ref);
-        if (outgoing) entries.push(...(await this.closing(outgoing)));
+        if (outgoing) entries.push(...this.markClosing(outgoing));
       }
     }
     if (pending?.to.then === "next" && (!missionId || pending.from.mission !== missionId))
-      entries.push(...(await this.closingRun(pending.from, view.profile)));
+      entries.push(...this.endingRun(pending.from, view.profile));
     const event = await this.runtime.event(
       { kind: "surface.open", surface: session.surface, format: "local", about },
       session,
@@ -710,7 +762,7 @@ export class LearningHost<S> {
         entries.push(...runEntries(before, result.run, view.now));
         for (const id of result.close) {
           const outgoing = sessionStates(view.profile).find((item) => item.id === id);
-          if (outgoing) entries.push(...(await this.closing(outgoing)));
+          if (outgoing) entries.push(...this.markClosing(outgoing));
         }
       }
       entries.push(platform({ kind: "local.session", session: updated }, session.surface));
@@ -774,7 +826,7 @@ export class LearningHost<S> {
   }
   async turn(input: HostSession, learnerMessage?: string): Promise<HostChatSetup> {
     const session = await this.current(input);
-    if (session.closed) throw new Error("Session is closed; resume it first");
+    if (session.closed || session.closing) throw new Error("Session is ended; resume it first");
     let view = await this.runtime.snapshot();
     let ctx = await this.context(session);
     if (learnerMessage !== undefined && view.theory.chat?.reply) {
@@ -806,7 +858,7 @@ export class LearningHost<S> {
       run: (args: unknown) =>
         this.serial(async () => {
           const current = await this.current(session);
-          if (current.closed || current.mode !== session.mode)
+          if (current.closed || current.closing || current.mode !== session.mode)
             throw new Error("Tool belongs to an inactive Session mode");
           const result = await this.runtime.prepare(tool.run(args, await this.context(current)), current);
           const feature = await this.runtime.event(
@@ -873,6 +925,21 @@ export class LearningHost<S> {
     }
     if (typeof localSettings(view.profile).timezone !== "string")
       await this.runtime.profile.appendLog([platform({ kind: "local.config", timezone: this.runtime.timezone })]);
+    const profile = await this.runtime.profile.read();
+    const known = sessionStates(profile);
+    const active = new Set(missions(profile).map((mission) => missionRun(profile, mission.id).active));
+    const open = new Set(
+      known.filter((session) => !session.closed && !session.closing && active.has(session.id)).map(({ id }) => id),
+    );
+    for (const id of open)
+      for (const session of known)
+        if (!session.closed && !session.closing && session.parent === id) open.add(session.id);
+    const pending = known.filter((session) => !session.closed && !open.has(session.id));
+    if (pending.length) {
+      await this.runtime.profile.appendLog(pending.flatMap((session) => this.markClosing(session)));
+      // Recovery must not delay startup of a thread receiving a Session handoff.
+      void this.closePending().catch(this.onCloseError);
+    }
   }
 }
 export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
@@ -881,7 +948,11 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
   const timezone = checkedTimezone(
     typeof config.timezone === "string" ? config.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
-  const learning = new LearningHost(new Runtime(profile, options.theories, options.model, timezone), options.confirm);
+  const learning = new LearningHost(
+    new Runtime(profile, options.theories, options.model, timezone),
+    options.confirm,
+    options.onCloseError ?? ((error) => console.error("Session close failed:", error)),
+  );
   await learning.start();
   const hub = connectHub(profile, options.theories, options.confirm, options.hub);
   return {
@@ -891,7 +962,12 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
       begin: (intent) => learning.serial(() => learning.begin(intent)),
       turn: (session, input) => learning.serial(() => learning.turn(session, input.learnerMessage)),
       settle: (session) => learning.serial(() => learning.settle(session)),
-      close: (session) => learning.serial(() => learning.close(session)),
+      end: (session) => learning.serial(() => learning.end(session)),
+      closePending: () => learning.closePending(),
+      close: async (session) => {
+        await learning.serial(() => learning.end(session));
+        await learning.closePending();
+      },
     },
     missions: {
       list: () => learning.missionReadings(),

@@ -33,11 +33,9 @@ import { validate, unpack, type ConfiguredTheory } from "./exchange.js";
 import type { Confirm, Host, HubOptions } from "./host.js";
 
 interface ImportPreview {
-  status: "confirm" | "choose-missions" | "imported";
+  status: "confirm" | "imported";
   mainProfileId: string;
-  available: number | null;
   missions: { id: string; statement: string; retired: boolean }[];
-  upgrade?: string;
 }
 function baseUrl(value: string): string {
   const url = new URL(value);
@@ -310,35 +308,18 @@ export function connectHub(
       await connected(async (call) => {
         const hash = await upload(call, archive, "application/x-tar");
         const preview = await call<ImportPreview>("import_profile", { hash });
-        let missions: string[] | undefined;
-        if (preview.status === "choose-missions") {
-          missions = [];
-          for (const mission of preview.missions) {
-            if (preview.available !== null && missions.length >= preview.available) break;
-            if (
-              await confirm({
-                kind: "hub.choose-mission",
-                title: "Keep Mission: " + mission.statement,
-                description: "Choose Missions to move to the web within your allowance, or upgrade on the web first.",
-                detail: { mission, available: preview.available, upgrade: preview.upgrade },
-              })
-            )
-              missions.push(mission.id);
-          }
-        }
         if (
           !(await confirm({
             kind: "hub.export",
             title: "Replace web Main with this local Profile",
-            description: "The old web Main is retained as history. Unchosen Missions remain here locally.",
-            detail: { ...preview, chosenMissions: missions },
+            description: "The old web Main is retained as history.",
+            detail: preview,
           }))
         )
           return;
         const result = await call<ImportPreview>("import_profile", {
           hash,
           expectedMainProfileId: preview.mainProfileId,
-          ...(missions === undefined ? {} : { missions }),
         });
         if (result.status !== "imported") throw new Error("Web import needs a new preview: " + JSON.stringify(result));
       });

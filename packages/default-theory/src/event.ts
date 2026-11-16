@@ -458,6 +458,7 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
     }
   }
   const current = stateDefault(ctx.graph, yield* read.observations({}), ctx.now);
+  const summaries = new Map<string, string>();
   for (const node of new Set(input.about)) {
     const memory = current.memories[node];
     if (
@@ -465,21 +466,21 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
       memory.entries.filter((entry) => entry.kind === "entry").length <= MEMORY_COMPACTION_THRESHOLD
     )
       continue;
-    const text = yield* judge(
-      SUMMARIZE,
-      memory.entries
-        .map((entry) =>
-          entry.kind === "summary"
-            ? `[summary through ${expandNodeMemory(memory, entry).at(-1)?.position}; Material sources ${JSON.stringify(entry.materialSources)}] quoted derivative: ${JSON.stringify(entry.text)}`
-            : `[${entry.at}] ${renderSpeech(entry.speaker, entry.text)}`,
-        )
-        .join("\n\n"),
-      { type: "string" },
-      (raw) => {
+    const renderedText = memory.entries
+      .map((entry) =>
+        entry.kind === "summary"
+          ? `[summary through ${expandNodeMemory(memory, entry).at(-1)?.position}; Material sources ${JSON.stringify(entry.materialSources)}] quoted derivative: ${JSON.stringify(entry.text)}`
+          : `[${entry.at}] ${renderSpeech(entry.speaker, entry.text)}`,
+      )
+      .join("\n\n");
+    let text = summaries.get(renderedText);
+    if (text === undefined) {
+      text = yield* judge(SUMMARIZE, renderedText, { type: "string" }, (raw) => {
         if (typeof raw !== "string") throw new Error("Memory summary must be a string");
         return raw;
-      },
-    );
+      });
+      summaries.set(renderedText, text);
+    }
     const sources: ObservationId[] = [...new Set(memory.originals.map((entry) => entry.observation))];
     const dependencies: ObservationId[] = [
       ...new Set(

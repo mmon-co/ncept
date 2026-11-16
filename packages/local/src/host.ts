@@ -93,8 +93,12 @@ export interface Host {
     open(input: SessionOpening): Promise<HostSession>;
     begin(intent: SessionIntent): Promise<HostSession>;
     turn(session: HostSession, input: Readonly<{ learnerMessage?: string }>): Promise<HostChatSetup>;
-    /** After the conversation stops, close a completed Lesson and return its next surface. */
+    /** After the conversation stops, end a completed Lesson and return its next surface. */
     settle(session: HostSession): Promise<ModeSwitch | undefined>;
+    /** End admission immediately, leaving Theory judgments pending. */
+    end(session: HostSession): Promise<void>;
+    /** Finish pending Theory closes without holding up other Session operations. */
+    closePending(): Promise<void>;
     close(session: HostSession): Promise<void>;
   };
   readonly missions: {
@@ -137,5 +141,7 @@ export interface OpenHostOptions<S> {
   readonly theories: readonly Theory<S>[];
   readonly model: Model;
   readonly confirm: Confirm;
+  /** Receives failures from the background recovery sweep. */
+  readonly onCloseError?: (error: unknown) => void;
 }
 export { openHost } from "./learning.js";
