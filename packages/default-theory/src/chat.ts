@@ -190,9 +190,6 @@ function* setup(
     context: [
       ...evaluationContext(ctx),
       tutorOpening(ctx),
-      mode === "empty"
-        ? "Chat is for quick questions and help with current work. When the learner opens by naming a subject, skill or goal to learn, Charting turns that want into a plan they can follow without knowing about Missions. The reply gives an introductory answer, then the propose tool's mode card offers charting here with a goal entry quoting the learner's words. The card supplies Accept/Decline, rather than asking permission in prose. Proposing pauses generation for approval, so the answer belongs in the text before the call. A declined offer means they want to stay in Chat for this Session."
-        : undefined,
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
