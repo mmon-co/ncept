@@ -131,6 +131,7 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
       return {
         missions: readMissions(view, true),
         nodes: view.graph.nodes.map(({ id }) => ({ id, label: label(id), status: progress[id]?.status ?? "open" })),
+        edges: view.graph.edges.map(({ from, to }) => ({ from, to })),
         dueReview: dueReview.map((id) => ({ id, label: label(id) })),
         sessions: sessionStates(view.profile).map((session) => ({
           ...session,
