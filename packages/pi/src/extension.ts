@@ -158,10 +158,20 @@ export default function ncept(pi: ExtensionAPI) {
       theories,
       model,
       confirm: async (proposal) => {
-        const accepted = await context.ui.confirm(
-          proposal.title,
-          proposal.description + "\n\n" + JSON.stringify(proposal.detail, null, 2),
-        );
+        const detail = JSON.stringify(proposal.detail, null, 2);
+        let message = proposal.description + "\n\n" + detail;
+        // bb's pi bridge cancels a confirm whose message exceeds 8192 characters, which pi
+        // reports as a refusal; a graph diff's detail runs far past that, so it goes to a file.
+        if (message.length > 8000) {
+          const file = join(
+            "proposals",
+            new Date().toISOString().replace(/[:.]/g, "-") + "-" + proposal.kind + ".json",
+          );
+          await mkdir(join(context.cwd, "proposals"), { recursive: true });
+          await writeFile(join(context.cwd, file), detail + "\n");
+          message = proposal.description.slice(0, 7000) + "\n\nFull change: " + join(context.cwd, file);
+        }
+        const accepted = await context.ui.confirm(proposal.title, message);
         if (proposal.kind === "hub.import") importConfirmed = accepted;
         return accepted;
       },
