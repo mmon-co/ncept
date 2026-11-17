@@ -34,7 +34,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
-export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" } as const;
+export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.1.0" } as const;
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;

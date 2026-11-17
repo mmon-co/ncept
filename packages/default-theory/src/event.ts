@@ -11,7 +11,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 import { isNodeId, sameExactPatchRef, type NodeId } from "@mmon-co/ncept-core/patch";
 import type { Context } from "@mmon-co/ncept-core/theory";
-import { isAttemptOutcome, isQuizOutcome, isRecallOutcome, practiceAttempts, problemAttempts } from "./outcomes.js";
+import { isAttemptOutcome, isQuizOutcome, practiceAttempts, problemAttempts } from "./outcomes.js";
 import {
   stateDefault,
   homeDefaultRecords,
@@ -372,7 +372,7 @@ export function* event(input: PlatformEvent, ctx: Context<DefaultState>): Progra
       return;
     }
     if (object(payload) && payload.kind === "completion") throw new Error("Invalid completion outcome");
-    if (!isRecallOutcome(payload) && !isQuizOutcome(payload) && !isAttemptOutcome(payload)) {
+    if (!isQuizOutcome(payload) && !isAttemptOutcome(payload)) {
       if (
         typeof input.payload === "object" &&
         input.payload !== null &&

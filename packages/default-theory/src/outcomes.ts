@@ -5,24 +5,6 @@ import type { ExactPatchRef, NodeId } from "@mmon-co/ncept-core/patch";
 export { isCompletionOutcome } from "./state.js";
 export type { CompletionOutcome } from "./state.js";
 
-/** Content captured when retrieval happened, not a pointer to an editable card. */
-export interface RecallOutcome {
-  readonly kind: "recall";
-  readonly card: {
-    readonly id: string;
-    readonly front: string;
-    readonly back: string;
-    readonly nodes: readonly NodeRef[];
-  };
-  readonly grade: {
-    readonly id: string;
-    readonly cardId: string;
-    readonly gradedAt: string;
-    readonly answer: string;
-    readonly grade: "again" | "hard" | "good" | "easy";
-  };
-}
-
 export interface QuizOutcome {
   readonly kind: "quiz";
   readonly id: string;
@@ -69,7 +51,7 @@ const exactRef = (value: unknown): value is ExactPatchRef =>
 const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(value.node) && exactRef(value.provenance);
 
 /**
- * One assessed Quizzes Playground response, with the Problem captured at open and the revision pinned there.
+ * One assessed Problem response, with its content and revision captured before grading.
  * Answer describes the response surface; grader records who judged it.
  */
 export interface AttemptOutcome {
@@ -256,28 +238,6 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
           })))
   );
 }
-/** Guards validate the supported payload, including the captured grading invariants. */
-export function isRecallOutcome(value: unknown): value is RecallOutcome {
-  if (!object(value) || value.kind !== "recall" || !object(value.card) || !object(value.grade)) return false;
-  const { card, grade } = value;
-  return (
-    text(card.id) &&
-    typeof card.front === "string" &&
-    typeof card.back === "string" &&
-    Array.isArray(card.nodes) &&
-    card.nodes.length > 0 &&
-    card.nodes.every(nodeRef) &&
-    new Set(card.nodes.map((node) => node.node)).size === card.nodes.length &&
-    text(grade.id) &&
-    grade.cardId === card.id &&
-    isObservationTimestamp(grade.gradedAt) &&
-    text(grade.answer) &&
-    typeof grade.grade === "string" &&
-    ["again", "hard", "good", "easy"].includes(grade.grade) &&
-    !(grade.answer.trim() === card.back.trim() && grade.grade === "again")
-  );
-}
-
 export function isQuizOutcome(value: unknown): value is QuizOutcome {
   if (
     !object(value) ||
@@ -337,16 +297,6 @@ export function isQuizOutcome(value: unknown): value is QuizOutcome {
   );
 }
 
-/** The existing verbatim unaided-card rule, recomputed from the attempt's content. */
-export function recallUnaided(card: Pick<RecallOutcome["card"], "front" | "back">): boolean {
-  const normalize = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-  const front = normalize(card.front);
-  const back = normalize(card.back);
-  const leaksAnswer = back.length > 0 && front.includes(back);
-  const offersCandidates = /(^|\n)\s*(?:[a-d][).]|[-*•])\s+/i.test(card.front) || /\bwhich of\b/i.test(card.front);
-  return !leaksAnswer && !offersCandidates;
-}
-
 export interface OriginalAttempt {
   readonly at: string;
   readonly payload: Demonstration;
@@ -373,7 +323,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
         item: problem.id,
         node: { node, provenance: { ...outcome.revision } },
         outcome: "dont-know",
-        unaided: !assessment.aided,
+        unaided: problem.answer.kind !== "choice" && !assessment.aided,
         grader: "learner",
         task: problem.prompt,
         response,
@@ -428,7 +378,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
       item: problem.id,
       node: { node, provenance: { ...outcome.revision } },
       outcome: assessment.correct ? "success" : "failure",
-      unaided: !assessment.aided,
+      unaided: problem.answer.kind !== "choice" && !assessment.aided,
       grader: assessment.grader,
       task: choice ? `${problem.prompt}\n${choice.map(({ label }) => `- ${label}`).join("\n")}` : problem.prompt,
       response: answer,
@@ -437,23 +387,7 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
 }
 
 /** Pure scoring over captured values; no current Material or graph read can rewrite an attempt. */
-export function practiceAttempts(outcome: RecallOutcome | QuizOutcome): readonly OriginalAttempt[] {
-  if (outcome.kind === "recall") {
-    const { card, grade } = outcome;
-    return card.nodes.map((node) => ({
-      at: grade.gradedAt,
-      payload: {
-        kind: "demonstration",
-        item: card.id,
-        node: { node: node.node, provenance: { ...node.provenance } },
-        outcome: grade.grade === "again" ? "failure" : "success",
-        unaided: recallUnaided(card),
-        grader: grade.answer.trim() === card.back.trim() ? "mechanical" : "learner",
-        task: card.front,
-        response: grade.answer,
-      },
-    }));
-  }
+export function practiceAttempts(outcome: QuizOutcome): readonly OriginalAttempt[] {
   return outcome.questions.flatMap<OriginalAttempt>((question) => {
     const response = outcome.responses.find(({ questionId }) => questionId === question.id);
     if (response === undefined) return [];

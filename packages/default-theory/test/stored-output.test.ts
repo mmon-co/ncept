@@ -228,9 +228,18 @@ function storedOutput() {
     validUntil: "2026-11-04T00:00:00.000Z",
   });
   outcome({
-    kind: "recall",
-    card: { id: "card-base", front: "Explain the base", back: "An explanation", nodes: [nodeRef("node-base")] },
-    grade: { id: "grade-base", cardId: "card-base", gradedAt: now, answer: "An explanation", grade: "good" },
+    kind: "attempt",
+    problem: {
+      id: "card-base",
+      digest: ref.digest,
+      about: ["node-base"],
+      prompt: "Explain the base",
+      answer: { kind: "short" },
+      grader: { by: "learner", rubric: "An explanation", accepted: ["An explanation"] },
+    },
+    revision: ref,
+    response: "An explanation",
+    assessment: { correct: true, grader: "mechanical" },
   });
   outcome({
     kind: "quiz",
