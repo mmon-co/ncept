@@ -96,7 +96,8 @@ export interface AttemptOutcome {
         };
     readonly grader:
       | { readonly by: "mechanical"; readonly accepted?: readonly string[] }
-      | { readonly by: "tutor" | "learner"; readonly rubric?: string }
+      | { readonly by: "tutor"; readonly rubric?: string }
+      | { readonly by: "learner"; readonly rubric?: string; readonly accepted?: readonly string[] }
       | {
           readonly by: "checks";
           readonly help: "pump" | "hint" | "correct";
@@ -180,6 +181,22 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
           (assessment.grader === "mechanical" && chosen.correct === assessment.correct)))
     );
   }
+  if (answer.kind === "short" && grader.by === "learner")
+    return (
+      text(grader.rubric) &&
+      (grader.accepted === undefined ||
+        (Array.isArray(grader.accepted) && grader.accepted.length > 0 && grader.accepted.every(text))) &&
+      (dontKnow ||
+        assessment.grader === "learner" ||
+        (assessment.grader === "mechanical" &&
+          assessment.correct === true &&
+          Array.isArray(grader.accepted) &&
+          grader.accepted.some(
+            (accepted: string) =>
+              accepted.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase() ===
+              response.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase(),
+          )))
+    );
   if (answer.kind === "short")
     return (
       grader.by === "mechanical" &&
