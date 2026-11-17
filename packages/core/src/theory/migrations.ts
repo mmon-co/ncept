@@ -121,7 +121,7 @@ export function migrateTheoryOutcomes(
   let migrated = payloads;
   let current = profile;
   for (const step of steps) {
-    migrated = migrated.map((payload) => step.migrateOutcome?.(payload, current) ?? payload);
+    migrated = migrated.map((payload) => (step.migrateOutcome ? step.migrateOutcome(payload, current) : payload));
     current = step.migrate(current);
   }
   return migrated;
