@@ -25,6 +25,7 @@ export interface Proposal {
   readonly title: string;
   readonly description: string;
   readonly detail: unknown;
+  readonly defaultAccepted?: boolean;
 }
 export type Confirm = (proposal: Proposal) => Promise<boolean>;
 export type ModeSwitch = ModeSwitchDefault & Readonly<{ entry?: ModeEntry }>;

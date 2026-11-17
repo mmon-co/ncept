@@ -159,6 +159,16 @@ export default function ncept(pi: ExtensionAPI) {
       model,
       onCloseError: (error) => context.ui.notify("Session close failed: " + String(error), "error"),
       confirm: async (proposal) => {
+        if (proposal.defaultAccepted !== undefined) {
+          const add = "Add Mission";
+          const skip = "Skip Mission";
+          return (
+            (await context.ui.select(
+              proposal.title + " " + proposal.description,
+              proposal.defaultAccepted ? [add, skip] : [skip, add],
+            )) === add
+          );
+        }
         const detail = JSON.stringify(proposal.detail, null, 2);
         let message = proposal.description + "\n\n" + detail;
         // bb's pi bridge cancels confirms over 8192 characters. Plain pi can show

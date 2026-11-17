@@ -5,11 +5,13 @@ import metadata from "../package.json" with { type: "json" };
 import {
   attachmentDigest,
   canonicalJson,
+  contentDigest,
   bundleForRevision,
   candidateRevision,
   exactPatchRefKey,
   isAttachment,
   isContentDigest,
+  isMission,
   isMissionRevision,
   isPatchId,
   migrateTheoryPatchClosure,
@@ -98,6 +100,38 @@ export function missionBundle(
 
 /** The Application's metadata property for Missions a release offers its readers. */
 const MISSION_SUGGESTIONS = "application:mission-suggestions";
+
+function suggestedMissions(revision: PatchRevision, contents: ReadonlyMap<ContentDigest, PatchContent>): Mission[] {
+  const encoded = revision.metadata.properties[MISSION_SUGGESTIONS];
+  if (encoded === undefined) return [];
+  if (typeof encoded !== "string") throw new Error("Invalid Mission suggestions metadata");
+  const suggestions: unknown = JSON.parse(encoded);
+  if (!Array.isArray(suggestions)) throw new Error("Invalid Mission suggestions metadata");
+  const nodes = new Set(resolvePatchBundle(bundleForRevision(revision.ref, contents)).nodes.map(({ id }) => id));
+  const ids = new Set<string>();
+  return suggestions.map((item: unknown) => {
+    if (!object(item) || typeof item.id !== "string" || !item.id || !Array.isArray(item.targetNodes))
+      throw new Error("Invalid Mission suggestion");
+    const { statement, targetNodes, guidance, assessment } = item;
+    const mission: unknown = {
+      id: "hub-" + contentDigest([revision.ref.identity, item.id]),
+      statement,
+      priority: 1,
+      targets: targetNodes.map((node: unknown) => ({ node, provenance: revision.ref })),
+      ...(guidance === undefined ? {} : { guidance }),
+      ...(assessment === undefined ? {} : { assessment }),
+    };
+    if (
+      !isMission(mission) ||
+      ids.has(mission.id) ||
+      new Set(targetNodes).size !== targetNodes.length ||
+      mission.targets.some(({ node }) => !nodes.has(node))
+    )
+      throw new Error("Invalid Mission suggestion");
+    ids.add(mission.id);
+    return mission;
+  });
+}
 
 interface ImportPreview {
   status: "confirm" | "imported";
@@ -197,6 +231,7 @@ export function connectHub(
   profile: ProfileDirectory,
   theories: readonly ConfiguredTheory[],
   confirm: Confirm,
+  createMission: Host["missions"]["create"],
   options: HubOptions = {},
 ): Host["hub"] {
   const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
@@ -331,6 +366,22 @@ export function connectHub(
       const next = candidateRevision(personal.ref.identity, content);
       contents.set(next.ref.digest, content);
       resolvePatchBundle(bundleForRevision(next.ref, contents));
+      const suggestions = suggestedMissions(adopted, contents);
+      const existing = new Set(current.log.filter(isMissionRevision).map(({ mission }) => mission.id));
+      const selectedMissions: Mission[] = [];
+      for (const mission of suggestions) {
+        if (existing.has(mission.id)) continue;
+        if (
+          await confirm({
+            kind: "hub.pull.mission",
+            title: "Add the suggested Mission?",
+            description: mission.statement,
+            detail: { statement: mission.statement },
+            defaultAccepted: suggestions.length === 1,
+          })
+        )
+          selectedMissions.push(mission);
+      }
       // Nothing touches the live head until every downloaded revision and blob verifies.
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
       for (const revision of bundle.revisions)
@@ -339,6 +390,7 @@ export function connectHub(
         if (!revisions.has(exactPatchRefKey(revision.ref)))
           await profile.addRevision(revision.ref.identity, revisionContent(revision));
       await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
+      for (const mission of selectedMissions) await createMission(mission);
       return adopted.ref;
     },
     async signIn() {
