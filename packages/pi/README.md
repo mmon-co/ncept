@@ -20,6 +20,7 @@ Accept pi's one-time project trust prompt. The dashboard above the editor shows 
 - `/missions` shows the dashboard again.
 - `/hub pull <release-url or patch@version>` adopts a release without an account. You can also paste an address and ask the tutor to pull it.
 - `/ncept login` signs in once through the browser; `/ncept logout` removes the saved Common Concept credential. These are separate from pi's model accounts.
+- `/share` publishes one Mission's map and Materials on the Hub at a link: choose the Mission, give it a title, confirm. Whoever has the link can read it and `/hub pull` it; it isn't listed. `/share <mission-id>` skips the chooser. Sharing needs a free Common Concept account, not a subscription, and signs you in on first use.
 - In authoring, ask the tutor to publish: its `hub` tool packages the current personal Patch, bases and Materials and confirms public publication. Publishing needs a free Common Concept account, not a subscription.
 - `/ncept export-to-web` replaces web Main with this Profile after confirmation; every Mission moves with it.
 - `/ncept import-from-web` replaces this Profile after confirmation, preserving the old project in the host's backup directory. pi project settings are restored; `/resume` can continue imported Sessions.

@@ -25,6 +25,26 @@ export default experimental_defineHostEntry({
       await host.missions.retire(missionId, outcome);
       return {};
     },
+    share: async ({ directory, missionId, title }) => {
+      const host = await openHost({
+        profileDir: directory,
+        theories: [defaultTheory],
+        model: async () => {
+          throw new Error("Sharing a Mission makes no model requests");
+        },
+        // The Share form in the Learn panel is the confirmation.
+        confirm: async () => true,
+        hub: {
+          url: process.env.NCEPT_HUB_URL,
+          credentialsFile: process.env.NCEPT_CREDENTIALS_FILE,
+          openUrl: async () => {
+            throw new Error("Sign in to the Hub first: send /ncept login in a Learn thread, then share again");
+          },
+        },
+      });
+      const { url } = await host.hub.share({ mission: missionId, title });
+      return { url };
+    },
     recognize: async ({ directory }) => {
       try {
         await readFile(join(directory, "profile.json"));

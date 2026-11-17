@@ -21,6 +21,10 @@ const retirement = z.object({ missionId: z.string(), outcome: z.enum(["achieved"
 const sessionDescription = z.object({ session: z.string(), mode: z.string(), title: z.string() });
 export const rpcContract = defineRpcContract({
   retire: { input: retirement.extend({ projectId: z.string() }), output: z.object({}), tags: () => ["learning"] },
+  share: {
+    input: z.object({ projectId: z.string(), missionId: z.string(), title: z.string().min(1) }),
+    output: z.object({ url: z.string() }),
+  },
   profiles: { input: z.object({}), output: z.array(profileChoice) },
   mission: {
     input: z.object({ projectId: z.string(), missionId: z.string() }),
@@ -50,6 +54,10 @@ export const rpcContract = defineRpcContract({
 });
 export const hostContract = defineRpcContract({
   retire: { input: retirement.extend({ directory: z.string() }), output: z.object({}) },
+  share: {
+    input: z.object({ directory: z.string(), missionId: z.string(), title: z.string().min(1) }),
+    output: z.object({ url: z.string() }),
+  },
   recognize: { input: z.object({ directory: z.string() }), output: z.boolean() },
   mission: { input: z.object({ directory: z.string(), missionId: z.string() }), output: missionReading },
   reading: { input: z.object({ directory: z.string() }), output: learningReading },

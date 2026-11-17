@@ -185,6 +185,10 @@ export default function ncept(bb: BbPluginApi) {
       const target = await profile(projectId);
       return host.call("retire", { directory: target.directory, missionId, outcome }, { hostId: target.hostId });
     },
+    share: async ({ projectId, missionId, title }) => {
+      const target = await profile(projectId);
+      return host.call("share", { directory: target.directory, missionId, title }, { hostId: target.hostId });
+    },
     mission: async ({ projectId, missionId }) => {
       const target = await profile(projectId);
       return host.call("mission", { directory: target.directory, missionId }, { hostId: target.hostId });

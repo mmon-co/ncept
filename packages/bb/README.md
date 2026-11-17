@@ -19,6 +19,7 @@ Your pi models and authentication stay yours. Initialization adds both pi packag
 - **Today** shows what is due for review; **Review →** opens a thread with that batch.
 - A Mission's page shows its route: milestones, the Lessons and checkpoints ahead, kept asides and past Sessions, each linked to its thread.
 - **Skip…** takes what you already know, in a sentence or by choosing a later stop. **Revise…** reworks the current Lesson or the route, or finishes the Mission.
+- **Share…** on a Mission's page publishes its map and Materials on the Hub at a link and gives you the link to copy. It isn't listed. Sharing needs a free Common Concept account: send `/ncept login` in one of the project's threads once.
 - A question off the Lesson's path opens an aside as a child thread, so bb's parent row takes you back.
 - With several Profiles, the path in Learn's title bar chooses one.
 
