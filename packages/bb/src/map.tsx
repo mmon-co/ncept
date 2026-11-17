@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./map.css";
-import { edgeCurve, taperPath } from "@concept/design/graph";
+import { edgeCurve, taperPath } from "./graph";
 import {
   experimental_NewThreadComposer as NewThreadComposer,
   experimental_useRpcQuery,

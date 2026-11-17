@@ -8,7 +8,7 @@ import { openHost, openLearningReader, openProfile } from "@mmon-co/ncept-local"
 import { isMissionRevision, isRunActiveChange } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { handoffSchema, hostContract } from "./contract";
-import { settleGraph } from "@concept/design/graph-positions";
+import { settleGraph } from "./graph-positions";
 
 export default experimental_defineHostEntry({
   contract: hostContract,
