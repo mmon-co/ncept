@@ -126,19 +126,11 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
         projection,
         view.graph.nodes.map(({ id }) => id),
       );
-      const tagged = tagIndex(projection);
-      const dueReview = [...tagged("review:due")];
-      const frontier = tagged("frontier");
+      const dueReview = [...tagIndex(projection)("review:due")];
       const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
       return {
         missions: readMissions(view, true),
-        nodes: view.graph.nodes.map(({ id }) => ({
-          id,
-          label: label(id),
-          status: progress[id]?.status ?? "open",
-          frontier: frontier.has(id),
-        })),
-        edges: view.graph.edges.map(({ from, to }) => ({ from, to })),
+        nodes: view.graph.nodes.map(({ id }) => ({ id, label: label(id), status: progress[id]?.status ?? "open" })),
         dueReview: dueReview.map((id) => ({ id, label: label(id) })),
         sessions: sessionStates(view.profile).map((session) => ({
           ...session,

@@ -96,6 +96,7 @@ export interface AttemptOutcome {
         };
     readonly grader:
       | { readonly by: "mechanical"; readonly accepted?: readonly string[] }
+      | { readonly by: "program"; readonly js: string }
       | { readonly by: "tutor" | "learner"; readonly rubric?: string }
       | {
           readonly by: "checks";
@@ -180,6 +181,8 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
           (assessment.grader === "mechanical" && chosen.correct === assessment.correct)))
     );
   }
+  if (answer.kind === "short" && grader.by === "program")
+    return text(grader.js) && (dontKnow || assessment.grader === "mechanical");
   if (answer.kind === "short")
     return (
       grader.by === "mechanical" &&
