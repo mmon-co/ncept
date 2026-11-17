@@ -172,12 +172,13 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
         assessment.grader === "learner" ||
         (assessment.grader === "mechanical" &&
           assessment.correct === true &&
-          Array.isArray(grader.accepted) &&
-          grader.accepted.some(
-            (accepted: string) =>
-              accepted.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase() ===
-              response.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase(),
-          )))
+          (response.trim() === grader.rubric.trim() ||
+            (Array.isArray(grader.accepted) &&
+              grader.accepted.some(
+                (accepted: string) =>
+                  accepted.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase() ===
+                  response.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase(),
+              )))))
     );
   if (answer.kind === "short")
     return (
