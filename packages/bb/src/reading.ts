@@ -26,6 +26,27 @@ export const learningReading = z.object({
     }),
   ),
 });
+export const mapReading = z.object({
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      status: z.string(),
+      frontier: z.boolean(),
+      x: z.number(),
+      y: z.number(),
+    }),
+  ),
+  edges: z.array(z.object({ from: z.string(), to: z.string() })),
+  /** `cone` is the Mission's targets and everything they need. */
+  missions: z.array(z.object({ id: z.string(), statement: z.string(), cone: z.array(z.string()) })),
+});
+/** The state a Node's mark shows, in the words the Map uses. */
+export function stateName(node: { status: string; frontier: boolean }): string {
+  if (node.status === "done") return "demonstrated";
+  if (node.frontier) return "frontier";
+  return node.status === "tentative" ? "tentative" : "unknown";
+}
 export const profileChoice = z.object({
   projectId: z.string(),
   name: z.string(),

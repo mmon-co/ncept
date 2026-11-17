@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { cliCommand, defineCli, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { hostContract, rpcContract } from "./contract";
 import { entrySchema } from "./entries";
+import { stateName } from "./reading";
 
 export default function ncept(bb: BbPluginApi) {
   const host = bb.hosts.experimental_client({ contract: hostContract });
@@ -63,6 +64,82 @@ export default function ncept(bb: BbPluginApi) {
     await bb.storage.kv.set("session:" + JSON.stringify([target.hostId, target.directory, session]), threadId);
   }
 
+  // Map parts as composer pills. An id is the project, the kind and the part's own ids, "~"-joined; the tutor
+  // receives what `resolve` returns when the message is sent.
+  async function learnMap(projectId: string) {
+    const target = await profile(projectId);
+    if (!(await host.call("recognize", { directory: target.directory }, { hostId: target.hostId }))) return null;
+    return host.call("map", { directory: target.directory }, { hostId: target.hostId });
+  }
+  bb.ui.registerMentionProvider({
+    id: "map",
+    label: "Map",
+    async search({ query, projectId }) {
+      const map = projectId ? await learnMap(projectId).catch(() => null) : null;
+      if (!map) return [];
+      const matches = (text: string) => text.toLowerCase().includes(query.toLowerCase());
+      return [
+        ...map.nodes
+          .filter((node) => matches(node.label))
+          .map((node) => ({
+            id: [projectId, "node", node.id].join("~"),
+            title: node.label,
+            subtitle: "Node · " + stateName(node),
+          })),
+        ...map.missions
+          .filter((mission) => matches(mission.statement))
+          .map((mission) => ({
+            id: [projectId, "mission", mission.id].join("~"),
+            title: mission.statement,
+            subtitle: "Mission",
+          })),
+      ].slice(0, 20);
+    },
+    async resolve(itemId) {
+      const [projectId = "", kind, id = "", to = ""] = itemId.split("~");
+      const map = await learnMap(projectId);
+      if (!map) throw new Error("That Profile is no longer a learn project");
+      const node = (id: string) => map.nodes.find((item) => item.id === id);
+      const name = (id: string) => JSON.stringify(node(id)?.label ?? id) + " (" + id + ")";
+      const list = (ids: readonly string[]) => ids.map(name).join(", ") || "nothing";
+      if (kind === "mission") {
+        const mission = map.missions.find((item) => item.id === id);
+        if (!mission) throw new Error("That Mission is no longer in the Profile");
+        return {
+          context:
+            "Mission " +
+            JSON.stringify(mission.statement) +
+            " (id " +
+            mission.id +
+            "). Its Nodes: " +
+            list(mission.cone) +
+            ".",
+        };
+      }
+      if (kind === "edge") {
+        if (!map.edges.some((edge) => edge.from === id && edge.to === to))
+          throw new Error("That Edge is no longer in the graph");
+        return { context: "Edge: " + name(id) + " is needed for " + name(to) + "." };
+      }
+      const found = node(id);
+      if (!found) throw new Error("That Node is no longer in the graph");
+      return {
+        context:
+          "Node " +
+          JSON.stringify(found.label) +
+          " (id " +
+          found.id +
+          ", " +
+          stateName(found) +
+          "). Needs: " +
+          list(map.edges.filter((edge) => edge.to === id).map((edge) => edge.from)) +
+          ". Unlocks: " +
+          list(map.edges.filter((edge) => edge.from === id).map((edge) => edge.to)) +
+          ".",
+      };
+    },
+  });
+
   bb.rpc.register(rpcContract, {
     profiles: async () => {
       // One host lookup per machine and all projects probed together: the badge polls this.
@@ -92,6 +169,17 @@ export default function ncept(bb: BbPluginApi) {
           reading.sessions.map(async (session) => ({ ...session, threadId: await association(projectId, session.id) })),
         ),
       };
+    },
+    threadProject: async ({ threadId }) => {
+      const thread = await bb.sdk.threads.get({ threadId });
+      const target = await profile(thread.projectId).catch(() => null);
+      const learn =
+        target && (await host.call("recognize", { directory: target.directory }, { hostId: target.hostId }));
+      return learn ? thread.projectId : null;
+    },
+    map: async ({ projectId, missionId }) => {
+      const target = await profile(projectId);
+      return host.call("map", { directory: target.directory, missionId }, { hostId: target.hostId });
     },
     retire: async ({ projectId, missionId, outcome }) => {
       const target = await profile(projectId);

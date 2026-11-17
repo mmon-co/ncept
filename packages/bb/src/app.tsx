@@ -14,6 +14,7 @@ import type { entrySchema } from "./entries";
 import type { z } from "zod";
 import { Button } from "./ui/button";
 import { MissionPage } from "./mission-page";
+import { LearnMap } from "./map";
 
 const listeners = new Set<() => void>();
 function useLearn(poll = false) {
@@ -114,6 +115,15 @@ export function LearnPanel({ subPath }: PluginNavPanelProps) {
       </div>
     );
   if (!data) return <div className="p-6 text-muted-foreground">{reading.error?.message ?? "Loading…"}</div>;
+  if (subPath === "map" || subPath.startsWith("map/"))
+    return (
+      <LearnMap
+        key={choice.projectId + subPath}
+        projectId={choice.projectId}
+        {...(subPath.length > 4 ? { mission: decodeURIComponent(subPath.slice(4)) } : {})}
+        dock
+      />
+    );
   const missionId = subPath.startsWith("missions/") ? decodeURIComponent(subPath.slice(9)) : undefined;
   return (
     <div className="ncept-learn h-full overflow-auto bg-background text-foreground">
@@ -286,6 +296,51 @@ function useBadge() {
   const count = reading.data?.dueReview.length ?? 0;
   return count ? { count, label: count + (count === 1 ? " card due" : " cards due") } : null;
 }
+function useLearnThread({ threadId }: { threadId: string }) {
+  return experimental_useRpcQuery({ contract: rpcContract, method: "threadProject", input: { threadId } }).data ?? null;
+}
+function ThreadMap({ threadId }: { threadId: string }) {
+  const projectId = useLearnThread({ threadId });
+  const context = experimental_useRpcQuery({ contract: rpcContract, method: "context", input: { threadId } });
+  if (!projectId || context.isLoading) return null;
+  const session = context.data;
+  return (
+    <LearnMap
+      key={session?.id}
+      projectId={projectId}
+      {...(session?.nodes.length || session?.mission
+        ? {
+            session: {
+              nodes: session.nodes.map((node) => node.id),
+              ...(session.mission ? { mission: session.mission } : {}),
+            },
+          }
+        : {})}
+    />
+  );
+}
+function Header({ subPath }: PluginNavPanelProps) {
+  const navigate = useBbNavigate();
+  const onMap = subPath === "map" || subPath.startsWith("map/");
+  const tab = (label: string, on: boolean, to: string) => (
+    <button
+      aria-current={on ? "page" : undefined}
+      className={"rounded px-2.5 py-0.5 " + (on ? "bg-background text-foreground shadow-sm" : "text-muted-foreground")}
+      onClick={() => navigate.toPluginPanel("learn", { subPath: to })}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <nav aria-label="Learn" className="inline-flex rounded-md bg-accent p-0.5 text-xs">
+        {tab("Overview", !onMap, "")}
+        {tab("Map", onMap, "map")}
+      </nav>
+      <ProfilePicker />
+    </div>
+  );
+}
 export default definePluginApp((app) => {
   app.slots.navPanel({
     id: "learn",
@@ -294,8 +349,18 @@ export default definePluginApp((app) => {
     icon: "BookOpen",
     component: LearnPanel,
     experimental_sidebar: Sessions,
-    headerContent: ProfilePicker,
+    headerContent: Header,
     experimental_useBadge: useBadge,
+  });
+  app.slots.experimental_tab({
+    context: { kind: "thread" },
+    availability: "fixed",
+    id: "map",
+    title: "Map",
+    icon: "Network",
+    layout: "flush",
+    useVisible: (props) => useLearnThread(props) !== null,
+    component: ThreadMap,
   });
   app.slots.experimental_threadContextCardRow({ id: "session", group: "1_context", component: SessionContext });
 });

@@ -5,6 +5,7 @@ import type { entrySchema } from "./entries";
 import type { learningReading } from "./reading";
 import type { z } from "zod";
 import { Button } from "./ui/button";
+import { LearnMap } from "./map";
 
 function MenuItem({
   hint,
@@ -262,6 +263,9 @@ export function MissionPage({
           </section>
         )}
       </header>
+      <div className="h-56 overflow-hidden rounded-xl border border-border">
+        <LearnMap projectId={projectId} mission={missionId} still />
+      </div>
       {error && (
         <p role="alert" className="text-destructive">
           {error}

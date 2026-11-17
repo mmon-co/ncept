@@ -1,7 +1,7 @@
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { entrySchema } from "./entries";
-import { learningReading, profileChoice } from "./reading";
+import { learningReading, mapReading, profileChoice } from "./reading";
 import { missionReading } from "./mission-reading";
 
 // The request travels through a host-local temporary file, so a full carry never
@@ -28,11 +28,17 @@ export const rpcContract = defineRpcContract({
     tags: () => ["learning"],
   },
   reading: { input: z.object({ projectId: z.string() }), output: learningReading, tags: () => ["learning"] },
+  map: {
+    input: z.object({ projectId: z.string(), missionId: z.string().optional() }),
+    output: mapReading,
+    tags: () => ["learning"],
+  },
   context: {
     input: z.object({ threadId: z.string() }),
     output: learningReading.shape.sessions.element.nullable(),
     tags: () => ["learning"],
   },
+  threadProject: { input: z.object({ threadId: z.string() }), output: z.string().nullable() },
   open: {
     input: z.object({ projectId: z.string(), intent: entrySchema }).strict(),
     output: z.object({ threadId: z.string(), title: z.string() }),
@@ -47,6 +53,7 @@ export const hostContract = defineRpcContract({
   recognize: { input: z.object({ directory: z.string() }), output: z.boolean() },
   mission: { input: z.object({ directory: z.string(), missionId: z.string() }), output: missionReading },
   reading: { input: z.object({ directory: z.string() }), output: learningReading },
+  map: { input: z.object({ directory: z.string(), missionId: z.string().optional() }), output: mapReading },
   entry: {
     input: z.object({ directory: z.string(), intent: entrySchema }),
     output: z.object({ title: z.string(), resume: z.string().optional() }),

@@ -8,6 +8,7 @@ import { openHost, openLearningReader, openProfile } from "@mmon-co/ncept-local"
 import { isMissionRevision, isRunActiveChange } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { handoffSchema, hostContract } from "./contract";
+import { settleGraph } from "./graph-positions";
 
 export default experimental_defineHostEntry({
   contract: hostContract,
@@ -46,6 +47,36 @@ export default experimental_defineHostEntry({
         })),
         dueReview: reading.dueReview,
         sessions: reading.sessions,
+      };
+    },
+    map: async ({ directory, missionId }) => {
+      const reading = await (await openLearningReader(directory, [defaultTheory])).reading();
+      const missions = reading.missions.map(({ mission }) => {
+        const cone = new Set<string>(mission.targets.map(({ node }) => node));
+        for (const id of cone) for (const edge of reading.edges) if (edge.to === id) cone.add(edge.from);
+        return { id: mission.id, statement: mission.statement, cone: [...cone] };
+      });
+      // A Mission's own drawing is its cone as a layered tree, prerequisites first; the whole graph settles freely.
+      const cone = missionId === undefined ? undefined : missions.find((item) => item.id === missionId)?.cone;
+      if (missionId !== undefined && !cone) throw new Error("Unknown Mission");
+      const nodes = cone ? reading.nodes.filter((node) => cone.includes(node.id)) : reading.nodes;
+      const edges = cone
+        ? reading.edges.filter((edge) => cone.includes(edge.from) && cone.includes(edge.to))
+        : reading.edges;
+      const positions = new Map(
+        settleGraph({ nodes, edges, ...(cone ? { arrangement: "layered" as const } : {}) }).map((item) => [
+          item.id,
+          item,
+        ]),
+      );
+      return {
+        nodes: nodes.map((node) => ({
+          ...node,
+          x: positions.get(node.id)?.x ?? 0,
+          y: positions.get(node.id)?.y ?? 0,
+        })),
+        edges,
+        missions,
       };
     },
     mission: async ({ directory, missionId }) => {
