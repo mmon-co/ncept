@@ -978,6 +978,7 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
       pull: (address) => learning.serial(() => hub.pull(address)),
       signIn: () => learning.serial(() => hub.signIn()),
       publish: (input) => learning.serial(() => hub.publish(input)),
+      share: (input) => learning.serial(() => hub.share(input)),
       exportTo: (destination) => learning.serial(() => hub.exportTo(destination)),
       importFrom: (source) =>
         learning.serial(async () => {
