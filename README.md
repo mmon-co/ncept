@@ -17,7 +17,7 @@ Trust the project and choose a model with tool-call support. Start with `/learn 
 - `/missions` shows your Missions and next stops; `/learn` offers a chooser.
 - `/review` opens what is due; pi's `/resume` returns to a conversation.
 - `/hub pull <release-page-url or patch-id@version>` adopts a public release without signing in.
-- `/share` publishes one Mission's map and Materials at an unlisted Hub link that anyone can read and `/hub pull`. It needs a free account, not a subscription.
+- `/hub share` publishes one Mission's map and Materials at an unlisted Hub link that anyone can read and `/hub pull`. It needs a free account, not a subscription.
 - `/ncept login` signs in through your browser. In `/author`, ask the tutor to publish and inspect its public-publication confirmation. Publishing needs a free account, not a subscription.
 - `/ncept export-to-web` replaces web Main after confirmation, with every Mission. `/ncept import-from-web` replaces this local Profile after backing it up; use `/resume` to continue an imported conversation. These are deliberate imports, not automatic sync. Tool calls from the other host arrive as text, not re-execution.
 
