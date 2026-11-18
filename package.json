@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "for name in core default-theory local pi local-mcp; do if [ -f packages/$name/package.json ]; then bun run --cwd packages/$name build || exit; fi; done",
+    "build": "for name in core default-theory local pi; do if [ -f packages/$name/package.json ]; then bun run --cwd packages/$name build || exit; fi; done",
     "typecheck": "bun run build && tsc --noEmit -p tsconfig.json",
     "test": "bun test --parallel --timeout 30000"
   },

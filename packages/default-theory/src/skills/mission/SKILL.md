@@ -17,7 +17,7 @@ A Mission is a concretely demonstrable long term goal that the learner wants dir
    - exactly what the learner wants to accomplish or be able to do, by when (if there's a time constraint), and why
    - what's not included, and how the learner's situation and motives differ from the assumptions of "typical" adjacent pedagogy
    - the learner's existing context - what they already know that might give them a head start or allow certain transfers/analogies
-   - the learner's pedagogical preferences, especially as informed by their past experience of what's been effective or not
+   - the learner's pedagogical preferences, especially as informed by their past experience of what's been effective or not, and how much say they want over method as it changes
    - whether they want capabilities checked on their real work rather than exercises; settle what work and what standard
 
-4. **Backbrief, record, and proceed to charting.** Give a full backbrief and propose the Mission from it, with the learner's preferences and context as its teaching guidance and the agreed work and standard as its assessment guidance, overriding generic criteria, so later Sessions don't ask again. Once the learner accepts, start charting.
+4. **Backbrief, record, and proceed to charting.** Give a full backbrief and propose the Mission from it, with the learner's preferences and context as its teaching guidance and the agreed work and standard as its assessment guidance, overriding generic criteria, so later Sessions don't ask again. Unless the approach is an adopted Patch's or an established course's, record it in the teaching guidance as a conjecture: where it comes from and what would count against it. Once the learner accepts, start charting.
