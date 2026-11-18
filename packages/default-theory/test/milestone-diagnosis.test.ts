@@ -3,7 +3,7 @@ import { resolvePatchBundle, type PatchRevision } from "@mmon-co/ncept-core/patc
 import { readTheoryState, type ChatContext, type LessonSnapshot } from "@mmon-co/ncept-core/theory";
 import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "@mmon-co/ncept-default-theory";
 
-test("host milestone diagnosis reaches check-in; numbered Lessons close from Materials", () => {
+test("host milestone diagnosis reaches check-in separately from the Lesson recount", () => {
   const revision: PatchRevision = {
     ref: { identity: "patch-milestone-diagnosis", digest: `sha256:${"a".repeat(64)}` },
     bases: [],
@@ -64,9 +64,10 @@ test("host milestone diagnosis reaches check-in; numbered Lessons close from Mat
     regressedComponents: ["node-component"],
   };
   const program = close.run({ op: "record", kind: "close-recount", input: {} }, ctx);
-  expect(() => program.next()).toThrow(
-    "The host closes Lessons when every focus Node\u0027s pedagogy:completion query holds",
-  );
+  expect(program.next()).toMatchObject({
+    done: true,
+    value: { capabilities: [{ label: "Capstone" }], practising: [] },
+  });
   // The host supplies diagnosis in the Checkpoint opening, never a close-recount input.
   const opening = {
     kind: "checkpoint" as const,
