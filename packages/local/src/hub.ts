@@ -78,6 +78,7 @@ export function missionBundle(
   // The Hub offers this to whoever opens the link as a Mission they can start.
   const suggestion = {
     id: randomUUID(),
+    preselected: true,
     statement: mission.statement,
     shortName: title,
     targetNodes: mission.targets.map((target) => node(target.node)),
@@ -101,7 +102,10 @@ export function missionBundle(
 /** The Application's metadata property for Missions a release offers its readers. */
 const MISSION_SUGGESTIONS = "application:mission-suggestions";
 
-function suggestedMissions(revision: PatchRevision, contents: ReadonlyMap<ContentDigest, PatchContent>): Mission[] {
+function suggestedMissions(
+  revision: PatchRevision,
+  contents: ReadonlyMap<ContentDigest, PatchContent>,
+): { mission: Mission; preselected: boolean }[] {
   const encoded = revision.metadata.properties[MISSION_SUGGESTIONS];
   if (encoded === undefined) return [];
   if (typeof encoded !== "string") throw new Error("Invalid Mission suggestions metadata");
@@ -112,7 +116,7 @@ function suggestedMissions(revision: PatchRevision, contents: ReadonlyMap<Conten
   return suggestions.map((item: unknown) => {
     if (!object(item) || typeof item.id !== "string" || !item.id || !Array.isArray(item.targetNodes))
       throw new Error("Invalid Mission suggestion");
-    const { statement, targetNodes, guidance, assessment } = item;
+    const { statement, targetNodes, guidance, assessment, preselected } = item;
     const mission: unknown = {
       id: "hub-" + contentDigest([revision.ref.identity, item.id]),
       statement,
@@ -129,7 +133,7 @@ function suggestedMissions(revision: PatchRevision, contents: ReadonlyMap<Conten
     )
       throw new Error("Invalid Mission suggestion");
     ids.add(mission.id);
-    return mission;
+    return { mission, preselected: preselected === true };
   });
 }
 
@@ -369,7 +373,7 @@ export function connectHub(
       const suggestions = suggestedMissions(adopted, contents);
       const existing = new Set(current.log.filter(isMissionRevision).map(({ mission }) => mission.id));
       const selectedMissions: Mission[] = [];
-      for (const mission of suggestions) {
+      for (const { mission, preselected } of suggestions) {
         if (existing.has(mission.id)) continue;
         if (
           await confirm({
@@ -377,7 +381,7 @@ export function connectHub(
             title: "Add the suggested Mission?",
             description: mission.statement,
             detail: { statement: mission.statement },
-            defaultAccepted: suggestions.length === 1,
+            defaultAccepted: preselected,
           })
         )
           selectedMissions.push(mission);
