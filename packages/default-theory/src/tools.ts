@@ -288,19 +288,11 @@ function lessonCompletion(ctx: Ctx) {
   const complete = nodes.every(({ complete }) => complete);
   return {
     complete,
-    status: complete
-      ? "This Lesson's completion queries hold; the host owns closure and the next Lesson."
-      : "This Lesson stays open; the next Lesson is not cleared for starting.",
+    status: complete ? "This Lesson's completion queries hold." : "This Lesson's completion queries do not yet hold.",
     nodes,
   };
 }
 function closeRecount(ctx: Ctx, rawPractising?: unknown) {
-  const lesson = lessonCompletion(ctx);
-  if (lesson !== undefined)
-    throw new Error(
-      "close_recount is for Review. The host closes Lessons when every focus Node's pedagogy:completion query holds.\n" +
-        JSON.stringify(lesson),
-    );
   const practising = rawPractising === undefined ? [] : rawPractising;
   if (!Array.isArray(practising)) throw new Error("Expected practice directions");
   const directions = practising.map((entry) => {
