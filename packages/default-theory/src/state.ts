@@ -13,6 +13,7 @@ import {
   type CompletionProgress,
 } from "./completion.js";
 import {
+  provenanceOf,
   exactPatchRefKey,
   lastMetadataContribution,
   metadataSetsForEntity,
@@ -34,7 +35,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
-export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.0.0" } as const;
+export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.1.0" } as const;
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
@@ -550,7 +551,7 @@ export function homingCandidates(graph: ResolvedGraph): readonly HomingCandidate
     const contributions = metadataSetsForEntity(graph, { kind: "node", id }).flatMap((set) => {
       const value = set.properties[NODE_CRITERION_PROPERTY];
       if (value === undefined) return [];
-      const source = graph.provenance.metadataProperties[set.id]?.[NODE_CRITERION_PROPERTY]?.at(-1);
+      const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[NODE_CRITERION_PROPERTY]?.at(-1);
       if (typeof value !== "string" || source === undefined) throw new Error(`Invalid capability statement for ${id}`);
       return [{ value, source }];
     });
@@ -759,7 +760,7 @@ export function defaultNodeCompletion(
       : (index.metadata.get(node) ?? [])
     ).flatMap((set) => {
       if (!(COMPLETION_PROPERTY in set.properties)) return [];
-      const source = graph.provenance.metadataProperties[set.id]?.[COMPLETION_PROPERTY]?.at(-1);
+      const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[COMPLETION_PROPERTY]?.at(-1);
       if (source === undefined) throw new Error(`Missing completion provenance for ${node}`);
       return [{ value: set.properties[COMPLETION_PROPERTY], source }];
     }),
@@ -771,7 +772,7 @@ export function defaultNodeCompletion(
 }
 /** Stable authoring provenance, rather than the terminal of an unrelated graph edit. */
 export function completionNodeRef(graph: ResolvedGraph, node: NodeId, nodeIds?: ReadonlySet<NodeId>): NodeRef {
-  const provenance = graph.provenance.nodes[node]?.at(-1)?.patch;
+  const provenance = provenanceOf(graph.provenance.nodes, node)?.at(-1)?.patch;
   if (!provenance || !(nodeIds?.has(node) ?? graph.nodes.some(({ id }) => id === node)))
     throw new Error(`Unknown completion Node ${node}`);
   return { node, provenance };

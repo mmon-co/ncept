@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { attachmentDigest, canonicalJson, contentDigest } from "../../src/digest";
 import {
+  provenanceOf,
   bundleForRevision,
   candidateRevision,
   composePatch,
@@ -68,7 +69,7 @@ test("attachment revision preserves placement, title, original reference and exa
     properties: { "display:title": "Example", content: replacement },
   });
   expect(graphFor(attached).metadataSets[0]?.properties.content).toEqual(original);
-  expect(graph.provenance.metadataProperties["metadata-document"]?.content?.at(-1)).toEqual({
+  expect(provenanceOf(graph.provenance.metadataProperties, "metadata-document")?.content?.at(-1)).toEqual({
     patch: graph.terminal,
     operationIndex: 2,
   });

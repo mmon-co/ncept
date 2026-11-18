@@ -29,6 +29,8 @@ export type TheoryMigration = Readonly<{
    * Observations are in Profile.log, not a separate host-specific collection.
    */
   migrate(profile: Profile): Profile;
+  /** Hosts retaining source events rewrite their live payloads in the same transaction as the Profile. */
+  migrateOutcome?(payload: unknown, profile: Profile): unknown;
 }>;
 
 export type TheoryProfileMigrationResult = Readonly<{
@@ -106,6 +108,23 @@ export function migrateTheoryProfile(
     validateLiveBundle(migrated);
   }
   return { profile: migrated, requirement: migratedRequirement };
+}
+
+/** Source journals are host-owned; compose the same validated path used for portable Profile data. */
+export function migrateTheoryOutcomes(
+  theory: MigrationTheory,
+  requirement: TheoryRequirement,
+  payloads: readonly unknown[],
+  profile: Profile,
+): readonly unknown[] {
+  const { steps } = planTheoryMigration(theory, requirement);
+  let migrated = payloads;
+  let current = profile;
+  for (const step of steps) {
+    migrated = migrated.map((payload) => (step.migrateOutcome ? step.migrateOutcome(payload, current) : payload));
+    current = step.migrate(current);
+  }
+  return migrated;
 }
 
 function planTheoryMigration(theory: MigrationTheory, requirement: TheoryRequirement) {

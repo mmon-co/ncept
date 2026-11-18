@@ -4,22 +4,31 @@ import { randomUUID } from "node:crypto";
 import metadata from "../package.json" with { type: "json" };
 import {
   attachmentDigest,
+  canonicalJson,
+  contentDigest,
   bundleForRevision,
   candidateRevision,
   exactPatchRefKey,
   isAttachment,
   isContentDigest,
+  isMission,
+  isMissionRevision,
   isPatchId,
   migrateTheoryPatchClosure,
+  notebookSelection,
+  reifyView,
   releasePrecedenceKey,
   resolveTheory,
   resolvePatchBundle,
   revisionContent,
   sameExactPatchRef,
+  selectGraph,
   type Attachment,
   type ClosedPatchBundle,
   type ContentDigest,
   type ExactPatchRef,
+  type Mission,
+  type NodeId,
   type PatchContent,
   type PatchRevision,
   type TheoryRequirement,
@@ -31,6 +40,102 @@ import { unpackDirectory, type ProfileDirectory } from "./directory.js";
 import { object, parsePiSession } from "./sessions.js";
 import { validate, unpack, type ConfiguredTheory } from "./exchange.js";
 import type { Confirm, Host, HubOptions } from "./host.js";
+
+/**
+ * One Mission's map as a standalone Patch: its targets and their prerequisites, flattened so
+ * the release carries that map alone whatever Patches it was learnt from, and offering the
+ * Mission to whoever opens it.
+ */
+export function missionBundle(
+  patches: ClosedPatchBundle,
+  mission: Mission,
+  title: string,
+): { bundle: ClosedPatchBundle; skills: number } {
+  const graph = resolvePatchBundle(patches, new Set(["local"]), notebookSelection(patches));
+  const cone = selectGraph(graph, { cone: { targets: mission.targets.map(({ node }) => node) } });
+  if (!cone.nodes.length) throw new Error("This Mission has no map yet");
+  // Flattened: the link carries the Mission's map alone, whatever Patches it was learnt from.
+  const reified = reifyView(cone, {
+    metadata: { properties: { "patch:title": title, "patch:description": mission.statement }, citations: [] },
+  });
+  const provenance = reified.metadata.citations.find((citation) => citation.kind === "reified_from");
+  const mapped = new Map<NodeId, NodeId>(
+    provenance?.kind === "reified_from" ? provenance.entities.nodes.map(({ source, target }) => [source, target]) : [],
+  );
+  const node = (id: NodeId) => mapped.get(id) ?? id;
+  const entries = (list: Mission["guidance"]) =>
+    list?.map((entry) => ({
+      ...entry,
+      ...(entry.nodes ? { nodes: entry.nodes.map(node) } : {}),
+      ...(entry.mode === "append"
+        ? {}
+        : "replace" in entry.mode
+          ? { mode: { replace: entry.mode.replace.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }
+          : { mode: { keep: entry.mode.keep.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }),
+    }));
+  const guidance = entries(mission.guidance);
+  const assessment = entries(mission.assessment);
+  // The Hub offers this to whoever opens the link as a Mission they can start.
+  const suggestion = {
+    id: randomUUID(),
+    preselected: true,
+    statement: mission.statement,
+    shortName: title,
+    targetNodes: mission.targets.map((target) => node(target.node)),
+    ...(guidance?.length ? { guidance } : {}),
+    ...(assessment?.length ? { assessment } : {}),
+  };
+  const content: PatchContent = {
+    ...reified,
+    metadata: {
+      // The Hub records provenance itself and refuses it from a client.
+      citations: reified.metadata.citations.filter((citation) => citation.kind !== "reified_from"),
+      properties: { ...reified.metadata.properties, [MISSION_SUGGESTIONS]: canonicalJson([suggestion]) },
+    },
+  };
+  const revision = candidateRevision(`patch-${randomUUID()}`, content);
+  const bundle = bundleForRevision(revision.ref, new Map([[revision.ref.digest, content]]));
+  resolvePatchBundle(bundle);
+  return { bundle, skills: cone.nodes.length };
+}
+
+/** The Application's metadata property for Missions a release offers its readers. */
+const MISSION_SUGGESTIONS = "application:mission-suggestions";
+
+function suggestedMissions(
+  revision: PatchRevision,
+  contents: ReadonlyMap<ContentDigest, PatchContent>,
+): { mission: Mission; preselected: boolean }[] {
+  const encoded = revision.metadata.properties[MISSION_SUGGESTIONS];
+  if (encoded === undefined) return [];
+  if (typeof encoded !== "string") throw new Error("Invalid Mission suggestions metadata");
+  const suggestions: unknown = JSON.parse(encoded);
+  if (!Array.isArray(suggestions)) throw new Error("Invalid Mission suggestions metadata");
+  const nodes = new Set(resolvePatchBundle(bundleForRevision(revision.ref, contents)).nodes.map(({ id }) => id));
+  const ids = new Set<string>();
+  return suggestions.map((item: unknown) => {
+    if (!object(item) || typeof item.id !== "string" || !item.id || !Array.isArray(item.targetNodes))
+      throw new Error("Invalid Mission suggestion");
+    const { statement, targetNodes, guidance, assessment, preselected } = item;
+    const mission: unknown = {
+      id: "hub-" + contentDigest([revision.ref.identity, item.id]),
+      statement,
+      priority: 1,
+      targets: targetNodes.map((node: unknown) => ({ node, provenance: revision.ref })),
+      ...(guidance === undefined ? {} : { guidance }),
+      ...(assessment === undefined ? {} : { assessment }),
+    };
+    if (
+      !isMission(mission) ||
+      ids.has(mission.id) ||
+      new Set(targetNodes).size !== targetNodes.length ||
+      mission.targets.some(({ node }) => !nodes.has(node))
+    )
+      throw new Error("Invalid Mission suggestion");
+    ids.add(mission.id);
+    return { mission, preselected: preselected === true };
+  });
+}
 
 interface ImportPreview {
   status: "confirm" | "imported";
@@ -130,6 +235,7 @@ export function connectHub(
   profile: ProfileDirectory,
   theories: readonly ConfiguredTheory[],
   confirm: Confirm,
+  createMission: Host["missions"]["create"],
   options: HubOptions = {},
 ): Host["hub"] {
   const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
@@ -140,7 +246,7 @@ export function connectHub(
   ) {
     const provider = await HubAuth.open(resource, options);
     if (!provider.tokens()) throw new Error("Sign in first with host.hub.signIn()");
-    const client = new Client({ name: "@mmon-co/ncept-local", version: "0.1.0" });
+    const client = new Client({ name: metadata.name, version: metadata.version });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(resource), { authProvider: provider }));
       return await operation(async <R>(name: string, args: Record<string, unknown>): Promise<R> => {
@@ -176,6 +282,29 @@ export function connectHub(
       body: new Uint8Array(bytes),
     });
     return hash;
+  }
+  /** Upload a closed bundle's attachments, capture it as a new Hub Patch and release it. */
+  async function release(
+    bundle: ClosedPatchBundle,
+    blobs: ReadonlyMap<ContentDigest, Uint8Array>,
+    version: string,
+    visibility: "public" | "unlisted",
+  ) {
+    return connected(async (call) => {
+      for (const attachment of attachments(bundle)) {
+        const bytes = blobs.get(attachment.hash);
+        if (!bytes) throw new Error("Missing Profile blob: " + attachment.hash);
+        await upload(call, bytes, attachment.mediaType);
+      }
+      const captured = await call<{ ref: ExactPatchRef }>("capture", { bundle });
+      await call("name", { patchId: captured.ref.identity, digest: captured.ref.digest, version });
+      await call("publish", { patchId: captured.ref.identity, version, visibility });
+      return {
+        ref: captured.ref,
+        version,
+        url: base + "/hub/" + captured.ref.identity + "/releases/" + encodeURIComponent(version),
+      };
+    });
   }
   return {
     async pull(address) {
@@ -241,6 +370,22 @@ export function connectHub(
       const next = candidateRevision(personal.ref.identity, content);
       contents.set(next.ref.digest, content);
       resolvePatchBundle(bundleForRevision(next.ref, contents));
+      const suggestions = suggestedMissions(adopted, contents);
+      const existing = new Set(current.log.filter(isMissionRevision).map(({ mission }) => mission.id));
+      const selectedMissions: Mission[] = [];
+      for (const { mission, preselected } of suggestions) {
+        if (existing.has(mission.id)) continue;
+        if (
+          await confirm({
+            kind: "hub.pull.mission",
+            title: "Add the suggested Mission?",
+            description: mission.statement,
+            detail: { statement: mission.statement },
+            defaultAccepted: preselected,
+          })
+        )
+          selectedMissions.push(mission);
+      }
       // Nothing touches the live head until every downloaded revision and blob verifies.
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
       for (const revision of bundle.revisions)
@@ -249,6 +394,7 @@ export function connectHub(
         if (!revisions.has(exactPatchRefKey(revision.ref)))
           await profile.addRevision(revision.ref.identity, revisionContent(revision));
       await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
+      for (const mission of selectedMissions) await createMission(mission);
       return adopted.ref;
     },
     async signIn() {
@@ -287,21 +433,35 @@ export function connectHub(
         }))
       )
         throw new Error("Publication declined");
-      return connected(async (call) => {
-        for (const attachment of attachments(bundle)) {
-          const bytes = current.blobs.get(attachment.hash);
-          if (!bytes) throw new Error("Missing Profile blob: " + attachment.hash);
-          await upload(call, bytes, attachment.mediaType);
-        }
-        const captured = await call<{ ref: ExactPatchRef }>("capture", { bundle });
-        await call("name", { patchId: captured.ref.identity, digest: captured.ref.digest, version: input.version });
-        await call("publish", { patchId: captured.ref.identity, version: input.version });
-        return {
-          ref: captured.ref,
-          version: input.version,
-          url: base + "/hub/" + captured.ref.identity + "/releases/" + encodeURIComponent(input.version),
-        };
-      });
+      return release(bundle, current.blobs, input.version, "public");
+    },
+    async share(input) {
+      const title = input.title.trim();
+      if (!title) throw new Error("A shared Mission needs a title");
+      const visibility = input.visibility ?? "unlisted";
+      const current = await profile.read();
+      const mission = current.log
+        .filter(isMissionRevision)
+        .findLast((entry) => entry.mission.id === input.mission)?.mission;
+      if (!mission) throw new Error("Unknown Mission");
+      const { bundle, skills } = missionBundle(current.patches, mission, title);
+      if (
+        !(await confirm({
+          kind: "hub.share",
+          title: "Share " + title,
+          description:
+            visibility === "public"
+              ? "List this Mission's map (" + skills + " skills) and its Materials publicly on the Hub."
+              : "Publish this Mission's map (" +
+                skills +
+                " skills) and its Materials at a link. Anyone with the link can read and learn from it; it isn't listed on the Hub.",
+          detail: { mission: mission.id, statement: mission.statement, title, visibility, skills: skills },
+        }))
+      )
+        throw new Error("Share declined");
+      const provider = await HubAuth.open(resource, options);
+      if (!provider.tokens()) await provider.signIn();
+      return release(bundle, current.blobs, "0.1.0", visibility);
     },
     async exportTo() {
       const archive = await profile.pack();

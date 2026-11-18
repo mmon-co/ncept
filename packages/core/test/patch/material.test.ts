@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { attachmentDigest, contentDigest } from "../../src/digest";
 import {
+  provenanceOf,
   isMaterialMeta,
   reifyView,
   resolvePatchBundle,
@@ -52,7 +53,7 @@ test("a Document lesson follows its content reference through edit, View capture
   expect(new TextDecoder().decode(rows.get(editedMaterial.content.hash))).toBe(
     "Fractions are equal-sized parts of a whole.",
   );
-  expect(graph.provenance.materials['["document","lesson-fractions"]']).toEqual([
+  expect(provenanceOf(graph.provenance.materials, '["document","lesson-fractions"]')).toEqual([
     { patch: root.ref, operationIndex: 1 },
     { patch: edit.ref, operationIndex: 0 },
   ]);

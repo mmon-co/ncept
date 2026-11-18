@@ -1,4 +1,5 @@
 import {
+  provenanceOf,
   lastMetadataContribution,
   metadataSetsForEntity,
   NODE_ELABORATE_PROPERTY,
@@ -26,7 +27,7 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
   return lastMetadataContribution(
     graph,
     metadataSetsForEntity(graph, { kind: "node", id: node }).flatMap((set) => {
-      const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+      const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[key]?.at(-1);
       return source === undefined ? [] : [{ value: set.properties[key], source }];
     }),
   )?.value;

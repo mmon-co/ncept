@@ -1,7 +1,7 @@
 import { PatchCompileError } from "./errors.js";
 import { lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import type { ExactPatchRef, MetadataSet, NodeId, SelectedGraph, VisualGraph, VisualProjectionInput } from "./model.js";
-import { NODE_LABEL_PROPERTY } from "./model.js";
+import { provenanceOf, NODE_LABEL_PROPERTY } from "./model.js";
 
 function metadataForNode(graph: SelectedGraph, node: NodeId): readonly MetadataSet[] {
   return metadataSetsForEntity(graph, { kind: "node", id: node });
@@ -17,7 +17,7 @@ function property<T extends string | number>(
     graph,
     sets.flatMap((set) => {
       const value = set.properties[key];
-      const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+      const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[key]?.at(-1);
       return accepts(value) && source !== undefined ? [{ value, source }] : [];
     }),
   );
@@ -56,7 +56,7 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
       NODE_LABEL_PROPERTY,
       (value): value is string => typeof value === "string",
     )?.source ??
-    graph.provenance.nodes[node]?.at(-1)?.patch ??
+    provenanceOf(graph.provenance.nodes, node)?.at(-1)?.patch ??
     graph.terminal
   );
 }

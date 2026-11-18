@@ -159,6 +159,16 @@ export default function ncept(pi: ExtensionAPI) {
       model,
       onCloseError: (error) => context.ui.notify("Session close failed: " + String(error), "error"),
       confirm: async (proposal) => {
+        if (proposal.defaultAccepted !== undefined) {
+          const add = "Add Mission";
+          const skip = "Skip Mission";
+          return (
+            (await context.ui.select(
+              proposal.title + " " + proposal.description,
+              proposal.defaultAccepted ? [add, skip] : [skip, add],
+            )) === add
+          );
+        }
         const detail = JSON.stringify(proposal.detail, null, 2);
         let message = proposal.description + "\n\n" + detail;
         // bb's pi bridge cancels confirms over 8192 characters. Plain pi can show
@@ -365,7 +375,7 @@ export default function ncept(pi: ExtensionAPI) {
           ),
         reading.missions.length ? "" : "No Missions yet.  /learn <what I want to learn>",
         reading.dueReview.length + " Nodes due for review.  /review",
-        "/learn  ·  /missions  ·  /author  ·  /hub pull <url>",
+        "/learn  ·  /missions  ·  /author  ·  /hub share  ·  /hub pull <url>",
       ].filter(Boolean),
     );
   }
@@ -723,19 +733,43 @@ export default function ncept(pi: ExtensionAPI) {
       await dashboard(ctx);
     },
   });
+  // pi's built-in /share exports the session, and a built-in wins over an extension command.
   pi.registerCommand("hub", {
-    description: "Pull a Hub release: /hub pull <url or patch@version>",
+    description: "Share a Mission's map at a link or pull a release: /hub share [mission] · /hub pull <url>",
     handler: async (args, ctx) => {
-      const match = /^pull\s+(.+)$/.exec(args.trim());
-      if (!match?.[1]) {
-        ctx.ui.notify("Usage: /hub pull <url or patch@version>", "info");
+      const [verb = "", ...rest] = args.trim().split(/\s+/);
+      const operand = rest.join(" ");
+      if (verb === "share") return share(operand, ctx);
+      if (verb !== "pull" || !operand) {
+        ctx.ui.notify("Usage: /hub share [mission] · /hub pull <url or patch@version>", "info");
         return;
       }
-      const ref = await (await getHost(ctx)).hub.pull(match[1]);
+      const ref = await (await getHost(ctx)).hub.pull(operand);
       ctx.ui.notify("Adopted " + ref.identity + "@" + ref.digest, "info");
       await dashboard(ctx);
     },
   });
+  async function share(id: string, ctx: ExtensionCommandContext) {
+    const h = await getHost(ctx);
+    await sync(ctx);
+    const missions = await h.missions.list();
+    let mission = missions.find(({ mission }) => mission.id === id)?.mission;
+    if (!mission) {
+      if (!missions.length) {
+        ctx.ui.notify("There is no Mission to share yet. Start one with /learn.", "info");
+        return;
+      }
+      const options = missions.map(({ mission }) => mission.statement.replace(/\s+/g, " ").slice(0, 100));
+      const selected = await ctx.ui.select("Share which Mission?", options);
+      if (!selected) return;
+      mission = missions[options.indexOf(selected)]?.mission;
+    }
+    if (!mission) return;
+    const title = await ctx.ui.input("Title for the shared map");
+    if (!title?.trim()) return;
+    const shared = await h.hub.share({ mission: mission.id, title });
+    ctx.ui.notify("Shared at " + shared.url + "\nAnyone with the link can read it and learn from it.", "info");
+  }
   pi.registerCommand("ncept", {
     description: "ncept login | logout | export-to-web | import-from-web",
     handler: async (args, ctx) => {

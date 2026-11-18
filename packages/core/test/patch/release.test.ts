@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { canonicalJson, contentDigest, sha256Hex } from "../../src/digest";
 import {
+  provenanceOf,
   applyGraphDiff,
   bundleForRevision,
   candidateRevision,
@@ -67,7 +68,7 @@ test("base closure uses supplied content, preserves manifest order, deduplicates
   ]);
   const graph = resolvePatchBundle(bundle);
   expect(graph.nodes).toEqual([{ id: "node-a" }]);
-  expect(graph.provenance.nodes["node-a"]).toEqual([{ patch: sharedRef, operationIndex: 0 }]);
+  expect(provenanceOf(graph.provenance.nodes, "node-a")).toEqual([{ patch: sharedRef, operationIndex: 0 }]);
   expect(revisionDigest({ ...terminal, bases: [...terminal.bases].reverse() })).not.toBe(revisionDigest(terminal));
 });
 
@@ -79,9 +80,9 @@ test("base closure rejects missing content, digest mismatches and incompatible e
     /missing Patch patch-course/,
   );
   const clone = { ...ref, identity: "patch-clone" as const };
-  expect(resolvePatchBundle(bundleForRevision(clone, contents(base))).provenance.nodes["node-a"]?.[0]?.patch).toEqual(
-    clone,
-  );
+  expect(
+    provenanceOf(resolvePatchBundle(bundleForRevision(clone, contents(base))).provenance.nodes, "node-a")?.[0]?.patch,
+  ).toEqual(clone);
   expect(() => bundleForRevision(ref, new Map([[ref.digest, emptyPatch()]]))).toThrow(/does not match/);
   const newer = { ...base, metadata: { ...base.metadata, properties: { "patch:title": "New title" } } };
   const conflicting = { ...terminal, bases: [ref, candidateRevision("patch-course", newer).ref] };
@@ -101,7 +102,7 @@ test("Notebook diff compilation and application preserve citations and compute t
   const after = candidateRevision("patch-personal", next);
   expect(compiled.report.compiledAgainst).toEqual(before.ref);
   expect(compiled.graph.terminal).toEqual(after.ref);
-  expect(compiled.graph.provenance.nodes["node-a"]).toEqual([{ patch: after.ref, operationIndex: 0 }]);
+  expect(provenanceOf(compiled.graph.provenance.nodes, "node-a")).toEqual([{ patch: after.ref, operationIndex: 0 }]);
   expect(resolvePatchBundle(bundleForRevision(after.ref, contents(next)))).toEqual(compiled.graph);
   expect(next.metadata.citations).toEqual(citations);
   expect(composePatch(next, [], [{ kind: "based_on", source: before.ref }]).metadata.citations).toEqual([
@@ -270,8 +271,8 @@ test("cloned instances share canonical content without instance-derived metadata
   const cloneGraph = resolvePatchBundle(bundleForRevision(clone.ref, contents(content)));
   expect(firstGraph.nodes).toEqual(cloneGraph.nodes);
   expect(firstGraph.metadataSets).toEqual(cloneGraph.metadataSets);
-  expect(firstGraph.provenance.nodes["node-a"]?.[0]?.patch).toEqual(first.ref);
-  expect(cloneGraph.provenance.nodes["node-a"]?.[0]?.patch).toEqual(clone.ref);
+  expect(provenanceOf(firstGraph.provenance.nodes, "node-a")?.[0]?.patch).toEqual(first.ref);
+  expect(provenanceOf(cloneGraph.provenance.nodes, "node-a")?.[0]?.patch).toEqual(clone.ref);
 });
 
 test("shared digest closure preserves both instances and exact masks do not suppress the other clone", () => {
@@ -282,7 +283,7 @@ test("shared digest closure preserves both instances and exact masks do not supp
   const terminal = candidateRevision("patch-personal", plain).ref;
   const bundle = bundleForRevision(terminal, contents(plain, content));
   expect(bundle.revisions.map(({ ref }) => ref)).toEqual([first, clone, terminal]);
-  expect(resolvePatchBundle(bundle).provenance.nodes["node-a"]).toEqual([
+  expect(provenanceOf(resolvePatchBundle(bundle).provenance.nodes, "node-a")).toEqual([
     { patch: first, operationIndex: 0 },
     { patch: clone, operationIndex: 0 },
   ]);
@@ -299,7 +300,7 @@ test("shared digest closure preserves both instances and exact masks do not supp
   const maskedRef = candidateRevision("patch-personal", masked).ref;
   const graph = resolvePatchBundle(bundleForRevision(maskedRef, contents(masked, content)));
   expect(graph.nodes).toEqual([{ id: "node-a" }]);
-  expect(graph.provenance.nodes["node-a"]).toEqual([{ patch: clone, operationIndex: 0 }]);
+  expect(provenanceOf(graph.provenance.nodes, "node-a")).toEqual([{ patch: clone, operationIndex: 0 }]);
   expect(candidateRevision("patch-mask-clone", masked).delta).toEqual(masked.delta);
 });
 

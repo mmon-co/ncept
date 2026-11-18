@@ -15,6 +15,6 @@ A checkpoint adjusts a Mission in progress to what its Lessons have shown.
    - The map is wrong (grain, Edges, order, method): edit it (see `chart`). An edited Node keeps its Records, so change its criterion only while it still asserts the same capability; otherwise replace it.
    - A Record is wrong: that's a recording error, corrected in a Lesson, not a content problem.
 
-3. **Elaborate the next section** as charting does, folding in what Lessons deferred to this check-in, and set `pedagogy:elaborate: false` on what you refine.
+3. **Elaborate the next section** as charting does, folding in what Lessons deferred to this check-in, move the Mission's measure to the next milestone, and set `pedagogy:elaborate: false` on what you refine.
 
 4. **Propose** the changes as a graph diff for the Mission. At the final check-in, this is the Mission's retrospective: what they can do now, then retire the Mission, which is how it finishes, with an extension or a next Mission if they want one.

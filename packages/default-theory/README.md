@@ -45,7 +45,6 @@ Core's `Observation` envelope carries identity, time, scope, support and the pro
 | Payload | Public type and guard from `@mmon-co/ncept-default-theory/outcomes` | Captured evidence |
 | --- | --- | --- |
 | `completion` | `CompletionOutcome`, `isCompletionOutcome` | Playground and scope, exact Node provenance, complete/incomplete and optional validity boundary |
-| `recall` | `RecallOutcome`, `isRecallOutcome` | Card content and Nodes at retrieval, learner answer and recall grade |
 | `quiz` | `QuizOutcome`, `isQuizOutcome` | Questions, choices and correct answers, selected/skipped responses and comments |
 | `attempt` | `AttemptOutcome`, `isAttemptOutcome` | Problem and grading contract at opening, response, assessment, help and exact revision |
 
@@ -70,5 +69,7 @@ Record payload types are exported from `@mmon-co/ncept-default-theory/state` and
 | `interpretation` | `Interpretation` | Supported retrieval prose and canonical tags; scope/support are the envelope's `nodes`/`cites`, not learner-state evidence |
 
 Public guards include `isDemonstration`, `isRetrievalOpenerDemonstration`, `isLapse`, `isGrade`, `isReviewPass`, `isFeatureUse`, `isTeaching`, `isClaim`, `isRetraction`, `isHoming` and `isMemory`. `isDefaultObservation` checks producing-Theory attribution only; it is not a payload validator. `MemorySummaryPayload` and `Interpretation` have exported types but no standalone public guards. Other Theories choose which kinds they understand and preserve unread observations when exchanging a Profile.
+
+Queued repetitions emit `attempt` too; their four ratings and latency belong to the queue's scheduling history. Version 1.1 migrates historical recall captures to Problems, freezing the former front/back unaided rule as observed assistance. Existing Demonstrations retain their identities, attribution and readings.
 
 Observation-contract changes follow the Theory's semver and forward-migration rules: a patch needs no dependent-data migration, a minor permits a mechanical migration, and a major requires a non-mechanical one. This extraction preserves the existing payloads and validators unchanged.

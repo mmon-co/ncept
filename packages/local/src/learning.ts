@@ -951,7 +951,13 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
     options.onCloseError ?? ((error) => console.error("Session close failed:", error)),
   );
   await learning.start();
-  const hub = connectHub(profile, options.theories, options.confirm, options.hub);
+  const hub = connectHub(
+    profile,
+    options.theories,
+    options.confirm,
+    (mission) => learning.reviseMission(mission, true),
+    options.hub,
+  );
   return {
     profile,
     sessions: {
@@ -978,6 +984,7 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
       pull: (address) => learning.serial(() => hub.pull(address)),
       signIn: () => learning.serial(() => hub.signIn()),
       publish: (input) => learning.serial(() => hub.publish(input)),
+      share: (input) => learning.serial(() => hub.share(input)),
       exportTo: (destination) => learning.serial(() => hub.exportTo(destination)),
       importFrom: (source) =>
         learning.serial(async () => {

@@ -25,6 +25,7 @@ export interface Proposal {
   readonly title: string;
   readonly description: string;
   readonly detail: unknown;
+  readonly defaultAccepted?: boolean;
 }
 export type Confirm = (proposal: Proposal) => Promise<boolean>;
 export type ModeSwitch = ModeSwitchDefault & Readonly<{ entry?: ModeEntry }>;
@@ -114,6 +115,11 @@ export interface Host {
     publish(
       input: Readonly<{ patch: ExactPatchRef; version: string; title: string; description?: string }>,
     ): Promise<HubRelease>;
+    /**
+     * Publish one Mission's map (its targets and their prerequisites) as a new Hub release and
+     * return its link. Unlisted unless asked otherwise; signs in first when needed.
+     */
+    share(input: Readonly<{ mission: string; title: string; visibility?: "public" | "unlisted" }>): Promise<HubRelease>;
     exportTo(destination: "web"): Promise<void>;
     importFrom(source: "web"): Promise<ImportResult>;
   };

@@ -15,7 +15,7 @@ import {
   type Program,
   type SurfaceId,
 } from "@mmon-co/ncept-core/observations";
-import { materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/ncept-core/patch";
+import { provenanceOf, materialKey, projectVisualGraph, route, type NodeId } from "@mmon-co/ncept-core/patch";
 import type { ChatContext, Tool } from "@mmon-co/ncept-core/theory";
 import { readMissionPath } from "@mmon-co/ncept-core/theory/path";
 import { pathDefault } from "./path.js";
@@ -520,7 +520,7 @@ export const defaultInstrumentTools = [
         .filter((material) => material.about.includes(node))
         .map((material) => ({
           material,
-          provenance: ctx.graph.provenance.materials[materialKey(material)] ?? [],
+          provenance: provenanceOf(ctx.graph.provenance.materials, materialKey(material)) ?? [],
         })),
   ),
   nodeTool("memory", "Opaque Node memory tail or summary with original Record citations.", (ctx, node) => {
