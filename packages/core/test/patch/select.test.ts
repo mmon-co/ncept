@@ -1,6 +1,7 @@
 import type { TagIndex } from "../../src/theory/theory";
 import { expect, test } from "bun:test";
 import {
+  provenanceOf,
   evaluateView,
   type View,
   parseGraphQuery,
@@ -165,7 +166,7 @@ test("is: selection and saved Views use the supplied TagIndex, including nested 
   expect(evaluateView(graph, view, tags)).toEqual(selected);
   expect(selected.nodes).toEqual([{ id: "node-a" }]);
   expect(selected.metadataSets.map(({ id }) => id)).toEqual(["metadata-a"]);
-  expect(selected.provenance.nodes["node-a"]).toEqual(graph.provenance.nodes["node-a"]);
+  expect(provenanceOf(selected.provenance.nodes, "node-a")).toEqual(provenanceOf(graph.provenance.nodes, "node-a"));
   expect(seen).toEqual(["known", "stale", "known", "stale"]);
   expect(selectGraph(graph, { tag: "is:known" }, () => new Set()).nodes).toEqual([]);
   expect(() => selectGraph(graph, { tag: "is:known" })).toThrow(/requires a TagIndex/);

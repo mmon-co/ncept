@@ -99,8 +99,8 @@ function fixture() {
     metadataSets: resolved.metadataSets.map((set) => ({ ...set, properties: track(set.properties) })),
     provenance: {
       ...resolved.provenance,
-      metadataProperties: Object.fromEntries(
-        Object.entries(resolved.provenance.metadataProperties).map(([id, properties]) => [id, track(properties)]),
+      metadataProperties: resolved.provenance.metadataProperties.map(
+        ([id, properties]) => [id, track(properties)] as const,
       ),
     },
   };

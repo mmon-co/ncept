@@ -12,6 +12,7 @@ import { PatchCompileError } from "./errors.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
+  ProvenanceEntries,
   EdgeId,
   ExactContributionMask,
   ExactPatchRef,
@@ -611,13 +612,10 @@ export function resolveAvailablePatchGraph(
     // Variant composition changes only the Notebook's base pointers, not its delta.
     // Its operations still belong to the recorded checkpoint, never the virtual revision.
     const patch = (ref: ExactPatchRef): ExactPatchRef => (sameExactPatchRef(ref, graph.terminal) ? terminal.ref : ref);
-    const provenance = (entries: Readonly<Record<string, readonly ContributionProvenance[]>>) =>
-      Object.fromEntries(
-        Object.entries(entries).map(([id, contributions]) => [
-          id,
-          contributions.map((contribution) => ({ ...contribution, patch: patch(contribution.patch) })),
-        ]),
-      );
+    const contributions = (chain: readonly ContributionProvenance[]) =>
+      chain.map((contribution) => ({ ...contribution, patch: patch(contribution.patch) }));
+    const provenance = <K extends string>(entries: ProvenanceEntries<K, readonly ContributionProvenance[]>) =>
+      entries.map(([id, chain]) => [id, contributions(chain)] as const);
     return {
       ...graph,
       terminal: terminal.ref,
@@ -627,8 +625,12 @@ export function resolveAvailablePatchGraph(
         edges: provenance(graph.provenance.edges),
         metadataSets: provenance(graph.provenance.metadataSets),
         materials: provenance(graph.provenance.materials),
-        metadataProperties: Object.fromEntries(
-          Object.entries(graph.provenance.metadataProperties).map(([id, properties]) => [id, provenance(properties)]),
+        metadataProperties: graph.provenance.metadataProperties.map(
+          ([id, properties]) =>
+            [
+              id,
+              Object.fromEntries(Object.entries(properties).map(([key, chain]) => [key, contributions(chain)])),
+            ] as const,
         ),
       },
     };
@@ -716,19 +718,22 @@ function resolveBundle(
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
   const materials: Material[] = [];
-  const materialProvenance: Record<string, ContributionProvenance[]> = {};
+  const materialProvenance = new Map<string, ContributionProvenance[]>();
   const tags = new Map<string, GraphTag>();
-  const nodeProvenance: Record<NodeId, ContributionProvenance[]> = {};
-  const edgeProvenance: Record<EdgeId, ContributionProvenance[]> = {};
-  const metadataProvenance: Record<MetadataSetId, ContributionProvenance[]> = {};
-  const metadataPropertyProvenance: Record<MetadataSetId, Record<string, ContributionProvenance[]>> = {};
+  const nodeProvenance = new Map<NodeId, ContributionProvenance[]>();
+  const edgeProvenance = new Map<EdgeId, ContributionProvenance[]>();
+  const metadataProvenance = new Map<MetadataSetId, ContributionProvenance[]>();
+  const metadataPropertyProvenance = new Map<MetadataSetId, Record<string, ContributionProvenance[]>>();
 
   for (const [id, contributions] of nodeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const last = active.at(-1);
     if (last === undefined) continue;
     nodes.set(id, last.value);
-    nodeProvenance[id] = active.map(({ provenance }) => provenance);
+    nodeProvenance.set(
+      id,
+      active.map(({ provenance }) => provenance),
+    );
   }
   for (const [id, contributions] of edgeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
@@ -738,7 +743,10 @@ function resolveBundle(
     if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
       throw new PatchCompileError("incompatible-contribution", `edge '${id}' cannot change endpoints`);
     edges.set(id, last.value);
-    edgeProvenance[id] = active.map(({ provenance }) => provenance);
+    edgeProvenance.set(
+      id,
+      active.map(({ provenance }) => provenance),
+    );
   }
   for (const [id, contributions] of metadataContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
@@ -752,8 +760,11 @@ function resolveBundle(
       );
     const merged = mergeMetadataProperties(active, maskedProperties);
     metadataSets.set(id, { ...last.value, properties: merged.properties });
-    metadataProvenance[id] = active.map(({ provenance }) => provenance);
-    metadataPropertyProvenance[id] = merged.provenance;
+    metadataProvenance.set(
+      id,
+      active.map(({ provenance }) => provenance),
+    );
+    metadataPropertyProvenance.set(id, merged.provenance);
   }
 
   for (const [key, contributions] of collection.materials) {
@@ -779,7 +790,7 @@ function resolveBundle(
     }
     if (current) {
       materials.push(current);
-      materialProvenance[key] = chain;
+      materialProvenance.set(key, chain);
     }
   }
   materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
@@ -805,13 +816,13 @@ function resolveBundle(
     // Every label of this exact revision names the same immutable closure membership.
     const members = {
       nodes: orderedNodes
-        .filter((node) => nodeProvenance[node.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .filter((node) => nodeProvenance.get(node.id)?.some((source) => closure.has(exactPatchRefKey(source.patch))))
         .map((node) => node.id),
       edges: orderedEdges
-        .filter((edge) => edgeProvenance[edge.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .filter((edge) => edgeProvenance.get(edge.id)?.some((source) => closure.has(exactPatchRefKey(source.patch))))
         .map((edge) => edge.id),
       metadataSets: orderedMetadataSets
-        .filter((set) => metadataProvenance[set.id]?.some((source) => closure.has(exactPatchRefKey(source.patch))))
+        .filter((set) => metadataProvenance.get(set.id)?.some((source) => closure.has(exactPatchRefKey(source.patch))))
         .map((set) => set.id),
     };
     for (const label of labels)
@@ -882,11 +893,11 @@ function resolveBundle(
         : [...new Set(materials.map((m) => m.playground).filter((id) => !availablePlaygrounds.has(id)))].sort(),
     tags: [...tags.values()].sort((left, right) => left.name.localeCompare(right.name)),
     provenance: {
-      nodes: nodeProvenance,
-      edges: edgeProvenance,
-      metadataSets: metadataProvenance,
-      materials: materialProvenance,
-      metadataProperties: metadataPropertyProvenance,
+      nodes: [...nodeProvenance],
+      edges: [...edgeProvenance],
+      metadataSets: [...metadataProvenance],
+      materials: [...materialProvenance],
+      metadataProperties: [...metadataPropertyProvenance],
     },
   };
 }

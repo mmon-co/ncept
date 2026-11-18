@@ -1,7 +1,7 @@
 import type { TagIndex } from "../theory/theory.js";
 import { isContentDigest } from "../digest.js";
 import { PatchCompileError } from "./errors.js";
-import { materialKey, sameExactPatchRef } from "./model.js";
+import { provenanceOf, materialKey, sameExactPatchRef } from "./model.js";
 import type {
   EdgeId,
   ExactPatchRef,
@@ -228,10 +228,16 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
     throw new PatchCompileError("unknown-provenance", "provenance selector names a Patch outside the graph");
   const contributed = (items: readonly { readonly patch: typeof ref }[] | undefined): boolean =>
     items?.some((item) => sameExactPatchRef(item.patch, ref)) === true;
-  const nodes = new Set(graph.nodes.filter(({ id }) => contributed(graph.provenance.nodes[id])).map(({ id }) => id));
-  const edges = new Set(graph.edges.filter(({ id }) => contributed(graph.provenance.edges[id])).map(({ id }) => id));
+  const nodes = new Set(
+    graph.nodes.filter(({ id }) => contributed(provenanceOf(graph.provenance.nodes, id))).map(({ id }) => id),
+  );
+  const edges = new Set(
+    graph.edges.filter(({ id }) => contributed(provenanceOf(graph.provenance.edges, id))).map(({ id }) => id),
+  );
   const metadataSets = new Set(
-    graph.metadataSets.filter(({ id }) => contributed(graph.provenance.metadataSets[id])).map(({ id }) => id),
+    graph.metadataSets
+      .filter(({ id }) => contributed(provenanceOf(graph.provenance.metadataSets, id)))
+      .map(({ id }) => id),
   );
   const fragment = { nodes, edges, metadataSets, tags: new Set<string>() };
   for (const edge of graph.edges)
@@ -280,28 +286,6 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
     return subjects.length === 0 ? [] : [{ ...metadata, subjects }];
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
-  const nodeProvenance: Record<NodeId, ResolvedGraph["provenance"]["nodes"][NodeId]> = {};
-  const edgeProvenance: Record<EdgeId, ResolvedGraph["provenance"]["edges"][EdgeId]> = {};
-  const metadataSetProvenance: Record<MetadataSetId, ResolvedGraph["provenance"]["metadataSets"][MetadataSetId]> = {};
-  const metadataPropertyProvenance: Record<
-    MetadataSetId,
-    ResolvedGraph["provenance"]["metadataProperties"][MetadataSetId]
-  > = {};
-  for (const node of graph.nodes) {
-    const provenance = graph.provenance.nodes[node.id];
-    if (nodes.has(node.id) && provenance !== undefined) nodeProvenance[node.id] = provenance;
-  }
-  for (const edge of graph.edges) {
-    const provenance = graph.provenance.edges[edge.id];
-    if (edges.has(edge.id) && provenance !== undefined) edgeProvenance[edge.id] = provenance;
-  }
-  for (const metadata of graph.metadataSets)
-    if (metadataSets.has(metadata.id)) {
-      const provenance = graph.provenance.metadataSets[metadata.id];
-      const propertyProvenance = graph.provenance.metadataProperties[metadata.id];
-      if (provenance !== undefined) metadataSetProvenance[metadata.id] = provenance;
-      if (propertyProvenance !== undefined) metadataPropertyProvenance[metadata.id] = propertyProvenance;
-    }
 
   const materials = graph.materials
     .filter((material) => material.about.some((id) => nodes.has(id)))
@@ -322,16 +306,14 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
       metadataSets: tag.metadataSets.filter((id) => metadataSets.has(id)),
     })),
     provenance: {
-      nodes: nodeProvenance,
-      edges: edgeProvenance,
-      metadataSets: metadataSetProvenance,
-      materials: Object.fromEntries(
-        materials.map((material) => {
-          const key = materialKey(material);
-          return [key, graph.provenance.materials[key] ?? []];
-        }),
-      ),
-      metadataProperties: metadataPropertyProvenance,
+      nodes: graph.provenance.nodes.filter(([id]) => nodes.has(id)),
+      edges: graph.provenance.edges.filter(([id]) => edges.has(id)),
+      metadataSets: graph.provenance.metadataSets.filter(([id]) => metadataSets.has(id)),
+      materials: materials.map((material) => {
+        const key = materialKey(material);
+        return [key, provenanceOf(graph.provenance.materials, key) ?? []] as const;
+      }),
+      metadataProperties: graph.provenance.metadataProperties.filter(([id]) => metadataSets.has(id)),
     },
   };
 }
@@ -341,7 +323,7 @@ export function nodesContributedOnlyBy(graph: ResolvedGraph, patches: ReadonlySe
   return new Set(
     graph.nodes
       .filter(({ id }) => {
-        const contributions = graph.provenance.nodes[id];
+        const contributions = provenanceOf(graph.provenance.nodes, id);
         return (
           contributions !== undefined &&
           contributions.length > 0 &&

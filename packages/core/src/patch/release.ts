@@ -3,6 +3,7 @@ import { compileGraph } from "./compile.js";
 import { PatchCompileError } from "./errors.js";
 import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import {
+  provenanceOf,
   exactPatchRefKey,
   NODE_LABEL_PROPERTY,
   type Attachment,
@@ -293,7 +294,7 @@ export function rootDefinition(identity: PatchId, content: PatchContent): RootPa
       graph,
       metadataSetsForEntity(graph, entity).flatMap((set) => {
         const value = set.properties[key];
-        const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+        const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[key]?.at(-1);
         return value !== undefined && source !== undefined ? [{ value, source }] : [];
       }),
     )?.value;

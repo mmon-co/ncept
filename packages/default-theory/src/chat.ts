@@ -1,6 +1,7 @@
 import { renderSpeech } from "@mmon-co/ncept-core/theory/speaker";
 /* eslint-disable require-yield -- Chat setup is a zero-effect synchronous Program. */
 import {
+  provenanceOf,
   lastMetadataContribution,
   metadataSetsForEntity,
   NODE_CRITERION_PROPERTY,
@@ -39,7 +40,7 @@ type Recommendation = ProductDocument & {
 function metadataValue(ctx: ChatContext<DefaultState>, node: NodeId, property: string): unknown {
   const candidates = metadataSetsForEntity(ctx.graph, { kind: "node", id: node }).flatMap((set) => {
     if (!(property in set.properties)) return [];
-    const source = ctx.graph.provenance.metadataProperties[set.id]?.[property]?.at(-1);
+    const source = provenanceOf(ctx.graph.provenance.metadataProperties, set.id)?.[property]?.at(-1);
     if (source === undefined) throw new Error(`Missing provenance for ${property} on ${node}`);
     return [{ value: set.properties[property], source }];
   });
@@ -55,7 +56,7 @@ function officialDocuments(ctx: ChatContext<DefaultState>): ProductDocument[] {
   return ctx.graph.nodes.flatMap(({ id }) => {
     if (
       !id.startsWith("node-mmon-") ||
-      !ctx.graph.provenance.nodes[id]?.some(({ patch }) => officialPatches.has(patch.identity))
+      !provenanceOf(ctx.graph.provenance.nodes, id)?.some(({ patch }) => officialPatches.has(patch.identity))
     )
       return [];
     const label = metadataValue(ctx, id, NODE_LABEL_PROPERTY);
