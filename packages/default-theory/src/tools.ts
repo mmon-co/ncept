@@ -36,7 +36,6 @@ import {
   memoryDefault,
   stateDefault,
   DEFAULT_THEORY_REF,
-  DEFAULT_PARAMETERS,
   type DefaultState,
   type Demonstration,
   type Interpretation,
@@ -47,6 +46,7 @@ import {
   indicatorsDefault,
   isDefaultKnown,
   isDefaultReviewable,
+  isDefaultReviewDue,
 } from "./tags.js";
 
 type Ctx = ChatContext<DefaultState>;
@@ -491,9 +491,7 @@ export const defaultInstrumentTools = [
   scopedTool("probes", "Claimed or due Nodes with acquisition and retention facts.", (ctx, scope) =>
     readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
-      return state.label === "probably-known" ||
-        (isDefaultReviewable(state) &&
-          (state.schedule?.lapsed === true || (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due))
+      return state.label === "probably-known" || (isDefaultReviewable(state) && isDefaultReviewDue(state))
         ? [{ ...candidate(ctx, id), schedule: state.schedule, rule: trail(ctx, id).rule }]
         : [];
     }),

@@ -33,11 +33,39 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
   )?.value;
 }
 
-/** Milestones and one-off steps keep their evidence without entering Review. */
+export const REVIEW_PROPERTY = "pedagogy:review";
+export type ReviewSchedule = { kind: "memory" } | { kind: "never" } | { kind: "interval"; days: number };
+
+export function validateReviewSchedule(value: unknown, path: string = REVIEW_PROPERTY): void {
+  if (value === undefined || typeof value === "boolean") return;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    Object.keys(value).length === 1 &&
+    "intervalDays" in value &&
+    typeof value.intervalDays === "number" &&
+    Number.isFinite(value.intervalDays) &&
+    value.intervalDays > 0
+  )
+    return;
+  throw new Error(`${path}: expected true, false, or { intervalDays: a positive finite number }`);
+}
+
+export function nodeReviewSchedule(graph: ResolvedGraph, node: NodeId): ReviewSchedule {
+  const review = nodeCascadedProperty(graph, node, REVIEW_PROPERTY);
+  if (
+    typeof review === "object" &&
+    review !== null &&
+    "intervalDays" in review &&
+    typeof review.intervalDays === "number"
+  )
+    return { kind: "interval", days: review.intervalDays };
+  const enabled = typeof review === "boolean" ? review : pathProperty(graph, node, "pedagogy:milestone") !== true;
+  return enabled ? { kind: "memory" } : { kind: "never" };
+}
+
 export function nodeAllowsReview(graph: ResolvedGraph, node: NodeId): boolean {
-  return (
-    pathProperty(graph, node, "pedagogy:milestone") !== true && pathProperty(graph, node, "pedagogy:review") !== false
-  );
+  return nodeReviewSchedule(graph, node).kind !== "never";
 }
 
 /** Default-theory hint: an absolute integer, higher first, inherited from tags. */
@@ -258,7 +286,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
   for (const { id } of context.graph.nodes) {
     const node = state.nodes[id];
     const schedule = node?.schedule;
-    if (!scope.has(id) || !schedule || node.reviewCleared || !nodeAllowsReview(context.graph, id)) continue;
+    if (!scope.has(id) || !schedule || node.reviewCleared) continue;
     const last = Date.parse(schedule.lastReview);
     const at = (time: number) => forgetting_curve((time - last) / 86_400_000, schedule.stability);
     const nextBelow = (threshold: number) => {
@@ -276,7 +304,9 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
       boundaries.push(high);
     };
     if (!schedule.lapsed) {
-      nextBelow(DEFAULT_PARAMETERS.retention.due);
+      if (node.intervalDue === undefined) nextBelow(DEFAULT_PARAMETERS.retention.due);
+      else if (!node.intervalDue.due && node.intervalDue.at <= 8_640_000_000_000_000)
+        boundaries.push(node.intervalDue.at);
       nextBelow(DEFAULT_PARAMETERS.retention.fading);
     }
     if (competing.has(id)) nextBelow(schedule.retrievability);
