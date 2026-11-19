@@ -311,7 +311,7 @@ test("review tags apply to acquired Nodes at 0.9 and 0.7 and rank untaught depen
     claim("obs-isolated", "node-isolated", "2026-09-20T08:00:00.000Z"),
     claim("obs-prerequisite", "node-prerequisite", "2026-09-20T08:00:00.000Z"),
   ];
-  const now = "2026-10-09T08:00:00.000Z";
+  const now = "2026-10-11T08:00:00.000Z";
   expect(tags(observations, now, "node-claim").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
   const rank = (node: NodeId) => tags(observations, now, node)[0]?.rank ?? 0;
   expect(rank("node-prerequisite")).toBeGreaterThan(rank("node-claim"));

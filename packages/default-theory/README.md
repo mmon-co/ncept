@@ -28,7 +28,7 @@ Licensed under the Functional Source License 1.1 with Apache-2.0 as its future l
 
 `bun test packages/default-theory/test/stored-output.test.ts` compares a fixed graph and observation log with `test/snapshots/stored-output.<major>.<minor>.json`. The ordinary test suite and pre-integration gate run it too. It records tag membership on Nodes, Edges and the learner at several evidence prefixes and clocks, the `pedagogy:` keys those operations read, and observation payloads emitted by recording tools and outcome/day events. It does not record captions, rankings, readings, paths, prompts or build metadata. Like any fixture, it detects changes exercised by that graph and log, not every possible policy change.
 
-A mismatch requires a minor (mechanical migration) or major (non-mechanical migration) bump to `DEFAULT_THEORY_REF` and the corresponding forward data migration. Changed criteria for applying the same tags count as stored-data changes, not patches. Generate the new version's snapshot after making that change. If the diff changes no stored data, refresh the existing snapshot instead:
+A mismatch requires a minor (mechanical migration) or major (non-mechanical migration) bump to `DEFAULT_THEORY_REF` and the corresponding forward data migration. Changed criteria for applying the same tags count as stored-data changes, not patches; when nothing stored changes shape, the step declares no rewrite (`{ from, to }`), and hosts move each Profile's pin and discard its derived state without reading it. Generate the new version's snapshot after making that change. If the diff changes no stored data, refresh the existing snapshot instead:
 
 ```sh
 UPDATE_DEFAULT_THEORY_STORED_OUTPUT=1 bun test packages/default-theory/test/stored-output.test.ts
