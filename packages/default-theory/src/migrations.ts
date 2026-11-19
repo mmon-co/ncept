@@ -1,12 +1,20 @@
-import { attachmentDigest, isObservation, type Profile } from "@mmon-co/ncept-core";
+import { canonicalJson, attachmentDigest, isObservation, type Profile } from "@mmon-co/ncept-core";
 import {
   isNodeId,
+  candidateRevision,
+  nodeCascadedProperty,
+  isMetadataValue,
+  resolvePatchBundle,
+  type MetadataSetId,
+  type NodeId,
+  type PatchContent,
+  type SemanticOperation,
   sameExactPatchRef,
   type ExactPatchRef,
   type MetadataSet,
-  type NodeId,
 } from "@mmon-co/ncept-core/patch";
 import { migrateTheoryPatchClosure, type TheoryMigration } from "@mmon-co/ncept-core/theory";
+import { pathProperty } from "./path.js";
 import { REVIEW_PROPERTY } from "./schedules.js";
 import { isAttemptOutcome, type AttemptOutcome } from "./outcomes.js";
 import type { NodeRef } from "./state.js";
@@ -95,37 +103,71 @@ export const recallToAttemptMigration = {
 export const reviewScheduleMigration = {
   from: "1.1",
   to: "1.2",
-  migratePatch(content) {
+  migratePatch(content, graphs) {
     const sets = content.delta.operations.flatMap((op) => (op.kind === "add-metadata-set" ? [op.metadataSet] : []));
     if (
+      !graphs?.basesChanged &&
       !sets.some(({ properties }) => typeof properties[REVIEW_PROPERTY] === "boolean") &&
       typeof content.metadata.properties[REVIEW_PROPERTY] !== "boolean"
     )
       return content;
 
-    const milestones = new Map<NodeId, boolean>();
-    for (const { subjects, properties } of sets)
-      for (const subject of subjects)
-        if (subject.kind === "node" && "pedagogy:milestone" in properties)
-          milestones.set(subject.id, properties["pedagogy:milestone"] === true);
-
-    function rewrite(properties: MetadataSet["properties"], milestone = false) {
+    const resolve =
+      graphs?.resolve ??
+      ((candidate = content) => {
+        const revision = candidateRevision("patch-migrating", candidate);
+        return resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
+      });
+    const before = resolve();
+    const milestone = (id: NodeId) => pathProperty(before, id, "pedagogy:milestone") === true;
+    function rewrite(properties: MetadataSet["properties"], subjects?: MetadataSet["subjects"]) {
       const review = properties[REVIEW_PROPERTY];
-      if (typeof review !== "boolean") return properties;
-      return { ...properties, [REVIEW_PROPERTY]: { kind: review && !milestone ? "fsrs" : "never" } };
+      return typeof review === "boolean"
+        ? {
+            ...properties,
+            [REVIEW_PROPERTY]: {
+              kind: review && !subjects?.every((s) => s.kind === "node" && milestone(s.id)) ? "fsrs" : "never",
+            },
+          }
+        : properties;
     }
-    return {
+    const rewritten: PatchContent = {
       ...content,
       metadata: { ...content.metadata, properties: rewrite(content.metadata.properties) },
       delta: {
         operations: content.delta.operations.map((op) => {
           if (op.kind !== "add-metadata-set") return op;
-          const { subjects, properties } = op.metadataSet;
-          const milestone = subjects.every((subject) => subject.kind === "node" && milestones.get(subject.id));
-          return { ...op, metadataSet: { ...op.metadataSet, properties: rewrite(properties, milestone) } };
+          return {
+            ...op,
+            metadataSet: { ...op.metadataSet, properties: rewrite(op.metadataSet.properties, op.metadataSet.subjects) },
+          };
         }),
       },
     };
+    // A single contribution may cover both ordinary Nodes and milestones, including
+    // through a tag or across Patch bases. Preserve each effective reading separately.
+
+    const after = resolve(rewritten);
+    const additions: SemanticOperation[] = [];
+    const ids = new Set(after.metadataSets.map((set) => set.id));
+    for (const { id } of before.nodes) {
+      const old = nodeCascadedProperty(before, id, REVIEW_PROPERTY);
+      const fallback = { kind: milestone(id) ? "never" : "fsrs" };
+      const wanted = old === false ? { kind: "never" } : old === true || old == null ? fallback : old;
+      const actual = nodeCascadedProperty(after, id, REVIEW_PROPERTY) ?? fallback;
+      if (canonicalJson(actual) === canonicalJson(wanted)) continue;
+      let key: MetadataSetId = `metadata-review-${id}`;
+      while (ids.has(key)) key = `${key}-review`;
+      ids.add(key);
+      if (!isMetadataValue(wanted)) throw new Error("Invalid inherited Review schedule");
+      additions.push({
+        kind: "add-metadata-set",
+        metadataSet: { id: key, subjects: [{ kind: "node", id }], properties: { [REVIEW_PROPERTY]: wanted } },
+      });
+    }
+    return additions.length
+      ? { ...rewritten, delta: { operations: [...rewritten.delta.operations, ...additions] } }
+      : rewritten;
   },
   migrate(profile) {
     const { terminal, revisions } = migrateTheoryPatchClosure(
