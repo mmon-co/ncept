@@ -1,4 +1,12 @@
-MIT License
+Each package in this repository carries its own licence in its LICENSE file:
+
+packages/core             Apache License, Version 2.0
+packages/default-theory   Business Source License 1.1 (Change License: Apache License, Version 2.0)
+packages/local            MIT License
+packages/pi               MIT License
+packages/bb               MIT License
+
+Files outside packages/ are under the MIT License:
 
 Copyright (c) 2026 mmon-co
 

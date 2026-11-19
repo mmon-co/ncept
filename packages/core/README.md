@@ -33,4 +33,4 @@ npm pack --dry-run
 
 `prepack` rebuilds `dist/`. The package contains only `dist/`, this README, `LICENSE` and its manifest. Repository tsconfig paths resolve workspace imports directly to source; they are not aliases for any former package name.
 
-MIT licensed; see [LICENSE](LICENSE).
+Apache-2.0 licensed, © 2026 mmon-co; see [LICENSE](LICENSE).
