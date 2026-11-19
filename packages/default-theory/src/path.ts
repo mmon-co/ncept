@@ -249,7 +249,10 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
         candidates.some(
           (b) =>
             a.priority === b.priority &&
-            (a.schedule.lastReview !== b.schedule.lastReview || a.schedule.stability !== b.schedule.stability),
+            (a.schedule.lastReview !== b.schedule.lastReview ||
+              a.schedule.stability !== b.schedule.stability ||
+              a.schedule.stabilityFast !== b.schedule.stabilityFast ||
+              a.schedule.difficulty !== b.schedule.difficulty),
         ),
       )
       .map(({ id }) => id),
@@ -259,7 +262,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
     const schedule = node?.schedule;
     if (!scope.has(id) || !schedule || node.reviewCleared || !nodeAllowsReview(context.graph, id)) continue;
     const last = Date.parse(schedule.lastReview);
-    const at = (time: number) => retrievability((time - last) / 86_400_000, schedule.stability);
+    const at = (time: number) => retrievability((time - last) / 86_400_000, schedule);
     const nextBelow = (threshold: number) => {
       if (threshold <= 0 || at(now) < threshold) return;
       let low = now,

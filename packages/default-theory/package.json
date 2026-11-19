@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@mmon-co/ncept-core": "^0.3.0",
-    "ts-fsrs": "^5.4.2",
+    "ts-fsrs": "^6.0.0",
     "yaml": "^2.5.0"
   },
   "devDependencies": {

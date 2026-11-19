@@ -86,4 +86,6 @@ export const migrations: readonly TheoryMigration[] = [
   // FSRS-6 (ts-fsrs 5) replaces FSRS-5's curve: review tags and path ranks read retrievability,
   // which every Profile recomputes from its unchanged evidence.
   { from: "1.1", to: "1.2" },
+  // FSRS-7 (ts-fsrs 6) replaces FSRS-6's single trace with slow and fast traces; likewise derived only.
+  { from: "1.2", to: "1.3" },
 ];

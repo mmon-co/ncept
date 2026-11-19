@@ -1,4 +1,6 @@
-import { createEmptyCard, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
+import { dateChrono, defineScheduler, Rating, type Grade as FsrsGrade } from "ts-fsrs";
+import { schedulerStatsMiddleware } from "ts-fsrs/middlewares";
+import { FSRS7_DEFAULT_WEIGHTS, FSRS7Model } from "ts-fsrs/models/fsrs-7";
 import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";
 import { readTheoryState, type TheoryState } from "@mmon-co/ncept-core/theory";
 
@@ -35,7 +37,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
-export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.2.0" } as const;
+export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.3.0" } as const;
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
@@ -617,7 +619,9 @@ export const DEFAULT_PARAMETERS: DefaultParameters = {
 };
 
 export interface NodeSchedule {
+  /** FSRS-7 memory: the slow and fast traces' stabilities and difficulty, all of which retrievability reads. */
   readonly stability: number;
+  readonly stabilityFast: number;
   readonly difficulty: number;
   readonly reps: number;
   readonly lapses: number;
@@ -629,10 +633,21 @@ export interface NodeSchedule {
 }
 
 const DAY_MS = 86_400_000;
-/** Daily reviews have no learning steps; disabling fuzz keeps replay deterministic. */
-const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
-/** Retrievability after `elapsedDays` under the scheduler's own decay. */
-export const retrievability = SCHEDULER.forgetting_curve;
+/** FSRS-7 over fractional days. Daily reviews have no learning steps, and without fuzz
+ * middleware replay stays deterministic. */
+const SCHEDULER = defineScheduler({ model: FSRS7Model, chrono: dateChrono })
+  .use(schedulerStatsMiddleware)
+  .create({ config: { weights: FSRS7_DEFAULT_WEIGHTS, fractionalDays: true, clearStatsOnForget: false } });
+type Card = ReturnType<typeof SCHEDULER.newCard>;
+/** Retrievability after `elapsedDays` under the scheduler's own curve. */
+export const retrievability = (
+  elapsedDays: number,
+  memory: Pick<NodeSchedule, "stability" | "stabilityFast" | "difficulty">,
+) => SCHEDULER.model.forgettingCurve(memory, elapsedDays);
+const review = (card: Card | undefined, at: string, grade: FsrsGrade) => {
+  const now = new Date(at);
+  return SCHEDULER.review({ card: card ?? SCHEDULER.newCard({ now }), now, grade }).card;
+};
 
 export interface NodeState {
   readonly completion: CompletionProgress & { readonly query?: Completion };
@@ -711,9 +726,12 @@ function scheduleDefaultNode(
     const { payload, at, id } = record;
     if (payload.kind === "claim") {
       if (payload.stance !== "knows" || card !== undefined) continue;
+      // The claim stands in for the first grade's initial slow stability; the fast trace
+      // follows FSRS-7's own initialization from it.
       card = {
-        ...SCHEDULER.next(createEmptyCard(at), at, Rating.Good).card,
+        ...review(undefined, at, Rating.Good),
         stability: parameters.retention.claimStabilityDays,
+        stabilityFast: 0.8 * parameters.retention.claimStabilityDays,
         reps: 0,
       };
       initializingClaim = at;
@@ -726,24 +744,25 @@ function scheduleDefaultNode(
             evidence.outcome === "success" &&
             Date.parse(at) < Date.parse(payload.day.start),
         );
-      card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
+      card = review(card, payload.day.end, Rating[payload.rating]);
       lapsed = payload.rating === "Again" && earlierSuccess;
       citations.push(...(record.cites ?? []));
     } else {
       const day = record.learnerDay;
       if (day === undefined || day.id === reviewDay) continue;
-      card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
+      card = review(card, at, Rating.Good);
       reviewDay = day.id;
     }
     citations.push(id);
   }
-  if (card?.last_review === undefined) return undefined;
+  if (!card?.lastReviewAt) return undefined;
   return {
     stability: card.stability,
+    stabilityFast: card.stabilityFast,
     difficulty: card.difficulty,
     reps: card.reps,
     lapses: card.lapses,
-    lastReview: card.last_review.toISOString(),
+    lastReview: card.lastReviewAt.toISOString(),
     lapsed,
     citations: [...new Set(citations)],
   };
@@ -1675,7 +1694,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
           ? undefined
           : {
               ...card,
-              retrievability: retrievability((Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS, card.stability),
+              retrievability: retrievability((Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS, card),
             };
       nodes[id] = {
         ...facts,
