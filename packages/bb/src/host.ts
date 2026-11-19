@@ -35,6 +35,8 @@ export default experimental_defineHostEntry({
         // The Share form in the Learn panel is the confirmation.
         confirm: async () => true,
         hub: {
+          // Sharing uses the same Hub login as `/ncept login` in the project's pi threads.
+          clientMetadataUrl: "https://pi.dev/oauth/client.json",
           url: process.env.NCEPT_HUB_URL,
           credentialsFile: process.env.NCEPT_CREDENTIALS_FILE,
           openUrl: async () => {
