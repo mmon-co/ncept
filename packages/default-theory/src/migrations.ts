@@ -74,15 +74,16 @@ function migrate(profile: Profile): Profile {
   };
 }
 
-// The hosted release can scan just the two payload stores before committing this step's
-// changed rows. Patch, Mission and derived Demonstration facts stay byte-for-byte as they were.
-export const recallToAttemptMigration = {
-  from: "1.0",
-  to: "1.1",
-  migratePatch: (content) => content,
-  migrate,
-  migrateOutcome: (payload, profile) => migratePayload(payload, profile.patches.terminal),
-  migratePayload,
-} satisfies TheoryMigration & { migratePayload: typeof migratePayload };
-
-export const migrations: readonly TheoryMigration[] = [recallToAttemptMigration];
+export const migrations: readonly TheoryMigration[] = [
+  {
+    from: "1.0",
+    to: "1.1",
+    // Derived Demonstrations already store unaided, grader and each original Node provenance.
+    // Preserve them verbatim, including their Theory attribution, ids, support and timestamps.
+    migrate,
+    migrateOutcome: (payload, profile) => migratePayload(payload, profile.patches.terminal),
+  },
+  // FSRS-6 (ts-fsrs 5) replaces FSRS-5's curve: review tags and path ranks read retrievability,
+  // which every Profile recomputes from its unchanged evidence.
+  { from: "1.1", to: "1.2" },
+];

@@ -46,7 +46,7 @@ This is a history-preserving mirror of the source monorepo's public packages.
 
 ## Licences
 
-Core is Apache-2.0, so anything may read and write Patches and implement a Theory. The local host library, the pi front end and the bb plugin are MIT. The default Theory is under the [Business Source License 1.1](packages/default-theory/LICENSE): use, change and redistribute it for anything except a commercial product or service that substitutes for it; each version becomes Apache-2.0 four years after it is published. Learning with the local product, alone or with a paid teacher, is within every one of these.
+Core is Apache-2.0, so anything may read and write Patches and implement a Theory. The local host library, the pi front end and the bb plugin are MIT. The default Theory is under the [Functional Source License 1.1](packages/default-theory/LICENSE): use, change and redistribute it for anything except a commercial product or service that substitutes for it, which includes selling a Theory derived from it; each version becomes Apache-2.0 two years after it is made available.0 four years after it is published. Learning with the local product, alone or with a paid teacher, is within every one of these.
 
 ## Develop and contribute
 

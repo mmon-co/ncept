@@ -1,7 +1,7 @@
 {
   "name": "@mmon-co/ncept-default-theory",
   "version": "2.0.0",
-  "license": "BUSL-1.1",
+  "license": "FSL-1.1-ALv2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mmon-co/ncept.git",
@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@mmon-co/ncept-core": "^0.3.0",
-    "ts-fsrs": "^4.0.0",
+    "ts-fsrs": "^5.4.2",
     "yaml": "^2.5.0"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
+import { createEmptyCard, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";
 import { readTheoryState, type TheoryState } from "@mmon-co/ncept-core/theory";
 
@@ -35,7 +35,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
-export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.1.0" } as const;
+export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.2.0" } as const;
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
@@ -631,6 +631,8 @@ export interface NodeSchedule {
 const DAY_MS = 86_400_000;
 /** Daily reviews have no learning steps; disabling fuzz keeps replay deterministic. */
 const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
+/** Retrievability after `elapsedDays` under the scheduler's own decay. */
+export const retrievability = SCHEDULER.forgetting_curve;
 
 export interface NodeState {
   readonly completion: CompletionProgress & { readonly query?: Completion };
@@ -1673,10 +1675,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
           ? undefined
           : {
               ...card,
-              retrievability: forgetting_curve(
-                (Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS,
-                card.stability,
-              ),
+              retrievability: retrievability((Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS, card.stability),
             };
       nodes[id] = {
         ...facts,
