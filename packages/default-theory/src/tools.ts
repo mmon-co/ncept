@@ -21,6 +21,7 @@ import { readMissionPath } from "@mmon-co/ncept-core/theory/path";
 import { pathDefault } from "./path.js";
 import { event, refinePendingHomes } from "./event.js";
 import { isAttemptOutcome } from "./outcomes.js";
+import { learnerAttempt, posedTask } from "./evaluation.js";
 import {
   activeDefaultRecords,
   completionNodeRef,
@@ -606,7 +607,7 @@ const recordDemonstration = {
   name: "record_demonstration" as const,
   description: [
     "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
-    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
+    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve the posed task and answer excerpt verbatim, including when grading directly after a judge error; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
     "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
     "For an answer to a Material item, use record_material_attempt. A runner records its own outcome; correct a wrong runner grade with evaluation_override and a reason. An option's optional error string remains verbatim in the response.",
     "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
@@ -617,8 +618,8 @@ const recordDemonstration = {
       outcome: { enum: ["success", "failure", "dont-know"] },
       unaided: { type: "boolean" },
       grader: { enum: ["mechanical", "tutor", "learner"] },
-      task: { type: "string" },
-      response: { type: "string" },
+      task: posedTask,
+      response: learnerAttempt,
     },
     ["node", "outcome", "unaided", "grader"],
   ),
