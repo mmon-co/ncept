@@ -19,6 +19,7 @@ export * from "./state.js";
 export * from "./completion.js";
 export * from "./tags.js";
 export * from "./outcomes.js";
+export { recallToAttemptMigration } from "./migrations.js";
 export * from "./roleplay.js";
 export * from "./chat.js";
 export * from "./opening.js";

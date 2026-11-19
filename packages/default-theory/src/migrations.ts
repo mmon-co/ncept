@@ -74,14 +74,15 @@ function migrate(profile: Profile): Profile {
   };
 }
 
-export const migrations: readonly TheoryMigration[] = [
-  {
-    from: "1.0",
-    to: "1.1",
-    migratePatch: (content) => content,
-    // Derived Demonstrations already store unaided, grader and each original Node provenance.
-    // Preserve them verbatim, including their Theory attribution, ids, support and timestamps.
-    migrate,
-    migrateOutcome: (payload, profile) => migratePayload(payload, profile.patches.terminal),
-  },
-];
+// The hosted release can scan just the two payload stores before committing this step's
+// changed rows. Patch, Mission and derived Demonstration facts stay byte-for-byte as they were.
+export const recallToAttemptMigration = {
+  from: "1.0",
+  to: "1.1",
+  migratePatch: (content) => content,
+  migrate,
+  migrateOutcome: (payload, profile) => migratePayload(payload, profile.patches.terminal),
+  migratePayload,
+} satisfies TheoryMigration & { migratePayload: typeof migratePayload };
+
+export const migrations: readonly TheoryMigration[] = [recallToAttemptMigration];
