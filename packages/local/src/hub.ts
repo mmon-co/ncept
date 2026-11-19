@@ -246,7 +246,7 @@ export function connectHub(
   ) {
     const provider = await HubAuth.open(resource, options);
     if (!provider.tokens()) throw new Error("Sign in first with host.hub.signIn()");
-    const client = new Client({ name: "@mmon-co/ncept-local", version: "0.1.0" });
+    const client = new Client({ name: metadata.name, version: metadata.version });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(resource), { authProvider: provider }));
       return await operation(async <R>(name: string, args: Record<string, unknown>): Promise<R> => {

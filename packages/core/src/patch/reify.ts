@@ -3,7 +3,14 @@ import { PatchCompileError } from "./errors.js";
 import { discoveryTags, sameMetadataSubjects } from "./metadata.js";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance.js";
 import { CAPABILITY_PROPERTIES } from "./capabilities.js";
-import { contributionKey, exactPatchRefKey, maskedPropertyKey, materialKey, sameExactPatchRef } from "./model.js";
+import {
+  provenanceOf,
+  contributionKey,
+  exactPatchRefKey,
+  maskedPropertyKey,
+  materialKey,
+  sameExactPatchRef,
+} from "./model.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -110,12 +117,12 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
       if (operation.kind === "mask-contribution") return;
       if (suppressed.has(contributionKey(source, operationIndex))) return;
       if (operation.kind === "add-node") {
-        if (!contributed(view.provenance.nodes[operation.node.id], source, operationIndex))
+        if (!contributed(provenanceOf(view.provenance.nodes, operation.node.id), source, operationIndex))
           masks.push({ source, operationIndex, entity: { kind: "node", id: operation.node.id } });
         return;
       }
       if (operation.kind === "add-edge") {
-        if (!contributed(view.provenance.edges[operation.edge.id], source, operationIndex))
+        if (!contributed(provenanceOf(view.provenance.edges, operation.edge.id), source, operationIndex))
           masks.push({ source, operationIndex, entity: { kind: "edge", id: operation.edge.id } });
         return;
       }
@@ -129,7 +136,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
         if (
           selected === undefined ||
           (operation.kind !== "remove-material" && canonicalJson(selected) !== canonicalJson(operation.material)) ||
-          !contributed(view.provenance.materials[materialKey(material)], source, operationIndex)
+          !contributed(provenanceOf(view.provenance.materials, materialKey(material)), source, operationIndex)
         )
           masks.push({
             source,
@@ -145,7 +152,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
       // expressed as property masks: the whole contribution goes and the capture authors it.
       if (
         selected === undefined ||
-        !contributed(view.provenance.metadataSets[set.id], source, operationIndex) ||
+        !contributed(provenanceOf(view.provenance.metadataSets, set.id), source, operationIndex) ||
         !sameMetadataSubjects(selected, set)
       ) {
         masks.push({ source, operationIndex, entity });
@@ -154,7 +161,7 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
       for (const property of Object.keys(set.properties))
         if (
           !suppressedProperties.has(maskedPropertyKey(source, operationIndex, property)) &&
-          !contributed(view.provenance.metadataProperties[set.id]?.[property], source, operationIndex)
+          !contributed(provenanceOf(view.provenance.metadataProperties, set.id)?.[property], source, operationIndex)
         )
           masks.push({ source, operationIndex, entity, property });
     });
@@ -188,7 +195,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
   const inheritsEntity = (chain: readonly ContributionProvenance[] | undefined) => chain?.some(supplied) === true;
   /** Authored operations resolve last, so only the effective contribution decides a property. */
   const inheritsProperty = (set: MetadataSetId, property: string) => {
-    const last = view.provenance.metadataProperties[set]?.[property]?.at(-1);
+    const last = provenanceOf(view.provenance.metadataProperties, set)?.[property]?.at(-1);
     return (
       last !== undefined &&
       supplied(last) &&
@@ -200,7 +207,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
   const patchOrder = new Map(view.patchOrder.map((ref, index) => [exactPatchRefKey(ref), index]));
   const metadataContributions = view.metadataSets
     .flatMap((metadataSet) => {
-      const inheritedEntity = inheritsEntity(view.provenance.metadataSets[metadataSet.id]);
+      const inheritedEntity = inheritsEntity(provenanceOf(view.provenance.metadataSets, metadataSet.id));
       const groups = new Map<string, { source: ContributionProvenance; metadataSet: MetadataSet }>();
       for (const [key, value] of Object.entries(metadataSet.properties)) {
         // Reauthor ordered pedagogy even from retained bases: flattened sources can precede them,
@@ -211,7 +218,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
           inheritsProperty(metadataSet.id, key)
         )
           continue;
-        const source = view.provenance.metadataProperties[metadataSet.id]?.[key]?.at(-1);
+        const source = provenanceOf(view.provenance.metadataProperties, metadataSet.id)?.[key]?.at(-1);
         if (source === undefined)
           throw new PatchCompileError("invalid-bundle", `missing provenance for '${key}' on '${metadataSet.id}'`);
         const groupKey = contributionKey(source.patch, source.operationIndex);
@@ -222,7 +229,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
         });
       }
       if (!inheritedEntity && groups.size === 0) {
-        const source = view.provenance.metadataSets[metadataSet.id]?.at(-1);
+        const source = provenanceOf(view.provenance.metadataSets, metadataSet.id)?.at(-1);
         if (source === undefined)
           throw new PatchCompileError("invalid-bundle", `missing provenance for '${metadataSet.id}'`);
         groups.set(contributionKey(source.patch, source.operationIndex), { source, metadataSet });
@@ -262,13 +269,13 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
   const operations: SemanticOperation[] = [
     ...inherited.masks.map((mask) => ({ kind: "mask-contribution" as const, mask })),
     ...view.nodes
-      .filter((node) => !inheritsEntity(view.provenance.nodes[node.id]))
+      .filter((node) => !inheritsEntity(provenanceOf(view.provenance.nodes, node.id)))
       .map((node) => ({ kind: "add-node" as const, node })),
     ...view.edges
-      .filter((edge) => !inheritsEntity(view.provenance.edges[edge.id]))
+      .filter((edge) => !inheritsEntity(provenanceOf(view.provenance.edges, edge.id)))
       .map((edge) => ({ kind: "add-edge" as const, edge })),
     ...view.materials.flatMap((material) => {
-      const chain = view.provenance.materials[materialKey(material)];
+      const chain = provenanceOf(view.provenance.materials, materialKey(material));
       const last = chain?.at(-1);
       if (last !== undefined && supplied(last)) return [];
       return [{ kind: inheritsEntity(chain) ? ("edit-material" as const) : ("add-material" as const), material }];

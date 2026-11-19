@@ -209,15 +209,37 @@ export interface ResolvedGraph {
   /** Required Playgrounds not installed by the resolving host. Empty when availability is not supplied. */
   readonly unavailablePlaygrounds: readonly PlaygroundId[];
   readonly tags: readonly GraphTag[];
+  /**
+   * Entry lists rather than records keyed by entity: a graph crosses host boundaries (Convex
+   * arguments and results) that refuse objects with more than 1,024 fields. Read through
+   * `provenanceOf`. A set's properties stay a record, bounded by a metadata set's own key limit.
+   */
   readonly provenance: {
-    readonly nodes: Readonly<Record<NodeId, readonly ContributionProvenance[]>>;
-    readonly edges: Readonly<Record<EdgeId, readonly ContributionProvenance[]>>;
-    readonly metadataSets: Readonly<Record<MetadataSetId, readonly ContributionProvenance[]>>;
-    readonly materials: Readonly<Record<string, readonly ContributionProvenance[]>>;
-    readonly metadataProperties: Readonly<
-      Record<MetadataSetId, Readonly<Record<string, readonly ContributionProvenance[]>>>
+    readonly nodes: ProvenanceEntries<NodeId, readonly ContributionProvenance[]>;
+    readonly edges: ProvenanceEntries<EdgeId, readonly ContributionProvenance[]>;
+    readonly metadataSets: ProvenanceEntries<MetadataSetId, readonly ContributionProvenance[]>;
+    /** Keyed by `materialKey`. */
+    readonly materials: ProvenanceEntries<string, readonly ContributionProvenance[]>;
+    readonly metadataProperties: ProvenanceEntries<
+      MetadataSetId,
+      Readonly<Record<string, readonly ContributionProvenance[]>>
     >;
   };
+}
+
+export type ProvenanceEntries<K extends string, V> = readonly (readonly [K, V])[];
+
+const provenanceIndexes = new WeakMap<object, ReadonlyMap<string, number>>();
+
+/** One entity's entry, through a position index built once per entry list. */
+export function provenanceOf<K extends string, V>(entries: ProvenanceEntries<K, V>, id: K): V | undefined {
+  let index = provenanceIndexes.get(entries);
+  if (!index) {
+    index = new Map(entries.map(([key], position) => [key, position]));
+    provenanceIndexes.set(entries, index);
+  }
+  const position = index.get(id);
+  return position === undefined ? undefined : entries[position]?.[1];
 }
 
 export type GraphQuery =

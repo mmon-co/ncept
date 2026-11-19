@@ -25,8 +25,10 @@ jobs:
       - run: bun run build
       - name: Publish versions absent from the registry
         run: |
-          shopt -s nullglob
-          for manifest in packages/*/package.json; do
+          # Make each dependency installable before publishing its consumers.
+          for package in core default-theory local pi bb; do
+            manifest="packages/$package/package.json"
+            if [[ ! -f "$manifest" ]]; then continue; fi
             name=$(jq -r .name "$manifest")
             version=$(jq -r .version "$manifest")
             if jq -e .private "$manifest" >/dev/null; then

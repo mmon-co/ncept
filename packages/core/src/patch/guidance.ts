@@ -7,6 +7,7 @@ import {
   metadataSubjectKey,
 } from "./metadata.js";
 import {
+  provenanceOf,
   exactPatchRefKey,
   type ContributionProvenance,
   type MetadataSetId,
@@ -102,7 +103,7 @@ export function nodeMetadataCascade<T>(
           subject.kind !== "edge" && metadataSubjectAppliesToEntity(graph, subject, entity),
       )
       .sort((a, b) => compareKey(metadataSubjectKey(a), metadataSubjectKey(b)));
-    const source = graph.provenance.metadataProperties[set.id]?.[key]?.at(-1);
+    const source = provenanceOf(graph.provenance.metadataProperties, set.id)?.[key]?.at(-1);
     if (source === undefined)
       throw new PatchCompileError("invalid-bundle", `missing metadata provenance for '${set.id}'`);
     return entries.map((value, entryIndex) => ({

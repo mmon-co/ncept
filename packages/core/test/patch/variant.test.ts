@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { variantLayerFixture } from "./variant-layer";
 import { attachmentDigest } from "../../src/digest";
 import {
+  provenanceOf,
   bundleForRevision,
   candidateRevision,
   declaredPatchLocale,
@@ -35,16 +36,16 @@ for (const [version, remove] of [
     const lesson = graph.materials.find(({ id }) => id === "lesson");
     if (!lesson) throw new Error("expected the lesson Document");
     expect(lesson.content.hash).toBe(attachmentDigest(new TextEncoder().encode(layered ? "译文" : "Original lesson")));
-    expect(graph.provenance.materials[materialKey(lesson)]?.map(({ patch }) => patch)).toEqual([
+    expect(provenanceOf(graph.provenance.materials, materialKey(lesson))?.map(({ patch }) => patch)).toEqual([
       layered ? variant.ref : current.ref,
     ]);
-    expect(graph.provenance.metadataProperties["metadata-a"]?.["display:label"]?.map(({ patch }) => patch)).toEqual([
-      layered ? variant.ref : current.ref,
-    ]);
+    expect(
+      provenanceOf(graph.provenance.metadataProperties, "metadata-a")?.["display:label"]?.map(({ patch }) => patch),
+    ).toEqual([layered ? variant.ref : current.ref]);
     if (!remove)
-      expect(graph.provenance.metadataProperties["metadata-b"]?.["display:label"]?.map(({ patch }) => patch)).toEqual([
-        current.ref,
-      ]);
+      expect(
+        provenanceOf(graph.provenance.metadataProperties, "metadata-b")?.["display:label"]?.map(({ patch }) => patch),
+      ).toEqual([current.ref]);
     expect(staleMasks).toEqual(
       layered
         ? [

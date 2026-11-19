@@ -9,6 +9,7 @@ import {
 } from "./guidance.js";
 import { isAttachment, metadataSubjectAppliesToEntity } from "./metadata.js";
 import {
+  provenanceOf,
   exactPatchRefKey,
   materialKey,
   sameExactPatchRef,
@@ -228,11 +229,11 @@ export function planPatchTranslation(input: {
           (other) =>
             (other.id === set.id || sameSubject(set, other)) &&
             other.properties[property] !== undefined &&
-            isHuman(human.provenance.metadataProperties[other.id]?.[property] ?? []),
+            isHuman(provenanceOf(human.provenance.metadataProperties, other.id)?.[property] ?? []),
         ),
       );
       if (covered) continue;
-      const masks = (graph.provenance.metadataProperties[set.id]?.[property] ?? []).map(
+      const masks = (provenanceOf(graph.provenance.metadataProperties, set.id)?.[property] ?? []).map(
         ({ patch, operationIndex }): ExactContributionMask => ({
           source: patch,
           operationIndex,
@@ -250,7 +251,10 @@ export function planPatchTranslation(input: {
       material.about.some((node) => nodeCascadedProperty(graph, node, PATCH_TRANSLATE) === false)
     )
       continue;
-    if (humans.some(({ graph: human }) => isHuman(human.provenance.materials[materialKey(material)] ?? []))) continue;
+    if (
+      humans.some(({ graph: human }) => isHuman(provenanceOf(human.provenance.materials, materialKey(material)) ?? []))
+    )
+      continue;
     documents.push({
       key: contentDigest({
         source: source.terminal.identity,
@@ -259,11 +263,13 @@ export function planPatchTranslation(input: {
         content: material.content,
       }),
       material,
-      masks: (graph.provenance.materials[materialKey(material)] ?? []).map(({ patch, operationIndex }) => ({
-        source: patch,
-        operationIndex,
-        entity: { kind: "material", playground: material.playground, id: material.id },
-      })),
+      masks: (provenanceOf(graph.provenance.materials, materialKey(material)) ?? []).map(
+        ({ patch, operationIndex }) => ({
+          source: patch,
+          operationIndex,
+          entity: { kind: "material", playground: material.playground, id: material.id },
+        }),
+      ),
     });
   }
   texts.sort((a, b) => a.priority - b.priority || a.key.localeCompare(b.key));

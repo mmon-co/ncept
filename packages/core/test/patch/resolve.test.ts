@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { PatchCompileError, resolvePatchBundle, type ExactPatchRef, type PatchRevision } from "../../src/patch";
+import {
+  provenanceOf,
+  PatchCompileError,
+  resolvePatchBundle,
+  type ExactPatchRef,
+  type PatchRevision,
+} from "../../src/patch";
 
 function root(operations: PatchRevision["delta"]["operations"]): PatchRevision {
   return {
@@ -78,7 +84,7 @@ test("ordered resolution applies an exact diamond dependency once and the termin
   });
 
   expect(resolved.patchOrder).toEqual([shared.ref, first.ref, second.ref, curriculum.ref]);
-  expect(resolved.provenance.nodes["node-shared"]).toEqual([{ patch: shared.ref, operationIndex: 0 }]);
+  expect(provenanceOf(resolved.provenance.nodes, "node-shared")).toEqual([{ patch: shared.ref, operationIndex: 0 }]);
 });
 
 test("resolution rejects incompatible exact revisions and dependency cycles with typed errors", () => {
@@ -162,7 +168,7 @@ test("compatible property contributions merge in Patch order without dropping ea
       },
     },
   ]);
-  expect(resolved.provenance.metadataSets["metadata-shared"]).toEqual([
+  expect(provenanceOf(resolved.provenance.metadataSets, "metadata-shared")).toEqual([
     { patch: foundation.ref, operationIndex: 1 },
     { patch: contribution.ref, operationIndex: 1 },
   ]);
@@ -331,10 +337,10 @@ test("exact masks suppress only their targeted entity and metadata contributions
       },
     },
   ]);
-  expect(resolved.provenance.metadataProperties["metadata-shared"]?.["display:label"]).toEqual([
+  expect(provenanceOf(resolved.provenance.metadataProperties, "metadata-shared")?.["display:label"]).toEqual([
     { patch: reconciliation.ref, operationIndex: 3 },
   ]);
-  expect(resolved.provenance.metadataProperties["metadata-shared"]?.["pedagogy:lesson"]).toEqual([
+  expect(provenanceOf(resolved.provenance.metadataProperties, "metadata-shared")?.["pedagogy:lesson"]).toEqual([
     { patch: source.ref, operationIndex: 5 },
   ]);
 });
