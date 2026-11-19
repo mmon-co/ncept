@@ -22,7 +22,7 @@ Charting is dependency resolution from a settled Mission. With no learner, as fo
 - A Node is one thing the learner can show or has done, defined by what shows it. Steps depend on what the learner can and will do themselves; work an agent could simply do is done by the tutor or left out, and coordinating other people stays outside. Different presentations of one task are one Node.
 - An Edge means the dependent can't be demonstrated without the prerequisite; give the reason in `pedagogy:because`. Teaching order is `pedagogy:priority`, never an Edge.
 - A part too big for one Lesson lacks a prerequisite step or capability (a child Node), volume (tiers: the top 50 words, then 100) or consolidation (thresholds: 60, then 90 words a minute).
-- Set `pedagogy:review: false` on one-off steps. Capabilities retain Review through another real instance; maintained states retain Review by checking whether they still hold.
+- Set `pedagogy:review` to `{ "kind": "fsrs" }` for what must be remembered, `{ "kind": "never" }` for one-off steps, or `{ "kind": "interval", "days": 30 }` for maintained states or capabilities that detrain, choosing how often to check them. If unset, milestones use `never` and other Nodes use `fsrs`.
 - Reuse an existing Node only unchanged: its metadata is shared with every Mission that uses it.
 - Group small Nodes taught together with a `lesson:<name>` tag, inside one section.
 - A learner's override of adopted guidance goes in their Mission's guidance, scoped to its Node.
