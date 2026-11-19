@@ -20,6 +20,7 @@ import { skillBody, skillResources, skillsForMode, tutorSystemPrompt } from "./s
 import { catalogToolsForMode } from "./catalog.js";
 import { evaluationContext, evaluateWatchedReply } from "./evaluation.js";
 import { lessonOpening, openingLanguage } from "./opening.js";
+import { nodeReviewSchedule } from "./path.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
@@ -209,6 +210,11 @@ function* setup(
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = tutorSystemPrompt(mode);
   const offered = linkedDocuments(ctx, officialDocuments(ctx), ctx.tutorMessages ?? []);
+  const entry = ctx.entry;
+  const intervalNodes =
+    entry?.kind === "review"
+      ? entry.nodes.filter((node) => nodeReviewSchedule(ctx.graph, node).kind === "interval")
+      : [];
   return {
     prompt,
     context: [
@@ -224,8 +230,13 @@ function* setup(
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
-      ...(ctx.entry?.kind === "review"
-        ? [`Current Review (frozen batch; check retention, not teach):\n${JSON.stringify(ctx.entry)}`]
+      ...(entry?.kind === "review"
+        ? [
+            `Current Review (frozen batch; check retention, not teach):\n${JSON.stringify({
+              ...entry,
+              ...(intervalNodes.length > 0 ? { intervalNodes } : {}),
+            })}`,
+          ]
         : []),
       ...(ctx.lesson === undefined
         ? []
