@@ -3,6 +3,7 @@ import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";
 import { readTheoryState, type TheoryState } from "@mmon-co/ncept-core/theory";
 
 import { dependentCones } from "./dependent-cone.js";
+import { nodeReviewSchedule } from "./path.js";
 import {
   COMPLETION_PROPERTY,
   compileCompletion,
@@ -643,6 +644,8 @@ export interface NodeState {
   /** Original active evidence in chronological order; never memory or summaries. */
   readonly records: readonly HomedRecord[];
   readonly schedule?: NodeSchedule;
+  /** Exact interval boundary, independent of rounding in FSRS retrievability. */
+  readonly intervalDue?: { readonly at: number; readonly due: boolean };
   /** A successful Review awaiting its day grade; not a change to the FSRS card. */
   readonly reviewCleared?: boolean;
 }
@@ -689,6 +692,7 @@ function scheduleDefaultNode(
   lapses: readonly Observation<Lapse>[],
   grades: readonly Observation<Grade>[],
   parameters: DefaultParameters,
+  intervalDays: number | undefined,
 ): Omit<NodeSchedule, "retrievability"> | undefined {
   const direct = [
     ...records.flatMap((record) =>
@@ -725,14 +729,17 @@ function scheduleDefaultNode(
             Date.parse(at) < Date.parse(payload.day.start),
         );
       card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
-      lapsed = payload.rating === "Again" && earlierSuccess;
+      lapsed =
+        payload.rating === "Again" && (earlierSuccess || (intervalDays !== undefined && reviewDay !== undefined));
       citations.push(...(record.cites ?? []));
     } else {
       const day = record.learnerDay;
       if (day === undefined || day.id === reviewDay) continue;
       card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
       reviewDay = day.id;
+      if (intervalDays !== undefined) lapsed = false;
     }
+    if (intervalDays !== undefined && payload.kind !== "claim") card.stability = intervalDays;
     citations.push(id);
   }
   if (card?.last_review === undefined) return undefined;
@@ -1577,6 +1584,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       return query === undefined ? [] : [[id, { query, evaluate: compileCompletion(query, id) }] as const];
     }),
   );
+  const reviewPlans = new Map(graph.nodes.map(({ id }) => [id, nodeReviewSchedule(graph, id)] as const));
   const own = new Map<NodeId, readonly HomedRecord[]>();
   const successes = new Map<NodeId, readonly HomedRecord[]>();
   const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
@@ -1631,7 +1639,8 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       }
       const facts = indexed(acquisition.get(id));
       const featureUses = index.featureUses.get(id) ?? [];
-      if (!initialized || dirtySchedules.has(id)) {
+      const review = indexed(reviewPlans.get(id));
+      if (review.kind !== "never" && (!initialized || dirtySchedules.has(id))) {
         const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
         const records = own.get(id) ?? [];
         const grades = activeNodeGrades(index.grades.get(id) ?? [], [
@@ -1659,11 +1668,12 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
         schedules.set(
           id,
           scheduleDefaultNode(
-            own.get(id) ?? [],
+            records,
             implicit,
             index.lapses.get(id) ?? [],
             index.grades.get(id) ?? [],
             DEFAULT_PARAMETERS,
+            review.kind === "interval" ? review.days : undefined,
           ),
         );
       }
@@ -1678,8 +1688,15 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
                 card.stability,
               ),
             };
+      const intervalDueAt =
+        schedule !== undefined && review.kind === "interval"
+          ? Math.ceil(Date.parse(schedule.lastReview) + schedule.stability * DAY_MS)
+          : undefined;
       nodes[id] = {
         ...facts,
+        ...(intervalDueAt === undefined
+          ? {}
+          : { intervalDue: { at: intervalDueAt, due: Date.parse(now) >= intervalDueAt } }),
         featureUses,
         reviewCleared: reviewClearances.get(id) ?? false,
         ...(schedule === undefined ? {} : { schedule }),
