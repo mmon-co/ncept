@@ -1,7 +1,7 @@
 {
   "name": "ncept-open",
   "private": true,
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
     "packages/*"
   ],

@@ -1,4 +1,8 @@
-import { createEmptyCard, forgetting_curve, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
+// Use the static srs-kit entry points to avoid bundling legacy models into Convex.
+import { defineScheduler, Rating, type Grade as FsrsGrade } from "#fsrs-scheduler";
+import { dateChrono } from "#fsrs-date";
+import { schedulerStatsMiddleware } from "ts-fsrs/middlewares";
+import { FSRS7_DEFAULT_WEIGHTS, FSRS7Model } from "ts-fsrs/models/fsrs-7";
 import { compareObservations, type Observation, type ObservationId } from "@mmon-co/ncept-core/observations";
 import type { Demonstration, Grade, HomedRecord, Lapse } from "./state.js";
 
@@ -23,6 +27,7 @@ export type ReplayedSchedule = ScheduleEvidence &
     | {
         readonly kind: "fsrs";
         readonly stability: number;
+        readonly stabilityFast: number;
         readonly difficulty: number;
         readonly reps: number;
         readonly lapses: number;
@@ -47,8 +52,15 @@ type Scheduler<K extends ReviewSchedule["kind"]> = {
 };
 
 const DAY_MS = 86_400_000;
-/** Daily reviews have no learning steps; disabling fuzz keeps replay deterministic. */
-const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
+/** Daily reviews have no learning steps; replay uses fractional days and no fuzz. */
+const SCHEDULER = defineScheduler({ model: FSRS7Model, chrono: dateChrono })
+  .use(schedulerStatsMiddleware)
+  .create({ config: { weights: FSRS7_DEFAULT_WEIGHTS, fractionalDays: true, clearStatsOnForget: false } });
+type Card = ReturnType<typeof SCHEDULER.newCard>;
+const review = (card: Card | undefined, at: string, grade: FsrsGrade) => {
+  const now = new Date(at);
+  return SCHEDULER.review({ card: card ?? SCHEDULER.newCard({ now }), now, grade }).card;
+};
 
 /** Accepted whole-day grades are the only direct reviews. Ungraded direct days also
  * suppress implicit credit. The host supplies the learner's day boundaries. */
@@ -72,8 +84,9 @@ const schedulers = {
         if (payload.kind === "claim") {
           if (payload.stance !== "knows" || card !== undefined) continue;
           card = {
-            ...SCHEDULER.next(createEmptyCard(at), at, Rating.Good).card,
+            ...review(undefined, at, Rating.Good),
             stability: DEFAULT_PARAMETERS.retention.claimStabilityDays,
+            stabilityFast: 0.8 * DEFAULT_PARAMETERS.retention.claimStabilityDays,
             reps: 0,
           };
           initializingClaim = at;
@@ -86,25 +99,26 @@ const schedulers = {
                 evidence.outcome === "success" &&
                 Date.parse(at) < Date.parse(payload.day.start),
             );
-          card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
+          card = review(card, payload.day.end, Rating[payload.rating]);
           lapsed = payload.rating === "Again" && earlierSuccess;
           citations.push(...(record.cites ?? []));
         } else {
           const day = record.learnerDay;
           if (day === undefined || day.id === reviewDay) continue;
-          card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
+          card = review(card, at, Rating.Good);
           reviewDay = day.id;
         }
         citations.push(id);
       }
-      if (card?.last_review === undefined) return undefined;
+      if (!card?.lastReviewAt) return undefined;
       return {
         kind: "fsrs",
         stability: card.stability,
+        stabilityFast: card.stabilityFast,
         difficulty: card.difficulty,
         reps: card.reps,
         lapses: card.lapses,
-        lastReview: card.last_review.toISOString(),
+        lastReview: card.lastReviewAt.toISOString(),
         lapsed,
         citations: [...new Set(citations)],
       };
@@ -187,18 +201,17 @@ export function prepareReviewReplay(schedule: ReviewSchedule): Replay {
   }
 }
 
-function decayDays(schedule: ReplayedSchedule): number {
-  return schedule.kind === "fsrs" ? schedule.stability : schedule.days;
-}
-
 export function sameReviewCurve(a: NodeSchedule, b: NodeSchedule): boolean {
-  return a.kind === b.kind && a.lastReview === b.lastReview && decayDays(a) === decayDays(b);
+  if (a.lastReview !== b.lastReview) return false;
+  return a.kind === "fsrs"
+    ? b.kind === "fsrs" && a.stability === b.stability && a.stabilityFast === b.stabilityFast && a.difficulty === b.difficulty
+    : b.kind === "interval" && a.days === b.days;
 }
 
 export function retrievabilityAt(schedule: ReplayedSchedule, time: number): number {
   const elapsed = (time - Date.parse(schedule.lastReview)) / DAY_MS;
-  const days = decayDays(schedule);
-  const retention = forgetting_curve(elapsed, days);
-  // FSRS rounds around 0.9. The interval scheduler crosses that threshold at exactly its named day.
-  return schedule.kind === "interval" && elapsed >= days && retention === 0.9 ? retention - Number.EPSILON : retention;
+  if (schedule.kind === "fsrs") return SCHEDULER.model.forgettingCurve(schedule, elapsed);
+  // The FSRS-5 power curve supplies a single trace normalized to 0.9 at the named interval.
+  const retention = Number(Math.pow(1 + (19 / 81) * elapsed / schedule.days, -0.5).toFixed(8));
+  return elapsed >= schedule.days && retention === 0.9 ? retention - Number.EPSILON : retention;
 }

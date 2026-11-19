@@ -414,15 +414,7 @@
           "nodes": {
             "node-base": ["frontier", "instability", "item-outcomes", "reachable", "unknown"],
             "node-claimed": ["claimed", "known", "probably-known", "reachable", "review:due", "review:fading"],
-            "node-detail": [
-              "claimed",
-              "demonstrated",
-              "instability",
-              "known",
-              "review:due",
-              "review:fading",
-              "self-report"
-            ],
+            "node-detail": ["claimed", "demonstrated", "instability", "known", "review:due", "self-report"],
             "node-milestone": ["frontier", "reachable", "unknown", "unused"],
             "node-mmon-help": ["frontier", "reachable", "unknown", "unused"],
             "node-untouched": ["coarse", "frontier", "reachable", "unclaimed", "unknown"]

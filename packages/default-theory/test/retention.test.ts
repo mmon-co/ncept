@@ -300,8 +300,8 @@ test("knows claims schedule soon without covering prerequisites", () => {
   expect(schedule(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toMatchObject({
     stability: 1,
     reps: 0,
-    retrievability: 1,
   });
+  expect(schedule(observations, "2026-10-01T08:00:00.000Z", "node-claim")?.retrievability).toBeCloseTo(1, 4);
   expect(read(observations, "2026-10-01T08:00:00.000Z").nodes["node-prerequisite"]?.label).toBe("unknown");
   expect(tags(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toEqual([]);
   expect(tags(observations, "2026-10-03T08:00:00.000Z", "node-claim").map(({ tag }) => tag)).toEqual(["review:due"]);
@@ -313,16 +313,16 @@ test("review tags apply to acquired Nodes at 0.9 and 0.7 and rank untaught depen
     claim("obs-isolated", "node-isolated", "2026-09-20T08:00:00.000Z"),
     claim("obs-prerequisite", "node-prerequisite", "2026-09-20T08:00:00.000Z"),
   ];
-  const now = "2026-10-09T08:00:00.000Z";
+  const now = "2026-10-31T08:00:00.000Z";
   expect(tags(observations, now, "node-claim").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
   const rank = (node: NodeId) => tags(observations, now, node)[0]?.rank ?? 0;
   expect(rank("node-prerequisite")).toBeGreaterThan(rank("node-claim"));
   expect(rank("node-claim")).toBeGreaterThan(rank("node-isolated"));
-  const year = "2027-10-09T08:00:00.000Z";
+  const twoYears = "2028-10-09T08:00:00.000Z";
   const learned = judged([
     attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
     attempt("obs-2", "node-isolated", "2026-10-02T08:00:00.000Z"),
   ]);
-  expect(read(learned, year).nodes["node-isolated"]?.label).toBe("demonstrated");
-  expect(tags(learned, year, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
+  expect(read(learned, twoYears).nodes["node-isolated"]?.label).toBe("demonstrated");
+  expect(tags(learned, twoYears, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
 });

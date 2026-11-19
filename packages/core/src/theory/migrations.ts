@@ -23,21 +23,35 @@ export type TheoryDataVersion = `${number}.${number}`;
  * without a candidate this reads the authored closure; with one it reads the migrated bases. */
 type MigrationGraphs = { basesChanged: boolean; resolve: (candidate?: PatchContent) => ResolvedGraph };
 
-/** Pure forward rewrite from one minor to the next within the same major. */
+/**
+ * Pure forward rewrite from one minor to the next within the same major. A step with no
+ * rewrite keeps every stored shape and changes only what the Theory derives from it, such as
+ * tag membership: hosts move the pin and discard derived state without reading the Profile.
+ */
 export type TheoryMigration = Readonly<{
   from: TheoryDataVersion;
   to: TheoryDataVersion;
   /** Rewrite one Patch's content without mutating it; identity and revision minting belong to the caller. */
-  migratePatch(content: PatchContent, graphs?: MigrationGraphs): PatchContent;
+  migratePatch?(content: PatchContent, graphs?: MigrationGraphs): PatchContent;
   /**
    * Apply migratePatch to live heads and rewrite Profile.log without mutating the input.
    * Changed content gets new exact references; hosts retain old revisions as unread history.
    * Observations are in Profile.log, not a separate host-specific collection.
    */
-  migrate(profile: Profile): Profile;
+  migrate?(profile: Profile): Profile;
   /** Hosts retaining source events rewrite their live payloads in the same transaction as the Profile. */
   migrateOutcome?(payload: unknown, profile: Profile): unknown;
 }>;
+
+/** The installed pin when no step from the stored pin rewrites stored data, else undefined. */
+export function theoryPinMigration(
+  theory: MigrationTheory,
+  requirement: TheoryRequirement,
+): TheoryRequirement | undefined {
+  const plan = planTheoryMigration(theory, requirement);
+  const rewrites = plan.steps.some((step) => step.migratePatch || step.migrate || step.migrateOutcome);
+  return rewrites ? undefined : plan.requirement;
+}
 
 export type TheoryProfileMigrationResult = Readonly<{
   profile: Profile;
@@ -60,7 +74,7 @@ export function migrateTheoryPatchContent(
 ): PatchContent {
   const { steps } = planTheoryMigration(theory, requirement);
   let migrated = content;
-  for (const step of steps) migrated = step.migratePatch(migrated, graphs);
+  for (const step of steps) if (step.migratePatch) migrated = step.migratePatch(migrated, graphs);
   return migrated;
 }
 
@@ -136,6 +150,7 @@ export function migrateTheoryProfile(
   validateLiveBundle(profile);
   let migrated = profile;
   for (const step of steps) {
+    if (!step.migrate) continue;
     migrated = step.migrate(migrated);
     validateLiveBundle(migrated);
   }
@@ -154,7 +169,7 @@ export function migrateTheoryOutcomes(
   let current = profile;
   for (const step of steps) {
     migrated = migrated.map((payload) => (step.migrateOutcome ? step.migrateOutcome(payload, current) : payload));
-    current = step.migrate(current);
+    if (step.migrate) current = step.migrate(current);
   }
   return migrated;
 }

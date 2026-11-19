@@ -94,15 +94,14 @@ function migrate(profile: Profile): Profile {
 export const recallToAttemptMigration = {
   from: "1.0",
   to: "1.1",
-  migratePatch: (content) => content,
   migrate,
   migrateOutcome: (payload, profile) => migratePayload(payload, profile.patches.terminal),
   migratePayload,
 } satisfies TheoryMigration & { migratePayload: typeof migratePayload };
 
 export const reviewScheduleMigration = {
-  from: "1.1",
-  to: "1.2",
+  from: "1.3",
+  to: "1.4",
   migratePatch(content, graphs) {
     const sets = content.delta.operations.flatMap((op) => (op.kind === "add-metadata-set" ? [op.metadataSet] : []));
     if (
@@ -171,9 +170,9 @@ export const reviewScheduleMigration = {
   },
   migrate(profile) {
     const { terminal, revisions } = migrateTheoryPatchClosure(
-      { id: "default", version: "1.2.0", migrations: [reviewScheduleMigration] },
+      { id: "default", version: "1.4.0", migrations: [reviewScheduleMigration] },
       profile.patches,
-      { theory: "default", range: "~1.1" },
+      { theory: "default", range: "~1.3" },
     );
     return sameExactPatchRef(profile.patches.terminal, terminal.ref)
       ? profile
@@ -181,4 +180,12 @@ export const reviewScheduleMigration = {
   },
 } satisfies TheoryMigration;
 
-export const migrations: readonly TheoryMigration[] = [recallToAttemptMigration, reviewScheduleMigration];
+export const migrations: readonly TheoryMigration[] = [
+  recallToAttemptMigration,
+  // FSRS-6 (ts-fsrs 5) replaces FSRS-5's curve: review tags and path ranks read retrievability,
+  // which every Profile recomputes from its unchanged evidence.
+  { from: "1.1", to: "1.2" },
+  // FSRS-7 (ts-fsrs 6) replaces FSRS-6's single trace with slow and fast traces; likewise derived only.
+  { from: "1.2", to: "1.3" },
+  reviewScheduleMigration,
+];

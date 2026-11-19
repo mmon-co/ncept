@@ -1,7 +1,7 @@
 {
   "name": "@mmon-co/ncept-core",
   "version": "0.3.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mmon-co/ncept.git",

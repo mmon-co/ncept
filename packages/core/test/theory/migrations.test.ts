@@ -29,7 +29,7 @@ test("Theory migrations compose pure Patch-content rewrites from 1.0 to 1.2 with
           ...step,
           migratePatch(value) {
             executed = true;
-            return step.migratePatch(value);
+            return step.migratePatch?.(value) ?? value;
           },
         })),
       },

@@ -255,7 +255,9 @@ export function LearnMap({
           edgesFocusable={!still}
           elementsSelectable={!still}
           panOnDrag={!still}
-          zoomOnScroll={!still}
+          // The wheel and two-finger scroll pan, as on the Session Map; pinch and Ctrl-wheel zoom.
+          panOnScroll={!still}
+          zoomOnScroll={false}
           zoomOnPinch={!still}
           zoomOnDoubleClick={!still}
           preventScrolling={!still}

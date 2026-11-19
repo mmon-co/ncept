@@ -42,10 +42,14 @@ Open **Learn** in bb's navigation rail and press **+ New Mission**. Each Lesson 
 | `packages/pi` | `@mmon-co/ncept-pi` | Official pi front end |
 | `packages/bb` | `@mmon-co/ncept-bb` | bb plugin over the pi front end: Learn, and a thread per Session |
 
-MIT licensed. This is a history-preserving mirror of the source monorepo's open packages.
+This is a history-preserving mirror of the source monorepo's public packages.
+
+## Licences
+
+Core is Apache-2.0, so anything may read and write Patches and implement a Theory. The local host library, the pi front end and the bb plugin are MIT. The default Theory is under the [Functional Source License 1.1](packages/default-theory/LICENSE): use, change and redistribute it for anything except a commercial product or service that substitutes for it, which includes selling a Theory derived from it; each version becomes Apache-2.0 two years after it is made available.0 four years after it is published. Learning with the local product, alone or with a paid teacher, is within every one of these.
 
 ## Develop and contribute
 
 Install [Bun](https://bun.sh), then run `bun install`, `bun run typecheck` and `bun run test`. Typecheck builds the workspaces first; exports resolve to built JavaScript and declarations. These checks need no hosted deployment, account or secret.
 
-Open a pull request here. Maintainers import PR changes into the source monorepo for review, crediting the original authors. Accepted changes return with the next mirror update. Do not merge PRs directly into this mirror: its `main` is published from the source repository.
+Open a pull request here. A contribution is licensed under its package's licence, except that contributions to `packages/default-theory` are licensed under Apache-2.0. Maintainers import PR changes into the source monorepo for review, crediting the original authors. Accepted changes return with the next mirror update. Do not merge PRs directly into this mirror: its `main` is published from the source repository.
