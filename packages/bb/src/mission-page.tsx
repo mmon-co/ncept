@@ -6,6 +6,7 @@ import type { learningReading } from "./reading";
 import type { z } from "zod";
 import { Button } from "./ui/button";
 import { LearnMap } from "./map";
+import { MissionShare } from "./mission-share";
 
 function MenuItem({
   hint,
@@ -47,8 +48,6 @@ export function MissionPage({
   });
   const [menu, setMenu] = useState<"skip" | "revise" | "share">();
   const [shareTitle, setShareTitle] = useState("");
-  const [sharing, setSharing] = useState(false);
-  const [shared, setShared] = useState<string>();
   const [picking, setPicking] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [retiring, setRetiring] = useState(false);
@@ -72,17 +71,6 @@ export function MissionPage({
       navigate.toThread(result.threadId);
     } catch (error) {
       setError(String(error));
-    }
-  }
-  async function share() {
-    setSharing(true);
-    setError(undefined);
-    try {
-      setShared((await rpc.call("share", { projectId, missionId, title: shareTitle.trim() })).url);
-    } catch (error) {
-      setError(String(error));
-    } finally {
-      setSharing(false);
     }
   }
   async function retire() {
@@ -156,7 +144,6 @@ export function MissionPage({
             onClick={() => {
               setMenu(menu === "share" ? undefined : "share");
               setTelling(false);
-              setShared(undefined);
               setShareTitle(shareTitle || data.statement.replace(/\s+/g, " ").slice(0, 80));
             }}
           >
@@ -262,49 +249,9 @@ export function MissionPage({
                 </div>
               </form>
             )}
-            {menu === "share" &&
-              (shared ? (
-                <div className="p-2 space-y-3">
-                  <p className="text-sm">Anyone with this link can read the map and learn from it.</p>
-                  <input
-                    readOnly
-                    aria-label="Link"
-                    value={shared}
-                    onFocus={(event) => event.currentTarget.select()}
-                    className="w-full rounded-md border border-input bg-background p-3 text-sm"
-                  />
-                  <Button type="button" onClick={() => void navigator.clipboard.writeText(shared)}>
-                    Copy link
-                  </Button>
-                </div>
-              ) : (
-                <form
-                  aria-label="Share Mission"
-                  className="p-2 space-y-3"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (shareTitle.trim()) void share();
-                  }}
-                >
-                  <label className="block text-sm" htmlFor="share-title">
-                    Title
-                  </label>
-                  <input
-                    id="share-title"
-                    autoFocus
-                    value={shareTitle}
-                    disabled={sharing}
-                    onChange={(event) => setShareTitle(event.target.value)}
-                    className="w-full rounded-md border border-input bg-background p-3 text-sm"
-                  />
-                  <small className="block text-muted-foreground">
-                    Publishes this Mission's map and its Materials on the Hub at a link. It isn't listed.
-                  </small>
-                  <Button disabled={sharing || !shareTitle.trim()} type="submit">
-                    {sharing ? "Sharing…" : "Share"}
-                  </Button>
-                </form>
-              ))}
+            {menu === "share" && (
+              <MissionShare projectId={projectId} missionId={missionId} title={shareTitle} setTitle={setShareTitle} />
+            )}
             {telling && (
               <form
                 className="p-2 space-y-3"
