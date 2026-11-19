@@ -1,4 +1,6 @@
-import { dateChrono, defineScheduler, Rating, type Grade as FsrsGrade } from "ts-fsrs";
+// Use ts-fsrs's scheduler types without bundling its dynamic legacy-model imports into the Convex schema.
+import { defineScheduler, Rating, type Grade as FsrsGrade } from "#fsrs-scheduler";
+import { dateChrono } from "#fsrs-date";
 import { schedulerStatsMiddleware } from "ts-fsrs/middlewares";
 import { FSRS7_DEFAULT_WEIGHTS, FSRS7Model } from "ts-fsrs/models/fsrs-7";
 import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";

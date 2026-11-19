@@ -13,6 +13,16 @@
     "LICENSE"
   ],
   "type": "module",
+  "imports": {
+    "#fsrs-scheduler": {
+      "types": "ts-fsrs",
+      "default": "@open-spaced-repetition/srs-kit"
+    },
+    "#fsrs-date": {
+      "types": "ts-fsrs",
+      "default": "@open-spaced-repetition/srs-kit/chrono/date"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -41,6 +51,7 @@
   },
   "dependencies": {
     "@mmon-co/ncept-core": "^0.3.0",
+    "@open-spaced-repetition/srs-kit": "1.0.0",
     "ts-fsrs": "^6.0.0",
     "yaml": "^2.5.0"
   },
