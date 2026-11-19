@@ -19,12 +19,16 @@ export const handoffSchema = z.object({
 });
 const retirement = z.object({ missionId: z.string(), outcome: z.enum(["achieved", "abandoned"]) });
 const sessionDescription = z.object({ session: z.string(), mode: z.string(), title: z.string() });
+const share = z.object({ missionId: z.string(), title: z.string().min(1) });
+const shareResult = z.union([z.object({ url: z.string() }), z.object({ signInRequired: z.literal(true) })]);
+const signIn = z.object({ attempt: z.string() });
+const signInStarted = signIn.extend({ url: z.url() });
 export const rpcContract = defineRpcContract({
   retire: { input: retirement.extend({ projectId: z.string() }), output: z.object({}), tags: () => ["learning"] },
-  share: {
-    input: z.object({ projectId: z.string(), missionId: z.string(), title: z.string().min(1) }),
-    output: z.object({ url: z.string() }),
-  },
+  share: { input: share.extend({ projectId: z.string() }), output: shareResult },
+  shareSignedIn: { input: z.object({ projectId: z.string() }), output: z.boolean() },
+  shareSignIn: { input: z.object({ projectId: z.string() }), output: signInStarted },
+  pollShareSignIn: { input: signIn.extend({ projectId: z.string() }), output: z.boolean() },
   profiles: { input: z.object({}), output: z.array(profileChoice) },
   mission: {
     input: z.object({ projectId: z.string(), missionId: z.string() }),
@@ -54,10 +58,10 @@ export const rpcContract = defineRpcContract({
 });
 export const hostContract = defineRpcContract({
   retire: { input: retirement.extend({ directory: z.string() }), output: z.object({}) },
-  share: {
-    input: z.object({ directory: z.string(), missionId: z.string(), title: z.string().min(1) }),
-    output: z.object({ url: z.string() }),
-  },
+  share: { input: share.extend({ directory: z.string() }), output: shareResult },
+  shareSignedIn: { input: z.object({ directory: z.string() }), output: z.boolean() },
+  shareSignIn: { input: z.object({ directory: z.string() }), output: signInStarted },
+  pollShareSignIn: { input: signIn.extend({ directory: z.string() }), output: z.boolean() },
   recognize: { input: z.object({ directory: z.string() }), output: z.boolean() },
   mission: { input: z.object({ directory: z.string(), missionId: z.string() }), output: missionReading },
   reading: { input: z.object({ directory: z.string() }), output: learningReading },

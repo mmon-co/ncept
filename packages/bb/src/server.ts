@@ -189,6 +189,18 @@ export default function ncept(bb: BbPluginApi) {
       const target = await profile(projectId);
       return host.call("share", { directory: target.directory, missionId, title }, { hostId: target.hostId });
     },
+    shareSignedIn: async ({ projectId }) => {
+      const target = await profile(projectId);
+      return host.call("shareSignedIn", { directory: target.directory }, { hostId: target.hostId });
+    },
+    shareSignIn: async ({ projectId }) => {
+      const target = await profile(projectId);
+      return host.call("shareSignIn", { directory: target.directory }, { hostId: target.hostId });
+    },
+    pollShareSignIn: async ({ projectId, attempt }) => {
+      const target = await profile(projectId);
+      return host.call("pollShareSignIn", { directory: target.directory, attempt }, { hostId: target.hostId });
+    },
     mission: async ({ projectId, missionId }) => {
       const target = await profile(projectId);
       return host.call("mission", { directory: target.directory, missionId }, { hostId: target.hostId });
