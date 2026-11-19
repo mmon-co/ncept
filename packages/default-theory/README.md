@@ -22,7 +22,7 @@ The Skills' Markdown is the source. `build-skills.ts` embeds it in Git-ignored `
 
 `npm pack --dry-run` from this directory runs `prepack`, rebuilding Core and this package. The archive contains only `dist/`, this README, `LICENSE` and its manifest. Its Core dependency is a registry semver range, not a workspace-only reference.
 
-Licensed under the Business Source License 1.1; see [LICENSE](LICENSE). You may use, change and redistribute this package, including in production, except to offer others a commercial product or service that substitutes for it or does substantially the same thing. Teaching or tutoring with it for payment is allowed. Each version becomes Apache-2.0 four years after it is published. Versions up to 2.0.0 were published under MIT and remain so. A Theory written against Core's `Theory` interface without this package's code is not a derived work and takes whatever licence its author chooses. For other terms, write to yz@mmon.co.
+Licensed under the Functional Source License 1.1 with Apache-2.0 as its future licence; see [LICENSE](LICENSE). You may use, change and redistribute this package for anything except offering others a commercial product or service that substitutes for it or does substantially the same thing; that includes selling a Theory derived from it. Schools and human teachers and tutors may use and host it for their own students and charge for the teaching. Each version becomes Apache-2.0 two years after it is made available. Versions up to 2.0.0 were published under MIT and remain so. A Theory written against Core's `Theory` interface without this package's code is not a derived work and takes whatever licence its author chooses. For other terms, write to yz@mmon.co.
 
 ## Stored-output version guard
 
