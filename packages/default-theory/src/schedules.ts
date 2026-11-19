@@ -204,7 +204,10 @@ export function prepareReviewReplay(schedule: ReviewSchedule): Replay {
 export function sameReviewCurve(a: NodeSchedule, b: NodeSchedule): boolean {
   if (a.lastReview !== b.lastReview) return false;
   return a.kind === "fsrs"
-    ? b.kind === "fsrs" && a.stability === b.stability && a.stabilityFast === b.stabilityFast && a.difficulty === b.difficulty
+    ? b.kind === "fsrs" &&
+        a.stability === b.stability &&
+        a.stabilityFast === b.stabilityFast &&
+        a.difficulty === b.difficulty
     : b.kind === "interval" && a.days === b.days;
 }
 
@@ -212,6 +215,6 @@ export function retrievabilityAt(schedule: ReplayedSchedule, time: number): numb
   const elapsed = (time - Date.parse(schedule.lastReview)) / DAY_MS;
   if (schedule.kind === "fsrs") return SCHEDULER.model.forgettingCurve(schedule, elapsed);
   // The FSRS-5 power curve supplies a single trace normalized to 0.9 at the named interval.
-  const retention = Number(Math.pow(1 + (19 / 81) * elapsed / schedule.days, -0.5).toFixed(8));
+  const retention = Number(Math.pow(1 + ((19 / 81) * elapsed) / schedule.days, -0.5).toFixed(8));
   return elapsed >= schedule.days && retention === 0.9 ? retention - Number.EPSILON : retention;
 }
