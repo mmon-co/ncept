@@ -20,7 +20,8 @@ import {
 } from "@mmon-co/ncept-core/theory";
 import { prepareEstimateDefault, progressDefault } from "./reading.js";
 import { DEFAULT_PARAMETERS, stateDefault } from "./state.js";
-import { forgetting_curve } from "ts-fsrs";
+import { REVIEW_PROPERTY, retrievabilityAt, sameReviewCurve, type ReviewSchedule } from "./schedules.js";
+export { REVIEW_PROPERTY, validateReviewSchedule, type ReviewSchedule } from "./schedules.js";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
@@ -33,35 +34,11 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
   )?.value;
 }
 
-export const REVIEW_PROPERTY = "pedagogy:review";
-export type ReviewSchedule = { kind: "memory" } | { kind: "never" } | { kind: "interval"; days: number };
-
-export function validateReviewSchedule(value: unknown, path: string = REVIEW_PROPERTY): void {
-  if (value === undefined || typeof value === "boolean") return;
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    Object.keys(value).length === 1 &&
-    "intervalDays" in value &&
-    typeof value.intervalDays === "number" &&
-    Number.isFinite(value.intervalDays) &&
-    value.intervalDays > 0
-  )
-    return;
-  throw new Error(`${path}: expected true, false, or { intervalDays: a positive finite number }`);
-}
-
 export function nodeReviewSchedule(graph: ResolvedGraph, node: NodeId): ReviewSchedule {
-  const review = nodeCascadedProperty(graph, node, REVIEW_PROPERTY);
-  if (
-    typeof review === "object" &&
-    review !== null &&
-    "intervalDays" in review &&
-    typeof review.intervalDays === "number"
-  )
-    return { kind: "interval", days: review.intervalDays };
-  const enabled = typeof review === "boolean" ? review : pathProperty(graph, node, "pedagogy:milestone") !== true;
-  return enabled ? { kind: "memory" } : { kind: "never" };
+  // Explicit values were validated when their revision was minted.
+  // eslint-disable-next-line typescript/consistent-type-assertions
+  const review = nodeCascadedProperty(graph, node, REVIEW_PROPERTY) as ReviewSchedule | undefined;
+  return review ?? { kind: pathProperty(graph, node, "pedagogy:milestone") === true ? "never" : "fsrs" };
 }
 
 export function nodeAllowsReview(graph: ResolvedGraph, node: NodeId): boolean {
@@ -274,21 +251,14 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
   // Integer priority dominates decay. Identical curves keep even their stable ties forever.
   const competing = new Set(
     candidates
-      .filter((a) =>
-        candidates.some(
-          (b) =>
-            a.priority === b.priority &&
-            (a.schedule.lastReview !== b.schedule.lastReview || a.schedule.stability !== b.schedule.stability),
-        ),
-      )
+      .filter((a) => candidates.some((b) => a.priority === b.priority && !sameReviewCurve(a.schedule, b.schedule)))
       .map(({ id }) => id),
   );
   for (const { id } of context.graph.nodes) {
     const node = state.nodes[id];
     const schedule = node?.schedule;
     if (!scope.has(id) || !schedule || node.reviewCleared) continue;
-    const last = Date.parse(schedule.lastReview);
-    const at = (time: number) => forgetting_curve((time - last) / 86_400_000, schedule.stability);
+    const at = (time: number) => retrievabilityAt(schedule, time);
     const nextBelow = (threshold: number) => {
       if (threshold <= 0 || at(now) < threshold) return;
       let low = now,
@@ -304,9 +274,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
       boundaries.push(high);
     };
     if (!schedule.lapsed) {
-      if (node.intervalDue === undefined) nextBelow(DEFAULT_PARAMETERS.retention.due);
-      else if (!node.intervalDue.due && node.intervalDue.at <= 8_640_000_000_000_000)
-        boundaries.push(node.intervalDue.at);
+      nextBelow(DEFAULT_PARAMETERS.retention.due);
       nextBelow(DEFAULT_PARAMETERS.retention.fading);
     }
     if (competing.has(id)) nextBelow(schedule.retrievability);

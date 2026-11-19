@@ -125,8 +125,10 @@ function claim(id: ObservationId, node: NodeId, at: string): Observation<Claim> 
 }
 const read = (observations: readonly Observation[], now: string) =>
   readTheoryState(defaultTheory, graph, observations, now);
-const schedule = (observations: readonly Observation[], now: string, node: NodeId) =>
-  read(observations, now).nodes[node]?.schedule;
+const schedule = (observations: readonly Observation[], now: string, node: NodeId) => {
+  const review = read(observations, now).nodes[node]?.schedule;
+  return review?.kind === "fsrs" ? review : undefined;
+};
 const tags = (observations: readonly Observation[], now: string, node: NodeId) =>
   defaultTheory.project(graph, read(observations, now)).nodes[node]?.filter(({ tag }) => tag.startsWith("review:")) ??
   [];
@@ -178,7 +180,7 @@ test("a success credits direct prerequisites only, and the direct day's grade co
   const failure = attempt("obs-failure", "node-prerequisite", "2026-10-02T08:00:00.000Z", "failure");
   const initial = judged([success], "Hard");
   const lapsed = read(judged([...initial, failure], "Hard"), now);
-  expect(lapsed.nodes["node-prerequisite"]?.schedule?.reps).toBe(2);
+  expect(lapsed.nodes["node-prerequisite"]?.schedule).toMatchObject({ kind: "fsrs", reps: 2 });
   expect(lapsed.nodes["node-prerequisite"]?.schedule?.retrievability).toBeLessThan(
     schedule(judged([...initial, failure], "Good"), now, "node-prerequisite")?.retrievability ?? 0,
   );
@@ -246,7 +248,7 @@ test("Again lapses only after an earlier direct success day or initializing know
   );
 });
 
-test("a passed placement milestone without an explicit schedule keeps its evidence and gets no review tags", () => {
+test("a passed placement milestone with no explicit review keeps its evidence without a schedule or review tags", () => {
   const milestoneGraph = resolvePatchBundle({
     terminal: ref,
     revisions: [

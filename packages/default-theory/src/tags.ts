@@ -27,10 +27,7 @@ export function isDefaultReviewable(node: NodeState): boolean {
 }
 
 export function isDefaultReviewDue(node: NodeState): boolean {
-  return (
-    node.schedule?.lapsed === true ||
-    (node.intervalDue?.due ?? (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due)
-  );
+  return node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due;
 }
 
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */

@@ -43,6 +43,7 @@ function fixture() {
               "pedagogy:elaborate": id === "node-untouched",
               "pedagogy:priority": id === "node-base" ? 2 : 0,
               "pedagogy:milestone": id === "node-milestone",
+              ...(id === "node-claimed" ? { "pedagogy:review": { kind: "interval", days: 30 } } : {}),
               "pedagogy:raise-when": "The learner asks for help using the product.",
               ...(id !== "node-detail"
                 ? {}

@@ -1,6 +1,13 @@
 import { attachmentDigest, isObservation, type Profile } from "@mmon-co/ncept-core";
-import { isNodeId, type ExactPatchRef } from "@mmon-co/ncept-core/patch";
-import type { TheoryMigration } from "@mmon-co/ncept-core/theory";
+import {
+  isNodeId,
+  sameExactPatchRef,
+  type ExactPatchRef,
+  type MetadataSet,
+  type NodeId,
+} from "@mmon-co/ncept-core/patch";
+import { migrateTheoryPatchClosure, type TheoryMigration } from "@mmon-co/ncept-core/theory";
+import { REVIEW_PROPERTY } from "./schedules.js";
 import { isAttemptOutcome, type AttemptOutcome } from "./outcomes.js";
 import type { NodeRef } from "./state.js";
 
@@ -85,4 +92,51 @@ export const recallToAttemptMigration = {
   migratePayload,
 } satisfies TheoryMigration & { migratePayload: typeof migratePayload };
 
-export const migrations: readonly TheoryMigration[] = [recallToAttemptMigration];
+export const reviewScheduleMigration = {
+  from: "1.1",
+  to: "1.2",
+  migratePatch(content) {
+    const sets = content.delta.operations.flatMap((op) => (op.kind === "add-metadata-set" ? [op.metadataSet] : []));
+    if (
+      !sets.some(({ properties }) => typeof properties[REVIEW_PROPERTY] === "boolean") &&
+      typeof content.metadata.properties[REVIEW_PROPERTY] !== "boolean"
+    )
+      return content;
+
+    const milestones = new Map<NodeId, boolean>();
+    for (const { subjects, properties } of sets)
+      for (const subject of subjects)
+        if (subject.kind === "node" && "pedagogy:milestone" in properties)
+          milestones.set(subject.id, properties["pedagogy:milestone"] === true);
+
+    function rewrite(properties: MetadataSet["properties"], milestone = false) {
+      const review = properties[REVIEW_PROPERTY];
+      if (typeof review !== "boolean") return properties;
+      return { ...properties, [REVIEW_PROPERTY]: { kind: review && !milestone ? "fsrs" : "never" } };
+    }
+    return {
+      ...content,
+      metadata: { ...content.metadata, properties: rewrite(content.metadata.properties) },
+      delta: {
+        operations: content.delta.operations.map((op) => {
+          if (op.kind !== "add-metadata-set") return op;
+          const { subjects, properties } = op.metadataSet;
+          const milestone = subjects.every((subject) => subject.kind === "node" && milestones.get(subject.id));
+          return { ...op, metadataSet: { ...op.metadataSet, properties: rewrite(properties, milestone) } };
+        }),
+      },
+    };
+  },
+  migrate(profile) {
+    const { terminal, revisions } = migrateTheoryPatchClosure(
+      { id: "default", version: "1.2.0", migrations: [reviewScheduleMigration] },
+      profile.patches,
+      { theory: "default", range: "~1.1" },
+    );
+    return sameExactPatchRef(profile.patches.terminal, terminal.ref)
+      ? profile
+      : { ...profile, patches: { terminal: terminal.ref, revisions } };
+  },
+} satisfies TheoryMigration;
+
+export const migrations: readonly TheoryMigration[] = [recallToAttemptMigration, reviewScheduleMigration];
