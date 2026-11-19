@@ -23,7 +23,7 @@ import { lessonOpening, openingLanguage } from "./opening.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
-const COMMON_CONCEPT_DOCUMENT_URL = "/ncept/playgrounds/document?material=";
+const DOCS_URL_PROPERTY = "app:docs-url";
 
 type ProductDocument = {
   readonly node: NodeId;
@@ -83,15 +83,24 @@ function officialDocuments(ctx: ChatContext<DefaultState>): ProductDocument[] {
   });
 }
 
-function linkedDocuments(documents: readonly ProductDocument[], messages: readonly string[]): ProductDocument[] {
-  // A linked official title still counts as offered when the tutor mistypes its destination.
-  return documents.filter(({ documentId, label }) =>
-    messages.some(
-      (text) =>
-        text.includes(`${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(documentId)}`) ||
-        text.replace(/\]\(\s+/g, "](").includes(`[${label}](${COMMON_CONCEPT_DOCUMENT_URL}`),
-    ),
+function docsUrl(ctx: ChatContext<DefaultState>, node: NodeId): string | undefined {
+  const url = metadataValue(ctx, node, DOCS_URL_PROPERTY);
+  return typeof url === "string" && url.trim() !== "" ? url : undefined;
+}
+
+function linkedDocuments(
+  ctx: ChatContext<DefaultState>,
+  documents: readonly ProductDocument[],
+  messages: readonly string[],
+): ProductDocument[] {
+  // The label also recognizes links kept in memory from before the public docs.
+  const labels = new Set(
+    messages.flatMap((text) => [...text.matchAll(/(?<!!)\[([^\]]+)\]\(\s*[^\s)]+[^)]*\)/g)].map((match) => match[1])),
   );
+  return documents.filter(({ node, label }) => {
+    const url = docsUrl(ctx, node);
+    return labels.has(label) || (url !== undefined && messages.some((text) => text.includes(url)));
+  });
 }
 
 /** Exclude Document links already carried by tutor text, in this conversation or a closed Session. */
@@ -107,12 +116,13 @@ function recommendableAffordances(
         : [],
     ),
   ];
-  const offered = new Set(linkedDocuments(documents, told).map(({ node }) => node));
+  const offered = new Set(linkedDocuments(ctx, documents, told).map(({ node }) => node));
   return documents.flatMap((document) => {
     const state = ctx.state.nodes[document.node];
     const raiseWhen = metadataValue(ctx, document.node, RAISE_WHEN_PROPERTY);
-    const documentUrl = `${COMMON_CONCEPT_DOCUMENT_URL}${encodeURIComponent(document.documentId)}`;
+    const documentUrl = docsUrl(ctx, document.node);
     if (
+      documentUrl === undefined ||
       state === undefined ||
       state.featureUses.length !== 0 ||
       typeof raiseWhen !== "string" ||
@@ -198,7 +208,7 @@ function* setup(
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = tutorSystemPrompt(mode);
-  const offered = linkedDocuments(officialDocuments(ctx), ctx.tutorMessages ?? []);
+  const offered = linkedDocuments(ctx, officialDocuments(ctx), ctx.tutorMessages ?? []);
   return {
     prompt,
     context: [
