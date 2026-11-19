@@ -1,14 +1,26 @@
+import { randomUUID } from "node:crypto";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { experimental_defineHostEntry } from "@get-bb/plugin-sdk/host";
 import { getAgentDir, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import { initProject } from "@mmon-co/ncept-pi";
-import { openHost, openLearningReader, openProfile } from "@mmon-co/ncept-local";
+import {
+  beginHubBrowserSignIn,
+  hasHubCredentials,
+  HubSignInRequired,
+  openHost,
+  openLearningReader,
+  openProfile,
+  type HubBrowserSignIn,
+} from "@mmon-co/ncept-local";
 import { isMissionRevision, isRunActiveChange } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { handoffSchema, hostContract } from "./contract";
 import { settleGraph } from "./graph-positions";
+
+const hub = { url: process.env.NCEPT_HUB_URL, credentialsFile: process.env.NCEPT_CREDENTIALS_FILE };
+const signIns = new Map<string, { directory: string; signIn: HubBrowserSignIn; polling: boolean }>();
 
 export default experimental_defineHostEntry({
   contract: hostContract,
@@ -34,18 +46,39 @@ export default experimental_defineHostEntry({
         },
         // The Share form in the Learn panel is the confirmation.
         confirm: async () => true,
-        hub: {
-          // Sharing uses the same Hub login as `/ncept login` in the project's pi threads.
-          clientMetadataUrl: "https://pi.dev/oauth/client.json",
-          url: process.env.NCEPT_HUB_URL,
-          credentialsFile: process.env.NCEPT_CREDENTIALS_FILE,
-          openUrl: async () => {
-            throw new Error("Sign in to the Hub first: send /ncept login in a Learn thread, then share again");
-          },
-        },
+        hub,
       });
-      const { url } = await host.hub.share({ mission: missionId, title });
-      return { url };
+      try {
+        const { url } = await host.hub.share({ mission: missionId, title, signIn: false });
+        return { url };
+      } catch (error) {
+        if (error instanceof HubSignInRequired) return { signInRequired: true as const };
+        throw error;
+      }
+    },
+    shareSignedIn: () => hasHubCredentials(hub),
+    shareSignIn: async ({ directory }) => {
+      const signIn = await beginHubBrowserSignIn(hub);
+      const attempt = randomUUID();
+      signIns.set(attempt, { directory, signIn, polling: false });
+      setTimeout(() => signIns.delete(attempt), signIn.expiresAt - Date.now()).unref();
+      return { attempt, url: signIn.url };
+    },
+    pollShareSignIn: async ({ directory, attempt }) => {
+      const current = signIns.get(attempt);
+      if (!current || current.directory !== directory) throw new Error("Sign-in expired. Try again.");
+      if (current.polling) return false;
+      current.polling = true;
+      try {
+        const ready = await current.signIn.poll();
+        if (ready) signIns.delete(attempt);
+        return ready;
+      } catch (error) {
+        signIns.delete(attempt);
+        throw error;
+      } finally {
+        current.polling = false;
+      }
     },
     recognize: async ({ directory }) => {
       try {

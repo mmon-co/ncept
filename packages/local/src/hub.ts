@@ -35,7 +35,8 @@ import {
 } from "@mmon-co/ncept-core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { HubAuth } from "./hub-auth.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { hubBaseUrl, HubAuth, HubSignInRequired } from "./hub-auth.js";
 import { unpackDirectory, type ProfileDirectory } from "./directory.js";
 import { object, parsePiSession } from "./sessions.js";
 import { validate, unpack, type ConfiguredTheory } from "./exchange.js";
@@ -142,19 +143,6 @@ interface ImportPreview {
   mainProfileId: string;
   missions: { id: string; statement: string; retired: boolean }[];
 }
-function baseUrl(value: string): string {
-  const url = new URL(value);
-  if (
-    (url.protocol !== "https:" &&
-      !(url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error("Hub URL must use HTTPS (or loopback HTTP)");
-  return url.href.replace(/\/$/, "");
-}
 function releaseAddress(value: string, base: string) {
   const page = value.match(/^(https?:\/\/.+)\/hub\/([^/]+)\/releases\/([^/?#]+)(?:[?#].*)?$/);
   const api = value.match(/^(https?:\/\/.+)\/hub\/v1\/releases\/([^/]+)\/([^/?#]+)(?:[?#].*)?$/);
@@ -164,7 +152,7 @@ function releaseAddress(value: string, base: string) {
   const version = match ? decodeURIComponent(match[3] ?? "") : exact?.[2];
   if (!isPatchId(patchId) || !version) throw new Error("Use a Hub release page URL or patch-id@version");
   releasePrecedenceKey(version);
-  return { base: match ? baseUrl(match[1] ?? "") : base, patchId, version };
+  return { base: match ? hubBaseUrl(match[1] ?? "") : base, patchId, version };
 }
 function releasePath(patchId: string, version: string) {
   return "/hub/v1/releases/" + encodeURIComponent(patchId) + "/" + encodeURIComponent(version);
@@ -238,17 +226,22 @@ export function connectHub(
   createMission: Host["missions"]["create"],
   options: HubOptions = {},
 ): Host["hub"] {
-  const base = baseUrl(options.url ?? "https://co.mmon.co/ncept");
+  const base = hubBaseUrl(options.url);
   const resource = base + "/mcp";
   const headers = { "User-Agent": options.userAgent ?? "@mmon-co/ncept-local/" + metadata.version };
   async function connected<T>(
     operation: (call: <R>(name: string, args: Record<string, unknown>) => Promise<R>) => Promise<T>,
   ) {
     const provider = await HubAuth.open(resource, options);
-    if (!provider.tokens()) throw new Error("Sign in first with host.hub.signIn()");
+    if (!provider.tokens()) throw new HubSignInRequired();
     const client = new Client({ name: metadata.name, version: metadata.version });
     try {
-      await client.connect(new StreamableHTTPClientTransport(new URL(resource), { authProvider: provider }));
+      try {
+        await client.connect(new StreamableHTTPClientTransport(new URL(resource), { authProvider: provider }));
+      } catch (error) {
+        if (error instanceof UnauthorizedError) throw new HubSignInRequired();
+        throw error;
+      }
       return await operation(async <R>(name: string, args: Record<string, unknown>): Promise<R> => {
         const result = await client.callTool({ name, arguments: args });
         const text = Array.isArray(result.content)
@@ -460,7 +453,10 @@ export function connectHub(
       )
         throw new Error("Share declined");
       const provider = await HubAuth.open(resource, options);
-      if (!provider.tokens()) await provider.signIn();
+      if (!provider.tokens()) {
+        if (input.signIn === false) throw new HubSignInRequired();
+        await provider.signIn();
+      }
       return release(bundle, current.blobs, "0.1.0", visibility);
     },
     async exportTo() {

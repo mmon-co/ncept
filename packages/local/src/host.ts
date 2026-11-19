@@ -119,7 +119,9 @@ export interface Host {
      * Publish one Mission's map (its targets and their prerequisites) as a new Hub release and
      * return its link. Unlisted unless asked otherwise; signs in first when needed.
      */
-    share(input: Readonly<{ mission: string; title: string; visibility?: "public" | "unlisted" }>): Promise<HubRelease>;
+    share(
+      input: Readonly<{ mission: string; title: string; visibility?: "public" | "unlisted"; signIn?: false }>,
+    ): Promise<HubRelease>;
     exportTo(destination: "web"): Promise<void>;
     importFrom(source: "web"): Promise<ImportResult>;
   };
