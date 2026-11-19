@@ -66,8 +66,15 @@ const review = (card: Card | undefined, at: string, grade: FsrsGrade) => {
  * suppress implicit credit. The host supplies the learner's day boundaries. */
 function reviews({ records, direct, implicit, grades }: RetentionEvidence) {
   const directDays = new Set(direct.map(({ learnerDay }) => learnerDay?.id));
-  const credit = implicit.filter(({ learnerDay }) => learnerDay !== undefined && !directDays.has(learnerDay.id));
-  return [...records.filter(({ payload }) => payload.kind === "claim"), ...credit, ...grades].sort(compareObservations);
+  let implicitDay: string | undefined;
+  return [...records.filter(({ payload }) => payload.kind === "claim"), ...implicit, ...grades]
+    .sort(compareObservations)
+    .filter(({ payload, learnerDay }) => {
+      if (payload.kind === "claim" || payload.kind === "grade") return true;
+      if (!learnerDay || directDays.has(learnerDay.id) || learnerDay.id === implicitDay) return false;
+      implicitDay = learnerDay.id;
+      return true;
+    });
 }
 
 const schedulers = {
@@ -75,7 +82,6 @@ const schedulers = {
     validate: (value) => Object.keys(value).length === 1,
     replay(_schedule, evidence) {
       let card: Card | undefined;
-      let reviewDay: string | undefined;
       let initializingClaim: string | undefined;
       let lapsed = false;
       const citations: ObservationId[] = [];
@@ -103,10 +109,7 @@ const schedulers = {
           lapsed = payload.rating === "Again" && earlierSuccess;
           citations.push(...(record.cites ?? []));
         } else {
-          const day = record.learnerDay;
-          if (day === undefined || day.id === reviewDay) continue;
           card = review(card, at, Rating.Good);
-          reviewDay = day.id;
         }
         citations.push(id);
       }
@@ -138,7 +141,6 @@ const schedulers = {
     replay(schedule, evidence) {
       let lastReview: string | undefined;
       let days = schedule.days;
-      let reviewDay: string | undefined;
       let lapsed = false;
       const citations: ObservationId[] = [];
       for (const record of reviews(evidence)) {
@@ -153,9 +155,6 @@ const schedulers = {
           lapsed = payload.rating === "Again";
           citations.push(...(record.cites ?? []));
         } else {
-          const day = record.learnerDay;
-          if (day === undefined || day.id === reviewDay) continue;
-          reviewDay = day.id;
           lastReview = at;
           days = schedule.days;
           lapsed = false;
