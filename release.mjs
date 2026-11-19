@@ -78,8 +78,13 @@ try {
         console.log("Already published: " + name + "@" + version);
         continue;
       }
+      // Build output (including bb plugin build) must not enter npm's JSON stream.
+      await checked(["npm", "run", "prepack"], { cwd });
       const [pack] = JSON.parse(
-        await checked(["npm", "pack", "--json", "--pack-destination", scratch], { cwd, capture: true }),
+        await checked(["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", scratch], {
+          cwd,
+          capture: true,
+        }),
       );
       const archive = join(scratch, pack.filename);
       const manifest = JSON.parse(await checked(["tar", "-xOf", archive, "package/package.json"], { capture: true }));

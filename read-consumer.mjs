@@ -24,7 +24,7 @@ console.log(
 );
 const { composePatch, emptyPatch } = await dependency("core");
 const { defaultTheory } = await dependency("default-theory");
-const { openHost, openProfile } = await dependency("local");
+const { openProfile } = await dependency("local");
 const { initProject } = await dependency("pi");
 const cwd = await initProject("profile");
 const profile = await openProfile(cwd, [defaultTheory]);
@@ -51,16 +51,17 @@ const provenance = await profile.addRevision(
 await profile.setPersonal(provenance);
 
 if (harness === "pi") {
-  const host = await openHost({
-    profileDir: cwd,
-    theories: [defaultTheory],
-    model: async () => {
-      throw new Error("A completion read should not call a model");
-    },
-    confirm: async () => true,
-  });
+  // Seed the Mission without starting the learning host; the installed
+  // extension should be the first reader of the completion query.
   const statement = "Learn integer addition";
-  await host.missions.create({ id: "addition", statement, priority: 1, targets: [{ node, provenance }] });
+  await profile.appendLog([
+    {
+      kind: "mission.revised",
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      mission: { id: "addition", statement, priority: 1, targets: [{ node, provenance }] },
+    },
+  ]);
   const entry = await import(pathToFileURL(resolve(directory, manifest.pi.extensions[0])).href);
   let start;
   entry.default({
