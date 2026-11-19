@@ -8,7 +8,7 @@ import {
   sameMetadataSubjects,
   validateMetadataProperties,
 } from "./metadata.js";
-import { PatchCompileError } from "./errors.js";
+import { PatchCompileError, StaleMaskTargetError } from "./errors.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -126,8 +126,8 @@ function describeMask(mask: ExactContributionMask): string {
 }
 
 function staleMask(owner: ExactPatchRef, mask: ExactContributionMask, reason: string): never {
-  throw new PatchCompileError(
-    "stale-mask-target",
+  throw new StaleMaskTargetError(
+    owner,
     `Patch ${owner.identity}@${exactRelease(owner)} has stale mask target ${describeMask(mask)}: ${reason}`,
   );
 }

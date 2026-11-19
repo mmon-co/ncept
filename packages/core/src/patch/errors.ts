@@ -1,3 +1,5 @@
+import type { ExactPatchRef } from "./model.js";
+
 export type PatchCompileErrorCode =
   | "invalid-bundle"
   | "invalid-retraction"
@@ -25,5 +27,14 @@ export class PatchCompileError extends Error {
     message: string,
   ) {
     super(message);
+  }
+}
+
+export class StaleMaskTargetError extends PatchCompileError {
+  constructor(
+    readonly patch: ExactPatchRef,
+    message: string,
+  ) {
+    super("stale-mask-target", message);
   }
 }

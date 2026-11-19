@@ -59,9 +59,13 @@ export function notebookBundleForRevision(
   ref: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
 ): ClosedPatchBundle {
+  return resolveNotebookRevision(ref, contents).bundle;
+}
+
+export function resolveNotebookRevision(ref: ExactPatchRef, contents: ReadonlyMap<ContentDigest, PatchContent>) {
   const content = contents.get(ref.digest);
   if (!content) throw new Error("Notebook content unavailable");
-  return bundleForRevision(ref, contents, new Map(content.bases.map((base) => [base.identity, base])));
+  return resolveRevision(ref, contents, new Map(content.bases.map((base) => [base.identity, base])));
 }
 
 /** Compute and verify the exact transitive closure from host-supplied content only. */
@@ -70,6 +74,14 @@ export function bundleForRevision(
   contents: ReadonlyMap<ContentDigest, PatchContent>,
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ClosedPatchBundle {
+  return resolveRevision(terminal, contents, selection).bundle;
+}
+
+function resolveRevision(
+  terminal: ExactPatchRef,
+  contents: ReadonlyMap<ContentDigest, PatchContent>,
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
+) {
   const revisions = new Map<string, PatchRevision>();
   const active = new Set<string>();
   const verified = new Set<ContentDigest>();
@@ -97,8 +109,7 @@ export function bundleForRevision(
   };
   visit(terminal);
   const bundle = { terminal, revisions: [...revisions.values()] };
-  resolvePatchBundle(bundle, undefined, selection);
-  return bundle;
+  return { bundle, graph: resolvePatchBundle(bundle, undefined, selection) };
 }
 
 function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
