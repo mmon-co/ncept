@@ -246,7 +246,7 @@ test("Again lapses only after an earlier direct success day or initializing know
   );
 });
 
-test("a passed placement milestone keeps its evidence and schedule but never gets review tags", () => {
+test("a passed placement milestone without an explicit schedule keeps its evidence and gets no review tags", () => {
   const milestoneGraph = resolvePatchBundle({
     terminal: ref,
     revisions: [
@@ -279,7 +279,7 @@ test("a passed placement milestone keeps its evidence and schedule but never get
   const now = "2027-10-01T11:00:00.000Z";
   const state = readTheoryState(defaultTheory, milestoneGraph, observations, now);
   expect(state.nodes["node-isolated"]?.completion.complete).toBe(true);
-  expect(state.nodes["node-isolated"]?.schedule).toBeDefined();
+  expect(state.nodes["node-isolated"]?.schedule).toBeUndefined();
   expect(state.nodes["node-isolated"]?.records).toHaveLength(3);
   expect(tags(observations, now, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
   expect(defaultTheory.project(milestoneGraph, state).nodes["node-isolated"]?.map(({ tag }) => tag)).not.toContain(
