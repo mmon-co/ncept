@@ -8,7 +8,7 @@ export const defaultTheory = {
   version: `${implementation.version}+${theoryContent}`,
 };
 /** The range a new Profile accepts: the default Theory's current minor, which a patch deploy keeps. */
-export const DEFAULT_THEORY_REQUIREMENT = { theory: defaultTheory.id, range: "~1.1" } as const;
+export const DEFAULT_THEORY_REQUIREMENT = { theory: defaultTheory.id, range: "~1.2" } as const;
 export * from "./path.js";
 export * from "./reading.js";
 export * from "./timing.js";
@@ -19,7 +19,6 @@ export * from "./state.js";
 export * from "./completion.js";
 export * from "./tags.js";
 export * from "./outcomes.js";
-export { recallToAttemptMigration } from "./migrations.js";
 export * from "./roleplay.js";
 export * from "./chat.js";
 export * from "./opening.js";

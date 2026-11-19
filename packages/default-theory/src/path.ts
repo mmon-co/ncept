@@ -19,8 +19,7 @@ import {
   type PathContext,
 } from "@mmon-co/ncept-core/theory";
 import { prepareEstimateDefault, progressDefault } from "./reading.js";
-import { DEFAULT_PARAMETERS, stateDefault } from "./state.js";
-import { forgetting_curve } from "ts-fsrs";
+import { DEFAULT_PARAMETERS, retrievability, stateDefault } from "./state.js";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
@@ -260,7 +259,7 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
     const schedule = node?.schedule;
     if (!scope.has(id) || !schedule || node.reviewCleared || !nodeAllowsReview(context.graph, id)) continue;
     const last = Date.parse(schedule.lastReview);
-    const at = (time: number) => forgetting_curve((time - last) / 86_400_000, schedule.stability);
+    const at = (time: number) => retrievability((time - last) / 86_400_000, schedule.stability);
     const nextBelow = (threshold: number) => {
       if (threshold <= 0 || at(now) < threshold) return;
       let low = now,
