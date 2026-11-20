@@ -18,7 +18,7 @@ import {
   type RootPatchDefinition,
   type SemanticDelta,
 } from "./model.js";
-import { resolvePatchBundle } from "./resolve.js";
+import { resolvePatchBundle, resolvePatchBundleWithVariants } from "./resolve.js";
 
 export const PERSONAL_PATCH_ID = "patch-personal" as const;
 export class PatchContentError extends Error {}
@@ -109,7 +109,7 @@ function resolveRevision(
   };
   visit(terminal);
   const bundle = { terminal, revisions: [...revisions.values()] };
-  return { bundle, graph: resolvePatchBundle(bundle, undefined, selection) };
+  return { bundle, ...resolvePatchBundleWithVariants(bundle, [], undefined, selection) };
 }
 
 function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {
