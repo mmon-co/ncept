@@ -46,6 +46,50 @@ async function packument(name) {
   return response.json();
 }
 
+async function pack(scratch, cwd, ...spec) {
+  const [result] = JSON.parse(
+    await checked(["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", scratch, ...spec], {
+      cwd,
+      capture: true,
+    }),
+  );
+  return { archive: join(scratch, result.filename), ...result };
+}
+
+async function checkPublished(scratch, id, local, tarball) {
+  const published = join(scratch, "published");
+  const built = join(scratch, "built");
+  await mkdir(published, { recursive: true });
+  const remote = await pack(published, scratch, tarball);
+  try {
+    // Compare packed files (including binary bytes and executable bits), ignoring tar metadata.
+    for (const [directory, archive] of [
+      [built, local],
+      [published, remote.archive],
+    ]) {
+      await mkdir(directory, { recursive: true });
+      await checked(["tar", "-xf", archive, "-C", directory]);
+    }
+    const args = [
+      "git",
+      "diff",
+      "--no-index",
+      "--no-ext-diff",
+      "--name-only",
+      "--",
+      "built/package",
+      "published/package",
+    ];
+    const { status, stdout, stderr } = await run(args, { cwd: scratch, capture: true });
+    if (status === 1)
+      throw new Error(id + " differs from npm at the same version; bump the version.\n" + stdout.trim());
+    if (status !== 0) throw new Error(id + " tarball comparison failed: " + stderr);
+  } finally {
+    await rm(built, { recursive: true, force: true });
+    await rm(published, { recursive: true, force: true });
+  }
+}
+
 const scratch = await mkdtemp(join(tmpdir(), "ncept-release-"));
 try {
   const metadata = new Map(
@@ -74,27 +118,24 @@ try {
       const { name, version, private: isPrivate } = await file.json();
       if (isPrivate || name !== nameOf(directory)) throw new Error("Unexpected package manifest: " + file.name);
       const info = metadata.get(name);
-      if (Object.hasOwn(info.versions, version)) {
-        console.log("Already published: " + name + "@" + version);
-        continue;
-      }
+      // Rebuild from source so files removed since a previous build don't enter the tarball.
+      await rm(join(cwd, "dist"), { recursive: true, force: true });
       // Build output (including bb plugin build) must not enter npm's JSON stream.
       await checked(["npm", "run", "prepack"], { cwd });
-      const [pack] = JSON.parse(
-        await checked(["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", scratch], {
-          cwd,
-          capture: true,
-        }),
-      );
-      const archive = join(scratch, pack.filename);
+      const { archive, filename, integrity } = await pack(scratch, cwd);
+      if (Object.hasOwn(info.versions, version)) {
+        await checkPublished(scratch, name + "@" + version, archive, info.versions[version].dist.tarball);
+        console.log("Already published and matches: " + name + "@" + version);
+        continue;
+      }
       const manifest = JSON.parse(await checked(["tar", "-xOf", archive, "package/package.json"], { capture: true }));
       if (manifest.name !== name || manifest.version !== version || manifest.private)
         throw new Error("Packed manifest disagrees: " + name);
-      archives.set(pack.filename, archive);
+      archives.set(filename, archive);
       candidates.set(name, { version, archive });
       info.versions[version] = {
         ...manifest,
-        dist: { tarball: new URL(pack.filename, server.url).href, integrity: pack.integrity },
+        dist: { tarball: new URL(filename, server.url).href, integrity },
       };
       const tag = info["dist-tags"].latest;
       if (!tag || Bun.semver.order(version, tag) > 0) info["dist-tags"].latest = version;
