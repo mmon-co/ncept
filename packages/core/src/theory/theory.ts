@@ -140,6 +140,8 @@ export type PathContext = EstimateContext &
     /** The host's effective Session budget, never a Theory preference. */
     minutes: number;
   }>;
+export type PathSelection = Pick<PathContext, "targets" | "past" | "retired">;
+export type PathInputs = Omit<PathContext, keyof PathSelection>;
 export type MissionFuture = MissionPath &
   Readonly<{
     /** Ordered upcoming stops; sections retain the structural syllabus and checkpoint addresses. */
@@ -265,6 +267,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   prepareEstimate?(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate;
   /** Compute the future from this reading, never persist it. A theory may have no stops. */
   path?(context: PathContext): MissionFuture;
+  /** Reuse one graph, time and evidence reading across different Mission selections. */
+  preparePath?(inputs: PathInputs, state: S): (selection: PathSelection) => MissionFuture;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   /** A historical act's meaning, from its accepted evidence rather than present progress. */

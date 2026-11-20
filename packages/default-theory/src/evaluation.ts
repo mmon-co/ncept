@@ -300,10 +300,21 @@ export function* evaluateWatchedReply(ctx: Ctx, message: string): Program<unknow
   return yield* assess(ctx, spec, { message }, watch.id);
 }
 
+export const posedTask = {
+  type: "string",
+  description: "The check as posed, verbatim. A question the learner asks alongside the answer is separate.",
+};
+export const learnerAttempt = {
+  type: "string",
+  description:
+    "The learner's own words answering this check. Leave out any separate question they ask in the same send.",
+};
+
 const specProperties = {
-  task: { type: "string", minLength: 1 },
+  task: { ...posedTask, minLength: 1 },
   rubric: {
     type: "array",
+    description: "Criteria for the posed task alone.",
     minItems: 1,
     items: {
       type: "object",
@@ -368,12 +379,12 @@ export const evaluationTools: readonly Tool<unknown, unknown, DefaultState>[] = 
   {
     name: "evaluation_judge",
     description:
-      "Grade one response and record the verdict. Supply response text or a selected learner message identity for original media.",
+      "Grade one posed check and record the verdict. Supply the answer excerpt as response for text, or a selected learner message identity for original media.",
     schema: {
       type: "object",
       additionalProperties: false,
       required: specKeys,
-      properties: { ...specProperties, response: { type: "string" }, message: { type: "string", minLength: 1 } },
+      properties: { ...specProperties, response: learnerAttempt, message: { type: "string", minLength: 1 } },
       oneOf: [
         {
           type: "object",

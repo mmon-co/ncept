@@ -17,9 +17,11 @@ import {
   type MissionPath,
   type MissionFuture,
   type PathContext,
+  type PathInputs,
+  type PathSelection,
 } from "@mmon-co/ncept-core/theory";
 import { prepareEstimateDefault, progressDefault } from "./reading.js";
-import { DEFAULT_PARAMETERS, stateDefault } from "./state.js";
+import { DEFAULT_PARAMETERS, stateDefault, type DefaultState } from "./state.js";
 import { REVIEW_PROPERTY, retrievabilityAt, sameReviewCurve, type ReviewSchedule } from "./schedules.js";
 export { REVIEW_PROPERTY, validateReviewSchedule, type ReviewSchedule } from "./schedules.js";
 
@@ -219,8 +221,11 @@ function ranked(nodes: readonly NodeId[], context: PathContext): NodeId[] {
 }
 
 /** Nodes are indivisible: an over-budget first Node must still make progress. */
-function packed(candidates: readonly NodeId[], context: PathContext): NodeId[] {
-  const estimate = prepareEstimateDefault(context);
+function packed(
+  candidates: readonly NodeId[],
+  context: PathContext,
+  estimate: ReturnType<typeof prepareEstimateDefault>,
+): NodeId[] {
   const nodes: NodeId[] = [];
   for (const node of ranked(candidates, context)) {
     if (
@@ -237,10 +242,13 @@ function packed(candidates: readonly NodeId[], context: PathContext): NodeId[] {
  * retrievability, so an unrounded analytic crossing would miss the first effective tick.
  * Rank changes are conservative: the order may survive one, but cannot change before it.
  */
-function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<MissionPath, "validUntil"> {
+function pathValidity(
+  context: PathContext,
+  scope: ReadonlySet<NodeId>,
+  state: DefaultState,
+): Pick<MissionPath, "validUntil"> {
   const now = Date.parse(context.now);
   const boundaries = context.projection.validUntil === undefined ? [] : [Date.parse(context.projection.validUntil)];
-  const state = stateDefault(context.graph, context.observations, context.now);
   const candidates = context.graph.nodes.flatMap(({ id }) => {
     const schedule = state.nodes[id]?.schedule;
     const rank = context.projection.nodes[id]?.find(({ tag }) => tag === "review:due")?.rank;
@@ -283,15 +291,37 @@ function pathValidity(context: PathContext, scope: ReadonlySet<NodeId>): Pick<Mi
   return Number.isFinite(expiry) ? { validUntil: new Date(expiry).toISOString() } : {};
 }
 
+export function pathDefault(context: PathContext): MissionFuture {
+  return preparePathDefault(context)(context);
+}
+
+/** The graph and historical timing are independent of the Mission's targets and run. */
+export function preparePathDefault(inputs: PathInputs, state?: DefaultState) {
+  let estimate: ReturnType<typeof prepareEstimateDefault> | undefined;
+  let tags: ReturnType<typeof tagIndex> | undefined;
+  const readState = () => (state ??= stateDefault(inputs.graph, inputs.observations, inputs.now));
+  return (selection: PathSelection): MissionFuture =>
+    readPath(
+      { ...inputs, ...selection },
+      (tags ??= tagIndex(inputs.projection)),
+      (estimate ??= prepareEstimateDefault(inputs)),
+      readState,
+    );
+}
+
 /** The syllabus stays addressable as progress changes; only the future is upcoming.
  * A trailing unnumbered review is maintenance; a review with numberOffset 1 blocks the
  * following teaching stop. A graph-wide reading has only maintenance, and no Mission.
  */
-export function pathDefault(context: PathContext): MissionFuture {
+function readPath(
+  context: PathContext,
+  tags: ReturnType<typeof tagIndex>,
+  estimate: ReturnType<typeof prepareEstimateDefault>,
+  readState: () => DefaultState,
+): MissionFuture {
   if (context.retired?.outcome === "abandoned") return { sections: [], warnings: [], future: [] };
   const { graph, targets, projection } = context;
   const path = teachingPath(graph, targets ?? []);
-  const tags = tagIndex(projection);
   const scope =
     targets === undefined
       ? new Set(graph.nodes.map(({ id }) => id))
@@ -299,10 +329,11 @@ export function pathDefault(context: PathContext): MissionFuture {
   const due = packed(
     graph.nodes.map(({ id }) => id).filter((id) => scope.has(id) && tags("review:due").has(id)),
     context,
+    estimate,
   );
   const maintenance: Lesson[] = due.length ? [{ kind: "review", numbered: false, nodes: due }] : [];
   if (context.retired?.outcome === "achieved" || targets === undefined)
-    return { ...path, ...pathValidity(context, scope), future: maintenance };
+    return { ...path, ...pathValidity(context, scope, readState()), future: maintenance };
 
   const progress = progressDefault(graph, projection, [...scope]);
   const next = path.sections
@@ -319,6 +350,7 @@ export function pathDefault(context: PathContext): MissionFuture {
       .map(({ id }) => id)
       .filter((id) => cone.has(id) && !next?.nodes.includes(id) && tags("review:fading").has(id)),
     context,
+    estimate,
   );
   const sections = path.sections.map((section) => ({
     ...section,
@@ -330,7 +362,7 @@ export function pathDefault(context: PathContext): MissionFuture {
   }));
   return {
     ...path,
-    ...pathValidity(context, scope),
+    ...pathValidity(context, scope, readState()),
     sections,
     future: [
       ...sections
