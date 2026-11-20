@@ -1,10 +1,10 @@
 # Default Theory
 
-`@mmon-co/ncept-default-theory` implements Core's `Theory` interface. It depends on `@mmon-co/ncept-core` through public exports, just as a third-party Theory does; Core does not depend on it. The web Application selects it explicitly. FSRS retention, acquisition, Mission futures, tutor Programs and pedagogical Skills live here. Hosts supply persistence, model calls and their own mechanics.
+`@mmon-co/ncept-default-theory` implements Core's `Theory` interface. It depends on `@mmon-co/ncept-core` through public exports, just as a third-party Theory does; Core does not depend on it. The web Application selects it explicitly. Node retention schedules, acquisition, Mission futures, tutor Programs and pedagogical Skills live here. Hosts supply persistence, model calls and their own mechanics.
 
 ## Use
 
-Import `defaultTheory` and `DEFAULT_THEORY_REQUIREMENT` from `@mmon-co/ncept-default-theory`. The executable keeps its identity `default`, version `1.0.0+<commit>` (`dev` outside a deploy) and new-Profile range `~1.0`. This package move changes neither stored observations nor Profile requirements and needs no data migration.
+Import `defaultTheory` and `DEFAULT_THEORY_REQUIREMENT` from `@mmon-co/ncept-default-theory`. The executable has identity `default`, a semver version with build metadata, and a new-Profile range pinned to its current minor. Version 1.4 migrates boolean `pedagogy:review` metadata to tagged schedules on live Patch heads. `fsrs` schedules memory checks, `interval` checks a maintained state or capability after its named number of days, and `never` skips Review. An unset milestone uses `never`; other unset Nodes use `fsrs`.
 
 The root exports the implementation's public operations and types. Focused exports are `@mmon-co/ncept-default-theory/path`, `/state`, `/messages` and `/outcomes`.
 

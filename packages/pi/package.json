@@ -1,6 +1,6 @@
 {
   "name": "@mmon-co/ncept-pi",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "Learn in pi from a Profile directory you own",
   "keywords": [
     "pi-package"
@@ -36,9 +36,9 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@mmon-co/ncept-core": "^0.3.0",
-    "@mmon-co/ncept-default-theory": "^2.0.0",
-    "@mmon-co/ncept-local": "^0.3.0"
+    "@mmon-co/ncept-core": "^0.4.0",
+    "@mmon-co/ncept-default-theory": "^3.0.0",
+    "@mmon-co/ncept-local": "^0.3.1"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "1.5.0",

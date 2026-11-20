@@ -125,8 +125,10 @@ function claim(id: ObservationId, node: NodeId, at: string): Observation<Claim> 
 }
 const read = (observations: readonly Observation[], now: string) =>
   readTheoryState(defaultTheory, graph, observations, now);
-const schedule = (observations: readonly Observation[], now: string, node: NodeId) =>
-  read(observations, now).nodes[node]?.schedule;
+const schedule = (observations: readonly Observation[], now: string, node: NodeId) => {
+  const review = read(observations, now).nodes[node]?.schedule;
+  return review?.kind === "fsrs" ? review : undefined;
+};
 const tags = (observations: readonly Observation[], now: string, node: NodeId) =>
   defaultTheory.project(graph, read(observations, now)).nodes[node]?.filter(({ tag }) => tag.startsWith("review:")) ??
   [];
@@ -178,7 +180,7 @@ test("a success credits direct prerequisites only, and the direct day's grade co
   const failure = attempt("obs-failure", "node-prerequisite", "2026-10-02T08:00:00.000Z", "failure");
   const initial = judged([success], "Hard");
   const lapsed = read(judged([...initial, failure], "Hard"), now);
-  expect(lapsed.nodes["node-prerequisite"]?.schedule?.reps).toBe(2);
+  expect(lapsed.nodes["node-prerequisite"]?.schedule).toMatchObject({ kind: "fsrs", reps: 2 });
   expect(lapsed.nodes["node-prerequisite"]?.schedule?.retrievability).toBeLessThan(
     schedule(judged([...initial, failure], "Good"), now, "node-prerequisite")?.retrievability ?? 0,
   );
@@ -246,7 +248,7 @@ test("Again lapses only after an earlier direct success day or initializing know
   );
 });
 
-test("a passed placement milestone keeps its evidence and schedule but never gets review tags", () => {
+test("a passed placement milestone with no explicit review keeps its evidence without a schedule or review tags", () => {
   const milestoneGraph = resolvePatchBundle({
     terminal: ref,
     revisions: [
@@ -279,7 +281,7 @@ test("a passed placement milestone keeps its evidence and schedule but never get
   const now = "2027-10-01T11:00:00.000Z";
   const state = readTheoryState(defaultTheory, milestoneGraph, observations, now);
   expect(state.nodes["node-isolated"]?.completion.complete).toBe(true);
-  expect(state.nodes["node-isolated"]?.schedule).toBeDefined();
+  expect(state.nodes["node-isolated"]?.schedule).toBeUndefined();
   expect(state.nodes["node-isolated"]?.records).toHaveLength(3);
   expect(tags(observations, now, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
   expect(defaultTheory.project(milestoneGraph, state).nodes["node-isolated"]?.map(({ tag }) => tag)).not.toContain(
@@ -298,8 +300,8 @@ test("knows claims schedule soon without covering prerequisites", () => {
   expect(schedule(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toMatchObject({
     stability: 1,
     reps: 0,
-    retrievability: 1,
   });
+  expect(schedule(observations, "2026-10-01T08:00:00.000Z", "node-claim")?.retrievability).toBeCloseTo(1, 4);
   expect(read(observations, "2026-10-01T08:00:00.000Z").nodes["node-prerequisite"]?.label).toBe("unknown");
   expect(tags(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toEqual([]);
   expect(tags(observations, "2026-10-03T08:00:00.000Z", "node-claim").map(({ tag }) => tag)).toEqual(["review:due"]);
@@ -311,16 +313,16 @@ test("review tags apply to acquired Nodes at 0.9 and 0.7 and rank untaught depen
     claim("obs-isolated", "node-isolated", "2026-09-20T08:00:00.000Z"),
     claim("obs-prerequisite", "node-prerequisite", "2026-09-20T08:00:00.000Z"),
   ];
-  const now = "2026-10-11T08:00:00.000Z";
+  const now = "2026-10-31T08:00:00.000Z";
   expect(tags(observations, now, "node-claim").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
   const rank = (node: NodeId) => tags(observations, now, node)[0]?.rank ?? 0;
   expect(rank("node-prerequisite")).toBeGreaterThan(rank("node-claim"));
   expect(rank("node-claim")).toBeGreaterThan(rank("node-isolated"));
-  const year = "2027-10-09T08:00:00.000Z";
+  const twoYears = "2028-10-09T08:00:00.000Z";
   const learned = judged([
     attempt("obs-1", "node-isolated", "2026-10-01T08:00:00.000Z"),
     attempt("obs-2", "node-isolated", "2026-10-02T08:00:00.000Z"),
   ]);
-  expect(read(learned, year).nodes["node-isolated"]?.label).toBe("demonstrated");
-  expect(tags(learned, year, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
+  expect(read(learned, twoYears).nodes["node-isolated"]?.label).toBe("demonstrated");
+  expect(tags(learned, twoYears, "node-isolated").map(({ tag }) => tag)).toEqual(["review:due", "review:fading"]);
 });

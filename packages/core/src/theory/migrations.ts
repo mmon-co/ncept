@@ -1,6 +1,8 @@
 import { tryParse } from "std-semver";
 import {
   candidateRevision,
+  notebookBundleForRevision,
+  type ResolvedGraph,
   exactPatchRefKey,
   notebookSelection,
   resolvePatchBundle,
@@ -17,6 +19,10 @@ import type { Theory, TheoryRequirement } from "./theory.js";
 /** A stored-data generation; patch releases and build metadata do not change it. */
 export type TheoryDataVersion = `${number}.${number}`;
 
+/** A content rewrite may depend on effective metadata inherited from bases. Resolve lazily:
+ * without a candidate this reads the authored closure; with one it reads the migrated bases. */
+type MigrationGraphs = { basesChanged: boolean; resolve: (candidate?: PatchContent) => ResolvedGraph };
+
 /**
  * Pure forward rewrite from one minor to the next within the same major. A step with no
  * rewrite keeps every stored shape and changes only what the Theory derives from it, such as
@@ -26,7 +32,7 @@ export type TheoryMigration = Readonly<{
   from: TheoryDataVersion;
   to: TheoryDataVersion;
   /** Rewrite one Patch's content without mutating it; identity and revision minting belong to the caller. */
-  migratePatch?(content: PatchContent): PatchContent;
+  migratePatch?(content: PatchContent, graphs?: MigrationGraphs): PatchContent;
   /**
    * Apply migratePatch to live heads and rewrite Profile.log without mutating the input.
    * Changed content gets new exact references; hosts retain old revisions as unread history.
@@ -64,10 +70,11 @@ export function migrateTheoryPatchContent(
   theory: MigrationTheory,
   requirement: TheoryRequirement,
   content: PatchContent,
+  graphs?: MigrationGraphs,
 ): PatchContent {
   const { steps } = planTheoryMigration(theory, requirement);
   let migrated = content;
-  for (const step of steps) if (step.migratePatch) migrated = step.migratePatch(migrated);
+  for (const step of steps) if (step.migratePatch) migrated = step.migratePatch(migrated, graphs);
   return migrated;
 }
 
@@ -85,6 +92,7 @@ export function migrateTheoryPatchClosure(
 ): Readonly<{ terminal: PatchRevision; revisions: readonly PatchRevision[] }> {
   const revisions = new Map(bundle.revisions.map((revision) => [exactPatchRefKey(revision.ref), revision]));
   const migrated = new Map<string, PatchRevision>();
+  const contents = new Map(bundle.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]));
   const visit = (ref: ExactPatchRef, inherited: TheoryRequirement): PatchRevision => {
     const key = exactPatchRefKey(ref);
     const held = migrated.get(key);
@@ -92,11 +100,35 @@ export function migrateTheoryPatchClosure(
     const revision = revisions.get(key);
     if (!revision) throw new Error("Incomplete Patch closure");
     const pin = declared.get(key) ?? inherited;
-    const content = migrateTheoryPatchContent(theory, pin, revisionContent(revision));
-    const next = candidateRevision(ref.identity, {
-      ...content,
-      bases: content.bases.map((base) => visit(base, pin).ref),
+    const authoredBases = revision.bases;
+    const bases = authoredBases.map((base) => visit(base, pin).ref);
+    const basesChanged = bases.some((base, i) => base.digest !== revision.bases[i]?.digest);
+    function relink(content: PatchContent): PatchContent {
+      const pointers = content.bases === authoredBases ? bases : content.bases.map((base) => visit(base, pin).ref);
+      if (pointers.every((base, i) => base.digest === content.bases[i]?.digest)) return content;
+      return {
+        ...content,
+        bases: pointers,
+        delta: {
+          operations: content.delta.operations.map((op) => {
+            if (op.kind !== "mask-contribution") return op;
+            const source = migrated.get(exactPatchRefKey(op.mask.source))?.ref;
+            return source ? { ...op, mask: { ...op.mask, source } } : op;
+          }),
+        },
+      };
+    }
+    const content = migrateTheoryPatchContent(theory, pin, revisionContent(revision), {
+      basesChanged,
+      resolve(candidate) {
+        const at = candidate ? candidateRevision(ref.identity, relink(candidate)) : revision;
+        contents.set(at.ref.digest, revisionContent(at));
+        const closure = notebookBundleForRevision(at.ref, contents);
+        return resolvePatchBundle(closure, undefined, notebookSelection(closure));
+      },
     });
+    const next = candidateRevision(ref.identity, relink(content));
+    contents.set(next.ref.digest, revisionContent(next));
     migrated.set(key, next);
     return next;
   };

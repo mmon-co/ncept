@@ -1,8 +1,10 @@
-import { createEmptyCard, fsrs, generatorParameters, Rating, type Card } from "ts-fsrs";
 import type { Speaker } from "@mmon-co/ncept-core/theory/speaker";
 import { readTheoryState, type TheoryState } from "@mmon-co/ncept-core/theory";
 
 import { dependentCones } from "./dependent-cone.js";
+import { nodeReviewSchedule } from "./path.js";
+import { prepareReviewReplay, retrievabilityAt, type NodeSchedule, type ReplayedSchedule } from "./schedules.js";
+export { DEFAULT_PARAMETERS, type DefaultParameters, type NodeSchedule } from "./schedules.js";
 import {
   COMPLETION_PROPERTY,
   compileCompletion,
@@ -35,7 +37,7 @@ import {
 } from "@mmon-co/ncept-core/observations";
 
 export const DEFAULT_THEORY_ID = "default";
-export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.2.0" } as const;
+export const DEFAULT_THEORY_REF = { theory: DEFAULT_THEORY_ID, version: "1.4.0" } as const;
 export interface NodeRef {
   readonly node: NodeId;
   readonly provenance: ExactPatchRef;
@@ -608,32 +610,6 @@ export function projectGraphChange(
 }
 
 export type NodeLabel = "demonstrated" | "probably-known" | "unknown";
-export type DefaultParameters = Readonly<{
-  retention: Readonly<{ due: number; fading: number; claimStabilityDays: number }>;
-}>;
-
-export const DEFAULT_PARAMETERS: DefaultParameters = {
-  retention: { due: 0.9, fading: 0.7, claimStabilityDays: 1 },
-};
-
-export interface NodeSchedule {
-  readonly stability: number;
-  readonly difficulty: number;
-  readonly reps: number;
-  readonly lapses: number;
-  readonly lastReview: string;
-  readonly retrievability: number;
-  /** Observed forgetting stays due until a later non-Again day grade, independently of FSRS R. */
-  readonly lapsed: boolean;
-  readonly citations: readonly ObservationId[];
-}
-
-const DAY_MS = 86_400_000;
-/** Daily reviews have no learning steps; disabling fuzz keeps replay deterministic. */
-const SCHEDULER = fsrs(generatorParameters({ enable_fuzz: false, enable_short_term: false }));
-/** Retrievability after `elapsedDays` under the scheduler's own decay. */
-export const retrievability = SCHEDULER.forgetting_curve;
-
 export interface NodeState {
   readonly completion: CompletionProgress & { readonly query?: Completion };
   /** Effective operation receipts; these do not change competence labels or schedules. */
@@ -680,72 +656,6 @@ export function labelDefaultNode(input: {
     aidedPractice: demonstrations.filter(({ payload }) => !payload.unaided).length,
     citations: [...new Set([...records.map(({ id }) => id), ...completion.citations])],
     records,
-  };
-}
-
-/** Accepted whole-day grades are the only direct FSRS reviews. Ungraded direct days also
- * suppress implicit credit. Core uses host boundaries, never a clock-zone or UTC-day fallback. */
-function scheduleDefaultNode(
-  records: readonly HomedRecord[],
-  implicit: readonly HomedRecord[],
-  lapses: readonly Observation<Lapse>[],
-  grades: readonly Observation<Grade>[],
-  parameters: DefaultParameters,
-): Omit<NodeSchedule, "retrievability"> | undefined {
-  const direct = [
-    ...records.flatMap((record) =>
-      record.payload.kind === "demonstration" && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
-    ),
-    ...lapses,
-  ];
-  const accepted = activeNodeGrades(grades, direct);
-  const directDays = new Set(direct.flatMap(({ learnerDay }) => (learnerDay === undefined ? [] : [learnerDay.id])));
-  const credit = implicit.filter(({ learnerDay }) => learnerDay !== undefined && !directDays.has(learnerDay.id));
-  const claims = records.filter((record): record is Observation<Claim> => record.payload.kind === "claim");
-  let card: Card | undefined;
-  let reviewDay: string | undefined;
-  let initializingClaim: string | undefined;
-  let lapsed = false;
-  const citations: ObservationId[] = [];
-  for (const record of [...claims, ...credit, ...accepted].sort(compareObservations)) {
-    const { payload, at, id } = record;
-    if (payload.kind === "claim") {
-      if (payload.stance !== "knows" || card !== undefined) continue;
-      card = {
-        ...SCHEDULER.next(createEmptyCard(at), at, Rating.Good).card,
-        stability: parameters.retention.claimStabilityDays,
-        reps: 0,
-      };
-      initializingClaim = at;
-    } else if (payload.kind === "grade") {
-      const earlierSuccess =
-        (initializingClaim !== undefined && Date.parse(initializingClaim) < Date.parse(payload.day.start)) ||
-        direct.some(
-          ({ at, payload: evidence }) =>
-            evidence.kind === "demonstration" &&
-            evidence.outcome === "success" &&
-            Date.parse(at) < Date.parse(payload.day.start),
-        );
-      card = SCHEDULER.next(card ?? createEmptyCard(payload.day.end), payload.day.end, Rating[payload.rating]).card;
-      lapsed = payload.rating === "Again" && earlierSuccess;
-      citations.push(...(record.cites ?? []));
-    } else {
-      const day = record.learnerDay;
-      if (day === undefined || day.id === reviewDay) continue;
-      card = SCHEDULER.next(card ?? createEmptyCard(at), at, Rating.Good).card;
-      reviewDay = day.id;
-    }
-    citations.push(id);
-  }
-  if (card?.last_review === undefined) return undefined;
-  return {
-    stability: card.stability,
-    difficulty: card.difficulty,
-    reps: card.reps,
-    lapses: card.lapses,
-    lastReview: card.last_review.toISOString(),
-    lapsed,
-    citations: [...new Set(citations)],
   };
 }
 
@@ -1579,9 +1489,15 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       return query === undefined ? [] : [[id, { query, evaluate: compileCompletion(query, id) }] as const];
     }),
   );
+  const reviewPlans = new Map(
+    graph.nodes.flatMap(({ id }) => {
+      const schedule = nodeReviewSchedule(graph, id);
+      return schedule.kind === "never" ? [] : [[id, prepareReviewReplay(schedule)] as const];
+    }),
+  );
   const own = new Map<NodeId, readonly HomedRecord[]>();
   const successes = new Map<NodeId, readonly HomedRecord[]>();
-  const schedules = new Map<NodeId, Omit<NodeSchedule, "retrievability"> | undefined>();
+  const schedules = new Map<NodeId, ReplayedSchedule | undefined>();
   const acquisition = new Map<NodeId, NodeState>();
   const reviewClearances = new Map<NodeId, boolean>();
   let history = prepareCompletionHistory([]);
@@ -1591,6 +1507,7 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
 
   function read(now: string): DefaultState {
     const prepared = evidence.read(now);
+    const at = Date.parse(now);
     const { index, homed } = prepared;
     const changedOwn = new Set<NodeId>();
     for (const id of prepared.dirtyNodes) {
@@ -1633,15 +1550,17 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
       }
       const facts = indexed(acquisition.get(id));
       const featureUses = index.featureUses.get(id) ?? [];
-      if (!initialized || dirtySchedules.has(id)) {
+      const replay = reviewPlans.get(id);
+      if (replay !== undefined && (!initialized || dirtySchedules.has(id))) {
         const implicit = (graphIndex.dependents.get(id) ?? []).flatMap((node) => successes.get(node) ?? []);
         const records = own.get(id) ?? [];
-        const grades = activeNodeGrades(index.grades.get(id) ?? [], [
+        const direct = [
           ...records.flatMap((record) =>
             isDemonstration(record.payload) && record.payload.unaided ? [{ ...record, payload: record.payload }] : [],
           ),
           ...(index.lapses.get(id) ?? []),
-        ]);
+        ];
+        const grades = activeNodeGrades(index.grades.get(id) ?? [], direct);
         const supportedSuccesses = new Set(
           records
             .filter(({ payload }) => isDemonstration(payload) && payload.unaided && payload.outcome === "success")
@@ -1658,25 +1577,10 @@ export function initDefaultState(graph: ResolvedGraph): TheoryState<DefaultState
         );
         // Grade/support changes and late direct evidence replace the affected day's review;
         // replay only this Node's chronology rather than retaining a second retention state.
-        schedules.set(
-          id,
-          scheduleDefaultNode(
-            own.get(id) ?? [],
-            implicit,
-            index.lapses.get(id) ?? [],
-            index.grades.get(id) ?? [],
-            DEFAULT_PARAMETERS,
-          ),
-        );
+        schedules.set(id, replay({ records, direct, implicit, grades }));
       }
       const card = schedules.get(id);
-      const schedule =
-        card === undefined
-          ? undefined
-          : {
-              ...card,
-              retrievability: retrievability((Date.parse(now) - Date.parse(card.lastReview)) / DAY_MS, card.stability),
-            };
+      const schedule = card && { ...card, retrievability: retrievabilityAt(card, at) };
       nodes[id] = {
         ...facts,
         featureUses,

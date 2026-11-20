@@ -8,7 +8,7 @@ import {
   sameMetadataSubjects,
   validateMetadataProperties,
 } from "./metadata.js";
-import { PatchCompileError } from "./errors.js";
+import { PatchCompileError, StaleMaskTargetError } from "./errors.js";
 import type {
   ClosedPatchBundle,
   ContributionProvenance,
@@ -126,8 +126,8 @@ function describeMask(mask: ExactContributionMask): string {
 }
 
 function staleMask(owner: ExactPatchRef, mask: ExactContributionMask, reason: string): never {
-  throw new PatchCompileError(
-    "stale-mask-target",
+  throw new StaleMaskTargetError(
+    owner,
     `Patch ${owner.identity}@${exactRelease(owner)} has stale mask target ${describeMask(mask)}: ${reason}`,
   );
 }
@@ -452,7 +452,7 @@ export function resolvePatchBundleWithVariants(
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): VariantResolution {
   let projected = notebook;
-  let graph = resolvePatchBundle(notebook, availablePlaygrounds, selection);
+  let resolution = resolveBundle(notebook, availablePlaygrounds, undefined, undefined, selection);
   const staleMasks: ExactContributionMask[] = [];
   for (const layer of layers) {
     try {
@@ -464,14 +464,14 @@ export function resolvePatchBundleWithVariants(
         availablePlaygrounds,
       );
       if (composed.bundle === projected) continue;
-      graph = resolvePatchBundle(composed.bundle, availablePlaygrounds, selection);
+      resolution = resolveBundle(composed.bundle, availablePlaygrounds, undefined, undefined, selection);
       projected = composed.bundle;
       staleMasks.push(...composed.staleMasks);
     } catch (error) {
       if (!(error instanceof PatchCompileError)) throw error;
     }
   }
-  return { graph, staleMasks };
+  return { graph: resolution.graph, staleMasks: [...resolution.staleMasks, ...staleMasks] };
 }
 
 /** Resolve one adopted source's read-time variant. */
@@ -573,13 +573,14 @@ export function notebookSelection(bundle: ClosedPatchBundle): ReadonlyMap<PatchI
 }
 
 /** Resolve selected base identities at the host's chosen exact revisions. The bundle
- * must include each reached selection; authored revisions may remain as unused history. */
+ * must include each reached selection; authored revisions may remain as unused history.
+ * A mask for a contribution that its substituted source dropped gives way. */
 export function resolvePatchBundle(
   bundle: ClosedPatchBundle,
   availablePlaygrounds?: ReadonlySet<string>,
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ResolvedGraph {
-  return resolveBundle(bundle, availablePlaygrounds, undefined, undefined, selection);
+  return resolveBundle(bundle, availablePlaygrounds, undefined, undefined, selection).graph;
 }
 
 /** Read independently authorized direct bases without claiming a closed terminal bundle.
@@ -645,7 +646,7 @@ export function resolveAvailablePatchGraph(
     undefined,
     projected.map((base) => base.terminal),
     selection,
-  );
+  ).graph;
 }
 
 function resolveBundle(
@@ -654,7 +655,8 @@ function resolveBundle(
   variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
   roots?: readonly ExactPatchRef[],
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
-): ResolvedGraph {
+): VariantResolution {
+  const staleMasks: ExactContributionMask[] = [];
   const ordered = orderRevisions(bundle, roots, selection);
   const orderedRevisions = ordered.revisions;
   const collection: ContributionCollection = {
@@ -689,8 +691,10 @@ function resolveBundle(
                 (candidate.kind === "add-metadata-set" &&
                   Object.hasOwn(candidate.metadataSet.properties, mask.property))),
           );
-          if (operationIndex === undefined || operationIndex < 0)
-            staleMask(revision.ref, mask, "the selected source has no matching contribution");
+          if (operationIndex === undefined || operationIndex < 0) {
+            staleMasks.push(mask);
+            return;
+          }
           collectOperation(
             revision.ref,
             { kind: "mask-contribution", mask: { ...mask, source, operationIndex } },
@@ -879,7 +883,7 @@ function resolveBundle(
 
   const patchMetadata: Record<PatchId, PatchMetadata> = {};
   for (const revision of orderedRevisions) patchMetadata[revision.ref.identity] = revision.metadata;
-  return {
+  const graph: ResolvedGraph = {
     terminal: bundle.terminal,
     patchOrder: orderedRevisions.map((revision) => revision.ref),
     patchMetadata,
@@ -900,4 +904,5 @@ function resolveBundle(
       metadataProperties: [...metadataPropertyProvenance],
     },
   };
+  return { graph, staleMasks };
 }

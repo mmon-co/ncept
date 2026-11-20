@@ -3,6 +3,7 @@ import {
   provenanceOf,
   PatchCompileError,
   resolvePatchBundle,
+  resolvePatchBundleWithVariants,
   type ExactPatchRef,
   type PatchRevision,
 } from "../../src/patch";
@@ -343,6 +344,30 @@ test("exact masks suppress only their targeted entity and metadata contributions
   expect(provenanceOf(resolved.provenance.metadataProperties, "metadata-shared")?.["pedagogy:lesson"]).toEqual([
     { patch: source.ref, operationIndex: 5 },
   ]);
+});
+
+test("a selected base that drops a contribution reports the authored mask and retains the edition", () => {
+  const node = { id: "node-branch" } as const;
+  const oldSource = based(ref("patch-source", "8"), [], [{ kind: "add-node", node }]);
+  const newSource = based(ref("patch-source", "9"), [], [{ kind: "add-node", node: { id: "node-new" } }]);
+  const mask = { source: oldSource.ref, operationIndex: 0, entity: { kind: "node", id: node.id } } as const;
+  const retained = based(
+    ref("patch-edition", "a"),
+    [oldSource.ref],
+    [
+      { kind: "mask-contribution", mask },
+      { kind: "add-node", node: { id: "node-edition" } },
+    ],
+  );
+  const notebook = based(ref("patch-personal", "b"), [newSource.ref, retained.ref]);
+  const { graph, staleMasks } = resolvePatchBundleWithVariants(
+    { terminal: notebook.ref, revisions: [notebook, oldSource, newSource, retained] },
+    [],
+    undefined,
+    new Map([[newSource.ref.identity, newSource.ref]]),
+  );
+  expect(staleMasks).toEqual([mask]);
+  expect(graph.nodes).toEqual([{ id: "node-edition" }, { id: "node-new" }]);
 });
 
 // Also replays check 4 (ordinary-Patch strictness) in https://github.com/mlegls/mmon-co/blob/a913d77ebf5b8df3ce82c4f365a629f2384b67bc/docs/attachments/layer-a-variant-over-a-newer-release-of-its-source/index.md.

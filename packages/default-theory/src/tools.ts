@@ -21,6 +21,7 @@ import { readMissionPath } from "@mmon-co/ncept-core/theory/path";
 import { pathDefault } from "./path.js";
 import { event, refinePendingHomes } from "./event.js";
 import { isAttemptOutcome } from "./outcomes.js";
+import { learnerAttempt, posedTask } from "./evaluation.js";
 import {
   activeDefaultRecords,
   completionNodeRef,
@@ -36,7 +37,6 @@ import {
   memoryDefault,
   stateDefault,
   DEFAULT_THEORY_REF,
-  DEFAULT_PARAMETERS,
   type DefaultState,
   type Demonstration,
   type Interpretation,
@@ -47,6 +47,7 @@ import {
   indicatorsDefault,
   isDefaultKnown,
   isDefaultReviewable,
+  isDefaultReviewDue,
 } from "./tags.js";
 
 type Ctx = ChatContext<DefaultState>;
@@ -472,7 +473,7 @@ export const defaultInstrumentTools = [
       "1. demonstrated: the Node query holds. A Node with no completion is never demonstrated. Aided attempts count only as practice unless the query selects them.",
       "2. probably-known: an attached knows claim is newer than any failure on this Node.",
       "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
-      "Retention is separate: the schedule replays the first unaided attempt per Node per UTC day as Good or Again. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds, excluding milestones and Nodes with pedagogy:review: false. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
+      "Retention is separate: the schedule replays each Node's grade for the learner day. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. The pedagogy:review schedule is {kind: fsrs} for memory, {kind: never} for no Review, or {kind: interval, days: N} for a check N days after the last one. Unset means never for milestones and fsrs otherwise. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
       "A newer knows claim can follow failure; a later failure defeats that claim unless completion still holds.",
     ].join("\n"),
     *run(raw, ctx) {
@@ -491,9 +492,7 @@ export const defaultInstrumentTools = [
   scopedTool("probes", "Claimed or due Nodes with acquisition and retention facts.", (ctx, scope) =>
     readingNodes(ctx, scope).flatMap((id) => {
       const state = defaultNodeState(ctx.state, id);
-      return state.label === "probably-known" ||
-        (isDefaultReviewable(state) &&
-          (state.schedule?.lapsed === true || (state.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due))
+      return state.label === "probably-known" || (isDefaultReviewable(state) && isDefaultReviewDue(state))
         ? [{ ...candidate(ctx, id), schedule: state.schedule, rule: trail(ctx, id).rule }]
         : [];
     }),
@@ -608,7 +607,7 @@ const recordDemonstration = {
   name: "record_demonstration" as const,
   description: [
     "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
-    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve task and response verbatim; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
+    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve the posed task and answer excerpt verbatim, including when grading directly after a judge error; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
     "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
     "For an answer to a Material item, use record_material_attempt. A runner records its own outcome; correct a wrong runner grade with evaluation_override and a reason. An option's optional error string remains verbatim in the response.",
     "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
@@ -619,8 +618,8 @@ const recordDemonstration = {
       outcome: { enum: ["success", "failure", "dont-know"] },
       unaided: { type: "boolean" },
       grader: { enum: ["mechanical", "tutor", "learner"] },
-      task: { type: "string" },
-      response: { type: "string" },
+      task: posedTask,
+      response: learnerAttempt,
     },
     ["node", "outcome", "unaided", "grader"],
   ),

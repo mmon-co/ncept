@@ -1,6 +1,6 @@
 {
   "name": "@mmon-co/ncept-default-theory",
-  "version": "2.0.0",
+  "version": "3.0.1",
   "license": "FSL-1.1-ALv2",
   "repository": {
     "type": "git",
@@ -13,6 +13,16 @@
     "LICENSE"
   ],
   "type": "module",
+  "imports": {
+    "#fsrs-scheduler": {
+      "types": "ts-fsrs",
+      "default": "@open-spaced-repetition/srs-kit"
+    },
+    "#fsrs-date": {
+      "types": "ts-fsrs",
+      "default": "@open-spaced-repetition/srs-kit/chrono/date"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -40,8 +50,9 @@
     "prepack": "bun run build"
   },
   "dependencies": {
-    "@mmon-co/ncept-core": "^0.3.0",
-    "ts-fsrs": "^5.4.2",
+    "@mmon-co/ncept-core": "^0.4.0",
+    "@open-spaced-repetition/srs-kit": "1.0.0",
+    "ts-fsrs": "^6.0.0",
     "yaml": "^2.5.0"
   },
   "devDependencies": {

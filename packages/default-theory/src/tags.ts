@@ -1,5 +1,5 @@
 import { dependentCones } from "./dependent-cone.js";
-import { nodePriority, teachingPath, pathProperty, nodeAllowsReview } from "./path.js";
+import { nodePriority, teachingPath, pathProperty } from "./path.js";
 import { NODE_ELABORATE_PROPERTY, type EdgeId, type NodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
 import type { Observation, ObservationId } from "@mmon-co/ncept-core/observations";
 import type { MessageDescriptor, Tag, TheoryProjection } from "@mmon-co/ncept-core/theory";
@@ -26,11 +26,15 @@ export function isDefaultReviewable(node: NodeState): boolean {
   return isDefaultKnown(node) || (node.completion.query !== undefined && node.schedule !== undefined);
 }
 
+export function isDefaultReviewDue(node: NodeState): boolean {
+  return node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due;
+}
+
 /** A shared reachability answer travels in, so a projection walks the graph for it once. */
 type QueryToken = (state: DefaultState, graph: ResolvedGraph, reached?: ReadonlySet<NodeId>) => ReadonlySet<NodeId>;
-function select(predicate: (node: NodeState, graph: ResolvedGraph, id: NodeId) => boolean): QueryToken {
+function select(predicate: (node: NodeState) => boolean): QueryToken {
   return (state, graph) =>
-    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id), graph, id)).map(({ id }) => id));
+    new Set(graph.nodes.filter(({ id }) => predicate(defaultNodeState(state, id))).map(({ id }) => id));
 }
 function reachableNodes(state: DefaultState, graph: ResolvedGraph): ReadonlySet<NodeId> {
   return new Set(
@@ -58,16 +62,9 @@ export const defaultQueryTokens = {
   reachable: (state, graph, reached = reachableNodes(state, graph)) => reached,
   frontier: (state, graph, reached = reachableNodes(state, graph)) =>
     new Set([...reached].filter((id) => !isDefaultKnown(defaultNodeState(state, id)))),
-  "review:due": select(
-    (node, graph, id) =>
-      nodeAllowsReview(graph, id) &&
-      !node.reviewCleared &&
-      isDefaultReviewable(node) &&
-      (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.due),
-  ),
+  "review:due": select((node) => !node.reviewCleared && isDefaultReviewable(node) && isDefaultReviewDue(node)),
   "review:fading": select(
-    (node, graph, id) =>
-      nodeAllowsReview(graph, id) &&
+    (node) =>
       !node.reviewCleared &&
       isDefaultReviewable(node) &&
       (node.schedule?.lapsed === true || (node.schedule?.retrievability ?? 1) < DEFAULT_PARAMETERS.retention.fading),
