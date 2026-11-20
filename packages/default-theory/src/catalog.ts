@@ -71,6 +71,18 @@ export function resolveDefaultCatalogProgram(
   if (Object.keys(envelope).some((key) => !allowed.includes(key))) throw new Error("Unknown catalog argument");
   if (name === "theory" && envelope.full !== undefined && typeof envelope.full !== "boolean")
     throw new Error("Invalid full flag");
+  const first = operations[0];
+  if (name === "evaluation" && first !== undefined) {
+    const example = { op: first.op, kind: first.kind, input: {} };
+    if (envelope.op === undefined)
+      throw new Error(
+        `Evaluation is missing op. Use an envelope like ${JSON.stringify(example)} with the operation's input.`,
+      );
+    if (envelope.op === "record" && envelope.kind === undefined && first.op === "record")
+      throw new Error(
+        `Evaluation op record is missing kind. Use an envelope like ${JSON.stringify(example)} with the record's input.`,
+      );
+  }
   const tool =
     name === "theory"
       ? theoryReadings.find((reading) => reading.name === envelope.name)
