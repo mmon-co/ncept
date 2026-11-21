@@ -72,7 +72,7 @@ test("base closure uses supplied content, preserves manifest order, deduplicates
   expect(revisionDigest({ ...terminal, bases: [...terminal.bases].reverse() })).not.toBe(revisionDigest(terminal));
 });
 
-test("base closure rejects missing content, digest mismatches and incompatible exact revisions", () => {
+test("closing checks content availability and digests; resolution checks compatible revisions", () => {
   const base = rootContent(definition);
   const ref = candidateRevision("patch-course", base).ref;
   const terminal = { ...emptyPatch(), bases: [ref] };
@@ -87,7 +87,9 @@ test("base closure rejects missing content, digest mismatches and incompatible e
   const newer = { ...base, metadata: { ...base.metadata, properties: { "patch:title": "New title" } } };
   const conflicting = { ...terminal, bases: [ref, candidateRevision("patch-course", newer).ref] };
   expect(() =>
-    bundleForRevision(candidateRevision("patch-personal", conflicting).ref, contents(base, newer, conflicting)),
+    resolvePatchBundle(
+      bundleForRevision(candidateRevision("patch-personal", conflicting).ref, contents(base, newer, conflicting)),
+    ),
   ).toThrow(/resolves to both/);
 });
 

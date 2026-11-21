@@ -20,7 +20,7 @@ import {
   type RootPatchDefinition,
   type SemanticDelta,
 } from "./model.js";
-import { resolvePatchBundle, resolvePatchBundleWithVariants } from "./resolve.js";
+import { notebookSelection, resolvePatchBundle, resolvePatchBundleWithVariants } from "./resolve.js";
 
 export const PERSONAL_PATCH_ID = "patch-personal" as const;
 export class PatchContentError extends Error {}
@@ -82,29 +82,22 @@ export function notebookBundleForRevision(
   ref: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
 ): ClosedPatchBundle {
-  return resolveNotebookRevision(ref, contents).bundle;
+  const content = contents.get(ref.digest);
+  if (!content) throw new Error("Notebook content unavailable");
+  return bundleForRevision(ref, contents, new Map(content.bases.map((base) => [base.identity, base])));
 }
 
 export function resolveNotebookRevision(ref: ExactPatchRef, contents: ReadonlyMap<ContentDigest, PatchContent>) {
-  const content = contents.get(ref.digest);
-  if (!content) throw new Error("Notebook content unavailable");
-  return resolveRevision(ref, contents, new Map(content.bases.map((base) => [base.identity, base])));
+  const bundle = notebookBundleForRevision(ref, contents);
+  return { bundle, ...resolvePatchBundleWithVariants(bundle, [], undefined, notebookSelection(bundle)) };
 }
 
-/** Compute and verify the exact transitive closure from host-supplied content only. */
+/** Close and digest-verify exact revisions from host-supplied content. Resolution checks the resulting graph. */
 export function bundleForRevision(
   terminal: ExactPatchRef,
   contents: ReadonlyMap<ContentDigest, PatchContent>,
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): ClosedPatchBundle {
-  return resolveRevision(terminal, contents, selection).bundle;
-}
-
-function resolveRevision(
-  terminal: ExactPatchRef,
-  contents: ReadonlyMap<ContentDigest, PatchContent>,
-  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
-) {
   const revisions = new Map<string, PatchRevision>();
   const active = new Set<string>();
   const verified = new Set<ContentDigest>();
@@ -131,8 +124,7 @@ function resolveRevision(
     revisions.set(key, revision);
   };
   visit(terminal);
-  const bundle = { terminal, revisions: [...revisions.values()] };
-  return { bundle, ...resolvePatchBundleWithVariants(bundle, [], undefined, selection) };
+  return { terminal, revisions: [...revisions.values()] };
 }
 
 function metadataId(id: NodeId | `edge-${string}`): `metadata-${string}` {

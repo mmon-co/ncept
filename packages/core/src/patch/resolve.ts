@@ -649,9 +649,8 @@ export function resolveAvailablePatchGraph(
   ).graph;
 }
 
-// A closed bundle is immutable, and one validation resolves it several times (closing it,
-// compiling its graph, checking its openings), so a plain resolution is kept per bundle object
-// and argument identity. Variant and root resolutions are rarer and stay uncached.
+// A closed bundle is immutable. Compiling its graph and reading it for checks like authored
+// openings share a plain resolution per bundle object and argument identity.
 const resolutions = new WeakMap<
   ClosedPatchBundle,
   {

@@ -1,7 +1,7 @@
 import { tryParse } from "std-semver";
 import {
   candidateRevision,
-  notebookBundleForRevision,
+  resolveNotebookRevision,
   type ResolvedGraph,
   exactPatchRefKey,
   notebookSelection,
@@ -123,8 +123,7 @@ export function migrateTheoryPatchClosure(
       resolve(candidate) {
         const at = candidate ? candidateRevision(ref.identity, relink(candidate)) : revision;
         contents.set(at.ref.digest, revisionContent(at));
-        const closure = notebookBundleForRevision(at.ref, contents);
-        return resolvePatchBundle(closure, undefined, notebookSelection(closure));
+        return resolveNotebookRevision(at.ref, contents).graph;
       },
     });
     const next = candidateRevision(ref.identity, relink(content));
