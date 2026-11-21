@@ -1,4 +1,4 @@
-import type { ExactPatchRef } from "./model.js";
+import type { ExactPatchRef, Material } from "./model.js";
 
 export type PatchCompileErrorCode =
   | "invalid-bundle"
@@ -26,6 +26,8 @@ export class PatchCompileError extends Error {
     readonly code: PatchCompileErrorCode,
     message: string,
     readonly contributionPatch?: ExactPatchRef,
+    /** The Material a `dangling-material` refusal is about. */
+    readonly material?: Material,
   ) {
     super(message);
   }
