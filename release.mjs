@@ -56,6 +56,28 @@ async function pack(scratch, cwd, ...spec) {
   return { archive: join(scratch, result.filename), ...result };
 }
 
+function latestInLine(versions, version) {
+  const line = version.split(".").slice(0, 2).join(".") + ".";
+  return Object.keys(versions)
+    .filter((published) => published.startsWith(line))
+    .sort(Bun.semver.order)
+    .at(-1);
+}
+
+async function buildAndPack(scratch, cwd, file, manifest, version) {
+  const original = version === manifest.version ? null : await file.text();
+  try {
+    if (original !== null) await Bun.write(file, JSON.stringify({ ...manifest, version }, null, 2) + "\n");
+    // Build with the version being packed, including any version stamped in the output.
+    // Rebuild from source so removed files don't enter the tarball.
+    await rm(join(cwd, "dist"), { recursive: true, force: true });
+    await checked(["npm", "run", "prepack"], { cwd });
+    return await pack(scratch, cwd);
+  } finally {
+    if (original !== null) await Bun.write(file, original);
+  }
+}
+
 async function checkPublished(scratch, id, local, tarball) {
   const published = join(scratch, "published");
   const built = join(scratch, "built");
@@ -81,9 +103,9 @@ async function checkPublished(scratch, id, local, tarball) {
       "published/package",
     ];
     const { status, stdout, stderr } = await run(args, { cwd: scratch, capture: true });
-    if (status === 1)
-      throw new Error(id + " differs from npm at the same version; bump the version.\n" + stdout.trim());
+    if (status === 1) return stdout.trim();
     if (status !== 0) throw new Error(id + " tarball comparison failed: " + stderr);
+    return null;
   } finally {
     await rm(built, { recursive: true, force: true });
     await rm(published, { recursive: true, force: true });
@@ -115,19 +137,28 @@ try {
       const cwd = resolve("packages", directory);
       const file = Bun.file(join(cwd, "package.json"));
       if (!(await file.exists())) continue;
-      const { name, version, private: isPrivate } = await file.json();
+      const source = await file.json();
+      const { name, private: isPrivate } = source;
       if (isPrivate || name !== nameOf(directory)) throw new Error("Unexpected package manifest: " + file.name);
       const info = metadata.get(name);
-      // Rebuild from source so files removed since a previous build don't enter the tarball.
-      await rm(join(cwd, "dist"), { recursive: true, force: true });
-      // Build output (including bb plugin build) must not enter npm's JSON stream.
-      await checked(["npm", "run", "prepack"], { cwd });
-      const { archive, filename, integrity } = await pack(scratch, cwd);
-      if (Object.hasOwn(info.versions, version)) {
-        await checkPublished(scratch, name + "@" + version, archive, info.versions[version].dist.tarball);
-        console.log("Already published and matches: " + name + "@" + version);
-        continue;
+      const published = latestInLine(info.versions, source.version);
+      let version = source.version;
+      const compare = published && Bun.semver.order(published, version) >= 0;
+      if (compare) version = published;
+      let packed = await buildAndPack(scratch, cwd, file, source, version);
+      if (compare) {
+        const id = name + "@" + version;
+        const changes = await checkPublished(scratch, id, packed.archive, info.versions[version].dist.tarball);
+        if (changes === null) {
+          console.log("Already published and matches: " + id);
+          continue;
+        }
+        const [major, minor, patch] = version.split(".");
+        version = `${major}.${minor}.${parseInt(patch, 10) + 1}`;
+        console.log(`${id} differs from npm; selecting ${name}@${version}:\n${changes}`);
+        packed = await buildAndPack(scratch, cwd, file, source, version);
       }
+      const { archive, filename, integrity } = packed;
       const manifest = JSON.parse(await checked(["tar", "-xOf", archive, "package/package.json"], { capture: true }));
       if (manifest.name !== name || manifest.version !== version || manifest.private)
         throw new Error("Packed manifest disagrees: " + name);
