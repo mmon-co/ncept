@@ -27,7 +27,7 @@ Accept pi's one-time project trust prompt. The dashboard above the editor shows 
 
 Every conversation is pi's own JSONL under `sessions/`. `/resume` continues one, `/tree` selects its branch, and `/new` starts a fresh chat. Host mode switches open next or aside pi Sessions with the Theory's declared carry. Observations, Mission progress, saved Materials and trusted Session associations live in the Profile and travel with its exchange archive. A session pi keeps elsewhere (`--session-dir`, `PI_CODING_AGENT_SESSION_DIR`, or a front end such as bb's pi bridge) is mirrored into `sessions/`, so the Profile still carries every transcript.
 
-The mode's native tools, context and Skills replace pi's coding prompt every turn. Global `AGENTS.md` and coding Skills are excluded. The mode selects which ncept tools are mounted; every other tool pi and its extensions provide stays available in every mode.
+The mode's native tools, context and Skills replace pi's coding prompt every turn. Global `AGENTS.md` and coding Skills are excluded. The mode selects which Common Concept tools are mounted; every other tool pi and its extensions provide stays available in every mode.
 
 Models and grading use the model currently selected in pi, through pi's provider/auth runtime. The selected model must support tool calls and structured judgments. No Common Concept account, token limit, hosted deployment or subscription is needed for local learning.
 
@@ -71,6 +71,6 @@ bun packages/pi/scripts/confirm-first-use.ts --cleanup /tmp/ncept-confirm-profil
 
 Without `--bb`, `bun packages/pi/scripts/confirm-first-use.ts /tmp/ncept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
 
-Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without ncept's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/ncept-confirm-profile` and remove the scratch directory.
+Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without the extension's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/ncept-confirm-profile` and remove the scratch directory.
 
 For a checkout-owned hosted endpoint, set `NCEPT_HUB_URL` to its Application base URL (including `/ncept`) before starting pi. `NCEPT_CREDENTIALS_FILE` selects an isolated credential file outside the Profile; login and logout use the same file. Omit both for the public product. OAuth uses pi's public CIMD identity, PKCE and the `patches publish learn` scopes; it does not require the issuer to enable dynamic registration.

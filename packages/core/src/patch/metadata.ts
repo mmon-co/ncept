@@ -64,13 +64,41 @@ export function metadataSubjectAppliesToEntity(
   return entity.kind === "node" ? tag?.nodes.includes(entity.id) === true : tag?.edges.includes(entity.id) === true;
 }
 
+// Callers ask once per entity, so scanning every set each time is quadratic in a large course;
+// a graph's sets are indexed by the entities they apply to on the first ask.
+const setsByEntity = new WeakMap<Pick<ResolvedGraph, "tags" | "metadataSets">, Map<string, MetadataSet[]>>();
+function entitySetIndex(graph: Pick<ResolvedGraph, "tags" | "metadataSets">): Map<string, MetadataSet[]> {
+  let index = setsByEntity.get(graph);
+  if (index) return index;
+  index = new Map();
+  // The first tag of a name is the one `metadataSubjectAppliesToEntity` reads.
+  const tags = new Map<string, (typeof graph.tags)[number]>();
+  for (const tag of graph.tags) if (!tags.has(tag.name)) tags.set(tag.name, tag);
+  for (const set of graph.metadataSets) {
+    const keys = new Set<string>();
+    for (const subject of set.subjects) {
+      if (subject.kind !== "tag") keys.add(metadataSubjectKey(subject));
+      else {
+        const tag = tags.get(subject.name);
+        for (const id of tag?.nodes ?? []) keys.add(metadataSubjectKey({ kind: "node", id }));
+        for (const id of tag?.edges ?? []) keys.add(metadataSubjectKey({ kind: "edge", id }));
+      }
+    }
+    for (const key of keys) {
+      const sets = index.get(key);
+      if (sets) sets.push(set);
+      else index.set(key, [set]);
+    }
+  }
+  setsByEntity.set(graph, index);
+  return index;
+}
+
 export function metadataSetsForEntity(
   graph: Pick<ResolvedGraph, "tags" | "metadataSets">,
   entity: EntityMetadataSubject,
 ): readonly MetadataSet[] {
-  return graph.metadataSets.filter((set) =>
-    set.subjects.some((subject) => metadataSubjectAppliesToEntity(graph, subject, entity)),
-  );
+  return entitySetIndex(graph).get(metadataSubjectKey(entity)) ?? [];
 }
 
 /** A Metadata set identifies what it is attached to: contributions may not move it, and a

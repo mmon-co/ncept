@@ -1,4 +1,6 @@
-import { contentDigest, type ContentDigest } from "../digest.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+import { canonicalJson, type ContentDigest } from "../digest.js";
 import { compileGraph } from "./compile.js";
 import { PatchCompileError } from "./errors.js";
 import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
@@ -36,9 +38,30 @@ export function isNodeId(value: unknown): value is NodeId {
   return typeof value === "string" && /^node-[0-9a-z-]+$/.test(value);
 }
 
+// Content is immutable once built, so one object's canonical form is computed once: a host
+// validating a large closure otherwise serializes and hashes each revision several times in one
+// transaction (charging its budget, minting the candidate, verifying each closure it builds).
+const canonical = new WeakMap<PatchContent, { digest: ContentDigest; bytes: number }>();
+function canonicalForm(content: PatchContent) {
+  let form = canonical.get(content);
+  if (!form) {
+    const bytes = utf8ToBytes(
+      canonicalJson({ bases: content.bases, delta: content.delta, metadata: content.metadata }),
+    );
+    form = { digest: `sha256:${bytesToHex(sha256(bytes))}`, bytes: bytes.byteLength };
+    canonical.set(content, form);
+  }
+  return form;
+}
+
 /** Canonical content identity; release names and host lifecycle are not content. */
 export function revisionDigest(content: PatchContent): ContentDigest {
-  return contentDigest({ bases: content.bases, delta: content.delta, metadata: content.metadata });
+  return canonicalForm(content).digest;
+}
+
+/** UTF-8 bytes of the canonical form `revisionDigest` hashes. */
+export function revisionBytes(content: PatchContent): number {
+  return canonicalForm(content).bytes;
 }
 
 export function candidateRevision(identity: PatchId, content: PatchContent): PatchRevision {
