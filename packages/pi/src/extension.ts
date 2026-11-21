@@ -138,7 +138,7 @@ export default function ncept(pi: ExtensionAPI) {
     if (host) return host;
     const manifest: unknown = JSON.parse(await readFile(join(ctx.cwd, "profile.json"), "utf8"));
     if (!manifest || typeof manifest !== "object" || !("theories" in manifest) || !Array.isArray(manifest.theories))
-      throw new Error("Not an mmon Profile. Run npx @mmon-co/ncept-pi init <dir> first.");
+      throw new Error("Not a Common Concept Profile. Run npx @mmon-co/ncept-pi init <dir> first.");
     const require = createRequire(join(ctx.cwd, "profile.json"));
     const theories: Theory<unknown>[] = [];
     for (const name of manifest.theories) {

@@ -1,6 +1,6 @@
 # Core
 
-`@mmon-co/ncept-core` owns the portable data and algorithms shared by mmon hosts:
+`@mmon-co/ncept-core` owns the portable data and algorithms shared by Common Concept hosts:
 
 - **Patches**: content-addressed revisions, Nodes, Edges, Materials, metadata, composition, release resolution and validation. Revision digests identify immutable content.
 - **The observation log and Profile**: observation envelopes with opaque Theory payloads, portable Mission/run records, log merging and closed Patch bundles. Core validates structure, not the pedagogical meaning of evidence.

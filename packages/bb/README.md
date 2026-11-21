@@ -23,7 +23,7 @@ Your pi models and authentication stay yours. Initialization adds both pi packag
 - A question off the Lesson's path opens an aside as a child thread, so bb's parent row takes you back.
 - With several Profiles, the path in Learn's title bar chooses one.
 
-The Profile holds its map, your evidence and every transcript as ordinary files. [ncept-pi](../pi/README.md) reads the same directory, so `cd ~/learn && pi` continues in a terminal, and its commands (`/learn`, `/review`, `/hub pull`) work in the project's threads.
+The Profile holds its map, your evidence and every transcript as ordinary files. [@mmon-co/ncept-pi](../pi/README.md) reads the same directory, so `cd ~/learn && pi` continues in a terminal, and its commands (`/learn`, `/review`, `/hub pull`) work in the project's threads.
 
 ## Development
 
@@ -53,7 +53,7 @@ For a real learner using unpublished source, use `bb concept init ~/learn --sour
 
 ### Transport
 
-The pi extension is inert outside bb. It claims ncept-pi's shared-bus handoff, passes a temporary host-local request file through `$BB_CLI concept spawn`, then removes the file. The plugin reuses the thread's project, environment and execution selection. Metadata records the Session and carry; provider environment contributions let the fresh pi process adopt them before its first prompt.
+The pi extension is inert outside bb. It claims `@mmon-co/ncept-pi`'s shared-bus handoff, passes a temporary host-local request file through `$BB_CLI concept spawn`, then removes the file. The plugin reuses the thread's project, environment and execution selection. Metadata records the Session and carry; provider environment contributions let the fresh pi process adopt them before its first prompt.
 
 Carries above 24 KiB live in plugin-owned storage, referenced by thread metadata and fetched through `bb concept carry` on start. This avoids the OS environment-variable limit and bb's 256 KiB metadata limit. The handoff accepts up to 4 MiB of carry. Carry is hidden tutoring context, not a credential; bb provider diagnostics include contributed environment values.
 
