@@ -852,11 +852,16 @@ function resolveBundle(
       throw new PatchCompileError(
         "dangling-material",
         `material ${materialKey(material)} targets missing or repeated Nodes`,
+        materialProvenance.get(materialKey(material))?.at(-1)?.patch,
       );
   }
   for (const edge of edges.values())
     if (!nodes.has(edge.from) || !nodes.has(edge.to))
-      throw new PatchCompileError("dangling-edge", `edge '${edge.id}' has missing endpoints`);
+      throw new PatchCompileError(
+        "dangling-edge",
+        `edge '${edge.id}' has missing endpoints`,
+        edgeProvenance.get(edge.id)?.at(-1)?.patch,
+      );
   for (const set of metadataSets.values())
     for (const subject of set.subjects) {
       const present =

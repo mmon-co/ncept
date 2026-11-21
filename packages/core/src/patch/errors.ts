@@ -25,6 +25,7 @@ export class PatchCompileError extends Error {
   constructor(
     readonly code: PatchCompileErrorCode,
     message: string,
+    readonly contributionPatch?: ExactPatchRef,
   ) {
     super(message);
   }
