@@ -884,6 +884,7 @@ function resolveBundleUncached(
         "dangling-material",
         `material ${materialKey(material)} targets missing or repeated Nodes`,
         materialProvenance.get(materialKey(material))?.at(-1)?.patch,
+        material,
       );
   }
   for (const edge of edges.values())
