@@ -649,7 +649,38 @@ export function resolveAvailablePatchGraph(
   ).graph;
 }
 
+// A closed bundle is immutable, and one validation resolves it several times (closing it,
+// compiling its graph, checking its openings), so a plain resolution is kept per bundle object
+// and argument identity. Variant and root resolutions are rarer and stay uncached.
+const resolutions = new WeakMap<
+  ClosedPatchBundle,
+  {
+    availablePlaygrounds?: ReadonlySet<string>;
+    selection?: ReadonlyMap<PatchId, ExactPatchRef>;
+    resolution: VariantResolution;
+  }[]
+>();
+
 function resolveBundle(
+  bundle: ClosedPatchBundle,
+  availablePlaygrounds?: ReadonlySet<string>,
+  variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
+  roots?: readonly ExactPatchRef[],
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
+): VariantResolution {
+  if (variantOperations !== undefined || roots !== undefined)
+    return resolveBundleUncached(bundle, availablePlaygrounds, variantOperations, roots, selection);
+  const cached = resolutions.get(bundle) ?? [];
+  const hit = cached.find(
+    (entry) => entry.availablePlaygrounds === availablePlaygrounds && entry.selection === selection,
+  );
+  if (hit) return hit.resolution;
+  const resolution = resolveBundleUncached(bundle, availablePlaygrounds, undefined, undefined, selection);
+  resolutions.set(bundle, [...cached, { availablePlaygrounds, selection, resolution }]);
+  return resolution;
+}
+
+function resolveBundleUncached(
   bundle: ClosedPatchBundle,
   availablePlaygrounds?: ReadonlySet<string>,
   variantOperations?: ReadonlyMap<number, SemanticOperation | null>,
@@ -853,6 +884,7 @@ function resolveBundle(
         "dangling-material",
         `material ${materialKey(material)} targets missing or repeated Nodes`,
         materialProvenance.get(materialKey(material))?.at(-1)?.patch,
+        material,
       );
   }
   for (const edge of edges.values())
