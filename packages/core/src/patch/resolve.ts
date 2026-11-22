@@ -565,11 +565,18 @@ function mergeMetadataProperties(
   return { properties, provenance };
 }
 
-/** Direct Notebook bindings select resolution without rewriting authored history. */
+const notebookSelections = new WeakMap<ClosedPatchBundle, ReadonlyMap<PatchId, ExactPatchRef>>();
+
+/** Direct Notebook bindings select resolution without rewriting authored history. The same
+ * selection identity lets compile, read and acceptance checks share the bundle's resolution. */
 export function notebookSelection(bundle: ClosedPatchBundle): ReadonlyMap<PatchId, ExactPatchRef> {
+  const cached = notebookSelections.get(bundle);
+  if (cached) return cached;
   const terminal = bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, bundle.terminal));
   if (!terminal) throw new Error("Notebook terminal unavailable");
-  return new Map(terminal.bases.map((ref) => [ref.identity, ref]));
+  const selection = new Map(terminal.bases.map((ref) => [ref.identity, ref]));
+  notebookSelections.set(bundle, selection);
+  return selection;
 }
 
 /** Resolve selected base identities at the host's chosen exact revisions. The bundle
