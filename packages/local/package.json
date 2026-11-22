@@ -44,7 +44,7 @@
     "@mmon-co/ncept-default-theory": "^3.0.0",
     "@types/proper-lockfile": "^4.1.4",
     "bun-types": "^1.3.14",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
   },
   "engines": {
     "node": ">=20.19.0"
