@@ -1,6 +1,7 @@
 import { satisfiesVersionRange } from "../version_range.js";
 import { canonicalJson } from "../digest.js";
 import { candidateRevision } from "./release.js";
+import { canonicalMaterial, requireAcyclicMaterialDependencies, validateMaterialDependencies } from "./material.js";
 import {
   discoveryTags,
   isAttachment,
@@ -194,7 +195,8 @@ function contributedValue(operation: SemanticOperation, mask: ExactContributionM
     const value = operation.metadataSet.properties[mask.property];
     return value === undefined ? undefined : { subjects: operation.metadataSet.subjects, value };
   }
-  if (operation.kind === "add-material" || operation.kind === "edit-material") return operation.material;
+  if (operation.kind === "add-material" || operation.kind === "edit-material")
+    return canonicalMaterial(operation.material);
   return operation;
 }
 
@@ -533,6 +535,7 @@ function collectOperation(
   ) {
     const key = materialKey(operation.kind === "remove-material" ? operation : operation.material);
     const contributions = collection.materials.get(key) ?? [];
+    if (operation.kind !== "remove-material") validateMaterialDependencies(operation.material);
     contributions.push({ value: operation, provenance });
     collection.materials.set(key, contributions);
   } else if (operation.kind === "define-tag") {
@@ -813,14 +816,15 @@ function resolveBundleUncached(
     let chain: ContributionProvenance[] = [];
     for (const { value, provenance } of contributions.filter(({ provenance }) => enabled(provenance))) {
       if (value.kind === "add-material") {
-        if (current && canonicalJson(current) !== canonicalJson(value.material))
+        const material = canonicalMaterial(value.material);
+        if (current && canonicalJson(current) !== canonicalJson(material))
           throw new PatchCompileError("incompatible-contribution", `material ${key} has conflicting additions`);
-        current = value.material;
+        current = material;
         chain.push(provenance);
       } else if (value.kind === "edit-material") {
         if (!current)
           throw new PatchCompileError("incompatible-contribution", `material ${key} does not exist to edit`);
-        current = value.material;
+        current = canonicalMaterial(value.material);
         chain.push(provenance);
       } else {
         if (!current)
@@ -834,6 +838,7 @@ function resolveBundleUncached(
       materialProvenance.set(key, chain);
     }
   }
+  requireAcyclicMaterialDependencies(materials);
   materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
   for (const contribution of tagContributions) {
     const existing = tags.get(contribution.name);

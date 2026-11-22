@@ -287,9 +287,21 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
 
-  const materials = graph.materials
-    .filter((material) => material.about.some((id) => nodes.has(id)))
-    .map((material) => ({ ...material, about: material.about.filter((id) => nodes.has(id)) }));
+  let selectedMaterials = graph.materials.filter((material) => material.about.some((id) => nodes.has(id)));
+  if (selectedMaterials.some((material) => material.dependsOn?.length)) {
+    const available = new Map(graph.materials.map((material) => [materialKey(material), material]));
+    const selected = new Set(selectedMaterials);
+    for (const material of selected)
+      for (const ref of material.dependsOn ?? []) {
+        const target = available.get(materialKey(ref));
+        if (target) selected.add(target);
+      }
+    selectedMaterials = graph.materials.filter((material) => selected.has(material));
+  }
+  const materials = selectedMaterials.map((material) => ({
+    ...material,
+    about: material.about.filter((id) => nodes.has(id)),
+  }));
   return {
     ...graph,
     materials,
