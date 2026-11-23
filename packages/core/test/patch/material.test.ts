@@ -1,12 +1,22 @@
 import { expect, test } from "bun:test";
 import { attachmentDigest, contentDigest } from "../../src/digest";
 import {
+  applyGraphDiff,
+  bundleForRevision,
+  candidateRevision,
+  compileGraphDiff,
+  copyPatchGraph,
+  emptyPatch,
+  NODE_LABEL_PROPERTY,
   provenanceOf,
+  revisionDigest,
   isMaterialMeta,
   reifyView,
   resolvePatchBundle,
   selectGraph,
+  type Material,
   type PatchContent,
+  type SemanticOperation,
   type PatchRevision,
 } from "../../src/patch";
 
@@ -74,6 +84,75 @@ test("a Document lesson follows its content reference through edit, View capture
     new Set(["document"]),
   );
   expect(removed.materials).toEqual([]);
+});
+
+test("Material dependencies carry through compiled revisions, View capture and namespaced copies", () => {
+  const baseline = candidateRevision("patch-code", emptyPatch());
+  const start = { terminal: baseline.ref, revisions: [baseline] };
+  const node = "node-code";
+  const library: Material = {
+    playground: "code",
+    type: "workspace",
+    id: "grid",
+    about: [],
+    content: { kind: "blob", hash: attachmentDigest(new Uint8Array()), mediaType: "text/plain" },
+    meta: {},
+  };
+  const external = { playground: "document", id: library.id };
+  const workspace: Material = {
+    ...library,
+    id: "exercise",
+    about: [node],
+    dependsOn: [{ playground: library.playground, id: library.id }, external],
+  };
+  const add = (material: Material): SemanticOperation => ({ kind: "add-material", material });
+  const diff = compileGraphDiff(
+    start,
+    [
+      { kind: "add-node", node: { id: node } },
+      {
+        kind: "add-metadata-set",
+        metadataSet: {
+          id: "metadata-code",
+          subjects: [{ kind: "node", id: node }],
+          properties: { [NODE_LABEL_PROPERTY]: "Code" },
+        },
+      },
+      add(library),
+      add(workspace),
+    ],
+    [node],
+  );
+  const content = applyGraphDiff(baseline, diff);
+  const compiled = candidateRevision(baseline.ref.identity, content);
+  expect(diff.graph.terminal).toEqual(compiled.ref);
+  const resolved = resolvePatchBundle(bundleForRevision(compiled.ref, new Map([[compiled.ref.digest, content]])));
+  const view = selectGraph(resolved, { cone: { targets: [node] } });
+  const capture = reifyView(view, { metadata: { properties: {}, citations: [] } });
+  expect(capture.delta.operations).toContainEqual(add(workspace));
+  expect(capture.delta.operations).toContainEqual(add(library));
+  const copy = copyPatchGraph(view, "instance-copy");
+  expect(copy.delta.operations).toContainEqual(
+    add({
+      ...workspace,
+      id: "instance-copy:exercise",
+      about: ["node-copy-code"],
+      dependsOn: [{ playground: "code", id: "instance-copy:grid" }, external],
+    }),
+  );
+  const withLibrary = (material: Material) => ({ ...emptyPatch(), delta: { operations: [add(material)] } });
+  expect(revisionDigest(withLibrary({ ...library, dependsOn: [] }))).toBe(revisionDigest(withLibrary(library)));
+  expect(revisionDigest(withLibrary({ ...library, dependsOn: [external] }))).not.toBe(
+    revisionDigest(withLibrary(library)),
+  );
+
+  const ref = (material: Material) => ({ playground: material.playground, id: material.id });
+  for (const operations of [
+    [add({ ...library, dependsOn: [ref(library)] })],
+    [add({ ...library, dependsOn: [ref(workspace)] }), add({ ...workspace, about: [] })],
+  ]) {
+    expect(() => compileGraphDiff(start, operations, [])).toThrow("Material dependencies contain a cycle");
+  }
 });
 
 test("applet metadata accepts dense nested JSON arrays, not holes or accessors", () => {

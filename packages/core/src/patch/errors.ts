@@ -19,6 +19,7 @@ export type PatchCompileErrorCode =
   | "dangling-query"
   | "malformed-query"
   | "missing-display-metadata"
+  | "material-dependency-cycle"
   | "dependency-cycle";
 
 export class PatchCompileError extends Error {

@@ -16,7 +16,6 @@ import {
   type SemanticDelta,
   type SemanticOperation,
 } from "./model.js";
-import { reifyView } from "./reify.js";
 
 export type PatchInstanceId = `instance-${string}`;
 export interface PatchCopy {
@@ -31,8 +30,8 @@ export function unscopedCopyTagName(name: string): string {
   return name.replace(/^(?:instance-[^:]+:)+/, "");
 }
 
-/** Flatten effective release contributions once, then namespace only typed identities. */
-export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId): PatchCopy {
+/** Namespace the typed identities in a flattened capture. */
+export function namespaceCapture(graph: ResolvedGraph, delta: SemanticDelta, instanceId: PatchInstanceId): PatchCopy {
   const suffix = instanceId.slice("instance-".length);
   const node = (id: NodeId): NodeId => `node-${suffix}-${id.slice("node-".length)}`;
   const edge = (id: EdgeId): EdgeId => `edge-${suffix}-${id.slice("edge-".length)}`;
@@ -53,8 +52,8 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
       target: materialKey({ ...material, id: materialId(material.id) }),
     })),
   };
-  const flat = reifyView(graph, { metadata: { properties: {}, citations: [] } });
-  const operations = flat.delta.operations.map((operation): SemanticOperation => {
+  const materialTargets = new Map(entities.materials.map(({ source, target }) => [source, target]));
+  const operations = delta.operations.map((operation): SemanticOperation => {
     switch (operation.kind) {
       case "add-node":
         return { kind: operation.kind, node: { ...operation.node, id: node(operation.node.id) } };
@@ -75,6 +74,14 @@ export function copyPatchGraph(graph: ResolvedGraph, instanceId: PatchInstanceId
             ...operation.material,
             id: materialId(operation.material.id),
             about: operation.material.about.map(node),
+            ...(operation.material.dependsOn && {
+              dependsOn: operation.material.dependsOn.map((ref) => {
+                const target = materialTargets.get(materialKey(ref));
+                if (target === undefined) return ref;
+                const [playground, id]: [string, string] = JSON.parse(target);
+                return { playground, id };
+              }),
+            }),
           },
         };
       case "add-metadata-set": {

@@ -1,5 +1,7 @@
+import { namespaceCapture, type PatchInstanceId, type PatchCopy } from "./copy.js";
 import { canonicalJson } from "../digest.js";
 import { PatchCompileError } from "./errors.js";
+import { canonicalMaterial } from "./material.js";
 import { discoveryTags, sameMetadataSubjects } from "./metadata.js";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance.js";
 import { CAPABILITY_PROPERTIES } from "./capabilities.js";
@@ -135,7 +137,8 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
         const selected = view.materials.find((candidate) => materialKey(candidate) === materialKey(material));
         if (
           selected === undefined ||
-          (operation.kind !== "remove-material" && canonicalJson(selected) !== canonicalJson(operation.material)) ||
+          (operation.kind !== "remove-material" &&
+            canonicalJson(canonicalMaterial(selected)) !== canonicalJson(canonicalMaterial(operation.material))) ||
           !contributed(provenanceOf(view.provenance.materials, materialKey(material)), source, operationIndex)
         )
           masks.push({
@@ -174,10 +177,15 @@ function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance 
  * capture authors that contribution itself; retained direct bases keep contributing, and the
  * capture only authors what they do not already supply.
  */
-export function reifyView(view: SelectedGraph, target: ReificationTarget, retained?: RetainedBases): PatchContent {
-  const inherited: Inheritance = retained
-    ? inheritance(view, retained)
-    : { bases: [], closure: new Map(), masks: [], definedTags: new Map(), generatedTags: new Set() };
+export function reifyView(
+  view: SelectedGraph,
+  target: ReificationTarget,
+  destination?: RetainedBases | PatchInstanceId,
+): PatchContent {
+  const inherited: Inheritance =
+    destination && typeof destination !== "string"
+      ? inheritance(view, destination)
+      : { bases: [], closure: new Map(), masks: [], definedTags: new Map(), generatedTags: new Set() };
   const masked = new Set(
     inherited.masks
       .filter((mask) => mask.property === undefined)
@@ -301,9 +309,10 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       }),
   ];
 
+  const copy = typeof destination === "string" ? namespaceCapture(view, { operations }, destination) : undefined;
   return {
     bases: inherited.bases,
-    delta: { operations },
+    delta: copy?.delta ?? { operations },
     metadata: {
       ...target.metadata,
       citations: [
@@ -314,7 +323,7 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
           formerBases: view.patchOrder.filter(
             (ref) => !sameExactPatchRef(ref, view.terminal) && !inherited.closure.has(exactPatchRefKey(ref)),
           ),
-          entities: {
+          entities: copy?.entities ?? {
             nodes: view.nodes.map(({ id }) => ({ source: id, target: id })),
             edges: view.edges.map(({ id }) => ({ source: id, target: id })),
             metadataSets: view.metadataSets.map(({ id }) => ({ source: id, target: id })),
@@ -327,4 +336,9 @@ export function reifyView(view: SelectedGraph, target: ReificationTarget, retain
       ],
     },
   };
+}
+
+export function copyPatchGraph(graph: SelectedGraph, instanceId: PatchInstanceId): PatchCopy {
+  const flat = reifyView(graph, { metadata: { properties: {}, citations: [] } });
+  return namespaceCapture(graph, flat.delta, instanceId);
 }

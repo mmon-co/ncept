@@ -1,6 +1,7 @@
 import { satisfiesVersionRange } from "../version_range.js";
 import { canonicalJson } from "../digest.js";
 import { candidateRevision } from "./release.js";
+import { canonicalMaterial, requireAcyclicMaterialDependencies, validateMaterialDependencies } from "./material.js";
 import {
   discoveryTags,
   isAttachment,
@@ -194,7 +195,8 @@ function contributedValue(operation: SemanticOperation, mask: ExactContributionM
     const value = operation.metadataSet.properties[mask.property];
     return value === undefined ? undefined : { subjects: operation.metadataSet.subjects, value };
   }
-  if (operation.kind === "add-material" || operation.kind === "edit-material") return operation.material;
+  if (operation.kind === "add-material" || operation.kind === "edit-material")
+    return canonicalMaterial(operation.material);
   return operation;
 }
 
@@ -533,6 +535,7 @@ function collectOperation(
   ) {
     const key = materialKey(operation.kind === "remove-material" ? operation : operation.material);
     const contributions = collection.materials.get(key) ?? [];
+    if (operation.kind !== "remove-material") validateMaterialDependencies(operation.material);
     contributions.push({ value: operation, provenance });
     collection.materials.set(key, contributions);
   } else if (operation.kind === "define-tag") {
@@ -766,10 +769,19 @@ function resolveBundleUncached(
   const metadataProvenance = new Map<MetadataSetId, ContributionProvenance[]>();
   const metadataPropertyProvenance = new Map<MetadataSetId, Record<string, ContributionProvenance[]>>();
 
+  // An entity whose every contribution is masked is removed, and takes what can't stand without it:
+  // Edges incident to a removed Node, metadata subjects on removed entities (the set goes when none
+  // remain), and Materials' about entries (the Material goes when it was only about removed Nodes).
+  // So one mask stays enough as a base revision adds more around the entity.
+  const removedNodes = new Set<NodeId>();
+  const removedEdges = new Set<EdgeId>();
   for (const [id, contributions] of nodeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const last = active.at(-1);
-    if (last === undefined) continue;
+    if (last === undefined) {
+      removedNodes.add(id);
+      continue;
+    }
     nodes.set(id, last.value);
     nodeProvenance.set(
       id,
@@ -780,7 +792,15 @@ function resolveBundleUncached(
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const first = active[0];
     const last = active.at(-1);
-    if (first === undefined || last === undefined) continue;
+    if (
+      first === undefined ||
+      last === undefined ||
+      removedNodes.has(first.value.from) ||
+      removedNodes.has(first.value.to)
+    ) {
+      removedEdges.add(id);
+      continue;
+    }
     if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
       throw new PatchCompileError("incompatible-contribution", `edge '${id}' cannot change endpoints`);
     edges.set(id, last.value);
@@ -799,8 +819,14 @@ function resolveBundleUncached(
         "incompatible-contribution",
         `metadata set '${id}' cannot change attachment subjects`,
       );
+    const subjects = last.value.subjects.filter(
+      (subject) =>
+        !(subject.kind === "node" && removedNodes.has(subject.id)) &&
+        !(subject.kind === "edge" && removedEdges.has(subject.id)),
+    );
+    if (subjects.length === 0 && last.value.subjects.length > 0) continue;
     const merged = mergeMetadataProperties(active, maskedProperties);
-    metadataSets.set(id, { ...last.value, properties: merged.properties });
+    metadataSets.set(id, { ...last.value, subjects, properties: merged.properties });
     metadataProvenance.set(
       id,
       active.map(({ provenance }) => provenance),
@@ -813,14 +839,15 @@ function resolveBundleUncached(
     let chain: ContributionProvenance[] = [];
     for (const { value, provenance } of contributions.filter(({ provenance }) => enabled(provenance))) {
       if (value.kind === "add-material") {
-        if (current && canonicalJson(current) !== canonicalJson(value.material))
+        const material = canonicalMaterial(value.material);
+        if (current && canonicalJson(current) !== canonicalJson(material))
           throw new PatchCompileError("incompatible-contribution", `material ${key} has conflicting additions`);
-        current = value.material;
+        current = material;
         chain.push(provenance);
       } else if (value.kind === "edit-material") {
         if (!current)
           throw new PatchCompileError("incompatible-contribution", `material ${key} does not exist to edit`);
-        current = value.material;
+        current = canonicalMaterial(value.material);
         chain.push(provenance);
       } else {
         if (!current)
@@ -829,11 +856,16 @@ function resolveBundleUncached(
         chain = [];
       }
     }
+    if (current && Array.isArray(current.about) && current.about.some((node) => removedNodes.has(node))) {
+      const about = current.about.filter((node) => !removedNodes.has(node));
+      current = about.length === 0 ? undefined : { ...current, about };
+    }
     if (current) {
       materials.push(current);
       materialProvenance.set(key, chain);
     }
   }
+  requireAcyclicMaterialDependencies(materials);
   materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
   for (const contribution of tagContributions) {
     const existing = tags.get(contribution.name);

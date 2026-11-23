@@ -8,6 +8,11 @@ export type EdgeRole = "dependency";
 export type MetadataSetId = `metadata-${string}`;
 export type MaterialId = string;
 export type PlaygroundId = string;
+/** Names a Material by the same identity `materialKey` keys; hosts resolve it at open, not by revision. */
+export interface MaterialRef {
+  readonly playground: PlaygroundId;
+  readonly id: MaterialId;
+}
 export function materialKey(material: Pick<Material, "playground" | "id">): string {
   return JSON.stringify([material.playground, material.id]);
 }
@@ -27,6 +32,8 @@ export interface Material {
   readonly about: readonly NodeId[];
   readonly content: Attachment;
   readonly meta: MaterialMeta;
+  /** Materials this one reads when opened, such as a Set's Problems or a library a code workspace imports. Acyclic. */
+  readonly dependsOn?: readonly MaterialRef[];
 }
 /** Portable metadata references only; bytes, authority and running instances belong to the host. */
 export type Attachment = { readonly kind: "blob"; readonly hash: ContentDigest; readonly mediaType: string };

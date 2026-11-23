@@ -50,6 +50,21 @@ const exactRef = (value: unknown): value is ExactPatchRef =>
   isContentDigest(value.digest);
 const nodeRef = (value: unknown): value is NodeRef => object(value) && nodeId(value.node) && exactRef(value.provenance);
 
+type OutcomeCheck = {
+  readonly id: string;
+  readonly about: readonly NodeId[];
+  readonly hint?: string;
+} & (
+  | { readonly kind: "test"; readonly correction?: string }
+  | {
+      readonly ask: string;
+      readonly shown: string;
+      readonly absent: string;
+      readonly mistaken?: Readonly<Record<string, string>>;
+      readonly corrections?: Readonly<Record<string, string>>;
+    }
+);
+
 /**
  * One assessed Problem response, with its content and revision captured before grading.
  * Answer describes the response surface; grader records who judged it.
@@ -69,6 +84,11 @@ export interface AttemptOutcome {
         }
       | { readonly kind: "short" }
       | { readonly kind: "text" }
+      | {
+          readonly kind: "code";
+          readonly material?: { readonly id: string; readonly revision: ExactPatchRef };
+          readonly feedback?: "on-run" | "on-submit" | "hidden";
+        }
       | { readonly kind: "roleplay"; readonly material: { readonly id: string; readonly revision: ExactPatchRef } }
       | {
           readonly kind: "applet";
@@ -84,20 +104,11 @@ export interface AttemptOutcome {
       | {
           readonly by: "checks";
           readonly help: "pump" | "hint" | "correct";
-          readonly checks: readonly {
-            id: string;
-            about: readonly NodeId[];
-            ask: string;
-            shown: string;
-            absent: string;
-            mistaken?: Readonly<Record<string, string>>;
-            hint?: string;
-            corrections?: Readonly<Record<string, string>>;
-          }[];
+          readonly checks: readonly OutcomeCheck[];
           readonly pumps: readonly { text: string; checks: readonly string[] }[];
         };
   };
-  /** A choice option id, a literal short/text answer, the applet query value as JSON, or a speaker-labelled roleplay transcript. */
+  /** A choice key, literal short/text answer, applet query JSON, roleplay transcript, or visible code submission JSON. */
   readonly response: string;
   readonly assessment: {
     readonly correct: boolean;
@@ -205,6 +216,19 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
       return false;
   } else if (answer.kind === "roleplay") {
     if (!object(answer.material) || !text(answer.material.id) || !exactRef(answer.material.revision)) return false;
+  } else if (answer.kind === "code") {
+    if (
+      answer.material !== undefined &&
+      (!object(answer.material) || !text(answer.material.id) || !exactRef(answer.material.revision))
+    )
+      return false;
+    if (
+      answer.feedback !== undefined &&
+      answer.feedback !== "on-run" &&
+      answer.feedback !== "on-submit" &&
+      answer.feedback !== "hidden"
+    )
+      return false;
   } else if (answer.kind !== "text") return false;
   if (grader.by === "tutor" || grader.by === "learner")
     return optional(grader.rubric) && (dontKnow || assessment.grader === grader.by);
@@ -216,9 +240,9 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     (c: unknown) =>
       object(c) &&
       text(c.id) &&
-      text(c.ask) &&
-      text(c.shown) &&
-      text(c.absent) &&
+      (c.kind === "test"
+        ? answer.kind === "code"
+        : c.kind === undefined && text(c.ask) && text(c.shown) && text(c.absent)) &&
       Array.isArray(c.about) &&
       c.about.length > 0 &&
       c.about.every((node: unknown) => nodeId(node) && about.has(node)),
@@ -232,7 +256,7 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     (dontKnow ||
       // Decision outages can delegate the whole assessment to the tutor.
       assessment.grader === "tutor" ||
-      (assessment.grader === "decision" &&
+      (assessment.grader === (checks.every((c) => c.kind === "test") ? "mechanical" : "decision") &&
         results(final) &&
         (assessment.helped === undefined || results(assessment.helped)) &&
         assessment.correct ===
@@ -306,10 +330,8 @@ export interface OriginalAttempt {
   readonly payload: Demonstration;
 }
 
-function checkNote(
-  check: { shown: string; absent: string; mistaken?: Readonly<Record<string, string>> },
-  { outcome, error }: CheckResult,
-): string {
+function checkNote(check: OutcomeCheck, { outcome, error }: CheckResult): string {
+  if ("kind" in check) return `${check.id}: ${outcome === "shown" ? "passed" : "failed"}`;
   if (outcome === "shown") return `Shown: ${check.shown}`;
   if (outcome === "absent") return `Not taken up: ${check.absent}`;
   if (outcome === "skipped") return "Set aside: I can't say";
@@ -363,8 +385,16 @@ export function problemAttempts(outcome: AttemptOutcome, at: string): readonly O
             outcome: result,
             unaided: beforeHelp && !assessment.aided,
             grader: result === "dont-know" ? "learner" : assessment.grader,
-            task: [problem.prompt, ...checks.map((check) => `Check: ${check.ask}`)].join("\n"),
-            response: [response, ...results.map(({ check, result }) => checkNote(check, result))].join("\n"),
+            task:
+              problem.answer.kind === "code" && problem.answer.feedback === "hidden"
+                ? problem.prompt
+                : [problem.prompt, ...checks.map((check) => `Check: ${"kind" in check ? check.id : check.ask}`)].join(
+                    "\n",
+                  ),
+            response:
+              problem.answer.kind === "code" && problem.answer.feedback === "hidden"
+                ? response
+                : [response, ...results.map(({ check, result }) => checkNote(check, result))].join("\n"),
           },
         };
       };

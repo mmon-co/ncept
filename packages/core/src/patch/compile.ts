@@ -1,4 +1,4 @@
-import { contentDigest } from "../digest.js";
+import { candidateRevision } from "./release.js";
 import { PatchCompileError } from "./errors.js";
 import type {
   ClosedPatchBundle,
@@ -122,10 +122,10 @@ function prospectiveBundle(
   if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
   const { ref, ...value } = terminal;
   const content = composePatch(value, operations, citations, retractions);
-  const next = { identity: ref.identity, digest: contentDigest(content) };
+  const next = candidateRevision(ref.identity, content);
   return {
-    terminal: next,
-    revisions: bundle.revisions.map((item) => (item === terminal ? { ref: next, ...content } : item)),
+    terminal: next.ref,
+    revisions: bundle.revisions.map((item) => (item === terminal ? next : item)),
   };
 }
 

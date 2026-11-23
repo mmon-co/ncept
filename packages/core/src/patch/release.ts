@@ -3,6 +3,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { canonicalJson, type ContentDigest } from "../digest.js";
 import { compileGraph } from "./compile.js";
 import { PatchCompileError } from "./errors.js";
+import { canonicalMaterial } from "./material.js";
 import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import {
   provenanceOf,
@@ -41,14 +42,23 @@ export function isNodeId(value: unknown): value is NodeId {
 // Content is immutable once built, so one object's canonical form is computed once: a host
 // validating a large closure otherwise serializes and hashes each revision several times in one
 // transaction (charging its budget, minting the candidate, verifying each closure it builds).
-const canonical = new WeakMap<PatchContent, { digest: ContentDigest; bytes: number }>();
+const canonical = new WeakMap<PatchContent, { digest: ContentDigest; bytes: number; delta: SemanticDelta }>();
+
+function canonicalDelta(delta: SemanticDelta): SemanticDelta {
+  let operations: SemanticDelta["operations"][number][] | undefined;
+  for (const [index, op] of delta.operations.entries()) {
+    if (op.kind !== "add-material" && op.kind !== "edit-material") continue;
+    const material = canonicalMaterial(op.material);
+    if (material !== op.material) (operations ??= [...delta.operations])[index] = { ...op, material };
+  }
+  return operations ? { ...delta, operations } : delta;
+}
 function canonicalForm(content: PatchContent) {
   let form = canonical.get(content);
   if (!form) {
-    const bytes = utf8ToBytes(
-      canonicalJson({ bases: content.bases, delta: content.delta, metadata: content.metadata }),
-    );
-    form = { digest: `sha256:${bytesToHex(sha256(bytes))}`, bytes: bytes.byteLength };
+    const delta = canonicalDelta(content.delta);
+    const bytes = utf8ToBytes(canonicalJson({ bases: content.bases, delta, metadata: content.metadata }));
+    form = { digest: `sha256:${bytesToHex(sha256(bytes))}`, bytes: bytes.byteLength, delta };
     canonical.set(content, form);
   }
   return form;
@@ -65,10 +75,11 @@ export function revisionBytes(content: PatchContent): number {
 }
 
 export function candidateRevision(identity: PatchId, content: PatchContent): PatchRevision {
+  const { digest, delta } = canonicalForm(content);
   return {
-    ref: { identity, digest: revisionDigest(content) },
+    ref: { identity, digest },
     bases: content.bases,
-    delta: content.delta,
+    delta,
     metadata: content.metadata,
   };
 }
