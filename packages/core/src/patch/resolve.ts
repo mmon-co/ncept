@@ -769,10 +769,19 @@ function resolveBundleUncached(
   const metadataProvenance = new Map<MetadataSetId, ContributionProvenance[]>();
   const metadataPropertyProvenance = new Map<MetadataSetId, Record<string, ContributionProvenance[]>>();
 
+  // An entity whose every contribution is masked is removed, and takes what can't stand without it:
+  // Edges incident to a removed Node, metadata subjects on removed entities (the set goes when none
+  // remain), and Materials' about entries (the Material goes when it was only about removed Nodes).
+  // So one mask stays enough as a base revision adds more around the entity.
+  const removedNodes = new Set<NodeId>();
+  const removedEdges = new Set<EdgeId>();
   for (const [id, contributions] of nodeContributions) {
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const last = active.at(-1);
-    if (last === undefined) continue;
+    if (last === undefined) {
+      removedNodes.add(id);
+      continue;
+    }
     nodes.set(id, last.value);
     nodeProvenance.set(
       id,
@@ -783,7 +792,15 @@ function resolveBundleUncached(
     const active = contributions.filter(({ provenance }) => enabled(provenance));
     const first = active[0];
     const last = active.at(-1);
-    if (first === undefined || last === undefined) continue;
+    if (
+      first === undefined ||
+      last === undefined ||
+      removedNodes.has(first.value.from) ||
+      removedNodes.has(first.value.to)
+    ) {
+      removedEdges.add(id);
+      continue;
+    }
     if (active.some(({ value }) => value.from !== first.value.from || value.to !== first.value.to))
       throw new PatchCompileError("incompatible-contribution", `edge '${id}' cannot change endpoints`);
     edges.set(id, last.value);
@@ -802,8 +819,14 @@ function resolveBundleUncached(
         "incompatible-contribution",
         `metadata set '${id}' cannot change attachment subjects`,
       );
+    const subjects = last.value.subjects.filter(
+      (subject) =>
+        !(subject.kind === "node" && removedNodes.has(subject.id)) &&
+        !(subject.kind === "edge" && removedEdges.has(subject.id)),
+    );
+    if (subjects.length === 0 && last.value.subjects.length > 0) continue;
     const merged = mergeMetadataProperties(active, maskedProperties);
-    metadataSets.set(id, { ...last.value, properties: merged.properties });
+    metadataSets.set(id, { ...last.value, subjects, properties: merged.properties });
     metadataProvenance.set(
       id,
       active.map(({ provenance }) => provenance),
@@ -832,6 +855,10 @@ function resolveBundleUncached(
         current = undefined;
         chain = [];
       }
+    }
+    if (current && Array.isArray(current.about) && current.about.some((node) => removedNodes.has(node))) {
+      const about = current.about.filter((node) => !removedNodes.has(node));
+      current = about.length === 0 ? undefined : { ...current, about };
     }
     if (current) {
       materials.push(current);
