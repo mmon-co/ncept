@@ -135,6 +135,22 @@ function recommendableAffordances(
   });
 }
 
+/** Only an unambiguous official title can identify the intended link. */
+export function officialDocumentLinks(ctx: ChatContext<DefaultState>) {
+  const links = new Map<string, { url: string; materialUrl: string }>();
+  const seen = new Set<string>();
+  for (const { node, label, documentId } of officialDocuments(ctx)) {
+    if (seen.has(label)) {
+      links.delete(label);
+      continue;
+    }
+    seen.add(label);
+    const url = docsUrl(ctx, node);
+    if (url) links.set(label, { url, materialUrl: "/ncept/playgrounds/document?material=" + documentId });
+  }
+  return links;
+}
+
 export function documentListing(ctx: ChatContext<DefaultState>) {
   const documents = officialDocuments(ctx);
   return { documents, candidates: recommendableAffordances(ctx, documents) };
