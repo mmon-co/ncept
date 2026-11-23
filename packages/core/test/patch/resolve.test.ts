@@ -5,6 +5,7 @@ import {
   resolvePatchBundle,
   resolvePatchBundleWithVariants,
   type ExactPatchRef,
+  type Material,
   type PatchRevision,
 } from "../../src/patch";
 
@@ -344,6 +345,91 @@ test("exact masks suppress only their targeted entity and metadata contributions
   expect(provenanceOf(resolved.provenance.metadataProperties, "metadata-shared")?.["pedagogy:lesson"]).toEqual([
     { patch: source.ref, operationIndex: 5 },
   ]);
+});
+
+test("masking a Node removes what cannot stand without it, including what a later base revision adds", () => {
+  const material = (id: string, about: Material["about"]): Material => ({
+    playground: "document",
+    type: "markdown",
+    id,
+    about,
+    content: { kind: "blob", hash: `sha256:${"e".repeat(64)}`, mediaType: "text/markdown" },
+    meta: {},
+  });
+  const graphOf = (extra: PatchRevision["delta"]["operations"], fill: string) =>
+    based(
+      ref("patch-source", fill),
+      [],
+      [
+        { kind: "add-node", node: { id: "node-placement" } },
+        { kind: "add-node", node: { id: "node-first" } },
+        { kind: "add-edge", edge: { id: "edge-placement-first", from: "node-placement", to: "node-first" } },
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-edge",
+            subjects: [{ kind: "edge", id: "edge-placement-first" }],
+            properties: { "display:label": "Placement first" },
+          },
+        },
+        {
+          kind: "add-metadata-set",
+          metadataSet: {
+            id: "metadata-both",
+            subjects: [
+              { kind: "node", id: "node-placement" },
+              { kind: "node", id: "node-first" },
+            ],
+            properties: { "pedagogy:lesson": "Both" },
+          },
+        },
+        { kind: "add-material", material: material("placement-only", ["node-placement"]) },
+        { kind: "add-material", material: material("placement-and-first", ["node-placement", "node-first"]) },
+        {
+          kind: "define-tag",
+          tag: {
+            name: "start",
+            nodes: ["node-placement", "node-first"],
+            edges: ["edge-placement-first"],
+            metadataSets: [],
+          },
+        },
+        ...extra,
+      ],
+    );
+  const source = graphOf([], "c");
+  const mask = { source: source.ref, operationIndex: 0, entity: { kind: "node", id: "node-placement" } } as const;
+  const edition = based(ref("patch-edition", "d"), [source.ref], [{ kind: "mask-contribution", mask }]);
+
+  const resolved = resolvePatchBundle({ terminal: edition.ref, revisions: [edition, source] });
+  expect(resolved.nodes).toEqual([{ id: "node-first" }]);
+  expect(resolved.edges).toEqual([]);
+  expect(resolved.metadataSets).toEqual([
+    { id: "metadata-both", subjects: [{ kind: "node", id: "node-first" }], properties: { "pedagogy:lesson": "Both" } },
+  ]);
+  expect(resolved.materials.map(({ id, about }) => ({ id, about }))).toEqual([
+    { id: "placement-and-first", about: ["node-first"] },
+  ]);
+  expect(resolved.tags.find(({ name }) => name === "start")).toMatchObject({ nodes: ["node-first"], edges: [] });
+
+  // A newer release adds another Edge to the removed Node; the one mask still covers it.
+  const newer = graphOf(
+    [
+      { kind: "add-node", node: { id: "node-second" } },
+      { kind: "add-edge", edge: { id: "edge-placement-second", from: "node-placement", to: "node-second" } },
+    ],
+    "f",
+  );
+  const notebook = based(ref("patch-personal", "a"), [newer.ref, edition.ref]);
+  const { graph, staleMasks } = resolvePatchBundleWithVariants(
+    { terminal: notebook.ref, revisions: [notebook, source, newer, edition] },
+    [],
+    undefined,
+    new Map([[newer.ref.identity, newer.ref]]),
+  );
+  expect(staleMasks).toEqual([]);
+  expect(graph.nodes).toEqual([{ id: "node-first" }, { id: "node-second" }]);
+  expect(graph.edges).toEqual([]);
 });
 
 test("a selected base that drops a contribution reports the authored mask and retains the edition", () => {
