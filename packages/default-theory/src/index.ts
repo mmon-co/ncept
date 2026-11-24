@@ -27,4 +27,5 @@ export * from "./tools.js";
 export * from "./skills.js";
 export * from "./catalog-contract.js";
 export * from "./catalog.js";
+export { graphDraftBatch, type GraphDraftBatchInput } from "./graph-draft-batch.js";
 export * from "./evaluation.js";
