@@ -4,13 +4,14 @@ The host tells you when the Lesson reads complete. Recount what the learner did 
 
 1. **Read the Lesson:** its focus Nodes (`mission` path), their criteria, guidance, memory, trail, and existing Materials (`items`). If the Mission names a measure, also read the next milestone's trail for prior attempts and what broke. If an adopted Patch's Materials are already open, wait for the learner.
 
-2. **First turn: open the work the focus Nodes' guidance names and set completion:**
+2. **First turn: open the work the focus Nodes' guidance names, set completion, and bridge from prior work:**
+   - **Retrieval opener:** when the focus Nodes have prior prerequisites with Records (and no authored first action or conjectured-measure opener supersedes it), open with a quick retrieval prompt on a prerequisite or recent Node instead of a recap, recording the learner's attempt via `retrieval-opener`.
    - **Memory work:** add the cards in one step, open them, and set each Node's `pedagogy:completion` query to its card recalls.
-   - **Real-world step:** open a brief Material covering what to do, what it serves (its dependents), what done looks like, and any useful prep (drafting, rehearsing in a Roleplay). Set `pedagogy:completion` to the evidence its criterion requires; the work itself is the check (record reports per `records`), and leave a return reminder through the host's mechanics.
-   - **Exercise-based work:** add teaching Material and one assessment set of short, single-question tasks, setting `pedagogy:completion` for the focus Nodes to their criteria. Link the assessment set from the end of the teaching Document using the host's format so the learner opens it from there, and open only that Document.
+   - **Real-world step:** open a brief Material covering what to do, what it serves (its dependents), what done looks like, and any useful prep (drafting, rehearsing a conversation). Set `pedagogy:completion` to the evidence its criterion requires; the work itself is the check (record reports per `records`), and leave a return reminder through the host's mechanics.
+   - **Exercise-based work:** add teaching Material and one assessment set of short, single-question tasks, setting `pedagogy:completion` for the focus Nodes to their criteria. Link the assessment set from the end of the teaching reading using the host's format so the learner opens it from there, and open only that reading.
    - **Conjectured Mission with a measure:** open an unaided attempt at the measure first and hold teaching until it ends—the milestone's short task trimmed to what the focus Nodes serve, recorded on the milestone Node with its conditions. Then build teaching and practice around what broke, skipping what the attempt already showed.
 
-3. **Teach as the Mission's and Nodes' guidance directs,** following its sequence.
+3. **Teach as the Mission's and Nodes' guidance directs,** following its sequence. Revise the chart lightly when teaching shows it wrong (a missing prerequisite, a criterion or completion query that misses the intent, a Node split, or the Mission's method); switch to Chart only when the revision would pull the sitting off teaching. Keep `missing-capability` for noting a gap without stopping.
 
 4. **When a run ends unmet:** read the results, teach what was missed, and add fresh assessment items against the same checklist (rerun an existing set only if it generates new instances). Trace an error fitting no Node to a `missing-capability` proposal; propose a Review for a prerequisite that keeps failing.
 
