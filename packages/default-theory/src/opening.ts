@@ -12,14 +12,14 @@ export function lessonOpening(graph: ResolvedGraph, nodes: readonly NodeId[], mi
   );
   return {
     instruction:
-      "Make and open the Lesson’s Materials first, following the focus Nodes’ guidance. Ask first only when that guidance leaves the work undecided. Then describe the Lesson as it stands: what its focus Nodes cover, its Materials in the order to use them, what counts as completing the Lesson, and what follows. Elicit the first action, using the first Node’s authored first action if supplied. Later Nodes’ openings are for when those Nodes are reached.",
+      "Make and open the Lesson’s Materials first per the focus Nodes’ guidance (ask first only if that guidance leaves the work undecided). Then introduce the Lesson—what its focus Nodes cover, its Materials in order, what completes it, and what follows—and elicit the first action (using the first Node’s authored first action if supplied; later Nodes’ openings wait until those Nodes are reached).",
     facts: {
       focus: nodes.map((node) => ({
         ...label(node),
         completion: defaultNodeCompletion(graph, node) ?? "Establish completion following this Node’s guidance.",
       })),
       completion:
-        "The Lesson reads complete when every focus Node’s completion query holds over the evidence. Use existing queries where set; otherwise establish them following the Nodes’ guidance.",
+        "The Lesson completes when every focus Node’s completion query holds. Keep existing queries; set missing ones per each Node’s guidance.",
       follows: [...following].map(label),
     },
   };

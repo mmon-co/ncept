@@ -1,11 +1,11 @@
 # milestone
 
-A milestone assessment shows its section's capability whole: a few tasks at the milestone's full conditions, each using several of its Nodes, with no hints or feedback until submitted. Milestone 0 checks the learner's claims with tasks they weren't taught.
+A milestone assessment tests its section's capability whole: a few tasks at full conditions, each combining several Nodes, with no hints or feedback until submitted. Milestone 0 checks the learner's prior claims with tasks they weren't taught.
 
-When it fails, tell apart:
+When it fails, distinguish:
 
-- **Integration:** the parts hold alone but break together. Step down the criterion's ladder of conditions, then back up.
-- **A regressed prerequisite:** propose its Review.
-- **A missing capability:** the error traces to no Node; make a `missing-capability` proposal.
+- **Integration:** parts hold alone but break together—step down the criterion's ladder of conditions, then work back up.
+- **Regressed prerequisite:** propose its Review.
+- **Missing capability:** the error traces to no Node—file a `missing-capability` proposal.
 
-After two or three rounds without gain, offer to revisit the map in Chart.
+After two or three rounds without progress, offer to revisit the map in Chart.

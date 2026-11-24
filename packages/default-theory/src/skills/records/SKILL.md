@@ -5,14 +5,19 @@ description: You're about to grade a learner's attempt, or a recorded task, outc
 
 ## Grading
 
-Delegate chat capability checks to a grader (`evaluation` watch or judge) unless you're judging free work yourself. When you record by hand:
+Delegate chat capability checks to a grader (`watch` or `judge`) unless you're judging free work yourself. When recording by hand:
 
-- A task's `unaided` is fixed when you pose it. Help on the checked capability before the outcome makes it aided; glossing other unfamiliar words, said to the learner and kept in the recorded task, doesn't. Never gloss the capability being checked.
-- "I don't know" in answer to a posed task is a `dont-know` demonstration. Closing without answering records nothing.
-- A correct keyed choice doesn't demonstrate a production capability; a chat answer makes no timing claim and doesn't demonstrate a timed criterion. Measure it in a Material that reports its timings.
-- Read the trail first; don't record a task component twice.
-- For a real step, record the step as the task and the learner's report verbatim as the response. Use `grader: learner` for their word, `tutor` when you inspected the artifact (a file, repository or URL with your own tools), or `mechanical` for a runner's reading. `unaided` says whether they did it themselves. Their word is enough unless the criterion sets a bar someone must inspect; they are the authority on what they did, so this is a demonstration. A step done before the Mission began is a claim; a state the learner shows still holds now is a demonstration observed now. The Node's completion query sets which evidence counts and how many; ten applications is a count of ten.
+- **Unaided status** is fixed when you pose the task. Help on the checked capability before the outcome makes it aided; glossing unrelated unfamiliar words (stated to the learner and kept in the recorded task) doesn't. Never gloss the capability being checked.
+- **Non-answers:** an explicit "I don't know" to a posed task is a `dont-know` demonstration; closing without answering records nothing.
+- **Medium limits:** a keyed choice doesn't demonstrate production; a chat answer doesn't demonstrate a timed criterion—measure timing in a Material that reports it.
+- **No duplicates:** read the trail first and don't record the same task component twice.
+- **Real-world steps:** record the step as the task and the learner's report verbatim as the response. Use `grader: learner` for their word, `tutor` when you inspected the artifact yourself (file, repo, URL), or `mechanical` for a runner's reading; `unaided` says whether they did it themselves. Their word suffices unless the criterion requires inspection—they are the authority on what they did. A step done before the Mission began is a claim; a state shown to still hold now is a demonstration observed now. The Node's completion query sets what evidence counts and how many.
 
 ## Corrections
 
-Read the Record's task, response and the standard applied to it. A learner disputing a standard correctly applied often means the Material assumes a typical context their Mission only resembles, or they want to deviate from it. Settle the standard they want and propose a Mission revision adding it as assessment guidance, so later checks hold to it. A Record that's actually wrong (wrong Node, wrong outcome) is confirmed with the learner, retracted, and recorded again with the same task and response; a delegated verdict is overridden instead. If the replacement fails, say the retraction happened and retry. "I've forgotten" is a new claim, not a reason to retract an earlier success. A complaint about the map itself (its grain, order or scope) is a checkpoint (propose Chart).
+Read the Record's task, response, and standard first:
+
+- **Standard dispute:** a learner disputing a correctly applied standard usually means the Material assumes a generic context their Mission only resembles, or they want a different bar. Settle the standard they want and propose a Mission revision adding it as assessment guidance.
+- **Actual recording error** (wrong Node or outcome): confirm with the learner, retract, and re-record with the same task and response—or override a delegated/runner verdict instead. If replacement fails, tell them the retraction happened and retry.
+- **"I've forgotten":** record a new claim; don't retract an earlier success.
+- **Map complaint** (grain, order, scope): that's a checkpoint—propose Chart.

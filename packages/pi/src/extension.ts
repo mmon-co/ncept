@@ -352,13 +352,7 @@ export default function ncept(pi: ExtensionAPI) {
   }
 
   function prompt(setup: HostChatSetup): string {
-    return (
-      setup.prompt +
-      "\n\n" +
-      setup.context +
-      "\n\nMounted Skills (read with skill):\n" +
-      setup.skills.map(({ name, description }) => "- " + name + ": " + description).join("\n")
-    );
+    return setup.prompt + "\n\n" + setup.context;
   }
 
   async function dashboard(ctx: ExtensionContext) {

@@ -3,26 +3,29 @@ name: chart
 description: A Mission, or the next section of one, needs graph content; or content is being designed for others to adopt.
 ---
 
-Charting is dependency resolution from a settled Mission. With no learner, as for a Patch others will adopt, chart for a typical adopter's Mission.
+Charting is dependency resolution from a settled Mission. When authoring a Patch for others, chart for a typical adopter's Mission.
 
 ## Method
 
-1. **Survey how people get there.** Within the approach the Mission settled, find how courses, textbooks and syllabi organize this ground, or how practitioners who reached a goal in the world sequenced it: playbooks and postmortems. Read the structures, not their contents; Lessons pull in materials later. These are your checklist for comprehensiveness, against charting only what comes to mind first.
+1. **Survey how people get there.** Within the Mission's settled approach, check how courses, textbooks, syllabi, or practitioner playbooks and postmortems sequence this ground. Read structures, not full contents—Lessons pull in materials later. Use this to counter expert blind spot and recall bias.
 
-2. **Find the macro organization.** What's the macro level organization of the Mission's prerequisites? Is it a sequence of real steps and the capabilities they need, or several separate, independently valuable skills or understandings, as with a knowledge domain? Should it be broken into separately practiced paths, like vocab vs grammar for a language? Is it fractal-like via "making smaller circles"? Separately practiced paths are strand tags; the practice serving one is guidance on its tag, not a Node.
+2. **Find the macro organization.** Decide how the Mission's prerequisites naturally hang together: a sequence of real steps and the capabilities they need, several independently valuable skills, separately practiced strands (like vocab vs grammar), or a fractal "smaller circles" progression. Separately practiced paths are strand tags; the practice serving a strand goes in guidance on its tag, not as a Node.
 
-3. **Choose milestones.** A few milestones mark sections of progress toward the targets. Each is a smaller Mission: a whole performance worth having on its own, checked by using its section together. First is whichever gets the learner doing the real thing soonest, even crudely. Set `pedagogy:milestone: true` on the Node ending each section, and give its criterion a ladder of simpler conditions down to the lowest viable whole task. An outcome that also depends on the world, such as a stranger paying, suits a milestone; a miss leads to re-charting at its check-in. Where the Mission's approach is a conjecture, the next milestone is also its measure: name in the Mission's assessment guidance the few-minute task from it that a Lesson can open on, with its number where it has one (a time, a rate, a count). Milestone 0 holds what the learner says they already have or did, their words quoted as claims.
+3. **Choose milestones.** Pick a few milestones marking sections toward the targets:
+   - Each milestone is a smaller Mission—a whole, realistic performance worth having on its own. Put whichever gets the learner doing the real thing soonest (even crudely) first.
+   - Mark each section's closing Node `pedagogy:milestone: true` and give its criterion a ladder of simpler conditions down to the lowest viable whole task.
+   - World-dependent outcomes (such as a stranger paying) suit milestones; a miss leads to re-charting at its check-in.
+   - For a conjectured approach (purposeful practice), the next milestone is its measure: name in Mission assessment guidance the short task from it that a Lesson can open on, with its metric (time, rate, count) where it has one.
+   - Milestone 0 holds what the learner says they already know or did, quoting their words as claims.
 
-4. **Elaborate the first section.** Recursively, starting from its milestone Node: does its new part fit one Session at the learner's minutes per Node? If not, how can that new part be broken into smaller prerequisites? Leave later sections coarse with `pedagogy:elaborate: true`, for the check-in before them.
+4. **Elaborate the first section.** Recursively from its milestone Node: if its new part won't fit one Session at the learner's minutes per Node, break it into smaller prerequisites. Leave later sections coarse with `pedagogy:elaborate: true` for the check-in before them.
 
-5. **Propose** the draft as a revision setting the Mission's targets, or as a graph diff when they don't change; content for others carries no claims. Don't write a syllabus; the theory derives the path.
+5. **Propose** the draft as a revision setting the Mission's targets, or as a graph diff when targets don't change (content for others carries no claims). Don't write a syllabus; the theory derives the path.
 
 ## The graph
 
-- A Node is one thing the learner can show or has done, defined by what shows it. Steps depend on what the learner can and will do themselves; work an agent could simply do is done by the tutor or left out, and coordinating other people stays outside. Different presentations of one task are one Node.
-- An Edge means the dependent can't be demonstrated without the prerequisite; give the reason in `pedagogy:because`. Teaching order is `pedagogy:priority`, never an Edge.
-- A part too big for one Lesson lacks a prerequisite step or capability (a child Node), volume (tiers: the top 50 words, then 100) or consolidation (thresholds: 60, then 90 words a minute).
-- Set `pedagogy:review` to `{ "kind": "fsrs" }` for what must be remembered, `{ "kind": "never" }` for one-off steps, or `{ "kind": "interval", "days": 30 }` for maintained states or capabilities that detrain, choosing how often to check them. If unset, milestones use `never` and other Nodes use `fsrs`.
-- Reuse an existing Node only unchanged: its metadata is shared with every Mission that uses it.
-- Group small Nodes taught together with a `lesson:<name>` tag, inside one section.
-- A learner's override of adopted guidance goes in their Mission's guidance, scoped to its Node.
+- **Nodes** are single observable capabilities or steps, defined by what shows them. Include only what the learner can and will do themselves—leave out work an agent can simply do or coordinating other people. Different presentations of one task are one Node.
+- **Edges** express definitional necessity—the dependent cannot be demonstrated without the prerequisite—with the reason in `pedagogy:because`. Preferred teaching order is `pedagogy:priority`, never an Edge.
+- **Splitting:** a part too large for one Lesson lacks a prerequisite step or capability (child Node), volume (tiers: top 50 words, then 100), or consolidation (thresholds: 60, then 90 wpm).
+- **Review schedules:** set `pedagogy:review` to `{"kind":"fsrs"}` for what must be remembered, `{"kind":"never"}` for one-off steps, or `{"kind":"interval","days":30}` (choosing the period) for maintained states or capabilities that detrain. Defaults when unset: `never` for milestones, `fsrs` otherwise.
+- **Reuse and grouping:** reuse an existing Node only unchanged (its metadata is shared across Missions). Group small Nodes taught together with a `lesson:<name>` tag within one section. Override adopted guidance in the Mission's own guidance, scoped to its Node.
