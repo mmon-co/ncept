@@ -53,7 +53,7 @@ const graphProperties = {
   operations: {
     type: "array",
     description:
-      'Core operations use kind, not op. Create a Node with {"kind":"add-node","node":{"id":"node-example"}}; its label and criterion are separate: {"kind":"add-metadata-set","metadataSet":{"id":"metadata-example","subjects":[{"kind":"node","id":"node-example"}],"properties":{"display:label":"Example","pedagogy:criterion":"Observable success","pedagogy:knowledge-type":"conceptual"}}}. A prerequisite edge is {"kind":"add-edge","edge":{"id":"edge-example","from":"node-prerequisite","to":"node-example"}}. Other kinds: define-tag {tag:{name,nodes,edges,metadataSets}}, add-material/edit-material {material:{playground,type,id,about,content:{kind:"blob",hash,mediaType},meta}}, remove-material {playground,id}, mask-contribution {mask:{source:{identity,digest},operationIndex,entity:{kind,id},property?}}. Prefer the material tool for local files. Metadata properties belong to metadata sets, never directly on Nodes.',
+      "Core Patch operations using kind (add-node, add-edge, add-metadata-set, define-tag, mask-contribution, add-material/edit-material/remove-material). Metadata lives in metadata sets, not on Nodes; prefer the material tool for local files.",
     items: { type: "object" },
   },
   targets: nodeList,
@@ -292,7 +292,7 @@ export function hostTools<S>(
   }
   mount(
     "propose",
-    'Ask approval for a Mission, graph-diff/revision, or preferences. For mission, input.mission is {id,statement,targets:[{node,provenance:{identity,digest}}],priority}; the same id revises an existing Mission. A Mission may start with targets:[] before charting; after graph acceptance, use mission again to attach its targets with exact provenance from read graph. For graph-diff/revision, input:{} submits the current edit_graph_draft; input.targets optionally selects Node ids. For preferences, input.text is the new text. For mode, input is {mode,then,entry}; choose an allowed switch from context. Entry shapes: {kind:"goal",text}, {kind:"mission",id}, {kind:"target",node}, {kind:"review",nodes}, or {kind:"lesson",opening:{missionId,number}} (omit number for the next uncleared Lesson). Call mission without scope to include Missions not yet targeted; its path supplies Lesson numbers after targets are attached. No proposed Profile change is applied before confirm.',
+    "Ask learner approval for a Mission (same id revises; targets:[] allowed before charting), graph-diff/revision (input:{} submits current edit_graph_draft), preferences, settings, or mode switch (choose an allowed switch from context). Nothing applies before confirm.",
     schema(
       {
         op: { enum: ["mission", "graph-diff", "revision", "preferences", "settings", "mode"] },
