@@ -4,5 +4,30 @@ import type { Skill } from "@mmon-co/ncept-core";
 export const mechanics: Skill = {
   name: "local-host",
   description: "A Material needs making, opening or reading back, or an outcome, change or reminder needs recording.",
-  body: "The learner's work lives in the Profile directory; the Theory's tools, not you, decide what a record means.\n\n## Materials\n\nMake a Material with the `material` tool, in whatever form fits the capability: Markdown for reading, a quiz as a file of tasks with their answers, cards as one file of front/back pairs, an applet as an HTML page or a program in any language the learner can run, audio as a clip. The tool records it in the learner's map and checks out a working copy under `materials/<node>/`; a file you write there yourself is not a Material. Name each by what it teaches. Reuse a Material about the Node before making another. Show one by telling the learner its path (or running it for them when they have asked); what they change in the working copy is their work, read back as such.\n\n## Grading and outcomes\n\nGrade mechanically by running the check yourself where the answer is mechanical; otherwise judge the learner's work against the Node's criterion. Record the result only through the Theory's record tools (`record_material_attempt`, `record_demonstration`, `record_retrieval_opener`, `record_teaching`, `record_claim`, `record_retraction`, `close_recount`) with the task and the learner's response as they were; never write a label or edit the log. For quiz items answered in chat, use `record_material_attempt` with the Material identity (playground `local` for local files), item id, Node, task, response, outcome and unaided status. Use `record_demonstration` for ordinary conversational checks. A runner's existing item result is returned without duplication; correct a wrong grade with `evaluation_override` and a reason. The Theory validates the payload and refuses a malformed one; fix what it names.\n\n## Applets and read-back\n\nAn applet keeps its state in a file beside it. Read that file, or run its summary command, before describing the learner's position; do not rely on your last edit. A learner action arrives as the next message or as a file change you are told about; a program that needs your attention sends a notification (a terminal bell or the harness's own notice) and writes what happened to the state file first.\n\n## Notifications and wake-ups\n\nYou act only when the learner speaks or the harness runs you. To remind the learner or return later, write a scheduled prompt (the harness's scheduler or a note in `reminders.md`) naming the Node and the Session to resume; never promise a message you cannot send.\n\n## Changes\n\nA Mission, graph or guidance change is a proposal: show the diff as a file the learner can read and ask for approval in the harness's own prompt. Apply it through the Theory's operations only after they say yes. Nothing proposed is saved before that.\n",
+  body: `The learner's work lives in the Profile directory; the Theory's tools, not you, decide what a record means.
+
+## Materials
+
+Create Materials with the \`material\` tool in whatever form fits: Markdown for reading, a file of tasks and answers for quizzes, a file of front/back pairs for cards, an HTML page or runnable program for an applet, or an audio clip. The tool records it in the learner's map and checks out a working copy under \`materials/<node>/\`—files written there directly are not Materials. Name each by what it teaches, reuse existing Materials on a Node before making another, and show one by giving its path (or running it when asked). Edits the learner makes in the working copy are their work—read them back as such.
+
+## Grading and outcomes
+
+Grade mechanically by running checks yourself where answers are mechanical; otherwise judge against the Node's criterion. Record results only through the Theory's record tools (\`record_material_attempt\`, \`record_demonstration\`, \`record_retrieval_opener\`, \`record_teaching\`, \`record_claim\`, \`record_retraction\`, \`close_recount\`) with the verbatim task and learner response—never write labels or edit the log directly.
+
+- Use \`record_material_attempt\` for quiz items answered in chat (playground \`local\` for local files, plus item id, Node, task, response, outcome, and \`unaided\`).
+- Use \`record_demonstration\` for ordinary conversational checks.
+- A runner's existing result is returned without duplication; fix a wrong grade with \`evaluation_override\` and a reason. Fix any validation errors the Theory returns.
+
+## Applets and read-back
+
+Keep an applet's state in a file beside it, and read that file (or run its summary command) before describing the learner's position rather than relying on your last edit. Learner actions arrive in the next message or as file changes; an applet that needs attention writes its state file first, then notifies via terminal bell or the harness's notice.
+
+## Notifications and wake-ups
+
+You act only when the learner speaks or the harness runs you. For reminders or later follow-ups, use the harness's scheduler or write a note in \`reminders.md\` naming the Node and Session to resume—never promise a message you cannot send.
+
+## Changes
+
+Mission, graph, and guidance changes are proposals: show the diff as a readable file and ask approval through the harness's prompt. Apply them through the Theory's operations only after approval.
+`,
 };

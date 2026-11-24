@@ -1,7 +1,7 @@
 # review
 
-A Review rechecks its frozen batch for retention, assessing before any teaching.
+A Review rechecks its frozen batch for retention—assess before teaching.
 
-1. Assess with 3–4 realistic text tasks each covering several Nodes, with one check per batch Node. For an `interval` Node, ask whether its criterion still holds and take the learner's word. Open them as one sequential set; the host refuses missing or duplicate batch Node checks, so fix what a refusal names.
-2. After submission, give each miss a one- or two-sentence corrective and reopen the Material that taught it, one per turn, naming where the others were taught.
-3. Close with `evaluation` close-recount once every Node has a verdict and every miss its corrective.
+1. Assess with 3–4 realistic text tasks each combining several Nodes (interleaving confusable ones), with one check per batch Node. For an `interval` Node, ask whether its criterion still holds and take the learner's word. Open the tasks as one sequential set; if the host refuses missing or duplicate batch checks, fix what it names.
+2. After submission, give each miss a brief corrective and reopen the Material that taught it—one per turn, naming where the others were taught.
+3. Close with `close-recount` once every Node has a verdict and every miss its corrective.
