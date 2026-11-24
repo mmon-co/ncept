@@ -225,7 +225,8 @@ function* setup(
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
   const prompt = tutorSystemPrompt(mode);
-  const offered = linkedDocuments(ctx, officialDocuments(ctx), ctx.tutorMessages ?? []);
+  const { documents, candidates } = documentListing(ctx);
+  const offered = linkedDocuments(ctx, documents, ctx.tutorMessages ?? []);
   const entry = ctx.entry;
   const intervalNodes =
     entry?.kind === "review"
@@ -236,11 +237,12 @@ function* setup(
     context: [
       ...evaluationContext(ctx),
       tutorOpening(ctx),
-      ...(offered.length
-        ? [
-            `Application help already offered in this Session (once-only asides):\n${JSON.stringify(offered)}\nKeep subsequent replies on the learner's task unless they ask for more application help.`,
-          ]
-        : []),
+      offered.length
+        ? `Application help already offered in this Session (once-only asides):\n${JSON.stringify(offered)}\nKeep subsequent replies on the learner's task unless they ask for more application help.`
+        : !ctx.opening && candidates.length
+          ? "If the learner's current message matches a cue, briefly link its guide alongside the answer:\n" +
+            candidates.map(({ raiseWhen, label, documentUrl }) => `${raiseWhen} [${label}](${documentUrl})`).join("\n")
+          : undefined,
       ctx.about.length
         ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
