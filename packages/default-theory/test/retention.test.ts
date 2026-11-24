@@ -1,4 +1,4 @@
-import { readTheoryState } from "@mmon-co/ncept-core/theory";
+import { readTheoryState, type ChatContext, type CurrentLesson, type MissionContext } from "@mmon-co/ncept-core/theory";
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type NodeId, type PatchRevision } from "@mmon-co/ncept-core/patch";
 import type { LearnerDay, Observation, ObservationId } from "@mmon-co/ncept-core/observations";
@@ -10,6 +10,7 @@ import {
   type Grade,
   type Claim,
   type Demonstration,
+  type DefaultState,
 } from "@mmon-co/ncept-default-theory";
 
 const ref = { identity: "patch-retention", digest: `sha256:${"b".repeat(64)}` } as const;
@@ -305,6 +306,102 @@ test("knows claims schedule soon without covering prerequisites", () => {
   expect(read(observations, "2026-10-01T08:00:00.000Z").nodes["node-prerequisite"]?.label).toBe("unknown");
   expect(tags(observations, "2026-10-01T08:00:00.000Z", "node-claim")).toEqual([]);
   expect(tags(observations, "2026-10-03T08:00:00.000Z", "node-claim").map(({ tag }) => tag)).toEqual(["review:due"]);
+});
+
+test("turn setup lists due Nodes from Session scope, Mission and Lesson prerequisites", () => {
+  const graph = resolvePatchBundle({
+    terminal: ref,
+    revisions: [
+      {
+        ...revision,
+        delta: {
+          operations: [
+            ...revision.delta.operations,
+            {
+              kind: "add-metadata-set",
+              metadataSet: {
+                id: "metadata-interval",
+                subjects: [{ kind: "node", id: "node-claim" }],
+                properties: {
+                  "display:label": "Maintained capability",
+                  "pedagogy:review": { kind: "interval", days: 30 },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const now = "2026-10-03T08:00:00.000Z";
+  const state = readTheoryState(
+    defaultTheory,
+    graph,
+    [
+      claim("obs-ancestor", "node-ancestor", "2026-08-01T08:00:00.000Z"),
+      claim("obs-prerequisite", "node-prerequisite", "2026-09-01T08:00:00.000Z"),
+      claim("obs-interval", "node-claim", "2026-10-01T08:00:00.000Z"),
+      claim("obs-mission", "node-isolated", "2026-09-20T08:00:00.000Z"),
+    ],
+    now,
+  );
+  const mission: MissionContext = {
+    id: "mission-session",
+    change: "mission-session",
+    statement: "Apply the capability",
+    nodes: ["node-isolated", "node-dependent"],
+    priority: 1,
+  };
+  const here: CurrentLesson = {
+    mission: { id: mission.id, statement: mission.statement },
+    number: 2,
+    of: 2,
+    name: "Apply",
+    section: { number: 1, milestone: "node-dependent", name: "Apply" },
+    nodes: ["node-dependent", "node-prerequisite"],
+  };
+  const ctx: ChatContext<DefaultState> = {
+    graph,
+    state,
+    now,
+    surface: "surface-retention",
+    mode: "empty",
+    about: [],
+    missions: [mission],
+  };
+  const listed = (mode: keyof typeof defaultTheory.modes, overrides: Partial<ChatContext<DefaultState>>) => {
+    const result = defaultTheory.modes[mode].setup({ ...ctx, ...overrides, mode }).next();
+    if (!result.done) throw new Error("Turn setup unexpectedly requested an effect");
+    const block = result.value.context?.match(/Due and fading Nodes \(most overdue first\):\n([^\n]+)/)?.[1];
+    const value: unknown = block === undefined ? undefined : JSON.parse(block);
+    return value;
+  };
+  const ancestor = { node: "node-ancestor", label: "node-ancestor", status: "fading" };
+  const focus = { node: "node-prerequisite", label: "node-prerequisite", status: "fading" };
+  const interval = { node: "node-claim", label: "Maintained capability", status: "due", interval: true };
+  const missionOnly = { node: "node-isolated", label: "node-isolated", status: "due" };
+  expect(
+    listed("lesson", {
+      about: here.nodes,
+      lesson: {
+        here,
+        nodes: [],
+        edges: [],
+        alsoShown: [],
+        doneCount: 0,
+        complete: false,
+        minutesLeft: 10,
+        rough: false,
+      },
+    }),
+  ).toEqual([{ ...ancestor, fadingPrerequisiteOfHere: true }, focus, missionOnly, interval]);
+  expect(listed("empty", { about: ["node-claim", "node-ancestor"] })).toEqual([ancestor, interval]);
+  expect(listed("charting", { about: ["node-claim"], entry: { kind: "mission", id: mission.id } })).toEqual([
+    missionOnly,
+    interval,
+  ]);
+  expect(listed("authoring", { about: ["node-claim"] })).toEqual([interval]);
+  expect(listed("empty", { about: ["node-dependent"] })).toBeUndefined();
 });
 
 test("review tags apply to acquired Nodes at 0.9 and 0.7 and rank untaught dependents before lower retrievability", () => {

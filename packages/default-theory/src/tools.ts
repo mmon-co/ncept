@@ -738,7 +738,7 @@ export const defaultRecordingTools = [
   {
     name: "record_retrieval_opener" as const,
     description:
-      "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Quiz, Review, Material outcome, or generic demonstration.",
+      "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Material outcome or generic demonstration.",
     schema: schema(
       {
         node: nodeProperty,

@@ -15,7 +15,7 @@ export function lessonOpening(graph: ResolvedGraph, nodes: readonly NodeId[], mi
   );
   return {
     instruction:
-      "Make and open the Lesson’s Materials first per the focus Nodes’ guidance (ask first only if that guidance leaves the work undecided). Then introduce the Lesson—what its focus Nodes cover, its Materials in order, what completes it, and what follows. If the focus Nodes have prior prerequisites with Records and no authored first action or conjectured-measure opener supersedes it, open with a quick retrieval prompt on prior work rather than a recap (recording the attempt with retrieval-opener); otherwise elicit the first action (using the first Node’s authored first action if supplied; later Nodes’ openings wait until those Nodes are reached).",
+      "Recheck prerequisites marked fadingPrerequisiteOfHere with fresh problems (material Skill, review.md) before building on them. Then make and open the Lesson’s Materials per the focus Nodes’ guidance (ask first only if that guidance leaves the work undecided). Introduce the Lesson—what its focus Nodes cover, its Materials in order, what completes it, and what follows. If there was no fading-prerequisite recheck and the focus Nodes have prior prerequisites with Records and no authored first action or conjectured-measure opener supersedes it, open with a quick retrieval prompt on prior work rather than a recap (recording the attempt with retrieval-opener); otherwise elicit the first action (using the first Node’s authored first action if supplied; later Nodes’ openings wait until those Nodes are reached).",
     facts: {
       focus: nodes.map((node) => ({
         ...label(node),
