@@ -23,7 +23,6 @@ import {
   jsonBytes,
   logBytes,
   liveLogPath,
-  migrateLessonLog,
   migrateProfileFiles,
   pack,
   parseManifest,
@@ -173,11 +172,14 @@ export async function openProfile(
 ): Promise<ProfileDirectory> {
   dir = resolve(dir);
   const readOnlyFiles = options.readOnly ? await filesAt(dir) : undefined;
-  if (!readOnlyFiles || migrateLessonLog(readOnlyFiles) !== readOnlyFiles)
+  // Any migration publishes a new manifest. Current read-only opens need no write lock.
+  if (
+    !readOnlyFiles ||
+    migrateProfileFiles(readOnlyFiles, theories).get("profile.json") !== readOnlyFiles.get("profile.json")
+  )
     await locked(dir, async () => {
       const stored = await filesAt(dir);
-      const initial = options.readOnly ? migrateLessonLog(stored) : migrateProfileFiles(stored, theories);
-      const profile = validate(initial, theories);
+      const initial = migrateProfileFiles(stored, theories);
       // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
       // leaves either the old generation or the complete new one; retry never repeats a step.
       for (const [path, bytes] of initial) {
@@ -187,7 +189,7 @@ export async function openProfile(
       if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
       if (options.readOnly) return;
       // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
-      for (const filename of Object.values(profile.manifest.sessions)) {
+      for (const filename of Object.values(parseManifest(manifest).sessions)) {
         const path = "sessions/" + filename;
         const bytes = initial.get(path);
         if (bytes) {
