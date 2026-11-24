@@ -173,6 +173,22 @@ export type SemanticOperation =
   | { readonly kind: "define-tag"; readonly tag: TaggedSet }
   | { readonly kind: "mask-contribution"; readonly mask: ExactContributionMask };
 
+/** Content keys for the entity puts of a graph draft. */
+export function graphDraftOperationKey(operation: SemanticOperation): string | undefined {
+  switch (operation.kind) {
+    case "add-node":
+      return operation.node.id;
+    case "add-edge":
+      return operation.edge.id;
+    case "add-metadata-set":
+      return operation.metadataSet.id;
+    case "define-tag":
+      return "tag:" + operation.tag.name;
+    default:
+      return undefined;
+  }
+}
+
 export interface SemanticDelta {
   readonly operations: readonly SemanticOperation[];
 }
