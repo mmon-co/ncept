@@ -262,11 +262,6 @@ function* setup(
   const { documents, candidates } = documentListing(ctx);
   const offered = linkedDocuments(ctx, documents, ctx.tutorMessages ?? []);
   const retention = dueNodes(ctx);
-  const entry = ctx.entry;
-  const intervalNodes =
-    entry?.kind === "review"
-      ? entry.nodes.filter((node) => nodeReviewSchedule(ctx.graph, node).kind === "interval")
-      : [];
   return {
     prompt,
     context: [
@@ -284,14 +279,6 @@ function* setup(
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
       retention.length ? `Due and fading Nodes (most overdue first):\n${JSON.stringify(retention)}` : undefined,
-      ...(entry?.kind === "review"
-        ? [
-            `Current Review (frozen batch; check retention, not teach):\n${JSON.stringify({
-              ...entry,
-              ...(intervalNodes.length > 0 ? { intervalNodes } : {}),
-            })}`,
-          ]
-        : []),
       ...(here === undefined
         ? []
         : [
@@ -370,7 +357,7 @@ export const modes = {
   lesson: {
     title: CATALOG_MODE_TITLES.lesson,
     frontTab: "document",
-    entry: { required: true, kinds: ["mission", "target", "review"] },
+    entry: { required: true, kinds: ["mission", "target"] },
     capabilities: catalogCapabilities("lesson"),
     metadataKeys: CATALOG_MODE_METADATA_KEYS.lesson,
     switches: [

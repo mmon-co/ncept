@@ -96,7 +96,7 @@ export interface LessonActivity {
   readonly surface: string;
   readonly activeMs: number;
   readonly startedAt: string;
-  readonly kind: "lesson" | "review";
+  readonly kind: "lesson";
   /** Nodes touched by the Session's Records, including its related Material surfaces. */
   readonly nodes: readonly NodeId[];
   /** Related Material surfaces owned by the same Session. */

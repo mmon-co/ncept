@@ -245,8 +245,6 @@ export function modeEntry(value: unknown): ModeEntry {
     case "target":
       if (!isNodeId(input.node)) throw new Error("A target entry needs a Node");
       return { kind: "target", node: input.node };
-    case "review":
-      return { kind: "review", nodes: nodeIds(input.nodes) };
     case "checkpoint":
       if (!nonempty(input.missionId) || (input.milestone !== undefined && !isNodeId(input.milestone)))
         throw new Error("Invalid checkpoint entry");
