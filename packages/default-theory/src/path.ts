@@ -12,7 +12,6 @@ import {
 import { dependentCones } from "./dependent-cone.js";
 import {
   LESSON_TAG_PREFIX,
-  tagIndex,
   type Lesson,
   type MissionPath,
   type MissionFuture,
@@ -20,9 +19,9 @@ import {
   type PathInputs,
   type PathSelection,
 } from "@mmon-co/ncept-core/theory";
-import { prepareEstimateDefault, progressDefault } from "./reading.js";
-import { DEFAULT_PARAMETERS, stateDefault, type DefaultState } from "./state.js";
-import { REVIEW_PROPERTY, retrievabilityAt, sameReviewCurve, type ReviewSchedule } from "./schedules.js";
+import { progressDefault } from "./reading.js";
+import type { DefaultState } from "./state.js";
+import { REVIEW_PROPERTY, type ReviewSchedule } from "./schedules.js";
 export { REVIEW_PROPERTY, validateReviewSchedule, type ReviewSchedule } from "./schedules.js";
 
 /** Default-theory authoring metadata, not Core graph vocabulary. */
@@ -214,161 +213,27 @@ export function teachingPath(graph: ResolvedGraph, targets: readonly NodeId[]): 
   return { sections, warnings: [...warnings.values()] };
 }
 
-/** Most overdue first, with deterministic ties independent of projection assembly order. */
-function ranked(nodes: readonly NodeId[], context: PathContext): NodeId[] {
-  const rank = (id: NodeId) => context.projection.nodes[id]?.find((tag) => tag.tag === "review:due")?.rank ?? 0;
-  return [...nodes].sort((a, b) => rank(b) - rank(a) || a.localeCompare(b));
-}
-
-/** Nodes are indivisible: an over-budget first Node must still make progress. */
-function packed(
-  candidates: readonly NodeId[],
-  context: PathContext,
-  estimate: ReturnType<typeof prepareEstimateDefault>,
-): NodeId[] {
-  const nodes: NodeId[] = [];
-  for (const node of ranked(candidates, context)) {
-    if (
-      nodes.length &&
-      estimate([{ kind: "review", numbered: false, nodes: [...nodes, node] }]).minutes > context.minutes
-    )
-      break;
-    nodes.push(node);
-  }
-  return nodes;
-}
-
-/** Invalidate at the next membership threshold or candidate rank change. FSRS rounds
- * retrievability, so an unrounded analytic crossing would miss the first effective tick.
- * Rank changes are conservative: the order may survive one, but cannot change before it.
- */
-function pathValidity(
-  context: PathContext,
-  scope: ReadonlySet<NodeId>,
-  state: DefaultState,
-): Pick<MissionPath, "validUntil"> {
-  const now = Date.parse(context.now);
-  const boundaries = context.projection.validUntil === undefined ? [] : [Date.parse(context.projection.validUntil)];
-  const candidates = context.graph.nodes.flatMap(({ id }) => {
-    const schedule = state.nodes[id]?.schedule;
-    const rank = context.projection.nodes[id]?.find(({ tag }) => tag === "review:due")?.rank;
-    return scope.has(id) && schedule && rank !== undefined
-      ? [{ id, schedule, priority: Math.round(rank - 1 + schedule.retrievability) }]
-      : [];
-  });
-  // Integer priority dominates decay. Identical curves keep even their stable ties forever.
-  const competing = new Set(
-    candidates
-      .filter((a) => candidates.some((b) => a.priority === b.priority && !sameReviewCurve(a.schedule, b.schedule)))
-      .map(({ id }) => id),
-  );
-  for (const { id } of context.graph.nodes) {
-    const node = state.nodes[id];
-    const schedule = node?.schedule;
-    if (!scope.has(id) || !schedule || node.reviewCleared) continue;
-    const at = (time: number) => retrievabilityAt(schedule, time);
-    const nextBelow = (threshold: number) => {
-      if (threshold <= 0 || at(now) < threshold) return;
-      let low = now,
-        high = now + 86_400_000;
-      while (at(high) >= threshold && high < 8_640_000_000_000_000)
-        high = Math.min(8_640_000_000_000_000, now + (high - now) * 2);
-      if (at(high) >= threshold) return;
-      while (high - low > 1) {
-        const mid = Math.floor(low + (high - low) / 2);
-        if (at(mid) < threshold) high = mid;
-        else low = mid;
-      }
-      boundaries.push(high);
-    };
-    if (!schedule.lapsed) {
-      nextBelow(DEFAULT_PARAMETERS.retention.due);
-      nextBelow(DEFAULT_PARAMETERS.retention.fading);
-    }
-    if (competing.has(id)) nextBelow(schedule.retrievability);
-  }
-  const expiry = Math.min(...boundaries);
-  return Number.isFinite(expiry) ? { validUntil: new Date(expiry).toISOString() } : {};
-}
-
 export function pathDefault(context: PathContext): MissionFuture {
-  return preparePathDefault(context)(context);
+  return readPath(context);
 }
 
-/** The graph and historical timing are independent of the Mission's targets and run. */
-export function preparePathDefault(inputs: PathInputs, state?: DefaultState) {
-  let estimate: ReturnType<typeof prepareEstimateDefault> | undefined;
-  let tags: ReturnType<typeof tagIndex> | undefined;
-  const readState = () => (state ??= stateDefault(inputs.graph, inputs.observations, inputs.now));
-  return (selection: PathSelection): MissionFuture =>
-    readPath(
-      { ...inputs, ...selection },
-      (tags ??= tagIndex(inputs.projection)),
-      (estimate ??= prepareEstimateDefault(inputs)),
-      readState,
-    );
+export function preparePathDefault(inputs: PathInputs, _state?: DefaultState) {
+  return (selection: PathSelection): MissionFuture => readPath({ ...inputs, ...selection });
 }
 
-/** The syllabus stays addressable as progress changes; only the future is upcoming.
- * A trailing unnumbered review is maintenance; a review with numberOffset 1 blocks the
- * following teaching stop. A graph-wide reading has only maintenance, and no Mission.
- */
-function readPath(
-  context: PathContext,
-  tags: ReturnType<typeof tagIndex>,
-  estimate: ReturnType<typeof prepareEstimateDefault>,
-  readState: () => DefaultState,
-): MissionFuture {
-  if (context.retired?.outcome === "abandoned") return { sections: [], warnings: [], future: [] };
-  const { graph, targets, projection } = context;
-  const path = teachingPath(graph, targets ?? []);
-  const scope =
-    targets === undefined
-      ? new Set(graph.nodes.map(({ id }) => id))
-      : new Set(path.sections.flatMap(({ lessons }) => lessons.flatMap(({ nodes }) => nodes)));
-  const due = packed(
-    graph.nodes.map(({ id }) => id).filter((id) => scope.has(id) && tags("review:due").has(id)),
-    context,
-    estimate,
-  );
-  const maintenance: Lesson[] = due.length ? [{ kind: "review", numbered: false, nodes: due }] : [];
-  if (context.retired?.outcome === "achieved" || targets === undefined)
-    return { ...path, ...pathValidity(context, scope, readState()), future: maintenance };
+/** The syllabus stays addressable as progress changes; only the future is upcoming. */
+function readPath(context: PathContext): MissionFuture {
+  const { graph, targets, projection, retired } = context;
+  const validity = projection.validUntil === undefined ? {} : { validUntil: projection.validUntil };
+  const path = teachingPath(graph, retired?.outcome === "abandoned" ? [] : (targets ?? []));
+  if (retired || targets === undefined) return { ...path, ...validity, future: [] };
 
-  const progress = progressDefault(graph, projection, [...scope]);
-  const next = path.sections
-    .flatMap(({ lessons }) => lessons)
-    .find((lesson) => lesson.numbered && lesson.nodes.some((id) => progress[id]?.status === "open"));
-  const cone = new Set(
-    next?.nodes.flatMap((id) => {
-      const result = route(graph, id);
-      return result.kind === "found" ? result.nodes.map(({ id }) => id) : [];
-    }) ?? [],
-  );
-  const fading = packed(
-    graph.nodes
-      .map(({ id }) => id)
-      .filter((id) => cone.has(id) && !next?.nodes.includes(id) && tags("review:fading").has(id)),
-    context,
-    estimate,
-  );
-  const sections = path.sections.map((section) => ({
-    ...section,
-    lessons: section.lessons.flatMap((lesson) =>
-      lesson === next && fading.length
-        ? [{ kind: "review", numbered: false, numberOffset: 1, nodes: fading }, lesson]
-        : [lesson],
-    ),
-  }));
+  const lessons = path.sections.flatMap((section) => section.lessons);
+  const scope = [...new Set(lessons.flatMap((lesson) => lesson.nodes))];
+  const progress = progressDefault(graph, projection, scope);
   return {
     ...path,
-    ...pathValidity(context, scope, readState()),
-    sections,
-    future: [
-      ...sections
-        .flatMap(({ lessons }) => lessons)
-        .filter((lesson) => !lesson.numbered || lesson.nodes.some((id) => progress[id]?.status === "open")),
-      ...maintenance,
-    ],
+    ...validity,
+    future: lessons.filter((lesson) => !lesson.numbered || lesson.nodes.some((id) => progress[id]?.status === "open")),
   };
 }
