@@ -172,7 +172,7 @@ function isSchedulerKind(kind: unknown): kind is keyof typeof schedulers {
   return typeof kind === "string" && Object.hasOwn(schedulers, kind);
 }
 
-export function validateReviewSchedule(value: unknown): void {
+export function validateReviewSchedule(value: unknown): asserts value is ReviewSchedule | undefined {
   if (value === undefined) return;
   if (
     typeof value === "object" &&
