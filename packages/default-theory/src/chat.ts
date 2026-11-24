@@ -23,6 +23,7 @@ import { evaluationContext, evaluateWatchedReply } from "./evaluation.js";
 import { lessonOpening, openingLanguage } from "./opening.js";
 import { nodeReviewSchedule } from "./path.js";
 import { defaultQueryTokens } from "./tags.js";
+import { graphDraftBatch } from "./graph-draft-batch.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
 const RAISE_WHEN_PROPERTY = "pedagogy:raise-when";
@@ -343,6 +344,7 @@ export const modes = {
     ],
     entry: { required: false, kinds: ["goal", "mission", "target", "checkpoint"] },
     capabilities: catalogCapabilities("charting"),
+    graphDraftBatch,
     switches: [{ mode: "lesson", then: "next", carry: { kind: "brief" } }],
     setup: (ctx) => setup(ctx, "charting"),
   },
@@ -351,6 +353,7 @@ export const modes = {
     frontTab: "map",
     entry: { required: false, kinds: ["goal", "mission"] },
     capabilities: catalogCapabilities("authoring"),
+    graphDraftBatch,
     switches: [],
     setup: (ctx) => setup(ctx, "authoring"),
   },
@@ -359,6 +362,7 @@ export const modes = {
     frontTab: "document",
     entry: { required: true, kinds: ["mission", "target"] },
     capabilities: catalogCapabilities("lesson"),
+    graphDraftBatch,
     metadataKeys: CATALOG_MODE_METADATA_KEYS.lesson,
     switches: [
       { mode: "lesson", then: "next", carry: { kind: "brief" } },

@@ -21,6 +21,8 @@ import {
   type ModeSwitchDefault,
   type NodeId,
   type PatchContent,
+  type Citation,
+  type SemanticOperation,
   type ProfileLogEntry,
   type RunSession,
   type SessionMode,
@@ -282,7 +284,19 @@ export class LearningHost<S> {
   private tail: Promise<unknown> = Promise.resolve();
   private pendingSwitch?: { from: LocalSession; to: ModeSwitch };
   private readonly closeJobs = new Map<string, Promise<void>>();
-  readonly drafts = new Map<string, { base: string; content: PatchContent }>();
+  readonly drafts = new Map<
+    string,
+    {
+      base: string;
+      content: PatchContent;
+      edits: {
+        operations: readonly SemanticOperation[];
+        targets: readonly NodeId[];
+        citations: readonly Citation[];
+        retractions: readonly string[];
+      };
+    }
+  >();
   constructor(
     readonly runtime: Runtime<S>,
     readonly confirm: OpenHostOptions<S>["confirm"],
@@ -816,7 +830,17 @@ export class LearningHost<S> {
       ]
         .filter(Boolean)
         .join("\n\n"),
-      tools: [...tools, ...hostTools(this, session, capabilities, setup.skills, selected?.metadataKeys ?? [])],
+      tools: [
+        ...tools,
+        ...hostTools(
+          this,
+          session,
+          capabilities,
+          setup.skills,
+          selected?.metadataKeys ?? [],
+          selected?.graphDraftBatch,
+        ),
+      ],
       skills: [...setup.skills, mechanics],
     };
   }

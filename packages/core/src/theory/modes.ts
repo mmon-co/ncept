@@ -1,5 +1,5 @@
-import type { Program } from "../observations.js";
-import type { NodeId } from "../patch/index.js";
+import type { JsonSchema, Program } from "../observations.js";
+import type { NodeId, ResolvedGraph, SemanticOperation } from "../patch/index.js";
 import type { ChatContext, ChatSetup, MessageDescriptor } from "./theory.js";
 
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
@@ -45,6 +45,16 @@ export type ModeSwitchDefault =
   | Readonly<{ mode: string; then: "here" }>
   | Readonly<{ mode: string; then: "next" | "aside"; carry: ModeCarry }>;
 
+/** A Theory may give the host typed shorthand for its graph metadata. */
+export interface GraphDraftBatch {
+  readonly properties: Readonly<Record<string, JsonSchema>>;
+  compile(
+    input: Readonly<Record<string, unknown>>,
+    graph: Pick<ResolvedGraph, "nodes" | "edges">,
+    previous: readonly SemanticOperation[],
+  ): { operations: readonly SemanticOperation[]; targets?: readonly NodeId[] };
+}
+
 /** @public A mode's entry requirement, capabilities, transitions and current tutor setup. */
 export type SessionMode<S = unknown> = Readonly<{
   title: string;
@@ -54,6 +64,7 @@ export type SessionMode<S = unknown> = Readonly<{
   noteTemplates?: readonly MessageDescriptor[];
   entry: Readonly<{ required: boolean; kinds: readonly ModeEntry["kind"][] }>;
   capabilities: readonly HostCapability[];
+  graphDraftBatch?: GraphDraftBatch;
   /** Authoring keys this mode may edit without a graph proposal. */
   metadataKeys?: readonly string[];
   switches: readonly ModeSwitchDefault[];

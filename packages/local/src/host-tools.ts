@@ -5,6 +5,7 @@ import {
   attachmentDigest,
   compileGraphDiff,
   composePatch,
+  graphDraftOperationKey,
   isMaterialMeta,
   isMission,
   isNodeId,
@@ -16,6 +17,8 @@ import {
   selectGraph,
   tagIndex,
   type ExactPatchRef,
+  type GraphDraftBatch,
+  type SemanticOperation,
   type HostCapability,
   type JsonSchema,
   type Material,
@@ -94,17 +97,34 @@ async function acceptContent<S>(
   ]);
   return to;
 }
-function graphDiff<S>(host: LearningHost<S>, input: Record<string, unknown>, session: LocalSession) {
+function putBatch(previous: readonly SemanticOperation[], puts: readonly SemanticOperation[]) {
+  const indexed = new Map<string | SemanticOperation | number, SemanticOperation>();
+  for (const [i, operation] of previous.entries()) indexed.set(graphDraftOperationKey(operation) ?? i, operation);
+  for (const operation of puts) indexed.set(graphDraftOperationKey(operation) ?? operation, operation);
+  return [...indexed.values()];
+}
+
+function graphDiff<S>(
+  host: LearningHost<S>,
+  input: Record<string, unknown>,
+  session: LocalSession,
+  batch?: GraphDraftBatch,
+) {
   return host.runtime.snapshot().then(async (view) => {
-    if (!Array.isArray(input.operations)) throw new Error("Expected graph operations");
-    const compiled = compileGraphDiff(
-      view.bundle,
-      operations(input.operations),
-      input.targets === undefined ? session.about : nodes(input.targets),
-      citations(input.citations),
-      input.retractions === undefined ? [] : strings(input.retractions),
-    );
-    return { view, compiled, content: applyGraphDiff(await host.runtime.content(), compiled) };
+    const draft = batch && host.drafts.get(session.id);
+    const previous = draft && draft.base === view.graph.terminal.digest ? draft.edits : undefined;
+    const typed = batch?.compile(input, view.graph, previous?.operations ?? []);
+    if (!typed && !Array.isArray(input.operations)) throw new Error("Expected graph operations");
+    const ordered = typed && input.operations === undefined ? [] : operations(input.operations);
+    const edits = {
+      operations: typed ? putBatch(previous?.operations ?? [], [...typed.operations, ...ordered]) : ordered,
+      targets:
+        typed?.targets ?? (input.targets === undefined ? (previous?.targets ?? session.about) : nodes(input.targets)),
+      citations: input.citations === undefined ? (previous?.citations ?? []) : citations(input.citations),
+      retractions: input.retractions === undefined ? (previous?.retractions ?? []) : strings(input.retractions),
+    };
+    const compiled = compileGraphDiff(view.bundle, edits.operations, edits.targets, edits.citations, edits.retractions);
+    return { view, compiled, edits, content: applyGraphDiff(await host.runtime.content(), compiled) };
   });
 }
 function page(items: readonly unknown[], input: Record<string, unknown>) {
@@ -125,6 +145,7 @@ export function hostTools<S>(
   capabilities: readonly HostCapability[],
   skills: readonly Skill[],
   metadataKeys: readonly string[],
+  batch?: GraphDraftBatch,
 ): readonly HostTool[] {
   const tools: HostTool[] = [];
   function mount(
@@ -281,11 +302,23 @@ export function hostTools<S>(
   if (capabilities.includes("graph-draft")) {
     mount(
       "edit_graph_draft",
-      "Compile graph operations against the personal Patch. This replaces the unsaved draft, not the Profile. Propose graph-diff to ask the learner to accept it.",
-      schema(graphProperties, ["operations"]),
+      (batch
+        ? "Add nodes, edges, tags and targets to the unsaved graph draft; raw Core operations run after the typed fields. A call with operations alone replaces the draft. "
+        : "Compile graph operations into a draft against the personal Patch. ") +
+        "Propose graph-diff to ask the learner to accept it.",
+      schema({ ...graphProperties, ...batch?.properties }, batch ? [] : ["operations"]),
       async (raw, session) => {
-        const prepared = await graphDiff(host, raw, session);
-        host.drafts.set(session.id, { base: prepared.view.graph.terminal.digest, content: prepared.content });
+        const typed =
+          batch &&
+          Object.keys(batch.properties).some(
+            (key) => Object.hasOwn(raw, key) && (key !== "targets" || raw.operations === undefined),
+          );
+        const prepared = await graphDiff(host, raw, session, typed ? batch : undefined);
+        host.drafts.set(session.id, {
+          base: prepared.view.graph.terminal.digest,
+          content: prepared.content,
+          edits: prepared.edits,
+        });
         return { content: { status: "draft", report: prepared.compiled.report, graph: prepared.compiled.graph } };
       },
     );

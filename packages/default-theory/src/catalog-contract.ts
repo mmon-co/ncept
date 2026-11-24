@@ -74,11 +74,6 @@ export interface FetchPageToolInput {
   readonly op?: "read" | "download";
 }
 
-export interface ProposeToolInput {
-  readonly op: "graph-diff" | "mission" | "revision" | "preferences" | "settings" | "mode" | "missing-capability";
-  readonly input: CatalogArguments;
-}
-
 export interface SkillToolInput {
   readonly name: string;
   /** A relative resource filename in the named Skill, never an arbitrary filesystem path. */
@@ -94,12 +89,19 @@ export interface GraphReadOptions {
   readonly provenance?: boolean;
 }
 
+export type GuidanceEntryInput = {
+  readonly text: string;
+  readonly nodes?: readonly NodeId[];
+  readonly mode?: "replace" | "keep";
+  readonly from?: { readonly tags?: readonly string[]; readonly nodes?: readonly NodeId[] };
+};
+
 /**
- * A compact graph stores every surviving origin entry once. Expanding a Node's ordered
- * references must equal nodeTutorGuidance(graph, node), with independent keep/replace per kind.
+ * A compact graph stores every surviving origin entry once, in the same shape the tutor writes.
+ * A Node's ordered references follow nodeTutorGuidance(graph, node), with independent cascades per kind.
  */
 export interface CompactGuidance {
-  readonly guidance: Readonly<Record<string, TutorGuidanceEntry>>;
+  readonly guidance: Readonly<Record<string, GuidanceEntryInput & Pick<TutorGuidanceEntry, "kind" | "origin">>>;
   readonly effectiveGuidance: Readonly<Partial<Record<NodeId, readonly string[]>>>;
 }
 
@@ -124,8 +126,20 @@ export const CATALOG_MODE_TITLES = {
   lesson: "Lesson",
 } as const;
 
+const CHAT_PROPOSAL_TOOLS = ["propose_mode", "propose_settings", "propose_preferences"] as const;
+const GRAPH_PROPOSAL_TOOLS = [
+  "propose_graph_draft",
+  "propose_mission",
+  "propose_mission_revision",
+  ...CHAT_PROPOSAL_TOOLS,
+] as const;
+export const PROPOSAL_TOOL_NAMES = [...GRAPH_PROPOSAL_TOOLS, "record_missing_capability"] as const;
+export function isProposalToolName(name: string): name is (typeof PROPOSAL_TOOL_NAMES)[number] {
+  return PROPOSAL_TOOL_NAMES.some((tool) => tool === name);
+}
+
 export const CATALOG_MODE_TOOLS = {
-  empty: ["query", "read", "theory", "skill", "report_friction", "propose"],
+  empty: ["query", "read", "theory", "skill", "report_friction", ...CHAT_PROPOSAL_TOOLS],
   charting: [
     "evaluation",
     "query",
@@ -134,7 +148,7 @@ export const CATALOG_MODE_TOOLS = {
     "skill",
     "report_friction",
     "edit_graph_draft",
-    "propose",
+    ...GRAPH_PROPOSAL_TOOLS,
     "web_search",
     "fetch_page",
     "code",
@@ -149,7 +163,7 @@ export const CATALOG_MODE_TOOLS = {
     "skill",
     "report_friction",
     "edit_graph_draft",
-    "propose",
+    ...GRAPH_PROPOSAL_TOOLS,
     "web_search",
     "fetch_page",
     "code",
@@ -167,7 +181,7 @@ export const CATALOG_MODE_TOOLS = {
     "edit_graph_draft",
     "edit_metadata",
     "evaluation",
-    "propose",
+    ...PROPOSAL_TOOL_NAMES,
     "web_search",
     "fetch_page",
     "code",
@@ -175,6 +189,10 @@ export const CATALOG_MODE_TOOLS = {
     "undo",
   ],
 } as const;
+
+export function catalogRootNames(mode: string | undefined): readonly string[] | undefined {
+  return Object.entries(CATALOG_MODE_TOOLS).find(([name]) => name === mode)?.[1];
+}
 
 /** The keys each mode's edit_metadata may write; the tool is mounted only where a list exists. */
 export const CATALOG_MODE_METADATA_KEYS: Readonly<Partial<Record<keyof typeof CATALOG_MODE_TOOLS, readonly string[]>>> =
