@@ -881,7 +881,7 @@ export class LearningHost<S> {
     return {
       ...setup,
       prompt:
-        setup.prompt +
+        `${setup.prompt.trimEnd()}\n- **${mechanics.name}**: ${mechanics.description}` +
         (typeof settings.preferences === "string" ? "\n\nLearner preferences:\n" + settings.preferences : ""),
       capabilities,
       context: [
