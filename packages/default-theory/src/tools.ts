@@ -467,15 +467,8 @@ export const defaultInstrumentTools = [
         },
       ],
     },
-    description: [
-      "Original records and the rule producing each Node's label. Pass node for one paged trail, or scope: [node, ...] for an array of independently paged trails. Follow each continueCursor with node and cursor, not scope. Limit applies per Node. The first qualifying rule applies:",
-      'pedagogy:completion is a query on Node or tag metadata: all/any combine counts; {count, of} counts observations matching a predicate. Predicates support all, any, not, field/is and latest: {per: [fields], of: predicate}. Example: {count: 16, of: {all: [{latest: {per: ["material", "item"], of: {all: [{field: "node", is: "self"}, {field: "material", is: {playground: "quizzes", id: "set-verbs-1"}}, {field: "unaided", is: true}]}}}, {field: "outcome", is: "success"}]}}. Without node: self a query can count other Nodes too. playground projects a demonstration\'s material.playground or a report\'s Playground; kind distinguishes them. Reports also expose scope, state and current (not expired). Trail displays each count as k of required, the query and citations.',
-      "1. demonstrated: the Node query holds. A Node with no completion is never demonstrated. Aided attempts count only as practice unless the query selects them.",
-      "2. probably-known: an attached knows claim is newer than any failure on this Node.",
-      "3. unknown: otherwise. Only demonstrated and probably-known count as known for routing.",
-      "Retention is separate: the schedule replays each Node's grade for the learner day. Unaided success also gives Good to direct prerequisites, at most once per day; failure never flows down. A diagnosed component regression supplies Again unless its slip is already recorded. An unresolved failure stays due for Review until an unaided success, independently of the forgetting curve. Claims start a short schedule without covering prerequisites. The pedagogy:review schedule is {kind: fsrs} for memory, {kind: never} for no Review, or {kind: interval, days: N} for a check N days after the last one. Unset means never for milestones and fsrs otherwise. Review tags select ordinary acquired Nodes and scheduled completion-bound Nodes below the retention thresholds. Scheduled completion-bound Nodes remain eligible despite acquisition withdrawal; incomplete or expired reports do not supply Again.",
-      "A newer knows claim can follow failure; a later failure defeats that claim unless completion still holds.",
-    ].join("\n"),
+    description:
+      "Original records and the rule producing each Node's standing. Pass node for one paged trail, or scope: [node, ...] for an array of independently paged trails (follow each continueCursor with node and cursor; limit applies per Node). Load the records Skill for standing, retention, and pedagogy:completion rules.",
     *run(raw, ctx) {
       const input = args(raw, ["node", "scope", "cursor", "limit"]);
       if (input.scope === undefined) return pagedTrail(ctx, raw);
@@ -560,7 +553,7 @@ export const defaultInstrumentTools = [
   {
     name: "close_recount" as const,
     description:
-      "Learner-facing close material for this Session: display labels, current standing, and active conversational Records on this Session surface (not its Material surfaces). Material attempt notices are separate; absence here does not mean unanswered. Statements are verbatim. This presentation intentionally omits internal identities and Patch provenance; use it for the closing recount. Optionally prescribe practice on existing Nodes with a concise reason; this is a host presentation direction, not theory evidence.",
+      "Learner-facing close summary: display labels, standing, and conversational Records on this Session surface (omits internal IDs/provenance; Material attempts are reported separately). Optional practising prescribes practice directions (not evidence).",
     schema: schema({
       practising: {
         type: "array",
@@ -605,13 +598,8 @@ export const defaultInstrumentTools = [
 /** Only theory evidence is written. The host assigns identity and attribution, not pedagogy. */
 const recordDemonstration = {
   name: "record_demonstration" as const,
-  description: [
-    "Record one attempted posed check: a posed task with a determinable outcome and an attempt. Reading, explanation, a remark in passing, dialogue is not one. An explicit I don’t know response to a posed task is a dont-know demonstration; closing without answering is not.",
-    "Use it for a free response, a requested Artifact section, an observed step, or an explicitly posed conversational check. Preserve the posed task and answer excerpt verbatim, including when grading directly after a judge error; grade success/failure with grader tutor. For a lesson-opening retrieval prompt, use record_retrieval_opener instead.",
-    "Decide unaided when posing: the task must be at least as demanding as the Node's capability statement in every respect. Hints, candidates on a production capability, a missing required clock, or tools on a no-tool task make it aided. Help before outcome makes it aided; the completion after help is not a second attempt.",
-    "For an answer to a Material item, use record_material_attempt. A runner records its own outcome; correct a wrong runner grade with evaluation_override and a reason. An option's optional error string remains verbatim in the response.",
-    "Never infer prerequisite failures. Record a prerequisite only if its own posed step was attempted; the label query accounts for structural evidence.",
-  ].join(" "),
+  description:
+    "Record one attempted posed conversational or real-world check with verbatim task and response. Use record_retrieval_opener for lesson-opening retrieval and record_material_attempt for Material items; never infer prerequisite failures. Load the records Skill for grading rules.",
   schema: schema(
     {
       node: nodeProperty,
@@ -648,7 +636,7 @@ export const defaultRecordingTools = [
   {
     name: "record_material_attempt" as const,
     description:
-      "Record a learner's chat answer to an existing Material's item, on any host. Supply the Material's playground and id, stable item id, assessed Node, verbatim task and response, outcome and unaided status fixed when posing (help makes it aided). The tutor grades success/failure; an explicit I don't know is dont-know. Ordinary conversational checks use record_demonstration. An identical retry returns its existing Record; a later different answer is a new attempt. A runner's outcome stays the record; correct a wrong grade with evaluation_override and a reason.",
+      "Record a learner's chat answer to an existing Material's item (verbatim task/response, outcome, unaided fixed when posing). Identical retries return the existing Record; fix a wrong runner grade with evaluation_override.",
     schema: schema(
       {
         material: schema({ playground: { type: "string", minLength: 1 }, id: { type: "string", minLength: 1 } }, [
@@ -784,11 +772,8 @@ export const defaultRecordingTools = [
   },
   {
     name: "record_teaching" as const,
-    description: [
-      "Record one explicit teaching act for a scoped Node after you have actually explained its content to the learner, with a worked example or equivalent reasoning.",
-      "Do not call on Skill entry, scope, reading, practice, an unrelated explanation, or merely creating/opening a Material. For a Document, accepted presentation of its opened surface records the occurrence instead.",
-      "Copy a substantial passage of the explanation you just delivered, including its worked step; this is not competence evidence.",
-    ].join(" "),
+    description:
+      "Record an explicit teaching explanation you just delivered for a scoped Node (paste a substantial excerpt with its worked step). Not competence evidence; don't call on reading or opening a Material.",
     schema: schema(
       {
         node: nodeProperty,
@@ -938,11 +923,8 @@ export const defaultRecordingTools = [
 export const defaultBackgroundTools = [
   {
     name: "attach_claim" as const,
-    description: [
-      "Attach an active claim to current Nodes by their capability statements, never by topic or Edges. An empty nodes list explicitly leaves it homeless.",
-      "After a charting Confirmation that adds Nodes, and at close before close_recount: call warnings and inspect its homeless citations; re-home each current-Session claim you can identify from its citation and conversation to the Node(s) whose capability statements match, and leave unmatched existing claims as they are.",
-      "Attach a newly recorded claim directly; it is not reported as homeless until explicitly attached. Use nodes: [] only when no current Node fits.",
-    ].join(" "),
+    description:
+      "Attach an active claim to current Nodes whose capability statements it covers (never by topic or Edges), or nodes: [] to leave it homeless. Check warnings for homeless claims after charting or before close_recount.",
     schema: schema(
       {
         record: { type: "string", pattern: "^obs-.+" },

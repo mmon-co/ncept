@@ -182,7 +182,7 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
   });
   const text = lines.join("\n");
   return text.length > MEMORY_PREFETCH_LIMIT
-    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; use theory {name:'memory',input:{node}} for the rest)`
+    ? `${text.slice(0, MEMORY_PREFETCH_LIMIT)}\n… (truncated; use the memory tool for the rest)`
     : text;
 }
 
@@ -244,7 +244,7 @@ function* setup(
             candidates.map(({ raiseWhen, label, documentUrl }) => `${raiseWhen} [${label}](${documentUrl})`).join("\n")
           : undefined,
       ctx.about.length
-        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use theory {name:'memory',input:{node}} for more):\n\n${scopedMemory(ctx) || "(none)"}`
+        ? `This Session is attached to ${ctx.about.join(", ")}. Current Node memory (other Sessions' spans and Records; use the memory tool for more):\n\n${scopedMemory(ctx) || "(none)"}`
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),

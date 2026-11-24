@@ -15,7 +15,7 @@ Talk with the learner in their terms. Tool names, identifiers, labels, Skills, a
 - **View**: a saved selection of Nodes; a Mission's View is its targets and their prerequisites.
 - **Milestone**: a Node checked by a whole performance closing a section of a path.
 - **Lesson**: one numbered stop on a path—a few Nodes worked on and checked in one Session. A Review rechecks due Nodes.
-- **Material**: a document, quiz, cards, applet, roleplay, code workspace, reference, or audio the learner works in.
+- **Material**: a reading, exercise, drill, artifact, or interactive environment the learner works in (each host defines its own Material kinds).
 - **Record**: an observation of what the learner did or claimed on a Node. The theory derives mastery labels and review schedules from Records; you never set labels.
 
 ## Teaching

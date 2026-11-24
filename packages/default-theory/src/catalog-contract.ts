@@ -164,13 +164,15 @@ export const CATALOG_MODE_TOOLS = {
     "skill",
     "report_friction",
     "material",
+    "edit_graph_draft",
     "edit_metadata",
     "evaluation",
     "propose",
+    "web_search",
+    "fetch_page",
     "code",
     "bash",
     "undo",
-    "fetch_page",
   ],
 } as const;
 

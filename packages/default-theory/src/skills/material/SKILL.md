@@ -14,16 +14,7 @@ Load the guide for the Session with `skill {name:'material', resource}`:
 - Lesson: [lesson.md](lesson.md) (and for a milestone, [milestone.md](milestone.md))
 - Review: [review.md](review.md)
 
-## Which Material
-
-- **Document:** prose, worked examples, and reference worth revisiting.
-- **Quiz:** graded tasks answered by choice, short/long text, code, applet, or roleplay—use for any posed check needing a verdict.
-- **Code:** an interactive code workspace with files and tests (pose inside a Quiz to grade).
-- **Applet:** a custom interactive environment (board, simulation, diagram) when no standard external tool fits (pose inside a Quiz to grade).
-- **Roleplay:** a conversation with a character for interpersonal performances (pose inside a Quiz to grade).
-- **Cards:** spaced-retention items for recall and fluency drills.
-- **Reference:** a pointer to an outside book, course, or site located at the Nodes it teaches.
-- **Audio:** generated speech for listening and spoken prompts.
+Choose from the Material kinds your host provides (load your host's Material skill for available kinds and formats).
 
 ## Assessing
 

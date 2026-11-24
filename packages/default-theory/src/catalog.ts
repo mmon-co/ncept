@@ -133,7 +133,7 @@ export const defaultCatalogTools: readonly DefaultTool[] = [
     name: "theory",
     members: theoryReadings,
     description:
-      "Read theory facts. Node inputs name existing Nodes from the graph, never Session identities. Interpretations return source handles: retrieval context, never labels or evidence. Trail defaults to limit 20; follow continueCursor, restart on stale cursor.",
+      "Read theory facts (frontier, route, trail, items, memory, mission, coverage, probes, warnings, interpretations). Node inputs name existing graph Nodes; trail pages with limit (default 20) and continueCursor.",
     schema: {
       type: "object",
       // Top-level properties beside the variants: without them DeepSeek sent input as a JSON string.
@@ -173,8 +173,8 @@ function evaluationCatalogTool(mode: string | undefined): DefaultTool {
     members: operations.map(({ tool }) => tool),
     description:
       operations === evaluationOperations
-        ? "Delegate chat checks: watch grades subsequent learner replies; stop ends it; judge grades one posed check (message selects original learner media). For judge and record/demonstration, including direct grading when judge fails, copy the posed task and just the learner's answer to it; answer any separate learner question in your reply. Grader decision uses the Account decision model. Host records per-Node verdicts and returns criterion probabilities; do not record them again. Usually delegate rather than manually record. Record/material-attempt grades a Material item answered in chat; identical retries return the existing Record, later different answers get new Records. A runner's outcome stays the record. Override corrects a delegated or Material Record with a reason; claim records self-report; retract corrects evidence. Before an interpretation-correction, read that interpretation's current handles with theory interpretations. A close-recount carries no citations. Artifact filing is host-owned."
-        : "Record evidence that needs no grading: claim records self-report; retract corrects evidence. Nothing here grades a response; graded checks happen in a Lesson's Materials. Artifact filing is host-owned.",
+        ? "Grade or record Session evidence: watch/stop/judge delegate chat checks (host records verdicts; grader 'decision' uses the Account decision model); record writes demonstration, material-attempt, retrieval-opener, teaching, claim-attachment, interpretation-correction, close-recount, or host artifact; override/claim/retract correct or record claims. Load the records Skill for grading and correction rules."
+        : "Record ungraded evidence (claim, retract, or host record/artifact). Graded checks belong in a Lesson.",
     schema: {
       type: "object",
       properties: {
