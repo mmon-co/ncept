@@ -1,7 +1,7 @@
 import { isNodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
 import type { Observation } from "@mmon-co/ncept-core/observations";
 import type { LessonActivity } from "@mmon-co/ncept-core/theory";
-import { isDemonstration, initDefaultState } from "./state.js";
+import { isDemonstration, isHoming, homeDefaultRecords, initDefaultState } from "./state.js";
 
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 export const UNMEASURED_LESSON_TIMING: LessonTiming = { minutesPerNode: 20, rough: true };
@@ -9,31 +9,33 @@ export const UNMEASURED_REVIEW_TIMING: LessonTiming = { minutesPerNode: 2, rough
 
 /** Unique unaided checks in Review Sessions; acquisition already predates these checks. */
 export function measuredReviewTiming(
+  graph: ResolvedGraph,
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ): LessonTiming {
-  const reviews = activities.filter((activity) => activity.stop?.kind === "review");
+  const reviews = activities.filter((activity) => activity.kind === "review");
+  const activeMs = reviews.reduce((sum, activity) => sum + activity.activeMs, 0);
+  if (activeMs <= 0) return UNMEASURED_REVIEW_TIMING;
   const surfaces = new Map(
     reviews.flatMap((activity) =>
       [activity.surface, ...(activity.relatedSurfaces ?? [])].map((surface) => [surface, activity] as const),
     ),
   );
   const reviewed = new Set<string>();
-  for (const observation of observations) {
-    const activity = observation.surface === undefined ? undefined : surfaces.get(observation.surface);
-    if (!activity || observation.at < activity.startedAt || observation.standing === "abandoned") continue;
-    const payload = observation.payload;
-    if (isDemonstration(payload) && payload.unaided && activity.stop?.nodes?.includes(payload.node.node))
-      reviewed.add(activity.surface + "/" + payload.node.node);
+  const last = observations.reduce((at, observation) => (observation.at > at ? observation.at : at), "");
+  const { records, current } = homeDefaultRecords(graph, observations, last);
+  for (const record of records) {
+    const activity = record.surface === undefined ? undefined : surfaces.get(record.surface);
+    if (!activity || record.at < activity.startedAt || !isDemonstration(record.payload) || !record.payload.unaided)
+      continue;
+    for (const node of current.get(record.id) ?? [])
+      if (activity.nodes.includes(node)) reviewed.add(activity.surface + "/" + node);
   }
-  const activeMs = reviews.reduce((sum, activity) => sum + activity.activeMs, 0);
-  return reviewed.size && activeMs > 0
-    ? { minutesPerNode: activeMs / 60_000 / reviewed.size, rough: false }
-    : UNMEASURED_REVIEW_TIMING;
+  return reviewed.size ? { minutesPerNode: activeMs / 60_000 / reviewed.size, rough: false } : UNMEASURED_REVIEW_TIMING;
 }
 
-/** Actual demonstration transitions, not attempts or currently-known Nodes. The fold sees the
- * evidence at its recording time, so forgetting after a lesson does not erase the measurement.
+/** Measure demonstrated transitions at recording time. Later forgetting or a change in
+ * Record homes does not erase work the Session did.
  */
 export function measuredLessonTiming(
   graph: ResolvedGraph,
@@ -50,19 +52,32 @@ export function prepareLessonTiming(
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ) {
-  const teaching = activities.filter((activity) => activity.stop?.kind !== "review");
-  const lessonSurfaces = new Map(teaching.map((activity) => [activity.surface, activity]));
+  const teaching = activities.filter((activity) => activity.kind === "lesson");
+  const lessonSurfaces = new Map(
+    teaching.flatMap((activity) =>
+      [activity.surface, ...(activity.relatedSurfaces ?? [])].map((surface) => [surface, activity] as const),
+    ),
+  );
   const demonstrated = new Set<string>();
   function* transitions() {
     const state = initDefaultState(graph);
     let consumed = 0;
     for (const [index, observation] of observations.entries()) {
-      const activity = observation.surface === undefined ? undefined : lessonSurfaces.get(observation.surface);
-      if (activity === undefined || observation.at < activity.startedAt || observation.standing === "abandoned")
-        continue;
+      if (observation.standing === "abandoned") continue;
+      const payload = observation.payload;
+      let activity = observation.surface === undefined ? undefined : lessonSurfaces.get(observation.surface);
+      const homing = isHoming(payload) ? payload : undefined;
+      if (!homing && (!activity || observation.at < activity.startedAt)) continue;
       // Skipped evidence still belongs to the prefix, but never to this activity's denominator.
       if (consumed < index) state.step(observations.slice(consumed, index));
+      consumed = index;
       const before = state.read(observation.at);
+      if (homing) {
+        const record = before.records.find(({ id }) => id === homing.of);
+        activity = record?.surface === undefined ? undefined : lessonSurfaces.get(record.surface);
+        if (!activity || !record || record.at < activity.startedAt) continue;
+      }
+      if (!activity) continue;
       state.step([observation]);
       consumed = index + 1;
       const after = state.read(observation.at);

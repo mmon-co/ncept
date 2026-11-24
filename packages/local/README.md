@@ -17,7 +17,7 @@ await unpackDirectory(tar, "/path/to/moved-profile", [defaultTheory]);
 
 `init` creates an empty personal Patch, empty log and reserved directories in an ordinary project directory. `profile.json` contains `format: 1`, `personal`, `theory` (Core's requirement), `theories` (package names, initially `@mmon-co/ncept-default-theory`) and `sessions` (surface → pi filename). Account credentials live at `credentialsPath()`, outside the Profile, in `~/.config/ncept/credentials.json`.
 
-`openProfile` and `unpack` migrate a stored minor pin (or an exact web-export release) with the supplied executable Theory’s `migrations` before strict resolution. Broad requirements still use strict resolution without migration. Migration writes new immutable Patch revisions and a content-addressed log snapshot, then atomically switches `profile.json`’s personal head, Theory requirement and optional `log` digest together. Interrupted writes leave the old generation active; reopening retries pure steps from that generation. Old revision/log files remain unread history. Host futures are rebuilt from the migrated Profile; captured Session transcripts are not rewritten as futures.
+`openProfile` and `unpack` migrate a stored minor pin (or an exact web-export release) with the supplied executable Theory’s `migrations` before strict resolution. Broad requirements still use strict resolution without migration. Migration writes new immutable Patch revisions and a content-addressed log snapshot, then atomically switches `profile.json`’s personal head, Theory requirement and optional `log` digest together. Interrupted writes leave the old generation active; reopening retries pure steps from that generation. Old revision/log files remain unread history. Opening a Profile also upgrades its host log: Lesson Sessions are entered on their Mission and run entries no longer retain a stop. The read-only Learn panel performs this log upgrade when it first opens an older Profile. Host futures are rebuilt from the migrated Profile; captured Session transcripts are not rewritten as futures.
 
 `openProfile` verifies digests, the personal Patch's complete base closure, log envelopes and the configured Theory range. Its handle appends log identities, adds immutable revisions and blobs, changes the personal head, and registers trusted transcripts. Add attachment bytes before revisions referring to them. A new revision replaces its identity's prior content; its bases are other Patches, not its own history.
 
@@ -31,17 +31,16 @@ Import `@mmon-co/ncept-local/exchange` in Convex actions or browsers; it has no 
 
 `openHost({ profileDir, theories, model, confirm })` runs the selected Theory over the directory. The front end supplies constrained JSON replies for `judge` and `assess` (including decision grading), confirms proposals, and carries out the conversation/carry in a returned mode switch. Native catalog members are mounted by their original names; the web's envelopes remain unchanged. `web` and `bash` are the front end's capabilities, not tools implemented here. `host.hub` connects to the hosted Hub over anonymous HTTP and authenticated MCP.
 
-Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. The default Theory's modes are `empty`, `charting` (entries `goal`, `mission`, `target`, `checkpoint`), `authoring` and `lesson` (entries `lesson`, `review`); the turn's `context` lists each mode's entry kinds and allowed switches. A tool is `{ name, description, schema, run(input) }`:
+Open a Session with `host.sessions.open({ mode, entry })`, then call `.turn(session, {})` for its prompt, context, Skills and bound tools. The default Theory's modes are `empty`, `charting` (entries `goal`, `mission`, `target`, `checkpoint`), `authoring` and `lesson` (entries `mission`, `target`, `review`); the turn's `context` lists each mode's entry kinds and allowed switches. A tool is `{ name, description, schema, run(input) }`:
 
 ```ts
 const session = await host.sessions.open({ mode: "charting", entry: { kind: "goal", text: "Learn addition" } });
 const setup = await host.sessions.turn(session, {});
 const claim = setup.tools.find((tool) => tool.name === "record_claim")!;
 await claim.run({ statement: "I can add one and one", stance: "knows" });
-const next = await host.sessions.settle(session);
 ```
 
-After the whole conversation turn stops and its transcript is saved, call `.settle(session)`. It closes a completed Lesson through the same lifecycle as `.close` and returns a Charting switch for its Mission; an unfinished Lesson stays open. Keep the Session open across all tool batches and the tutor's final reply.
+A Lesson Session entered on a Mission reads the first uncleared numbered Lesson on the Mission's path each turn. When that Lesson clears, the same Session can teach the next one.
 
 After a switch result, call `.open(result.switch)` for `next`/`aside`; for `here`, keep the same Session handle and request a fresh turn. `.close(session)` records its closing transcript through the Theory. Resume a closed Session with `.open({ mode, resume: session.id })`. Session identities, mode, scope, acceptance provenance and learner-day receipts are platform observations in `log.jsonl`, so they travel with the Profile.
 

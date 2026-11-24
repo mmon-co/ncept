@@ -1,6 +1,6 @@
 import type { Program } from "../observations.js";
 import type { NodeId } from "../patch/index.js";
-import type { ChatContext, ChatSetup, LessonSnapshot, MessageDescriptor } from "./theory.js";
+import type { ChatContext, ChatSetup, MessageDescriptor } from "./theory.js";
 
 /** @public Host-owned capability names a theory may mount, not individual tool names. */
 export type HostCapability = "reads" | "materials" | "graph-draft" | "applets" | "web" | "preferences" | "bash";
@@ -20,7 +20,6 @@ export type ModeEntry =
     }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>
-  | Readonly<{ kind: "lesson"; lesson: LessonSnapshot }>
   | Readonly<{ kind: "review"; nodes: readonly NodeId[] }>
   | Readonly<{
       kind: "checkpoint";

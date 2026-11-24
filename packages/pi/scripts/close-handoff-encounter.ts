@@ -86,17 +86,7 @@ const mission: Mission = {
 };
 await host.missions.create(mission);
 const chart = await host.sessions.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
-const entry = {
-  kind: "lesson",
-  lesson: {
-    mission: { id: mission.id, statement: mission.statement },
-    number: 1,
-    of: 1,
-    name: "Add integers",
-    section: { number: 1, milestone: "node-addition", name: "Addition" },
-    nodes: ["node-addition"],
-  },
-};
+const entry = { kind: "mission", id: mission.id };
 const agentDir = join(root, "agent");
 await mkdir(agentDir);
 await writeFile(

@@ -335,8 +335,8 @@ export class Runtime<S> {
     }
     return this.prepare(view.theory.event(event, view), session, view);
   }
-  async context(session: LocalSession): Promise<ChatContext<S>> {
-    const view = await this.snapshot();
+  async context(session: LocalSession, view?: Awaited<ReturnType<Runtime<S>["snapshot"]>>): Promise<ChatContext<S>> {
+    view ??= await this.snapshot();
     return {
       ...view,
       surface: session.surface,

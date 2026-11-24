@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { resolvePatchBundle, type PatchRevision } from "@mmon-co/ncept-core/patch";
-import { readTheoryState, type ChatContext, type LessonSnapshot } from "@mmon-co/ncept-core/theory";
+import { readTheoryState, type ChatContext, type CurrentLesson } from "@mmon-co/ncept-core/theory";
 import { defaultTheory, type DefaultState, type MilestoneDiagnosis } from "@mmon-co/ncept-default-theory";
 
 test("host milestone diagnosis reaches check-in separately from the Lesson recount", () => {
@@ -34,7 +34,7 @@ test("host milestone diagnosis reaches check-in separately from the Lesson recou
   };
   const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
   const now = "2026-10-09T06:00:00.000Z";
-  const lesson: LessonSnapshot = {
+  const lesson: CurrentLesson = {
     mission: { id: "mission-capstone", statement: "Perform the whole task." },
     number: 2,
     of: 2,
@@ -49,7 +49,17 @@ test("host milestone diagnosis reaches check-in separately from the Lesson recou
     surface: "surface-milestone",
     mode: "lesson",
     about: ["node-capstone"],
-    entry: { kind: "lesson", lesson },
+    entry: { kind: "mission", id: lesson.mission.id },
+    lesson: {
+      here: lesson,
+      nodes: [],
+      edges: [],
+      alsoShown: [],
+      doneCount: 0,
+      complete: false,
+      minutesLeft: 0,
+      rough: false,
+    },
   };
   const tool = defaultTheory.modes.lesson.setup(ctx).next();
   if (!tool.done) throw new Error("Lesson setup unexpectedly requested an effect");

@@ -7,7 +7,7 @@ import type {
   ExtensionCommandContext,
   BuildSystemPromptOptions,
 } from "@earendil-works/pi-coding-agent";
-import type { Theory } from "@mmon-co/ncept-core";
+import { lessonHere, type Theory } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import {
   credentialsPath,
@@ -70,7 +70,6 @@ export default function ncept(pi: ExtensionAPI) {
   let active: HostSession | undefined;
   let context: ExtensionContext;
   let mounted: HostChatSetup | undefined;
-  let transition: ModeSwitch | undefined;
   let pendingEnter: ((ctx: ExtensionCommandContext) => Promise<void>) | undefined;
   const ownTools = new Set<string>();
   const graded = new Set<string>();
@@ -299,7 +298,6 @@ export default function ncept(pi: ExtensionAPI) {
         parameters: tool.schema,
         async execute(_id, input, _signal, _onUpdate, toolCtx) {
           context = toolCtx;
-          if (transition) throw new Error("A Session switch is pending.");
           await sync(toolCtx);
           if (!mounted) throw new Error("No active learning mode.");
           const currentTool = mounted.tools.find((candidate) => candidate.name === tool.name);
@@ -561,8 +559,7 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.on("agent_settled", async (_event, ctx) => {
     await sync(ctx);
-    if (!pendingEnter && !transition && active && host) transition = await host.sessions.settle(active);
-    if (pendingEnter || transition) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
+    if (pendingEnter) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
     else if (active) ctx.ui.setStatus("ncept", active.mode);
   });
 
@@ -629,10 +626,6 @@ export default function ncept(pi: ExtensionAPI) {
         await finish(ctx);
         return;
       }
-      if (!transition || transition.then === "here") return;
-      const to = transition;
-      transition = undefined;
-      await enter(ctx, to, "Continue.", await carryFor(ctx, to), to.then === "aside");
     },
   });
   pi.registerCommand("learn", {
@@ -668,21 +661,15 @@ export default function ncept(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const h = await getHost(ctx);
       const current = await session(ctx);
-      if (current.mode !== "lesson" || current.entry?.kind !== "lesson") {
+      const missionId = current.entry?.kind === "mission" ? current.entry.id : undefined;
+      const path = missionId && (await h.missions.list()).find(({ mission }) => mission.id === missionId)?.path;
+      const here = path ? lessonHere(path)?.lesson : undefined;
+      if (current.mode !== "lesson" || !missionId || !path || !here) {
         ctx.ui.notify("Open a Mission Lesson to skip.", "info");
         return;
       }
-      const lesson = current.entry.lesson;
-      const missionId = lesson.mission.id;
-      const reading = (await h.missions.list()).find(({ mission }) => mission.id === missionId);
-      const index =
-        reading?.next.findIndex(
-          (stop) =>
-            stop.kind === "lesson" &&
-            stop.nodes.length === lesson.nodes.length &&
-            stop.nodes.every((node) => lesson.nodes.includes(node)),
-        ) ?? -1;
-      const later = reading?.next.slice(index >= 0 ? index + 1 : 0) ?? [];
+      const stops = path.sections.flatMap(({ lessons }) => lessons);
+      const later = stops.slice(stops.indexOf(here) + 1).filter((stop) => !stop.cleared);
       const options = later.map((stop) => stop.kind + " " + stop.number + " — " + (stop.name ?? stop.nodes.join(", ")));
       const selected = await ctx.ui.select("Skip… Lessons in between are marked probably known.", [
         "Just this lesson",

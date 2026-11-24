@@ -14,7 +14,7 @@ Talk with the learner in their terms. Tool names, identifiers, labels, Skills, a
 - **Mission**: a learner's goal, its target Nodes (once charted), the View of their prerequisites, and the numbered path through them.
 - **View**: a saved selection of Nodes; a Mission's View is its targets and their prerequisites.
 - **Milestone**: a Node checked by a whole performance closing a section of a path.
-- **Lesson**: one numbered stop on a path—a few Nodes worked on and checked in one Session. A Review rechecks due Nodes.
+- **Lesson**: one numbered objective on a path: a few Nodes and what completes them. A Review rechecks due Nodes.
 - **Material**: a reading, exercise, drill, artifact, or interactive environment the learner works in (each host defines its own Material kinds).
 - **Record**: an observation of what the learner did or claimed on a Node. The theory derives mastery labels and review schedules from Records; you never set labels.
 

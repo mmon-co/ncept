@@ -1,7 +1,7 @@
 import { isNodeId, type EdgeId, type NodeId, type ResolvedGraph } from "../patch/index.js";
 import type { ModeEntry, SessionMode } from "./modes.js";
 import type { TheoryMigration } from "./migrations.js";
-import type { MissionRun, MissionRunReading, StopRef } from "../run.js";
+import type { MissionRun, MissionRunReading } from "../run.js";
 import type { LessonReading } from "./path.js";
 import type { JsonSchema, Observation, ObservationId, PlatformEvent, Program, SurfaceId } from "../observations.js";
 
@@ -96,14 +96,12 @@ export interface LessonActivity {
   readonly surface: string;
   readonly activeMs: number;
   readonly startedAt: string;
-  /** Identity captured for this Session, independent of its current place in a Mission. */
-  readonly stop?: StopRef;
+  readonly kind: "lesson" | "review";
+  /** Nodes touched by the Session's Records, including its related Material surfaces. */
+  readonly nodes: readonly NodeId[];
   /** Related Material surfaces owned by the same Session. */
   readonly relatedSurfaces?: readonly string[];
 }
-
-/** Measurement before the host has assembled its complete related membership. */
-export type LessonActivityHeader = Omit<LessonActivity, "relatedSurfaces">;
 
 export type NodeProgress = Readonly<{
   status: "done" | "tentative" | "open";
@@ -148,8 +146,8 @@ export type MissionFuture = MissionPath &
     future: readonly Lesson[];
   }>;
 
-/** Identity and full checklist captured when a lesson Session opens, not its growing attachment. */
-export type LessonSnapshot = Readonly<{
+/** The current Lesson's identity and checklist, read afresh each turn. */
+export type CurrentLesson = Readonly<{
   mission: Readonly<{ id: string; statement: string; shortName?: string }>;
   number: number;
   of: number;
@@ -171,7 +169,7 @@ export type LessonNodeReading = Readonly<{
 }>;
 /** A current reading shared by the learner's checklist and the tutor's turn context. */
 export type LessonProgress = Readonly<{
-  lesson: LessonSnapshot;
+  here: CurrentLesson;
   nodes: readonly LessonNodeReading[];
   edges: readonly Readonly<{ from: NodeId; to: NodeId }>[];
   alsoShown: readonly LessonNodeReading[];
@@ -218,7 +216,7 @@ export type ChatContext<S> = Context<S> &
     lessonActivities?: readonly LessonActivity[];
     /** Host budget for computed futures; absent means the host imposes no bound. */
     sessionMinutes?: number;
-    /** The fixed Lesson's current checklist, from the host's same reading as the header. */
+    /** The current Lesson and checklist, from the same reading as the header. */
     lesson?: LessonProgress;
     openSurfaces?: readonly { readonly surface: SurfaceId; readonly about: readonly NodeId[] }[];
   }>;

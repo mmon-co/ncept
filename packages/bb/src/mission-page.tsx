@@ -91,9 +91,8 @@ export function MissionPage({
   const data = reading.data;
   if (!data) return <p role={reading.error ? "alert" : undefined}>{reading.error?.message ?? "Loading Mission…"}</p>;
   const stops = data.sections.flatMap((section) => section.lessons);
-  const activeIndex = stops.findIndex((stop) => stop.active);
-  const currentIndex = activeIndex >= 0 ? activeIndex : stops.findIndex((stop) => !stop.cleared);
-  const later = currentIndex < 0 ? [] : stops.slice(currentIndex + 1);
+  const here = stops.findIndex((stop) => stop.numbered && !stop.checkpoint && !stop.cleared);
+  const later = stops.filter((stop, index) => here >= 0 && index > here && !stop.cleared);
   const currentSection =
     data.sections.find((section) => section.lessons.some((stop) => stop.active)) ??
     data.sections.find((section) => section.lessons.some((stop) => !stop.cleared));

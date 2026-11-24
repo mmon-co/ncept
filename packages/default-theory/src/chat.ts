@@ -188,16 +188,15 @@ function scopedMemory(ctx: ChatContext<DefaultState>): string {
 
 function tutorOpening(ctx: ChatContext<DefaultState>): string | undefined {
   if (!ctx.opening) return undefined;
-  const entry = ctx.entry;
-  const nodes = entry?.kind === "lesson" ? entry.lesson.nodes : [];
+  const here = ctx.lesson?.here;
+  const nodes = here?.nodes ?? [];
   const lesson =
-    entry?.kind === "lesson"
-      ? lessonOpening(
-          ctx.graph,
-          nodes,
-          ctx.missions?.find(({ id }) => id === entry.lesson.mission.id),
-        )
-      : undefined;
+    here &&
+    lessonOpening(
+      ctx.graph,
+      nodes,
+      ctx.missions?.find(({ id }) => id === here.mission.id),
+    );
   return [
     "Initial tutor-led turn (host context, not learner speech). " +
       (lesson?.instruction ?? "Begin this Session in its selected mode."),
@@ -224,6 +223,7 @@ function* setup(
 ): Program<ChatSetup<DefaultState>> {
   for (const node of ctx.about)
     if (!ctx.graph.nodes.some(({ id }) => id === node)) throw new Error(`Missing Node ${node}`);
+  const { here, ...progress } = ctx.lesson ?? {};
   const prompt = tutorSystemPrompt(mode);
   const { documents, candidates } = documentListing(ctx);
   const offered = linkedDocuments(ctx, documents, ctx.tutorMessages ?? []);
@@ -256,12 +256,13 @@ function* setup(
             })}`,
           ]
         : []),
-      ...(ctx.lesson === undefined
+      ...(here === undefined
         ? []
         : [
-            `Current Lesson progress (fixed checklist; current theory reading):\n${JSON.stringify({
-              ...ctx.lesson,
-              completion: ctx.lesson.lesson.nodes.map((node) => ({
+            `Current Lesson progress (current theory reading):\n${JSON.stringify({
+              lesson: here,
+              ...progress,
+              completion: here.nodes.map((node) => ({
                 node,
                 query: ctx.state.nodes[node]?.completion.query ?? "no completion set",
                 counts: ctx.state.nodes[node]?.completion.counts ?? [],
@@ -333,7 +334,7 @@ export const modes = {
   lesson: {
     title: CATALOG_MODE_TITLES.lesson,
     frontTab: "document",
-    entry: { required: true, kinds: ["lesson", "review"] },
+    entry: { required: true, kinds: ["mission", "target", "review"] },
     capabilities: catalogCapabilities("lesson"),
     metadataKeys: CATALOG_MODE_METADATA_KEYS.lesson,
     switches: [

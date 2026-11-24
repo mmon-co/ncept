@@ -92,7 +92,7 @@ export default function encounter(pi: ExtensionAPI) {
         input: {
           mode: "lesson",
           then: "next",
-          entry: { kind: "lesson", opening: { missionId: "count-liberties", number: 1 } },
+          entry: { kind: "mission", id: "count-liberties" },
         },
       });
     else if (!replied && last.includes("Open an aside"))

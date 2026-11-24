@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import {
   resolvePatchBundle,
   readMissionPath,
+  lessonHere,
   setActive,
   sessionNumber,
-  stopRef,
   type MissionRun,
   type Theory,
 } from "../../src";
@@ -71,15 +71,12 @@ test("Theory-named numbered and unnumbered stops retain identity through public 
   ]);
   expect(reading.lessonCount).toBe(2);
   expect(stops.every(({ cleared }) => !cleared)).toBe(true);
+  expect(lessonHere(reading)?.lesson).toBe(stops[1]);
   let run: MissionRun = { mission: "goals", active: null, past: [] };
   const at = "2026-11-06T00:00:00.000Z";
-  const nextGoal = stops[3];
-  const reflection = stops[2];
-  if (!nextGoal || !reflection) throw new Error("Goal tracker stops missing");
-  // Open future stop 2 first: Session numbering must not borrow that address.
-  run = setActive(run, { kind: "new", session: "goal-session", stop: stopRef(nextGoal, "Next goal") }, at, []).run;
+  run = setActive(run, { kind: "attach", session: "goal-session" }, at, []).run;
   expect(sessionNumber(run, "goal-session")).toBe("1");
-  run = setActive(run, { kind: "new", session: "reflection", stop: stopRef(reflection, "Reflect") }, at, []).run;
+  run = setActive(run, { kind: "attach", session: "reflection" }, at, []).run;
   expect(sessionNumber(run, "reflection")).toBe("2");
   run = setActive(run, { kind: "attach", session: "notes" }, at, []).run;
   expect(sessionNumber(run, "notes")).toBe("3");
@@ -90,9 +87,8 @@ test("Theory-named numbered and unnumbered stops retain identity through public 
       kind: "session",
       session: "goal-session",
       at,
-      stop: { kind: "check-in", name: "Next goal", nodes: ["node-goal"] },
     },
-    { kind: "session", session: "reflection", at, stop: { kind: "check-in", name: "Reflect", nodes: ["node-goal"] } },
+    { kind: "session", session: "reflection", at },
     { kind: "session", session: "notes", at },
   ]);
 });

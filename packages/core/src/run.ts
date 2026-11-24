@@ -4,22 +4,13 @@ import { isObservationTimestamp } from "./observations.js";
 /** Application-owned Session identity, opaque to Core. */
 export type SessionRef = string;
 
-/** A captured stop, independent of its changing position in the future path. */
-export type StopRef = Readonly<{
-  kind: string;
-  name: string;
-  /** Historical checkpoints need not carry Nodes; future stops always do. */
-  nodes?: readonly NodeId[];
-  tag?: string;
-  milestone?: NodeId;
-}>;
 /** Exact releases and result forms, not a Notebook acceptance or a fabricated Session. */
 export type TheoryUpdate = Readonly<{
   before: Readonly<{ theory: string; version: string; form: "legacy-choice" | "ordered-plan" }>;
   after: Readonly<{ theory: string; version: string; form: "legacy-choice" | "ordered-plan" }>;
 }>;
 export type PastEntry = Readonly<
-  | { kind: "session"; session: SessionRef; parent?: SessionRef; stop?: StopRef; at: string }
+  | { kind: "session"; session: SessionRef; parent?: SessionRef; at: string }
   | { kind: "ghost"; session?: SessionRef; act: number; nodes: readonly NodeId[]; at: string }
   | { kind: "theory-updated"; update: TheoryUpdate; at: string }
   | { kind: "plan-changed"; act: number; at: string }
@@ -31,25 +22,10 @@ function runObject(value: unknown): value is Record<string, unknown> {
 function sessionRef(value: unknown): value is SessionRef {
   return typeof value === "string" && value.length > 0;
 }
-export function isStopRef(value: unknown): value is StopRef {
-  return (
-    runObject(value) &&
-    typeof value.kind === "string" &&
-    value.kind.length > 0 &&
-    typeof value.name === "string" &&
-    (value.nodes === undefined || (Array.isArray(value.nodes) && value.nodes.every(isNodeId))) &&
-    (value.tag === undefined || typeof value.tag === "string") &&
-    (value.milestone === undefined || isNodeId(value.milestone))
-  );
-}
 export function isPastEntry(value: unknown): value is PastEntry {
   if (!runObject(value) || !isObservationTimestamp(value.at)) return false;
   if (value.kind === "session")
-    return (
-      sessionRef(value.session) &&
-      (value.parent === undefined || sessionRef(value.parent)) &&
-      (value.stop === undefined || isStopRef(value.stop))
-    );
+    return sessionRef(value.session) && (value.parent === undefined || sessionRef(value.parent));
   if (value.kind === "theory-updated" || (value.kind === "plan-changed" && value.update !== undefined)) {
     const release = (fact: unknown) =>
       runObject(fact) &&
@@ -78,7 +54,6 @@ export type MissionRun = Readonly<{
 /** Lifecycle facts for this Mission's Sessions, supplied by the Application, not stored in the run. */
 export type RunSession = Readonly<{ ref: SessionRef; parent?: SessionRef; open: boolean }>;
 export type SetActiveTarget = Readonly<
-  | { kind: "new"; session: SessionRef; stop: StopRef }
   | { kind: "attach"; session: SessionRef }
   | { kind: "resume"; session: SessionRef }
   | { kind: "aside"; session: SessionRef }
@@ -122,7 +97,6 @@ export function setActive(
             kind: "session" as const,
             session: target.session,
             ...(target.kind === "aside" && run.active !== null ? { parent: run.active } : {}),
-            ...(target.kind === "new" ? { stop: target.stop } : {}),
             at,
           },
         ];

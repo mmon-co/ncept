@@ -94,8 +94,6 @@ export interface Host {
     open(input: SessionOpening): Promise<HostSession>;
     begin(intent: SessionIntent): Promise<HostSession>;
     turn(session: HostSession, input: Readonly<{ learnerMessage?: string }>): Promise<HostChatSetup>;
-    /** After the conversation stops, end a completed Lesson and return its next surface. */
-    settle(session: HostSession): Promise<ModeSwitch | undefined>;
     /** End admission immediately, leaving Theory judgments pending. */
     end(session: HostSession): Promise<void>;
     /** Finish pending Theory closes without holding up other Session operations. */

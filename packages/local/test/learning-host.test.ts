@@ -72,17 +72,7 @@ test("a goal switches to a Lesson, records a demonstration, and the next Session
     input: {
       mode: "lesson",
       then: "next",
-      entry: {
-        kind: "lesson",
-        lesson: {
-          mission: { id: mission.id, statement: mission.statement },
-          number: 1,
-          of: 1,
-          name: "Add integers",
-          section: { number: 1, milestone: "node-addition", name: "Addition" },
-          nodes: ["node-addition"],
-        },
-      },
+      entry: { kind: "mission", id: mission.id },
     },
   });
   if (!switched.switch) throw new Error("No mode switch");

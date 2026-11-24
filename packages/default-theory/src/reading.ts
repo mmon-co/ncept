@@ -85,7 +85,7 @@ export function prepareEstimateDefault(context: EstimateContext): (lessons: read
     const reviews = lessons.filter(({ kind }) => kind === "review").reduce((sum, { nodes }) => sum + nodes.length, 0);
     teachingTiming ??= prepareLessonTiming(context.graph, context.observations, context.activities);
     if (open > 0) timing ??= teachingTiming.measure();
-    if (reviews > 0) reviewTiming ??= measuredReviewTiming(context.observations, context.activities);
+    if (reviews > 0) reviewTiming ??= measuredReviewTiming(context.graph, context.observations, context.activities);
     return {
       minutes: open * (timing?.minutesPerNode ?? 0) + reviews * (reviewTiming?.minutesPerNode ?? 0),
       rough: (timing?.rough ?? teachingTiming.rough()) || (reviews > 0 && (reviewTiming?.rough ?? false)),

@@ -14,8 +14,8 @@ import {
   openProfile,
   type HubBrowserSignIn,
 } from "@mmon-co/ncept-local";
-import { isMissionRevision, isRunActiveChange } from "@mmon-co/ncept-core";
-import { defaultTheory } from "@mmon-co/ncept-default-theory";
+import { isMissionRevision, isRunActiveChange, lessonHere, type NodeId } from "@mmon-co/ncept-core";
+import { defaultTheory, homeDefaultRecords } from "@mmon-co/ncept-default-theory";
 import { handoffSchema, hostContract } from "./contract";
 import { settleGraph } from "./graph-positions";
 
@@ -139,14 +139,38 @@ export default experimental_defineHostEntry({
       const item = reading.missions.find(({ mission }) => mission.id === missionId);
       if (!item) throw new Error("Unknown Mission");
       const label = (id: string) => reading.nodes.find((node) => node.id === id)?.label ?? id;
-      const active = item.run.past.find((entry) => entry.kind === "session" && entry.session === item.run.active);
-      const frozen = active?.kind === "session" ? active.stop : undefined;
+      const active = reading.sessions.find((session) => session.id === item.run.active);
+      const here = item.path && lessonHere(item.path)?.lesson;
+      const canReviseLesson = Boolean(here && active?.mode === "lesson" && active.entry?.kind === "mission");
+      const lessons = (item.path?.sections ?? []).flatMap(({ lessons }) =>
+        lessons.filter((stop) => stop.numbered && !stop.checkpoint),
+      );
+      const { records, current } = homeDefaultRecords(reading.graph, reading.observations, reading.now);
+      const recordNodes = new Map<string, Set<NodeId>>();
+      for (const { id, surface } of records) {
+        const homes = current.get(id);
+        if (!surface || !homes?.size) continue;
+        const nodes = recordNodes.get(surface) ?? new Set<NodeId>();
+        for (const node of homes) nodes.add(node);
+        recordNodes.set(surface, nodes);
+      }
+      const sessions = new Map(reading.sessions.map((session) => [session.id, session]));
+      const sessionLabel = (id: string) => {
+        const session = sessions.get(id);
+        const nodes = session && recordNodes.get(session.surface);
+        const names = nodes
+          ? lessons
+              .filter((stop) => stop.nodes.some((node) => nodes.has(node)))
+              .map((stop) => `Lesson ${stop.number}: ${stop.name ?? stop.nodes.map(label).join(" · ")}`)
+          : [];
+        return names.length ? names.join("; ") : (session?.title ?? id);
+      };
       return {
         id: item.mission.id,
         statement: item.mission.statement,
         active: item.run.active,
         retired: Boolean(item.run.retired),
-        canReviseLesson: reading.sessions.find((session) => session.id === item.run.active)?.entry?.kind === "lesson",
+        canReviseLesson,
         next: item.next[0]?.name ?? null,
         asides: [...item.run.asides],
         sections: (item.path?.sections ?? []).map((section) => ({
@@ -166,15 +190,7 @@ export default experimental_defineHostEntry({
               stop.nodes.some((id) => reading.nodes.find((node) => node.id === id)?.status === "tentative"),
             minutes: stop.minutes,
             checkpoint: Boolean(stop.checkpoint),
-            active: Boolean(
-              frozen &&
-              (frozen.kind === "checkpoint"
-                ? stop.checkpoint && stop.checkpoint.milestone === frozen.milestone
-                : stop.kind === frozen.kind &&
-                  frozen.nodes &&
-                  stop.nodes.length === frozen.nodes.length &&
-                  stop.nodes.every((id) => frozen.nodes?.includes(id))),
-            ),
+            active: canReviseLesson && stop === here,
           })),
         })),
         history: item.run.past.map((entry) => ({
@@ -184,9 +200,7 @@ export default experimental_defineHostEntry({
           ...("parent" in entry ? { parent: entry.parent } : {}),
           label:
             entry.kind === "session"
-              ? (reading.sessions.find((session) => session.id === entry.session)?.title ??
-                entry.stop?.name ??
-                entry.session)
+              ? sessionLabel(entry.session)
               : entry.kind === "ghost"
                 ? "Probably known · " + entry.nodes.map(label).join(", ")
                 : entry.kind === "theory-updated"

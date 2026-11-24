@@ -2,6 +2,8 @@ import {
   attachmentDigest,
   resolveNotebookRevision,
   isContentDigest,
+  isMissionRevision,
+  isNodeId,
   isPatchId,
   isProfileLogEntry,
   mergeProfileLogs,
@@ -104,21 +106,30 @@ function patchContent(value: unknown): value is PatchContent {
     Array.isArray(value.metadata.citations)
   );
 }
-export function parseLog(bytes: Uint8Array | undefined): readonly ProfileLogEntry[] {
+function decodeLog(bytes: Uint8Array | undefined): readonly unknown[] {
   if (!bytes) throw new Error("Missing Profile file: log.jsonl");
   const lines = decoder.decode(bytes).split("\n");
   if (lines.at(-1) === "") lines.pop();
-  const entries = lines.map((line, index) => {
-    let value: unknown;
+  return lines.map((line, index) => {
     try {
-      value = JSON.parse(line);
+      const value: unknown = JSON.parse(line);
+      return value;
     } catch {
       throw new Error("Malformed Profile log JSON at line " + (index + 1));
     }
-    if (!isProfileLogEntry(value)) throw new Error("Invalid Profile log entry at line " + (index + 1));
-    return value;
   });
-  return mergeProfileLogs([], entries);
+}
+function checkedLog(entries: readonly unknown[]): readonly ProfileLogEntry[] {
+  return mergeProfileLogs(
+    [],
+    entries.map((value, index) => {
+      if (!isProfileLogEntry(value)) throw new Error("Invalid Profile log entry at line " + (index + 1));
+      return value;
+    }),
+  );
+}
+export function parseLog(bytes: Uint8Array | undefined): readonly ProfileLogEntry[] {
+  return checkedLog(decodeLog(bytes));
 }
 export function logBytes(entries: readonly ProfileLogEntry[]): Uint8Array {
   const merged = mergeProfileLogs([], entries);
@@ -179,11 +190,57 @@ function validateStructure(files: ProfileFiles): ValidatedProfile {
     throw new Error("Profile log digest mismatch");
   return { manifest, patches, log: parseLog(log), blobs, sessions };
 }
+/** Rewrite host-owned state before validating the log in its current shape. */
+export function migrateLessonLog(files: ProfileFiles): ProfileFiles {
+  const manifest = parseManifest(files.get("profile.json"));
+  const path = liveLogPath(manifest);
+  const bytes = files.get(path);
+  if (manifest.log !== undefined && (!bytes || attachmentDigest(bytes) !== manifest.log))
+    throw new Error("Profile log digest mismatch");
+  const entries = decodeLog(bytes);
+  const missions = new Set(entries.filter(isMissionRevision).map(({ mission }) => mission.id));
+  const nextEntries = entries.map((value) => {
+    if (!object(value)) return value;
+    if (value.kind === "run.past" && object(value.entry) && value.entry.kind === "session" && "stop" in value.entry) {
+      const { stop: _stop, ...entry } = value.entry;
+      return { ...value, entry };
+    }
+    const payload = value.payload;
+    if (value.by !== "platform" || !object(payload) || payload.kind !== "local.session" || !object(payload.session))
+      return value;
+    const { entry, mission: _mission, ...session } = payload.session;
+    if (!object(entry) || entry.kind !== "lesson" || !object(entry.lesson)) return value;
+    const lesson = entry.lesson;
+    const mission = object(lesson.mission) ? lesson.mission.id : undefined;
+    const node = Array.isArray(lesson.nodes) ? lesson.nodes.find(isNodeId) : undefined;
+    if (typeof mission === "string" && missions.has(mission)) {
+      return {
+        ...value,
+        payload: { ...payload, session: { ...session, mission, entry: { kind: "mission", id: mission } } },
+      };
+    }
+    if (!node) throw new Error("A detached Lesson needs a target Node");
+    return {
+      ...value,
+      payload: { ...payload, session: { ...session, about: [node], entry: { kind: "target", node } } },
+    };
+  });
+  if (nextEntries.every((entry, index) => entry === entries[index])) return files;
+  const next = new Map(files);
+  const log = logBytes(checkedLog(nextEntries));
+  const updated = { ...manifest, log: attachmentDigest(log) };
+  next.delete(path);
+  next.set(liveLogPath(updated), log);
+  next.set("profile.json", jsonBytes(updated));
+  return next;
+}
+
 /** Migrate structurally valid live data before ordinary strict Theory resolution. */
 export function migrateProfileFiles(
   files: ProfileFiles,
   theories: readonly ConfiguredTheory[],
 ): Map<string, Uint8Array> {
+  files = migrateLessonLog(files);
   const current = validateStructure(files);
   const matches = theories.filter((theory) => theory.id === current.manifest.theory.theory);
   const theory = matches[0];

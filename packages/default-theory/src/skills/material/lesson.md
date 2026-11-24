@@ -1,10 +1,10 @@
 # lesson
 
-The host tells you when the Lesson reads complete. Recount what the learner did and end the Session when it makes sense to stop; keep going if they're mid-question or the attempt was shaky. Weigh active minutes against their Session length and conversation size.
+When a short Lesson clears and there is time and attention left, carry on into the next Lesson. When it makes sense to stop, recount what the learner did and end the Session even if its Lesson is unfinished.
 
-1. **Read the Lesson:** its focus Nodes (`mission` path), their criteria, guidance, memory, trail, and existing Materials (`items`). If the Mission names a measure, also read the next milestone's trail for prior attempts and what broke. If an adopted Patch's Materials are already open, wait for the learner.
+1. **Read the Lesson:** the current Lesson in context, its focus Nodes, their criteria, guidance, memory, trail, and existing Materials (`items`). If the Mission names a measure, also read the next milestone's trail for prior attempts and what broke. If an adopted Patch's Materials are already open, wait for the learner.
 
-2. **First turn: open the work the focus Nodes' guidance names, set completion, and bridge from prior work:**
+2. **When starting a Lesson, open the work the focus Nodes' guidance names, set completion, and bridge from prior work:**
    - **Retrieval opener:** when the focus Nodes have prior prerequisites with Records (and no authored first action or conjectured-measure opener supersedes it), open with a quick retrieval prompt on a prerequisite or recent Node instead of a recap, recording the learner's attempt via `retrieval-opener`.
    - **Memory work:** add the cards in one step, open them, and set each Node's `pedagogy:completion` query to its card recalls.
    - **Real-world step:** open a brief Material covering what to do, what it serves (its dependents), what done looks like, and any useful prep (drafting, rehearsing a conversation). Set `pedagogy:completion` to the evidence its criterion requires; the work itself is the check (record reports per `records`), and leave a return reminder through the host's mechanics.

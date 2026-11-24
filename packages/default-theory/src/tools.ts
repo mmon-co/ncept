@@ -269,7 +269,7 @@ function retractionCandidates(ctx: Ctx, observations: readonly Observation[]) {
     }));
 }
 function lessonCompletion(ctx: Ctx) {
-  const lesson = ctx.lesson?.lesson ?? (ctx.entry?.kind === "lesson" ? ctx.entry.lesson : undefined);
+  const lesson = ctx.lesson?.here;
   if (ctx.mode !== "lesson" || lesson === undefined) return undefined;
   const nodes = lesson.nodes.map((node) => {
     const completion = ctx.state.nodes[node]?.completion;
@@ -624,7 +624,7 @@ const recordDemonstration = {
     const observation = { at: ctx.now, about: [...ctx.about], nodes: [node], surface: ctx.surface, payload };
     const id = yield* write(observation);
     const lesson =
-      ctx.mode === "lesson" && (ctx.lesson !== undefined || ctx.entry?.kind === "lesson")
+      ctx.mode === "lesson" && ctx.lesson !== undefined
         ? lessonCompletion({ ...ctx, state: stateDefault(ctx.graph, yield* read.observations({}), ctx.now) })
         : undefined;
     return { observation: { ...observation, id }, citations: [id], ...(lesson === undefined ? {} : { lesson }) };

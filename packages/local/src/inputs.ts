@@ -201,6 +201,8 @@ export function strings(value: unknown): readonly string[] {
     throw new Error("Expected strings");
   return value;
 }
+export const ENTRY_KINDS = ["goal", "mission", "target", "review", "checkpoint"] satisfies readonly ModeEntry["kind"][];
+
 export function modeEntry(value: unknown): ModeEntry {
   const input = record(value);
   switch (input.kind) {
@@ -245,39 +247,6 @@ export function modeEntry(value: unknown): ModeEntry {
       return { kind: "target", node: input.node };
     case "review":
       return { kind: "review", nodes: nodeIds(input.nodes) };
-    case "lesson": {
-      const lesson = record(input.lesson);
-      const mission = record(lesson.mission);
-      const section = record(lesson.section);
-      if (
-        !nonempty(mission.id) ||
-        !nonempty(mission.statement) ||
-        !nonempty(lesson.name) ||
-        typeof lesson.number !== "number" ||
-        !Number.isSafeInteger(lesson.number) ||
-        typeof lesson.of !== "number" ||
-        !Number.isSafeInteger(lesson.of) ||
-        typeof section.number !== "number" ||
-        !isNodeId(section.milestone) ||
-        !nonempty(section.name)
-      )
-        throw new Error("Invalid Lesson snapshot");
-      return {
-        kind: "lesson",
-        lesson: {
-          mission: {
-            id: mission.id,
-            statement: mission.statement,
-            ...(typeof mission.shortName === "string" ? { shortName: mission.shortName } : {}),
-          },
-          number: lesson.number,
-          of: lesson.of,
-          name: lesson.name,
-          nodes: nodeIds(lesson.nodes),
-          section: { number: section.number, milestone: section.milestone, name: section.name },
-        },
-      };
-    }
     case "checkpoint":
       if (!nonempty(input.missionId) || (input.milestone !== undefined && !isNodeId(input.milestone)))
         throw new Error("Invalid checkpoint entry");

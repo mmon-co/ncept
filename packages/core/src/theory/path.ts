@@ -1,18 +1,5 @@
 import type { Lesson, MissionPath, Theory, EstimateContext } from "./theory.js";
 import type { NodeId } from "../patch/index.js";
-import type { StopRef } from "../run.js";
-
-/** Freeze identity facts, not the stop's changing future position or numbering. */
-export function stopRef(stop: Lesson, name: string): StopRef {
-  return {
-    kind: stop.kind,
-    name,
-    nodes: [...stop.nodes],
-    ...(stop.tag === undefined ? {} : { tag: stop.tag }),
-    ...(stop.milestone === undefined ? {} : { milestone: stop.milestone }),
-  };
-}
-
 /** Number is a future address, independent of Session attachment order. */
 export type LessonReading = Lesson & Readonly<{ number: number; cleared: boolean; minutes?: number }>;
 export type MissionPathReading = Readonly<{
@@ -31,6 +18,17 @@ export type MissionPathReading = Readonly<{
 }>;
 /** Numbering is a Theory-declared fact, never inferred from a kind name. */
 export const isNumberedStop = (stop: Pick<Lesson, "numbered">) => stop.numbered;
+
+/** "Here": the first numbered Lesson on the path with an open Node, read afresh each turn.
+ * A chat Session on a Mission works here; the stops after it are what comes next. */
+export function lessonHere(
+  reading: MissionPathReading,
+): { lesson: LessonReading; section: MissionPathReading["sections"][number] } | undefined {
+  for (const section of reading.sections)
+    for (const lesson of section.lessons)
+      if (isNumberedStop(lesson) && !lesson.checkpoint && !lesson.cleared) return { lesson, section };
+  return undefined;
+}
 export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate" | "prepareEstimate">;
 
 /** Keep each scope independent, including for custom theories without preparation. */

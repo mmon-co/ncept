@@ -28,7 +28,7 @@ import type { LearningHost } from "./learning.js";
 import { localPayload, platform, sessionStates, transcript, type LocalSession } from "./runtime.js";
 import { mechanics } from "./mechanics.js";
 import { object } from "./sessions.js";
-import { citations, exactRef, metadataProperties, modeEntry, operations, strings } from "./inputs.js";
+import { citations, ENTRY_KINDS, exactRef, metadataProperties, modeEntry, operations, strings } from "./inputs.js";
 
 function args(value: unknown): Record<string, unknown> {
   if (!object(value)) throw new Error("Expected an object");
@@ -324,15 +324,13 @@ export function hostTools<S>(
             entry: {
               type: "object",
               properties: {
-                kind: { enum: ["goal", "mission", "target", "review", "lesson", "checkpoint"] },
+                kind: { enum: ENTRY_KINDS },
                 text: string,
                 id: string,
                 node: string,
                 nodes: nodeList,
-                opening: schema({ missionId: string, number: { type: "integer", minimum: 1 } }, ["missionId"]),
               },
-              description:
-                "For a Lesson use {kind:'lesson',opening:{missionId,number}}; omit number for the next uncleared Lesson. The host resolves the complete snapshot.",
+              description: "For the current Lesson on a Mission, use {kind:'mission',id}.",
             },
             ...graphProperties,
             text: string,
@@ -355,13 +353,7 @@ export function hostTools<S>(
         );
         if (!allowed)
           throw new Error("Mode switch is not allowed. Allowed: " + JSON.stringify(selected?.switches ?? []));
-        let entry;
-        if (object(input.entry) && input.entry.kind === "lesson" && object(input.entry.opening)) {
-          const { missionId, number } = input.entry.opening;
-          if (number !== undefined && (typeof number !== "number" || !Number.isSafeInteger(number)))
-            throw new Error("Lesson number must be an integer");
-          entry = await host.lessonEntry(text(missionId, "Mission id"), number);
-        } else entry = input.entry === undefined ? undefined : modeEntry(input.entry);
+        const entry = input.entry === undefined ? undefined : modeEntry(input.entry);
         const to: ModeSwitch = { ...allowed, ...(entry === undefined ? {} : { entry }) };
         await host.switchMode(session, to);
         return { content: { status: "switching" }, switch: to };

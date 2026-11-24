@@ -4,6 +4,7 @@ import {
   isRunActiveChange,
   isRunPastEntry,
   isRunRetirement,
+  lessonHere,
   nodeCascadedProperty,
   readMissionPath,
   readMissionRun,
@@ -54,14 +55,13 @@ import {
 import { hostTools } from "./host-tools.js";
 import { mechanics } from "./mechanics.js";
 import type { ValidatedProfile } from "./exchange.js";
-import { isSurface, modeEntry } from "./inputs.js";
+import { ENTRY_KINDS, isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
 import { reviewStop, sessionLength } from "./session-policy.js";
 
-function readMissions<S>(
-  view: Awaited<ReturnType<Runtime<S>["snapshot"]>>,
-  complete = false,
-): readonly MissionReading[] {
+type LearningView<S> = Awaited<ReturnType<Runtime<S>["snapshot"]>>;
+
+function readMissions<S>(view: LearningView<S>, complete = false): readonly MissionReading[] {
   const projection = view.theory.project(view.graph, view.state);
   const sessions = runs(sessionStates(view.profile));
   return missions(view.profile).map((mission) => {
@@ -102,7 +102,7 @@ function readMissions<S>(
   });
 }
 
-/** Read current learning state without day processing, receipts, configuration writes or model calls. */
+/** Read current learning state without day processing, receipts or model calls. */
 export async function openLearningReader<S>(profileDir: string, theories: readonly Theory<S>[]) {
   const profile = await openProfile(profileDir, theories, { readOnly: true });
   const settings = localSettings(await profile.read());
@@ -131,6 +131,9 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
       const frontier = tagged("frontier");
       const label = (id: NodeId) => stringProperty(view.graph, id, "display:label", id);
       return {
+        graph: view.graph,
+        observations: view.observations,
+        now: view.now,
         missions: readMissions(view, true),
         nodes: view.graph.nodes.map(({ id }) => ({
           id,
@@ -151,6 +154,40 @@ export async function openLearningReader<S>(profileDir: string, theories: readon
   };
 }
 
+function lessonAtEntry<S>(
+  session: LocalSession,
+  graph: LearningView<S>["graph"],
+  readings: readonly MissionReading[],
+): LessonProgress["here"] | undefined {
+  const entry = session.entry;
+  const label = (id: NodeId) => stringProperty(graph, id, "display:label", id);
+  if (entry?.kind === "target") {
+    const name = label(entry.node);
+    return {
+      mission: { id: entry.node, statement: name },
+      number: 1,
+      of: 1,
+      name,
+      section: { number: 1, milestone: entry.node, name },
+      nodes: [entry.node],
+    };
+  }
+  if (entry?.kind !== "mission") return;
+  const reading = readings.find(({ mission }) => mission.id === entry.id);
+  if (!reading?.path) return;
+  const here = lessonHere(reading.path);
+  if (!here) return;
+  const { lesson, section } = here;
+  return {
+    mission: { id: reading.mission.id, statement: reading.mission.statement },
+    number: lesson.number,
+    of: reading.path.lessonCount,
+    name: lesson.name ?? lesson.nodes.map(label).join(", "),
+    section: { number: section.number, milestone: section.milestone, name: label(section.milestone) },
+    nodes: lesson.nodes,
+  };
+}
+
 function sessionTitle(session: LocalSession, profile: ValidatedProfile, label: (id: NodeId) => string): string {
   const entry = session.entry;
   const mode = session.mode.charAt(0).toUpperCase() + session.mode.slice(1);
@@ -158,15 +195,13 @@ function sessionTitle(session: LocalSession, profile: ValidatedProfile, label: (
   if (entry?.kind === "review") title = "Review · " + entry.nodes.length + " due";
   else {
     const name =
-      entry?.kind === "lesson"
-        ? entry.lesson.name
-        : entry?.kind === "mission"
-          ? missions(profile).find((mission) => mission.id === entry.id)?.statement
-          : entry?.kind === "target"
-            ? label(entry.node)
-            : entry?.kind === "goal"
-              ? entry.text
-              : undefined;
+      entry?.kind === "mission"
+        ? missions(profile).find((mission) => mission.id === entry.id)?.statement
+        : entry?.kind === "target"
+          ? label(entry.node)
+          : entry?.kind === "goal"
+            ? entry.text
+            : undefined;
     if (name) title += " · " + name;
   }
   return title.slice(0, 200);
@@ -288,54 +323,10 @@ export class LearningHost<S> {
   async missionReadings(): Promise<readonly MissionReading[]> {
     return readMissions(await this.runtime.snapshot());
   }
-  async lessonEntry(missionId: string, number?: number): Promise<ModeEntry> {
-    const view = await this.runtime.snapshot();
-    const reading = (await this.missionReadings()).find(({ mission }) => mission.id === missionId);
-    if (!reading) throw new Error("Unknown Mission");
-    const context = {
-      graph: view.graph,
-      projection: view.theory.project(view.graph, view.state),
-      observations: view.observations,
-      activities: [],
-    };
-    const future = view.theory.path?.({
-      ...context,
-      targets: reading.mission.targets.map(({ node }) => node),
-      past: reading.run.past,
-      now: view.now,
-      minutes: sessionLength(localSettings(view.profile)),
-    });
-    if (!future) throw new Error("Theory provides no Mission path");
-    const path = readMissionPath(future, view.theory, context);
-    const section = path.sections.find(({ lessons }) =>
-      lessons.some(
-        (lesson) => lesson.kind === "lesson" && (number === undefined ? !lesson.cleared : lesson.number === number),
-      ),
-    );
-    const lesson = section?.lessons.find(
-      (lesson) => lesson.kind === "lesson" && (number === undefined ? !lesson.cleared : lesson.number === number),
-    );
-    if (!section || !lesson) throw new Error("No matching Lesson in this Mission");
-    return {
-      kind: "lesson",
-      lesson: {
-        mission: { id: reading.mission.id, statement: reading.mission.statement },
-        number: lesson.number,
-        of: path.lessonCount,
-        name: lesson.name ?? lesson.nodes.map((id) => stringProperty(view.graph, id, "display:label", id)).join(", "),
-        section: {
-          number: section.number,
-          milestone: section.milestone,
-          name: stringProperty(view.graph, section.milestone, "display:label", section.milestone),
-        },
-        nodes: lesson.nodes,
-      },
-    };
-  }
   async reading() {
     const view = await this.runtime.snapshot();
     return {
-      missions: await this.missionReadings(),
+      missions: readMissions(view),
       dueReview: [...tagIndex(view.theory.project(view.graph, view.state))("review:due")],
     };
   }
@@ -444,18 +435,6 @@ export class LearningHost<S> {
     }
     if (failures.length) throw new AggregateError(failures, "Session close failed");
   }
-  async settle(session: HostSession): Promise<ModeSwitch | undefined> {
-    const current = await this.current(session);
-    if (current.closed || current.closing || current.mode !== "lesson" || current.entry?.kind !== "lesson") return;
-    if (!(await this.context(current)).lesson?.complete) return;
-    await this.end(current);
-    return {
-      mode: "charting",
-      then: "next",
-      carry: { kind: "brief" },
-      entry: { kind: "mission", id: current.entry.lesson.mission.id },
-    };
-  }
   async retireMission(id: string, outcome: "achieved" | "abandoned"): Promise<void> {
     const view = await this.runtime.snapshot();
     if (!missions(view.profile).some((mission) => mission.id === id)) throw new Error("Unknown Mission");
@@ -485,7 +464,8 @@ export class LearningHost<S> {
     if (!("missionId" in intent)) throw new Error("Expected a Mission entry");
     const reading = (await this.missionReadings()).find(({ mission }) => mission.id === intent.missionId);
     if (!reading || reading.run.retired?.outcome === "abandoned") throw new Error("Mission is not available");
-    const { mission, run, next } = reading;
+    const { mission, run, next, path } = reading;
+    const entry = { kind: "mission", id: mission.id } as const;
     if (intent.kind === "continue" && run.active) return this.open({ mode: "empty", resume: run.active });
     if (run.retired && intent.kind !== "continue")
       throw new Error("A finished Mission can only continue or resume a Session");
@@ -496,8 +476,9 @@ export class LearningHost<S> {
     if (intent.kind === "revise-lesson") {
       const view = await this.runtime.snapshot();
       const active = sessionStates(view.profile).find(({ id }) => id === run.active);
-      if (active?.entry?.kind !== "lesson") throw new Error("There is no active Lesson to revise");
-      return this.open({ mode: "lesson", entry: active.entry });
+      if (active?.mode !== "lesson" || active.entry?.kind !== "mission" || !path || !lessonHere(path))
+        throw new Error("There is no active Lesson to revise");
+      return this.open({ mode: "lesson", entry });
     }
     if (intent.kind === "tell-tutor" || intent.kind === "revise-route" || !mission.targets.length)
       return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
@@ -507,7 +488,7 @@ export class LearningHost<S> {
     if (run.retired) throw new Error("No review is due for this finished Mission");
     if (!stop) throw new Error("This Mission has no following stop; revise the route or finish it");
     if (stop.checkpoint) return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
-    return this.open({ mode: "lesson", entry: await this.lessonEntry(mission.id, stop.number) });
+    return this.open({ mode: "lesson", entry });
   }
   async open(input: SessionOpening): Promise<HostSession> {
     const skipMission = input.skip?.mission;
@@ -517,37 +498,15 @@ export class LearningHost<S> {
       const reading = (await this.missionReadings()).find(({ mission }) => mission.id === input.skip?.mission);
       if (!reading) throw new Error("Unknown Mission");
       if (reading.run.retired) throw new Error("A finished Mission can only continue or resume a Session");
-      const view = await this.runtime.snapshot();
-      const context = {
-        graph: view.graph,
-        projection: view.theory.project(view.graph, view.state),
-        observations: view.observations,
-        activities: [],
-      };
-      const future = view.theory.path?.({
-        ...context,
-        targets: reading.mission.targets.map(({ node }) => node),
-        past: reading.run.past,
-        now: view.now,
-        minutes: sessionLength(localSettings(view.profile)),
-      });
-      if (!future) throw new Error("Theory provides no Mission path");
-      const stops = readMissionPath(future, view.theory, context).sections.flatMap(({ lessons }) => lessons);
-      const frozen = reading.run.past.find((entry) => entry.kind === "session" && entry.session === reading.run.active);
-      const frozenStop = frozen?.kind === "session" ? frozen.stop : undefined;
-      const activeIndex = frozenStop
-        ? stops.findIndex(
-            (stop) =>
-              stop.kind === frozenStop.kind &&
-              stop.nodes.length === frozenStop.nodes?.length &&
-              stop.nodes.every((node) => frozenStop.nodes?.includes(node)),
-          )
-        : -1;
-      const now = activeIndex >= 0 ? activeIndex : stops.findIndex((stop) => !stop.cleared);
+      const path = reading.path;
+      if (!path) throw new Error("Theory provides no Mission path");
+      const stops = path.sections.flatMap(({ lessons }) => lessons);
+      const here = lessonHere(path)?.lesson;
+      const now = here ? stops.indexOf(here) : -1;
       const skip = input.skip;
       const index =
         skip.kind === "skip-lesson"
-          ? now + 1
+          ? stops.findIndex((stop, position) => position > now && !stop.cleared)
           : stops.findIndex(
               (stop) =>
                 stop.kind === skip.stop.kind &&
@@ -556,17 +515,12 @@ export class LearningHost<S> {
             );
       if (index < 0 || !stops[index])
         throw new Error("This Mission has no following stop; revise the route or finish it");
-      if (skip.kind === "skip-to") {
-        if (now < 0 || index <= now) throw new Error("Choose a stop after the current stop");
-        skipped = stops.slice(now, index);
-      }
+      if (now < 0 || index <= now || stops[index].cleared)
+        throw new Error("Choose an uncleared stop after the current Lesson");
+      skipped = stops.slice(now, index).filter((stop) => stop.numbered && !stop.cleared && !stop.checkpoint);
       const stop = stops[index];
       const entry: ModeEntry =
-        stop.kind === "review"
-          ? { kind: "review", nodes: stop.nodes }
-          : stop.checkpoint
-            ? { kind: "mission", id: reading.mission.id }
-            : await this.lessonEntry(reading.mission.id, stop.number);
+        stop.kind === "review" ? { kind: "review", nodes: stop.nodes } : { kind: "mission", id: reading.mission.id };
       input = { mode: stop.checkpoint ? "charting" : "lesson", entry };
     }
     const view = await this.runtime.snapshot();
@@ -583,17 +537,15 @@ export class LearningHost<S> {
             about:
               input.entry?.kind === "review"
                 ? input.entry.nodes
-                : input.entry?.kind === "lesson"
-                  ? input.entry.lesson.nodes
-                  : input.entry?.kind === "target"
-                    ? [input.entry.node]
-                    : [
-                        ...new Set(
-                          view.observations
-                            .filter((observation) => observation.surface === surface)
-                            .flatMap((observation) => observation.nodes ?? observation.about ?? []),
-                        ),
-                      ],
+                : input.entry?.kind === "target"
+                  ? [input.entry.node]
+                  : [
+                      ...new Set(
+                        view.observations
+                          .filter((observation) => observation.surface === surface)
+                          .flatMap((observation) => observation.nodes ?? observation.about ?? []),
+                      ),
+                    ],
             closed: true,
             ...(input.entry === undefined ? {} : { entry: input.entry }),
           };
@@ -615,26 +567,22 @@ export class LearningHost<S> {
       resumed?.mission ??
       (entry?.kind === "mission"
         ? entry.id
-        : entry?.kind === "lesson"
-          ? entry.lesson.mission.id
-          : entry?.kind === "checkpoint"
-            ? entry.missionId
-            : (input.mission ?? skipMission ?? pending?.from.mission));
+        : entry?.kind === "checkpoint"
+          ? entry.missionId
+          : (input.mission ?? skipMission ?? pending?.from.mission));
     const mission = missionId ? missions(view.profile).find(({ id }) => id === missionId) : undefined;
     if (missionId && !mission) throw new Error("Unknown Mission");
     const about: readonly NodeId[] =
-      resumed?.about ??
+      (mode === "lesson" && entry?.kind === "mission" ? undefined : resumed?.about) ??
       (entry?.kind === "target"
         ? [entry.node]
         : entry?.kind === "review"
           ? entry.nodes
-          : entry?.kind === "lesson"
-            ? entry.lesson.nodes
-            : mission
-              ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                  ({ id }) => id,
-                )
-              : []);
+          : mission
+            ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+                ({ id }) => id,
+              )
+            : []);
     for (const node of about)
       if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
     const id = resumed?.id ?? identity();
@@ -655,17 +603,12 @@ export class LearningHost<S> {
     const entries: ProfileLogEntry[] = [];
     if (missionId) {
       const before = missionRun(view.profile, missionId);
-      const stop = {
-        kind: entry?.kind ?? mode,
-        name: entry?.kind === "lesson" ? entry.lesson.name : mode,
-        nodes: about,
-      };
       const target =
         resumed && before.past.some((entry) => entry.kind === "session" && entry.session === id)
           ? { kind: "resume" as const, session: id }
           : pending?.to.then === "aside"
             ? { kind: "aside" as const, session: id }
-            : { kind: "new" as const, session: id, stop };
+            : { kind: "attach" as const, session: id };
       // A fresh front end adopting an open aside keeps it beside its parent.
       const result =
         resumed?.parent === before.active && !resumed.closed
@@ -727,27 +670,23 @@ export class LearningHost<S> {
     this.mode(view.theory, to.mode, to.entry);
     if (to.then === "here") {
       const missionId =
-        to.entry?.kind === "lesson"
-          ? to.entry.lesson.mission.id
-          : to.entry?.kind === "mission"
-            ? to.entry.id
-            : to.entry?.kind === "checkpoint"
-              ? to.entry.missionId
-              : session.mission;
+        to.entry?.kind === "mission"
+          ? to.entry.id
+          : to.entry?.kind === "checkpoint"
+            ? to.entry.missionId
+            : session.mission;
       const mission = missions(view.profile).find(({ id }) => id === missionId);
       if (missionId && !mission) throw new Error("Unknown Mission");
       const about =
         to.entry?.kind === "review"
           ? to.entry.nodes
-          : to.entry?.kind === "lesson"
-            ? to.entry.lesson.nodes
-            : to.entry?.kind === "target"
-              ? [to.entry.node]
-              : mission
-                ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                    ({ id }) => id,
-                  )
-                : session.about;
+          : to.entry?.kind === "target"
+            ? [to.entry.node]
+            : mission
+              ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+                  ({ id }) => id,
+                )
+              : session.about;
       for (const node of about)
         if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
       const updated: LocalSession = {
@@ -777,16 +716,16 @@ export class LearningHost<S> {
       await this.runtime.profile.appendLog(entries);
     } else this.pendingSwitch = { from: session, to };
   }
-  async context(session: LocalSession) {
-    const view = await this.runtime.snapshot();
-    const ctx = await this.runtime.context(session);
-    const readings = await this.missionReadings();
+  async context(session: LocalSession, view?: LearningView<S>) {
+    view ??= await this.runtime.snapshot();
+    const ctx = await this.runtime.context(session, view);
+    const readings = readMissions(view);
+    const here = session.mode === "lesson" ? lessonAtEntry(session, ctx.graph, readings) : undefined;
     let lesson: LessonProgress | undefined;
-    if (session.entry?.kind === "lesson") {
-      const snapshot = session.entry.lesson;
+    if (here) {
       const projection = view.theory.project(ctx.graph, ctx.state);
-      const progress = view.theory.progress(ctx.graph, projection, snapshot.nodes);
-      const nodes = snapshot.nodes.map((id) => ({
+      const progress = view.theory.progress(ctx.graph, projection, here.nodes);
+      const nodes = here.nodes.map((id) => ({
         id,
         label: stringProperty(ctx.graph, id, "display:label", id),
         criterion: stringProperty(ctx.graph, id, "pedagogy:criterion", ""),
@@ -801,12 +740,12 @@ export class LearningHost<S> {
           observations: view.observations,
           activities: [],
         },
-        [{ kind: "lesson", nodes: snapshot.nodes, numbered: true }],
+        [{ kind: "lesson", nodes: here.nodes, numbered: true }],
       );
       lesson = {
-        lesson: snapshot,
+        here,
         nodes,
-        edges: ctx.graph.edges.filter(({ from, to }) => snapshot.nodes.includes(from) && snapshot.nodes.includes(to)),
+        edges: ctx.graph.edges.filter(({ from, to }) => here.nodes.includes(from) && here.nodes.includes(to)),
         alsoShown: [],
         doneCount: nodes.filter(({ status }) => status === "done").length,
         complete: nodes.every(({ status }) => status === "done"),
@@ -816,7 +755,7 @@ export class LearningHost<S> {
     }
     return {
       ...ctx,
-      ...(lesson ? { lesson } : {}),
+      ...(lesson ? { lesson, about: lesson.here.nodes } : {}),
       missions: readings.map(({ mission, run, next }) => ({
         id: mission.id,
         statement: mission.statement,
@@ -836,11 +775,11 @@ export class LearningHost<S> {
     const session = await this.current(input);
     if (session.closed || session.closing) throw new Error("Session is ended; resume it first");
     let view = await this.runtime.snapshot();
-    let ctx = await this.context(session);
+    let ctx = await this.context(session, view);
     if (learnerMessage !== undefined && view.theory.chat?.reply) {
       await this.runtime.execute(view.theory.chat.reply(ctx, learnerMessage), session);
       view = await this.runtime.snapshot();
-      ctx = await this.context(session);
+      ctx = await this.context(session, view);
     }
     if (learnerMessage === undefined && transcript(view.profile, session.surface).turns.length === 0) {
       const latest = sessionStates(view.profile)
@@ -892,7 +831,10 @@ export class LearningHost<S> {
             capabilities,
             switches: selected?.switches ?? [],
             entries: Object.fromEntries(
-              Object.entries(view.theory.modes ?? {}).map(([name, mode]) => [name, mode.entry]),
+              Object.entries(view.theory.modes ?? {}).map(([name, { entry }]) => [
+                name,
+                { ...entry, kinds: ENTRY_KINDS.filter((kind) => entry.kinds.includes(kind)) },
+              ]),
             ),
           }),
       ]
@@ -964,7 +906,6 @@ export async function openHost<S>(options: OpenHostOptions<S>): Promise<Host> {
       open: (input) => learning.serial(() => learning.open(input)),
       begin: (intent) => learning.serial(() => learning.begin(intent)),
       turn: (session, input) => learning.serial(() => learning.turn(session, input.learnerMessage)),
-      settle: (session) => learning.serial(() => learning.settle(session)),
       end: (session) => learning.serial(() => learning.end(session)),
       closePending: () => learning.closePending(),
       close: async (session) => {

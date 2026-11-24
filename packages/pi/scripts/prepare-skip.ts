@@ -54,24 +54,7 @@ await host.missions.create({
 const reading = (await host.missions.list())[0];
 const first = reading?.next.find((stop) => stop.kind === "lesson");
 if (!reading || !first) throw new Error("Preparation produced no Lesson");
-// Use the host's admitted selector to open the first Lesson without synthesizing a snapshot.
-const { LearningHost } = await import("../../local/src/learning");
-const { Runtime } = await import("../../local/src/runtime");
-const learning = new LearningHost(
-  new Runtime(
-    profile,
-    [defaultTheory],
-    async () => {
-      throw new Error("No model needed");
-    },
-    "UTC",
-  ),
-  async () => true,
-);
-const opened = await host.sessions.open({
-  mode: "lesson",
-  entry: await learning.lessonEntry("skip-mission", first.number),
-});
+const opened = await host.sessions.open({ mode: "lesson", entry: { kind: "mission", id: reading.mission.id } });
 console.log(JSON.stringify({ profile: cwd, session: opened.id, stops: reading.next }, null, 2));
 console.log("cd " + JSON.stringify(cwd) + " && pi --session " + JSON.stringify(join(cwd, "sessions", "skip.jsonl")));
 // pi resumes the prepared host Session through the same extension state used in a conversation.
