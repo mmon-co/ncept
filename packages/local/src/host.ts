@@ -87,7 +87,7 @@ export type SessionIntent =
   | Readonly<{ kind: "skip-to"; missionId: string; stop: Pick<LessonReading, "kind" | "number" | "checkpoint"> }>
   | Readonly<{ kind: "continue" | "revise-lesson" | "revise-route"; missionId: string }>
   | Readonly<{ kind: "tell-tutor"; missionId: string; request: string }>
-  | Readonly<{ kind: "new-mission" | "review" }>;
+  | Readonly<{ kind: "new-mission" }>;
 export interface Host {
   readonly profile: ProfileDirectory;
   readonly sessions: {

@@ -201,7 +201,7 @@ export function strings(value: unknown): readonly string[] {
     throw new Error("Expected strings");
   return value;
 }
-export const ENTRY_KINDS = ["goal", "mission", "target", "review", "checkpoint"] satisfies readonly ModeEntry["kind"][];
+export const ENTRY_KINDS = ["goal", "mission", "target", "checkpoint"] satisfies readonly ModeEntry["kind"][];
 
 export function modeEntry(value: unknown): ModeEntry {
   const input = record(value);

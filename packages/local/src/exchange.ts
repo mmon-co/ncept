@@ -6,6 +6,8 @@ import {
   isNodeId,
   isPatchId,
   isProfileLogEntry,
+  isRunActiveChange,
+  type RunActiveChange,
   mergeProfileLogs,
   migrateTheoryProfile,
   type Theory,
@@ -199,7 +201,10 @@ export function migrateLessonLog(files: ProfileFiles): ProfileFiles {
     throw new Error("Profile log digest mismatch");
   const entries = decodeLog(bytes);
   const missions = new Set(entries.filter(isMissionRevision).map(({ mission }) => mission.id));
+  const activeByMission = new Map<string, RunActiveChange>();
+  const openReviews = new Map<string, string>();
   const nextEntries = entries.map((value) => {
+    if (isRunActiveChange(value)) activeByMission.set(value.mission, value);
     if (!object(value)) return value;
     if (value.kind === "run.past" && object(value.entry) && value.entry.kind === "session" && "stop" in value.entry) {
       const { stop: _stop, ...entry } = value.entry;
@@ -208,7 +213,29 @@ export function migrateLessonLog(files: ProfileFiles): ProfileFiles {
     const payload = value.payload;
     if (value.by !== "platform" || !object(payload) || payload.kind !== "local.session" || !object(payload.session))
       return value;
-    const { entry, mission: _mission, ...session } = payload.session;
+    const { entry, mission: attached, ...session } = payload.session;
+    if (typeof session.id === "string") openReviews.delete(session.id);
+    if (object(entry) && entry.kind === "review") {
+      const { closing: _closing, ...state } = session;
+      const closed = { ...state, closed: true };
+      if (typeof attached === "string" && missions.has(attached)) {
+        if (session.closed === false && typeof session.id === "string") openReviews.set(session.id, attached);
+        return {
+          ...value,
+          payload: { ...payload, session: { ...closed, mission: attached, entry: { kind: "mission", id: attached } } },
+        };
+      }
+      const node = Array.isArray(entry.nodes) ? entry.nodes.find(isNodeId) : undefined;
+      return {
+        ...value,
+        payload: {
+          ...payload,
+          session: node
+            ? { ...closed, about: [node], entry: { kind: "target", node } }
+            : { ...closed, mode: "empty", about: [] },
+        },
+      };
+    }
     if (!object(entry) || entry.kind !== "lesson" || !object(entry.lesson)) return value;
     const lesson = entry.lesson;
     const mission = object(lesson.mission) ? lesson.mission.id : undefined;
@@ -226,6 +253,18 @@ export function migrateLessonLog(files: ProfileFiles): ProfileFiles {
     };
   });
   if (nextEntries.every((entry, index) => entry === entries[index])) return files;
+  // Clear only the current Review pointer, keeping the original activity and past entries.
+  for (const { mission, active, id, at } of activeByMission.values()) {
+    if (active !== null && openReviews.get(active) === mission) {
+      nextEntries.push({
+        kind: "run.active",
+        id: "close-review-" + attachmentDigest(jsonBytes(id)),
+        at,
+        mission,
+        active: null,
+      });
+    }
+  }
   const next = new Map(files);
   const log = logBytes(checkedLog(nextEntries));
   const updated = { ...manifest, log: attachmentDigest(log) };

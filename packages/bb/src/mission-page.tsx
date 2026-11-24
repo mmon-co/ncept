@@ -318,7 +318,7 @@ export function MissionPage({
                       {stop.cleared ? "✓" : stop.checkpoint ? "◇" : stop.number}
                     </span>
                     <span className="flex-1">
-                      {stop.checkpoint ? "Checkpoint: " : stop.kind === "review" ? "Review: " : ""}
+                      {stop.checkpoint ? "Checkpoint: " : ""}
                       {stop.name}
                     </span>
                     <span className="text-xs text-muted-foreground">

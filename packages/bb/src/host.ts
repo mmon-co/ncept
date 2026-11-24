@@ -227,7 +227,7 @@ export default experimental_defineHostEntry({
     },
     entry: async ({ directory, intent }) => {
       const profile = await (await openProfile(directory, [defaultTheory], { readOnly: true })).read();
-      if (!("missionId" in intent)) return { title: intent.kind === "review" ? "Review" : "Charting · New Mission" };
+      if (!("missionId" in intent)) return { title: "Charting · New Mission" };
       const revision = profile.log.findLast((item) => isMissionRevision(item) && item.mission.id === intent.missionId);
       if (!revision || !isMissionRevision(revision)) throw new Error("Unknown Mission");
       const active = profile.log.findLast((item) => isRunActiveChange(item) && item.mission === intent.missionId);

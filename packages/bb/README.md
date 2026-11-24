@@ -16,14 +16,14 @@ Your pi models and authentication stay yours. Initialization adds both pi packag
 ## Learn
 
 - Missions are listed with their next stops. **Start →** or **Continue →** opens the next Lesson as a titled thread, or returns to the one already open.
-- **Today** shows what is due for review; **Review →** opens a thread with that batch.
+- **Today** shows which Nodes are due. The tutor can recheck them during your Session.
 - A Mission's page shows its route: milestones, the Lessons and checkpoints ahead, kept asides and past Sessions, each linked to its thread.
 - **Skip…** takes what you already know, in a sentence or by choosing a later stop. **Revise…** reworks the current Lesson or the route, or finishes the Mission.
 - **Share…** on a Mission's page publishes its map and Materials on the Hub at a link and gives you the link to copy. It isn't listed. Sharing needs a free Common Concept account: send `/ncept login` in one of the project's threads once.
 - A question off the Lesson's path opens an aside as a child thread, so bb's parent row takes you back.
 - With several Profiles, the path in Learn's title bar chooses one.
 
-The Profile holds its map, your evidence and every transcript as ordinary files. [@mmon-co/ncept-pi](../pi/README.md) reads the same directory, so `cd ~/learn && pi` continues in a terminal, and its commands (`/learn`, `/review`, `/hub pull`) work in the project's threads.
+The Profile holds its map, your evidence and every transcript as ordinary files. [@mmon-co/ncept-pi](../pi/README.md) reads the same directory, so `cd ~/learn && pi` continues in a terminal, and its commands (`/learn`, `/hub pull`) work in the project's threads.
 
 ## Development
 
@@ -37,7 +37,7 @@ bun packages/bb/scripts/source-install.ts <server-machine-id>
 bun packages/bb/scripts/first-use.ts /tmp/my-bb-profile <server-machine-id>
 ```
 
-The last command prints a directly runnable thread-spawn command. It creates a disposable Profile/project with Count liberties and Recognize atari Missions, one due Review Node, and a scripted tutor. Say **Accept Lesson**, then in the new Lesson thread say **Open an aside**. The marker **blue pebble** travels with each handoff. No account, deployment, network model or paid draw is required. The script records provider contexts in the Profile's `bb-encounter-context.jsonl`.
+The last command prints a directly runnable thread-spawn command. It creates a disposable Profile/project with Count liberties and Recognize atari Missions, one Node due for review, and a scripted tutor. Say **Accept Lesson**, then in the new Lesson thread say **Open an aside**. The marker **blue pebble** travels with each handoff. No account, deployment, network model or paid draw is required. The script records provider contexts in the Profile's `bb-encounter-context.jsonl`.
 
 From a worker checkout, run the panel-entry and association encounter inside the shared-install wrapper:
 
@@ -59,8 +59,8 @@ Carries above 24 KiB live in plugin-owned storage, referenced by thread metadata
 
 ### Learn entry API
 
-Import `rpcContract`'s type from `src/contract.ts` for a typed plugin RPC client. `open({projectId, intent})` returns `{threadId, title}`. Entries are `continue` with `missionId`, `new-mission`, `review`, `tell-tutor` with `missionId` and `request`, `revise-lesson` with `missionId`, and `revise-route` with `missionId`. Continue returns the existing active Session's thread when it is known. `thread({projectId, session})` returns `{threadId: string | null}` for kept asides and history.
+Import `rpcContract`'s type from `src/contract.ts` for a typed plugin RPC client. `open({projectId, intent})` returns `{threadId, title}`. Entries are `continue` with `missionId`, `new-mission`, `tell-tutor` with `missionId` and `request`, `revise-lesson` with `missionId`, and `revise-route` with `missionId`. Continue returns the existing active Session's thread when it is known. `thread({projectId, session})` returns `{threadId: string | null}` for kept asides and history.
 
-The selected project's source identifies the Profile and machine. Skip entries (`skip-lesson`, or `skip-to` with the stop identity from the Mission reading) resolve and write in the new tutoring pi process. `retire({projectId, missionId, outcome})`, with outcome `achieved` or `abandoned`, opens the writing local host on that machine and finishes the Mission under the Profile directory lock. It opens no thread. Other entry resolution and Session creation run in the tutoring pi process. A new Mission opens charting. Mission Continue resolves the next Lesson, review or charting stop; both Revise controls and Tell the tutor open a new Session. The learner's request remains the first user message. The title is refined from the resolved Session before its first turn.
+The selected project's source identifies the Profile and machine. Skip entries (`skip-lesson`, or `skip-to` with the stop identity from the Mission reading) resolve and write in the new tutoring pi process. `retire({projectId, missionId, outcome})`, with outcome `achieved` or `abandoned`, opens the writing local host on that machine and finishes the Mission under the Profile directory lock. It opens no thread. Other entry resolution and Session creation run in the tutoring pi process. A new Mission opens charting. Mission Continue resolves the next Lesson or checkpoint; both Revise controls and Tell the tutor open a new Session. The learner's request remains the first user message. The title is refined from the resolved Session before its first turn.
 
 Panel entries, tutor handoffs and plain pi threads all record their Session in plugin metadata and a Profile-scoped lookup. A process restart adopts the recorded Session. The Profile and its transcripts remain the local host's ordinary portable files.
