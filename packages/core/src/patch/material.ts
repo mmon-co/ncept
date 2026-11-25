@@ -53,6 +53,19 @@ export function validateMaterialDependencies(material: Material): void {
   }
 }
 
+export function reachableMaterials(materials: readonly Material[], root: (material: Material) => boolean): Material[] {
+  const roots = materials.filter(root);
+  if (roots.length === materials.length || !roots.some((material) => material.dependsOn?.length)) return roots;
+  const available = new Map(materials.map((material) => [materialKey(material), material]));
+  const reached = new Set(roots);
+  for (const material of reached)
+    for (const ref of material.dependsOn ?? []) {
+      const target = available.get(materialKey(ref));
+      if (target) reached.add(target);
+    }
+  return materials.filter((material) => reached.has(material));
+}
+
 /** Only Materials with outgoing edges can take part in a cycle. Missing targets are resolved by the host. */
 export function requireAcyclicMaterialDependencies(materials: readonly Material[]): void {
   const incoming = new Map<string, number>();
