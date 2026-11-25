@@ -18,6 +18,8 @@ import {
   type PathContext,
   type PathInputs,
   type PathSelection,
+  type SuggestContext,
+  type Suggestion,
 } from "@mmon-co/ncept-core/theory";
 import { progressDefault } from "./reading.js";
 import type { DefaultState } from "./state.js";
@@ -234,6 +236,14 @@ export function pathDefault(context: PathContext): MissionFuture {
     ...validity,
     future: lessons.filter((lesson) => !lesson.numbered || lesson.nodes.some((id) => progress[id]?.status === "open")),
   };
+}
+
+export function suggestDefault({ future, checkIn, activeToday, dueCards }: SuggestContext): Suggestion | undefined {
+  if (checkIn) return { kind: "check-in" };
+  if (future.future.length === 0) return undefined;
+  if (activeToday) return { kind: "chat" };
+  if (dueCards > 0) return { kind: "cards", count: dueCards };
+  return { kind: "chat" };
 }
 
 export function preparePathDefault(inputs: PathInputs, _state?: DefaultState) {

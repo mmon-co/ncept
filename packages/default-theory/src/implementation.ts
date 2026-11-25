@@ -5,7 +5,7 @@ import { event } from "./event.js";
 import { isAttemptOutcome, isQuizOutcome } from "./outcomes.js";
 import { DEFAULT_THEORY_REF, initDefaultState, isCompletionOutcome } from "./state.js";
 import { defaultTags, projectDefault } from "./tags.js";
-import { pathDefault, preparePathDefault } from "./path.js";
+import { pathDefault, preparePathDefault, suggestDefault } from "./path.js";
 import { progressDefault, estimateDefault, prepareEstimateDefault } from "./reading.js";
 
 /** The single default implementation assembly. */
@@ -20,6 +20,7 @@ export const implementation = {
   prepareEstimate: prepareEstimateDefault,
   path: pathDefault,
   preparePath: preparePathDefault,
+  suggest: suggestDefault,
   describeObservation: describeDefaultObservation,
   tags: defaultTags,
   outcomes: {
