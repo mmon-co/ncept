@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   candidateRevision,
+  extractSparseClosure,
+  packPatchContent,
+  sparseStoreFromPacked,
   canonicalJson,
   composePatch,
   emptyPatch,
@@ -88,7 +91,7 @@ test("local publication freezes a Profile Mission and pull adopts the public def
     const pointed = { ...content, metadata: withPatchMissionPointers(content.metadata, [missionId]) };
     const ref = await author.profile.addRevision("patch-addition", pointed);
     await author.profile.setPersonal(ref);
-    const patches = (await readdir(join(authorDir, "patches"))).sort();
+    const patches = (await readdir(join(authorDir, "manifests"))).sort();
     const publication = { patch: ref, version: "1.2.3", title: "Addition" };
     const refusal = await author.hub.publish(publication).catch((error: unknown) => error);
     expect(refusal).toMatchObject({ message: expect.stringContaining("missing from the Profile log") });
@@ -104,37 +107,34 @@ test("local publication freezes a Profile Mission and pull adopts the public def
     expect(saved.entry.mission).toEqual(mission);
     const release = await author.hub.publish({ ...publication, missions: [missionId] });
     const origin = { missionId, logEntryId: saved.entry.id, logPosition: saved.position };
-    expect(bundles.get(release.ref.identity)).toEqual({
-      terminal: release.ref,
-      revisions: [
-        {
-          ...content,
-          ref: release.ref,
-          metadata: {
-            ...content.metadata,
-            properties: {
-              "patch:title": publication.title,
-              [MISSION_SUGGESTIONS_PROPERTY]: canonicalJson([
-                {
-                  id: missionId,
-                  statement: mission.statement,
-                  shortName: mission.statement,
-                  targetNodes: ["node-addition"],
-                  origin,
-                },
-              ]),
+    const packed = packPatchContent({
+      ...content,
+      metadata: {
+        ...content.metadata,
+        properties: {
+          "patch:title": publication.title,
+          [MISSION_SUGGESTIONS_PROPERTY]: canonicalJson([
+            {
+              id: missionId,
+              statement: mission.statement,
+              shortName: mission.statement,
+              targetNodes: ["node-addition"],
+              origin,
             },
-          },
+          ]),
         },
-      ],
+      },
     });
+    expect(bundles.get(release.ref.identity)).toEqual(
+      await extractSparseClosure(release.ref, sparseStoreFromPacked([packed]), { completeTerminal: true }),
+    );
 
     const revised = { ...mission, statement: "Add three integers" };
     await author.missions.revise(revised);
     const later = latestMissionRevision((await author.profile.read()).log, missionId);
     expect(later?.entry.mission).toEqual(revised);
     expect(later?.position).toBeGreaterThan(saved.position);
-    expect((await readdir(join(authorDir, "patches"))).sort()).toEqual(patches);
+    expect((await readdir(join(authorDir, "manifests"))).sort()).toEqual(patches);
 
     const offers: string[] = [];
     const reader = await open(join(root, "reader"), async ({ description }) => {
@@ -143,7 +143,10 @@ test("local publication freezes a Profile Mission and pull adopts the public def
     });
     await reader.missions.create({ ...mission, statement: "My private Mission", targets: [] });
     const malformed = candidateRevision("patch-malformed", { ...emptyPatch(), metadata: pointed.metadata });
-    bundles.set(malformed.ref.identity, { terminal: malformed.ref, revisions: [malformed] });
+    bundles.set(
+      malformed.ref.identity,
+      await extractSparseClosure(malformed.ref, sparseStoreFromPacked([packPatchContent(malformed)])),
+    );
     await reader.hub.pull("patch-malformed@1.0.0");
     expect(offers).toEqual([]);
 

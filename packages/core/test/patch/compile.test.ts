@@ -1,5 +1,18 @@
 import { expect, test } from "bun:test";
-import { compileGraph, compileGraphDiff, GraphDiffCompileError } from "../../src/patch/compile";
+import {
+  applyGraphDiff,
+  candidateRevision,
+  compileGraph,
+  compileGraphDiff,
+  compileSparseGraph,
+  compileSparseGraphDiff,
+  emptyPatch,
+  extractSparseClosure,
+  GraphDiffCompileError,
+  packPatchContent,
+  sparseNotebookSelection,
+  sparseStoreFromPacked,
+} from "../../src/patch";
 import type { ClosedPatchBundle, NodeId, PatchRevision, ResolvedGraph, SemanticOperation } from "../../src/patch/model";
 
 const revision: PatchRevision = {
@@ -361,6 +374,81 @@ test("a new prerequisite of an elaborate Node joins its authored method tags, bu
     "language",
     "strand:lexicon",
   ]);
+});
+
+test("sparse Notebook compilation matches the dense candidate and fetches newly demanded base labels", async () => {
+  const full = candidateRevision(templateRevision.ref.identity, templateRevision);
+  const base = candidateRevision("patch-base", revision);
+  const dependent = candidateRevision("patch-dependent", { ...emptyPatch(), bases: [base.ref] });
+  const notebook = candidateRevision("patch-notebook", {
+    ...emptyPatch(),
+    bases: [full.ref, { ...dependent.ref, take: "needed" }],
+    delta: {
+      operations: [{ kind: "add-metadata-set", metadataSet: { id: "metadata-old", subjects: [], properties: {} } }],
+    },
+  });
+  const revisions = [full, base, dependent, notebook];
+  const bundle = { terminal: notebook.ref, revisions };
+  const packed = revisions.map(packPatchContent);
+  const store = sparseStoreFromPacked(packed);
+  const pages = new Map(packPatchContent(base).manifest.nodeMetadataChunks);
+  const fresh = pages.get("node-spans")?.[0];
+  const absent = pages.get("node-vectors")?.[0];
+  if (!fresh || !absent) throw new Error("expected separate label pages");
+  const selection = sparseNotebookSelection(packPatchContent(notebook).manifest);
+  const previous = await extractSparseClosure(notebook.ref, store, { selection });
+  expect(new Map(previous.chunks).has(fresh)).toBe(false);
+  expect(await compileSparseGraph({ bundle: previous, selection, annotations: {} })).toEqual(
+    compileGraph({ bundle, selection, annotations: {} }),
+  );
+  const reads = new Set<string>();
+  const input = {
+    terminal: notebook.ref,
+    store: {
+      ...store,
+      async getChunk(d: typeof notebook.ref.digest) {
+        reads.add(d);
+        return d === absent ? undefined : store.getChunk(d);
+      },
+    },
+  };
+  const operations: SemanticOperation[] = [
+    ...elaboration("node-words", "node-lexicon"),
+    { kind: "add-edge", edge: { id: "edge-fresh", from: "node-words", to: "node-spans" } },
+  ];
+  const args = [
+    operations,
+    ["node-words"],
+    [{ kind: "based_on", source: full.ref }],
+    ["metadata-old"],
+    selection,
+  ] as const;
+  const dense = compileGraphDiff(bundle, ...args);
+  const { content, ...diff } = await compileSparseGraphDiff(input, ...args);
+  expect(diff).toEqual(dense);
+  expect(content).toEqual(applyGraphDiff(notebook, dense));
+  expect(membership(diff, "node-words")).toEqual(["language", "strand:lexicon"]);
+  expect(reads.has(fresh)).toBe(true);
+  expect(reads.has(absent)).toBe(false);
+
+  for (const invalid of [
+    [{ kind: "add-node", node: { id: "node-unlabelled" } }],
+    [{ kind: "add-edge", edge: { id: "edge-missing", from: "node-words", to: "node-absent" } }],
+    [{ kind: "add-edge", edge: { id: "edge-loop", from: "node-lexicon", to: "node-lexicon" } }],
+  ] satisfies SemanticOperation[][]) {
+    const report = async (run: () => unknown) => {
+      try {
+        await run();
+      } catch (e) {
+        if (e instanceof GraphDiffCompileError) return e.report;
+        throw e;
+      }
+      throw new Error("expected compilation to fail");
+    };
+    expect(await report(() => compileSparseGraphDiff(input, invalid, [], [], ["metadata-old"], selection))).toEqual(
+      await report(() => compileGraphDiff(bundle, invalid, [], [], ["metadata-old"], selection)),
+    );
+  }
 });
 
 test("an explicit tag definition is the complete membership and excludes a prerequisite", () => {

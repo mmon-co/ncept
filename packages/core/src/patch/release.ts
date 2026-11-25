@@ -1,9 +1,8 @@
-import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
-import { canonicalJson, type ContentDigest } from "../digest.js";
+import type { ContentDigest } from "../digest.js";
+import { packPatchContent, manifestDigest, manifestBytes, chunkBytes } from "./merkle.js";
 import { compileGraph } from "./compile.js";
 import { PatchCompileError } from "./errors.js";
-import { canonicalMaterial } from "./material.js";
+import { canonicalDelta } from "./material.js";
 import { discoveryTags, isAttachment, lastMetadataContribution, metadataSetsForEntity } from "./metadata.js";
 import {
   provenanceOf,
@@ -44,21 +43,13 @@ export function isNodeId(value: unknown): value is NodeId {
 // transaction (charging its budget, minting the candidate, verifying each closure it builds).
 const canonical = new WeakMap<PatchContent, { digest: ContentDigest; bytes: number; delta: SemanticDelta }>();
 
-function canonicalDelta(delta: SemanticDelta): SemanticDelta {
-  let operations: SemanticDelta["operations"][number][] | undefined;
-  for (const [index, op] of delta.operations.entries()) {
-    if (op.kind !== "add-material" && op.kind !== "edit-material") continue;
-    const material = canonicalMaterial(op.material);
-    if (material !== op.material) (operations ??= [...delta.operations])[index] = { ...op, material };
-  }
-  return operations ? { ...delta, operations } : delta;
-}
 function canonicalForm(content: PatchContent) {
   let form = canonical.get(content);
   if (!form) {
-    const delta = canonicalDelta(content.delta);
-    const bytes = utf8ToBytes(canonicalJson({ bases: content.bases, delta, metadata: content.metadata }));
-    form = { digest: `sha256:${bytesToHex(sha256(bytes))}`, bytes: bytes.byteLength, delta };
+    const { manifest, chunks } = packPatchContent(content);
+    let bytes = manifestBytes(manifest);
+    for (const chunk of chunks.values()) bytes += chunkBytes(chunk);
+    form = { digest: manifestDigest(manifest), bytes, delta: canonicalDelta(content.delta) };
     canonical.set(content, form);
   }
   return form;
@@ -69,7 +60,7 @@ export function revisionDigest(content: PatchContent): ContentDigest {
   return canonicalForm(content).digest;
 }
 
-/** UTF-8 bytes of the canonical form `revisionDigest` hashes. */
+/** Canonical UTF-8 bytes of the manifest and its distinct chunks. */
 export function revisionBytes(content: PatchContent): number {
   return canonicalForm(content).bytes;
 }
@@ -124,7 +115,12 @@ export function bundleForRevision(
       verified.add(ref.digest);
     }
     if (revisions.has(key)) return;
-    const revision = { ref, bases: content.bases, delta: content.delta, metadata: content.metadata };
+    const revision = {
+      ref: { identity: ref.identity, digest: ref.digest },
+      bases: content.bases,
+      delta: content.delta,
+      metadata: content.metadata,
+    };
     active.add(key);
     for (const base of content.bases) {
       visit(base);

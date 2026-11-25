@@ -1,17 +1,13 @@
 import {
-  notebookBundleForRevision,
-  notebookSelection,
   candidateRevision,
   effectiveObservations,
+  extractSparseClosure,
+  resolveSparseBundle,
   isObservation,
-  isContentDigest,
   readTheoryState,
-  resolvePatchBundle,
   resolveTheory,
-  revisionContent,
   sameExactPatchRef,
   type ChatContext,
-  type ContentDigest,
   type ExactPatchRef,
   type NodeId,
   type Observation,
@@ -31,6 +27,8 @@ import type { ValidatedProfile } from "./exchange.js";
 import { object, parsePiSession, piActiveBranch } from "./sessions.js";
 import { learnerDayAt } from "./days.js";
 import { isMaterial, isObjectIdentity, isSurface, modeEntry, nodeIds, nonempty } from "./inputs.js";
+
+import { PackedPatches } from "./packed.js";
 
 export interface LocalSession extends HostSession {
   readonly surface: SurfaceId;
@@ -149,19 +147,11 @@ export class Runtime<S> {
   async snapshot(ref?: ExactPatchRef) {
     const profile = await this.profile.read();
     const theory = resolveTheory(profile.manifest.theory, this.theories);
-    let bundle = profile.patches;
-    if (ref && !sameExactPatchRef(ref, bundle.terminal)) {
-      const files = await this.profile.files();
-      const contents = new Map<ContentDigest, PatchContent>();
-      for (const [path, bytes] of files)
-        if (path.startsWith("patches/")) {
-          const digest = path.slice(8, -5);
-          if (!isContentDigest(digest)) throw new Error("Invalid revision filename");
-          contents.set(digest, JSON.parse(new TextDecoder().decode(bytes)));
-        }
-      bundle = notebookBundleForRevision(ref, contents);
-    }
-    const graph = resolvePatchBundle(bundle, new Set(["local"]), notebookSelection(bundle));
+    const reading =
+      ref && !sameExactPatchRef(ref, profile.manifest.personal)
+        ? await PackedPatches.fromFiles(await this.profile.files()).reading(ref)
+        : profile;
+    const { patches: bundle, graph, personal } = reading;
     const now = new Date().toISOString();
     const observations = this.observations(profile, now);
     return {
@@ -172,7 +162,19 @@ export class Runtime<S> {
       state: readTheoryState(theory, graph, observations, now),
       observations,
       bundle,
+      personal,
     };
+  }
+  /** A published Patch is a reading; only a Personal revision must retain its entire authored delta. */
+  async readPatch(ref: ExactPatchRef, profile: ValidatedProfile) {
+    if (sameExactPatchRef(ref, profile.manifest.personal)) return { bundle: profile.patches, graph: profile.graph };
+    const store = PackedPatches.fromFiles(await this.profile.files());
+    if (ref.identity === profile.manifest.personal.identity) {
+      const { patches, graph } = await store.reading(ref);
+      return { bundle: patches, graph };
+    }
+    const bundle = await extractSparseClosure(ref, store);
+    return { bundle, graph: await resolveSparseBundle(bundle) };
   }
   observations(profile: ValidatedProfile, now: string): readonly Observation[] {
     const standing = new Map<string, "selected" | "abandoned">();
@@ -195,11 +197,7 @@ export class Runtime<S> {
         learnerDay: learnerDayAt(observation.at, this.timezone),
         ...(object(observation.payload) && object(observation.payload.material)
           ? {
-              materialPresent: resolvePatchBundle(
-                profile.patches,
-                undefined,
-                notebookSelection(profile.patches),
-              ).materials.some(
+              materialPresent: profile.graph.materials.some(
                 (material) =>
                   object(observation.payload) &&
                   object(observation.payload.material) &&
@@ -290,7 +288,7 @@ export class Runtime<S> {
         const select = request.select;
         switch (select.kind) {
           case "patch": {
-            const patch = select.ref ? await this.snapshot(select.ref) : view;
+            const patch = select.ref ? await this.readPatch(select.ref, view.profile) : view;
             sent = { patch: patch.graph.terminal, graph: patch.graph };
             break;
           }
@@ -359,18 +357,19 @@ export class Runtime<S> {
   async prospective(content: PatchContent) {
     const view = await this.snapshot();
     const revision = candidateRevision(view.graph.terminal.identity, content);
-    const contents = new Map(view.bundle.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]));
-    contents.set(revision.ref.digest, content);
-    const bundle = notebookBundleForRevision(revision.ref, contents);
-    const graph = resolvePatchBundle(bundle, new Set(["local"]), notebookSelection(bundle));
+    const store = PackedPatches.fromFiles(await this.profile.files());
+    store.add(content);
+    const reading = await store.reading(revision.ref);
+    const { patches: bundle, graph } = reading;
     const profile = {
       ...view.profile,
-      patches: bundle,
+      ...reading,
       manifest: { ...view.profile.manifest, personal: revision.ref },
     };
     const observations = this.observations(profile, view.now);
     return {
       ...view,
+      personal: content,
       profile,
       bundle,
       graph,
@@ -380,8 +379,6 @@ export class Runtime<S> {
   }
   async content(): Promise<PatchContent> {
     const view = await this.snapshot();
-    const revision = view.bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, view.bundle.terminal));
-    if (!revision) throw new Error("Missing personal revision");
-    return revisionContent(revision);
+    return view.personal;
   }
 }

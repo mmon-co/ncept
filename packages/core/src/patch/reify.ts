@@ -1,8 +1,10 @@
 import { namespaceCapture, type PatchInstanceId, type PatchCopy } from "./copy.js";
 import { canonicalJson } from "../digest.js";
 import { PatchCompileError } from "./errors.js";
-import { canonicalMaterial } from "./material.js";
-import { discoveryTags, sameMetadataSubjects } from "./metadata.js";
+import { readSparseManifest, resolveSparsePatchView, sparseReader, type SparsePatchInput } from "./sparse.js";
+import { resolvePatchBundle } from "./resolve.js";
+import { takeBase } from "./select.js";
+import { discoveryTags } from "./metadata.js";
 import { isGuidanceEntries, GUIDANCE_PROPERTIES } from "./guidance.js";
 import { CAPABILITY_PROPERTIES } from "./capabilities.js";
 import {
@@ -14,6 +16,8 @@ import {
   sameExactPatchRef,
 } from "./model.js";
 import type {
+  ResolvedGraph,
+  BaseTake,
   ClosedPatchBundle,
   ContributionProvenance,
   ExactContributionMask,
@@ -35,14 +39,16 @@ import type {
  * that base's content — so the request fails rather than quietly flattening everything.
  */
 export interface RetainedBases {
-  /** The closed bundle the View was resolved from; retention needs each revision's own delta. */
+  /** The closed bundle the View was resolved from. */
   readonly bundle: ClosedPatchBundle;
   readonly bases: readonly ExactPatchRef[];
 }
 
+type RevisionHeader = Pick<PatchRevision, "ref" | "metadata">;
 interface Inheritance {
-  readonly bases: readonly ExactPatchRef[];
-  readonly closure: ReadonlyMap<string, PatchRevision>;
+  readonly bases: readonly ResolvedGraph[];
+  readonly exposed: ReadonlySet<string>;
+  readonly closure: ReadonlyMap<string, RevisionHeader>;
   readonly masks: readonly ExactContributionMask[];
   readonly definedTags: ReadonlyMap<string, readonly TaggedSet[]>;
   readonly generatedTags: ReadonlySet<string>;
@@ -73,103 +79,152 @@ function contributed(chain: readonly ContributionProvenance[] | undefined, sourc
   return chain?.some((entry) => entry.operationIndex === index && sameExactPatchRef(entry.patch, source)) === true;
 }
 
-/**
- * What the retained bases keep contributing, and the masks the capture owes them. A retained
- * contribution the View does not carry — suppressed by the captured revision, or left out by
- * the selection — must be masked here, or it would reappear under the new content.
- */
-function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance {
-  const terminal = requireRevision(retained.bundle, retained.bundle.terminal);
+function retainedRefs(
+  view: SelectedGraph,
+  terminal: Pick<PatchRevision, "ref" | "bases">,
+  named: readonly ExactPatchRef[],
+) {
   if (!sameExactPatchRef(view.terminal, terminal.ref))
     throw new PatchCompileError("invalid-bundle", "the retained bases come from a different source revision");
-  for (const base of retained.bases)
+  for (const base of named)
     if (!terminal.bases.some((direct) => sameExactPatchRef(direct, base)))
       throw new PatchCompileError(
         "unsupported-bases",
         `${base.identity}@${base.digest} is not a direct base of ${terminal.ref.identity}; only a direct base can be retained or flattened`,
       );
-  const bases = terminal.bases.filter((base) => retained.bases.some((named) => sameExactPatchRef(named, base)));
+  return terminal.bases.filter((base) => named.some((ref) => sameExactPatchRef(ref, base)));
+}
+function inheritance(view: SelectedGraph, retained: RetainedBases): Inheritance {
+  const bases = retainedRefs(view, requireRevision(retained.bundle, retained.bundle.terminal), retained.bases);
   const closure = closureOf(retained.bundle, bases);
 
-  const suppressed = new Set<string>();
-  const suppressedProperties = new Set<string>();
-  for (const revision of closure.values())
-    for (const operation of revision.delta.operations)
-      if (operation.kind === "mask-contribution") {
-        const { source, operationIndex, property } = operation.mask;
-        if (property === undefined) suppressed.add(contributionKey(source, operationIndex));
-        else suppressedProperties.add(maskedPropertyKey(source, operationIndex, property));
-      }
-
-  const selectedSets = new Map<MetadataSetId, MetadataSet>(view.metadataSets.map((set) => [set.id, set]));
-  const masks: ExactContributionMask[] = [];
+  const graphs = bases.map((ref) =>
+    resolvePatchBundle({
+      terminal: requireRevision(retained.bundle, ref).ref,
+      revisions: [...closureOf(retained.bundle, [ref]).values()],
+    }),
+  );
+  return fromGraphs(view, graphs, closure);
+}
+/**
+ * Masks preserve suppressed contributions on kept entities. Base takes carry the View's
+ * selection, so omitted entities remain available through other adoptions.
+ */
+function fromGraphs(
+  view: SelectedGraph,
+  graphs: ResolvedGraph[],
+  closure: ReadonlyMap<string, RevisionHeader>,
+): Inheritance {
+  // Only compare real contributions to kept entities: the sparse planning graph may
+  // contain anonymous MetadataSets whose sole purpose is to distinguish possible takes.
+  const exposed = new Set<string>();
+  const suppressed = new Map<string, ExactContributionMask>();
+  const compare = (
+    entity: ExactContributionMask["entity"],
+    base: readonly ContributionProvenance[] | undefined,
+    kept: readonly ContributionProvenance[] | undefined,
+    property?: string,
+  ) => {
+    for (const { patch: source, operationIndex } of base ?? []) {
+      const key = contributionKey(source, operationIndex);
+      exposed.add(key);
+      if (contributed(kept, source, operationIndex)) continue;
+      if (property === undefined) suppressed.set(key, { source, operationIndex, entity });
+      else if (!suppressed.has(key))
+        suppressed.set(maskedPropertyKey(source, operationIndex, property), {
+          source,
+          operationIndex,
+          entity,
+          property,
+        });
+    }
+  };
+  for (const { provenance: base } of graphs) {
+    const kept = view.provenance;
+    for (const { id } of view.nodes)
+      compare({ kind: "node", id }, provenanceOf(base.nodes, id), provenanceOf(kept.nodes, id));
+    for (const { id } of view.edges)
+      compare({ kind: "edge", id }, provenanceOf(base.edges, id), provenanceOf(kept.edges, id));
+    for (const { id, playground } of view.materials) {
+      const entity = { kind: "material", id, playground } as const,
+        key = materialKey(entity);
+      compare(entity, provenanceOf(base.materials, key), provenanceOf(kept.materials, key));
+    }
+    for (const { id } of view.metadataSets) {
+      const entity = { kind: "metadata-set", id } as const;
+      compare(entity, provenanceOf(base.metadataSets, id), provenanceOf(kept.metadataSets, id));
+      for (const [property, chain] of Object.entries(provenanceOf(base.metadataProperties, id) ?? {}))
+        compare(entity, chain, provenanceOf(kept.metadataProperties, id)?.[property], property);
+    }
+  }
+  const order = new Map([...closure.keys()].map((key, index) => [key, index]));
+  const masks = [...suppressed.values()].sort(
+    (a, b) =>
+      (order.get(exactPatchRefKey(a.source)) ?? 0) - (order.get(exactPatchRefKey(b.source)) ?? 0) ||
+      a.operationIndex - b.operationIndex ||
+      (a.property === b.property ? 0 : (a.property ?? "") < (b.property ?? "") ? -1 : 1),
+  );
   const definedTags = new Map<string, TaggedSet[]>();
+  for (const graph of graphs)
+    for (const tag of graph.tags) {
+      const contributions = definedTags.get(tag.name) ?? [];
+      contributions.push(tag);
+      definedTags.set(tag.name, contributions);
+    }
   const generatedTags = new Set<string>();
   for (const revision of closure.values()) {
     const source = revision.ref;
     for (const label of discoveryTags(revision.metadata.properties))
       generatedTags.add(`patch:${source.identity}:${label}`);
-    revision.delta.operations.forEach((operation, operationIndex) => {
-      if (operation.kind === "define-tag") {
-        const contributions = definedTags.get(operation.tag.name) ?? [];
-        contributions.push(operation.tag);
-        definedTags.set(operation.tag.name, contributions);
-        return;
-      }
-      if (operation.kind === "mask-contribution") return;
-      if (suppressed.has(contributionKey(source, operationIndex))) return;
-      if (operation.kind === "add-node") {
-        if (!contributed(provenanceOf(view.provenance.nodes, operation.node.id), source, operationIndex))
-          masks.push({ source, operationIndex, entity: { kind: "node", id: operation.node.id } });
-        return;
-      }
-      if (operation.kind === "add-edge") {
-        if (!contributed(provenanceOf(view.provenance.edges, operation.edge.id), source, operationIndex))
-          masks.push({ source, operationIndex, entity: { kind: "edge", id: operation.edge.id } });
-        return;
-      }
-      if (
-        operation.kind === "add-material" ||
-        operation.kind === "edit-material" ||
-        operation.kind === "remove-material"
-      ) {
-        const material = operation.kind === "remove-material" ? operation : operation.material;
-        const selected = view.materials.find((candidate) => materialKey(candidate) === materialKey(material));
-        if (
-          selected === undefined ||
-          (operation.kind !== "remove-material" &&
-            canonicalJson(canonicalMaterial(selected)) !== canonicalJson(canonicalMaterial(operation.material))) ||
-          !contributed(provenanceOf(view.provenance.materials, materialKey(material)), source, operationIndex)
-        )
-          masks.push({
-            source,
-            operationIndex,
-            entity: { kind: "material", playground: material.playground, id: material.id },
-          });
-        return;
-      }
-      const set = operation.metadataSet;
-      const entity = { kind: "metadata-set", id: set.id } as const;
-      const selected = selectedSets.get(set.id);
-      // Subjects are part of the set's identity, so a selection that narrowed them cannot be
-      // expressed as property masks: the whole contribution goes and the capture authors it.
-      if (
-        selected === undefined ||
-        !contributed(provenanceOf(view.provenance.metadataSets, set.id), source, operationIndex) ||
-        !sameMetadataSubjects(selected, set)
-      ) {
-        masks.push({ source, operationIndex, entity });
-        return;
-      }
-      for (const property of Object.keys(set.properties))
-        if (
-          !suppressedProperties.has(maskedPropertyKey(source, operationIndex, property)) &&
-          !contributed(provenanceOf(view.provenance.metadataProperties, set.id)?.[property], source, operationIndex)
-        )
-          masks.push({ source, operationIndex, entity, property });
-    });
   }
-  return { bases, closure, masks, definedTags, generatedTags };
+  return { bases: graphs, exposed, closure, masks, definedTags, generatedTags };
+}
+
+/** Retain the least restrictive base entry reproducing each component of the View. */
+function captureBase(
+  base: ResolvedGraph,
+  view: SelectedGraph,
+  ops: readonly SemanticOperation[],
+): PatchContent["bases"][number] {
+  const bare = base.terminal;
+  const ids = <K extends string>(values: readonly { id: K }[]) => values.map((v) => v.id);
+  const common = <T extends { id: string }>(a: readonly T[], b: readonly T[]) => {
+    const keys = new Set(ids(b));
+    return a.filter((x) => keys.has(x.id));
+  };
+  const nodes = ids(common(base.nodes, view.nodes)),
+    edges = ids(common(base.edges, view.edges));
+  const viewSets = new Map(view.metadataSets.map((s) => [s.id, new Set(s.subjects.map((v) => canonicalJson(v)))]));
+  const sets = common(base.metadataSets, view.metadataSets).map((s) => ({
+    ...s,
+    subjects: s.subjects.filter((v) => viewSets.get(s.id)?.has(canonicalJson(v))),
+  }));
+  const visible = new Set(view.materials.map(materialKey));
+  const materials = base.materials.filter((m) => visible.has(materialKey(m)));
+  const equal = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b);
+  const subjects = (ss: typeof base.metadataSets) => ss.map((s) => [s.id, s.subjects]);
+  const matches = (g: SelectedGraph) =>
+    equal(ids(g.nodes), nodes) &&
+    equal(ids(g.edges), edges) &&
+    equal(subjects(g.metadataSets), subjects(sets)) &&
+    equal(g.materials.map(materialKey), materials.map(materialKey));
+  if (matches(base)) return bare;
+  const auto = takeBase(base, "needed", ops);
+  if (matches(auto)) return { ...bare, take: "needed" };
+  const needed = { kind: "needed", include: { cone: { targets: nodes } } } as const;
+  if (matches(takeBase(base, needed, ops))) return { ...bare, take: needed };
+  let only: Extract<BaseTake, { kind: "only" }> = { kind: "only", nodes };
+  const induced = () => takeBase(base, only, ops);
+  if (!equal(ids(induced().edges), edges)) only = { ...only, edges };
+  const tagSubjects = (ss: typeof base.metadataSets) =>
+    [...new Set(ss.flatMap((s) => s.subjects.flatMap((v) => (v.kind === "tag" ? [v.name] : []))))].sort();
+  const wanted = new Set(ids(sets));
+  if (!equal(tagSubjects(induced().metadataSets.filter((s) => wanted.has(s.id))), tagSubjects(sets)))
+    only = { ...only, tagSubjects: tagSubjects(sets) };
+  if (!equal(ids(induced().metadataSets), ids(sets))) only = { ...only, metadataSets: ids(sets) };
+  if (!equal(induced().materials.map(materialKey), materials.map(materialKey)))
+    only = { ...only, materials: materials.map(({ playground, id }) => ({ playground, id })) };
+  return { ...bare, take: only };
 }
 
 /**
@@ -185,7 +240,48 @@ export function reifyView(
   const inherited: Inheritance =
     destination && typeof destination !== "string"
       ? inheritance(view, destination)
-      : { bases: [], closure: new Map(), masks: [], definedTags: new Map(), generatedTags: new Set() };
+      : {
+          bases: [],
+          exposed: new Set(),
+          closure: new Map(),
+          masks: [],
+          definedTags: new Map(),
+          generatedTags: new Set(),
+        };
+  return capture(view, target, inherited, typeof destination === "string" ? destination : undefined);
+}
+
+/** Capture against an authorized store: the new take can demand contributions the source take omitted. */
+export async function reifySparseView(
+  view: SelectedGraph,
+  target: ReificationTarget,
+  retained: { bundle: SparsePatchInput; bases: readonly ExactPatchRef[] },
+): Promise<PatchContent> {
+  const input = sparseReader(retained.bundle);
+  const { store } = input;
+  const terminal = await readSparseManifest(store, input.terminal);
+  const bases = retainedRefs(view, { ref: input.terminal, bases: terminal.bases }, retained.bases);
+  const metadataSets = new Set(view.metadataSets.map((set) => set.id));
+  const closure = new Map<string, RevisionHeader>();
+  const graphs: ResolvedGraph[] = [];
+  for (const { identity, digest } of bases) {
+    const resolved = await resolveSparsePatchView({ identity, digest }, store, {}, undefined, {
+      metadataSets,
+      revision(ref, metadata) {
+        closure.set(exactPatchRefKey(ref), { ref, metadata });
+      },
+    });
+    graphs.push(resolved.graph);
+  }
+  return capture(view, target, fromGraphs(view, graphs, closure));
+}
+
+function capture(
+  view: SelectedGraph,
+  target: ReificationTarget,
+  inherited: Inheritance,
+  destination?: PatchInstanceId,
+): PatchContent {
   const masked = new Set(
     inherited.masks
       .filter((mask) => mask.property === undefined)
@@ -197,7 +293,7 @@ export function reifyView(
     ),
   );
   const supplied = (entry: ContributionProvenance) =>
-    inherited.closure.has(exactPatchRefKey(entry.patch)) &&
+    inherited.exposed.has(contributionKey(entry.patch, entry.operationIndex)) &&
     !masked.has(contributionKey(entry.patch, entry.operationIndex));
   /** A retained base already carries this entity, so the capture must not author it again. */
   const inheritsEntity = (chain: readonly ContributionProvenance[] | undefined) => chain?.some(supplied) === true;
@@ -311,7 +407,7 @@ export function reifyView(
 
   const copy = typeof destination === "string" ? namespaceCapture(view, { operations }, destination) : undefined;
   return {
-    bases: inherited.bases,
+    bases: inherited.bases.map((graph) => captureBase(graph, view, operations)),
     delta: copy?.delta ?? { operations },
     metadata: {
       ...target.metadata,

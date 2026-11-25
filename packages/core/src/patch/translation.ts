@@ -25,6 +25,9 @@ import {
   type ResolvedGraph,
   type SemanticOperation,
 } from "./model.js";
+import { unpackPatchContentAsync } from "./merkle.js";
+import { readSparseManifest, resolveSparsePatch, sparseReader, type SparsePatchInput } from "./sparse.js";
+import { resolveSparseVariantBundle } from "./sparse-variants.js";
 import { resolvePatchBundle, resolveVariantBundle } from "./resolve.js";
 import { satisfiesVersionRange } from "../version_range.js";
 import { declaredPatchLocale, patchVariantMetadata } from "./variants.js";
@@ -88,6 +91,29 @@ export function translationSource(source: ClosedPatchBundle): PatchRevision {
   return revision;
 }
 
+export async function sparseTranslationSource(input: SparsePatchInput): Promise<PatchRevision> {
+  const { terminal, store } = sparseReader(input);
+  const manifest = await readSparseManifest(store, terminal);
+  return { ref: terminal, ...(await unpackPatchContentAsync(manifest, (d) => store.getChunk(d, terminal.digest))) };
+}
+
+type HumanLayer<Revision = Pick<PatchRevision, "ref" | "metadata">> = {
+  readonly revision: Revision;
+  readonly graph: ResolvedGraph;
+};
+
+function humanClaim(
+  source: ExactPatchRef,
+  version: string,
+  locale: string,
+  ref: ExactPatchRef,
+  metadata: PatchContent["metadata"],
+) {
+  if (metadata.properties[PATCH_MACHINE_TRANSLATION] === true) return false;
+  const claim = patchVariantMetadata(ref.identity, metadata).claim;
+  return claim?.patchId === source.identity && claim.locale === locale && satisfiesVersionRange(version, claim.range);
+}
+
 /** Resolve masks against today's source before deciding coverage. Stale human text, another
  * locale, an out-of-range claim, and an existing machine result are not human coverage. */
 export function translationHumanLayers(
@@ -95,18 +121,11 @@ export function translationHumanLayers(
   sourceVersion: string,
   locale: string,
   variants: readonly ClosedPatchBundle[],
-): readonly { readonly revision: PatchRevision; readonly graph: ResolvedGraph }[] {
+): readonly HumanLayer<PatchRevision>[] {
   return variants.flatMap((variant) => {
     try {
       const revision = translationSource(variant);
-      if (revision.metadata.properties[PATCH_MACHINE_TRANSLATION] === true) return [];
-      const claim = patchVariantMetadata(revision.ref.identity, revision.metadata).claim;
-      if (
-        claim?.patchId !== source.terminal.identity ||
-        claim.locale !== locale ||
-        !satisfiesVersionRange(sourceVersion, claim.range)
-      )
-        return [];
+      if (!humanClaim(source.terminal, sourceVersion, locale, revision.ref, revision.metadata)) return [];
       const { graph } = resolveVariantBundle(source, variant, sourceVersion);
       return graph.patchOrder.some((ref) => sameExactPatchRef(ref, revision.ref)) ? [{ revision, graph }] : [];
     } catch (error) {
@@ -114,6 +133,29 @@ export function translationHumanLayers(
       return [];
     }
   });
+}
+
+export async function sparseTranslationHumanLayers(
+  source: SparsePatchInput,
+  sourceVersion: string,
+  locale: string,
+  variants: readonly SparsePatchInput[],
+): Promise<readonly HumanLayer[]> {
+  const from = sparseReader(source);
+  const layers: HumanLayer[] = [];
+  for (const variant of variants) {
+    try {
+      const read = sparseReader(variant);
+      const manifest = await readSparseManifest(read.store, read.terminal);
+      if (!humanClaim(from.terminal, sourceVersion, locale, read.terminal, manifest.metadata)) continue;
+      const { graph } = await resolveSparseVariantBundle(from, read, sourceVersion);
+      if (graph.patchOrder.some((ref) => sameExactPatchRef(ref, read.terminal)))
+        layers.push({ graph, revision: { ref: read.terminal, metadata: manifest.metadata } });
+    } catch (error) {
+      if (!(error instanceof PatchCompileError)) throw error;
+    }
+  }
+  return layers;
 }
 
 function textProperty(property: string): boolean {
@@ -154,35 +196,89 @@ function sameSubject(left: MetadataSet, right: MetadataSet): boolean {
   );
 }
 
-/** A reusable to-do list over an exact source and only the human layers below the machine.
- * Results are cumulative by key: replay retained results into a fresh plan after a source
- * update, and only changed strings/Document bytes need another provider request. */
-export function planPatchTranslation(input: {
-  readonly source: ClosedPatchBundle;
+interface TranslationInput<T> {
+  readonly source: T;
   readonly sourceVersion: string;
   readonly locale: string;
-  readonly humanVariants?: readonly ClosedPatchBundle[];
-}): PatchTranslationPlan {
-  const { source, sourceVersion } = input;
+  readonly humanVariants?: readonly T[];
+}
+
+function emptyPlan(
+  source: ExactPatchRef,
+  metadata: PatchContent["metadata"],
+  input: { locale: string; sourceVersion: string },
+) {
   const locale = Intl.getCanonicalLocales(input.locale)[0];
   if (!locale) throw new Error("Translation needs a reading locale");
-  const sourceLocale = declaredPatchLocale(translationSource(source).metadata);
-  const texts: TranslationText[] = [];
-  const documents: TranslationDocument[] = [];
-  const properties: TranslationProperty[] = [];
-  const plan = {
-    source: source.terminal,
-    sourceVersion,
+  const sourceLocale = declaredPatchLocale(metadata);
+  const texts: TranslationText[] = [],
+    documents: TranslationDocument[] = [],
+    properties: TranslationProperty[] = [];
+  return {
+    source,
+    sourceVersion: input.sourceVersion,
     locale,
     ...(sourceLocale && { sourceLocale }),
     texts,
     documents,
     properties,
   };
-  if (sourceLocale === locale) return plan;
+}
+
+/** A reusable to-do list over an exact source and only the human layers below the machine.
+ * Results are cumulative by key: replay retained results into a fresh plan after a source
+ * update, and only changed strings/Document bytes need another provider request. */
+export function planPatchTranslation(input: TranslationInput<ClosedPatchBundle>): PatchTranslationPlan {
+  const { source, sourceVersion } = input;
+  const { metadata } = translationSource(source);
+  const plan = emptyPlan(source.terminal, metadata, input);
+  if (plan.sourceLocale === plan.locale) return plan;
   const graph = resolvePatchBundle(source);
-  const humans = translationHumanLayers(source, sourceVersion, locale, input.humanVariants ?? []);
-  const sourceRefs = new Set(source.revisions.map(({ ref }) => exactPatchRefKey(ref)));
+  const humans = translationHumanLayers(source, sourceVersion, plan.locale, input.humanVariants ?? []);
+  return collectPlan(
+    plan,
+    metadata,
+    graph,
+    humans,
+    source.revisions.map(({ ref }) => ref),
+  );
+}
+
+export async function planSparsePatchTranslation(
+  input: TranslationInput<SparsePatchInput>,
+): Promise<PatchTranslationPlan> {
+  return (await readSparsePatchTranslation(input)).plan;
+}
+
+/** Reuse the planner's exact reading for host-owned fields such as Mission suggestions. */
+export async function readSparsePatchTranslation(input: TranslationInput<SparsePatchInput>): Promise<{
+  readonly plan: PatchTranslationPlan;
+  readonly graph?: ResolvedGraph;
+  readonly humans: readonly HumanLayer[];
+}> {
+  const source = sparseReader(input.source);
+  const { metadata } = await readSparseManifest(source.store, source.terminal);
+  const plan = emptyPlan(source.terminal, metadata, input);
+  if (plan.sourceLocale === plan.locale) return { plan, humans: [] };
+  const { graph } = await resolveSparsePatch(source.terminal, source.store);
+  const humans = await sparseTranslationHumanLayers(
+    source,
+    input.sourceVersion,
+    plan.locale,
+    input.humanVariants ?? [],
+  );
+  return { plan: collectPlan(plan, metadata, graph, humans, graph.patchOrder), graph, humans };
+}
+
+function collectPlan(
+  plan: ReturnType<typeof emptyPlan>,
+  metadata: PatchContent["metadata"],
+  graph: ResolvedGraph,
+  humans: readonly HumanLayer[],
+  refs: readonly ExactPatchRef[],
+) {
+  const { source, locale, texts, documents, properties } = plan;
+  const sourceRefs = new Set(refs.map(exactPatchRefKey));
   const isHuman = (sources: readonly { patch: ExactPatchRef }[]) =>
     sources.some(({ patch }) => !sourceRefs.has(exactPatchRefKey(patch)));
 
@@ -205,9 +301,9 @@ export function planPatchTranslation(input: {
     const fields = strings.flatMap((text, index) => {
       if (!text.trim()) return [];
       const item = translationText(
-        source.terminal,
+        source,
         locale,
-        [target.kind, target.kind === "root" ? source.terminal.identity : target.set.id, property, index],
+        [target.kind, target.kind === "root" ? source.identity : target.set.id, property, index],
         text,
         OPENING_PROPERTIES.includes(property) ? 0 : 1,
       );
@@ -217,7 +313,7 @@ export function planPatchTranslation(input: {
     if (fields.length) properties.push({ target, property, value, fields, masks });
   };
 
-  for (const [property, value] of Object.entries(translationSource(source).metadata.properties)) {
+  for (const [property, value] of Object.entries(metadata.properties)) {
     if (humans.some(({ revision }) => revision.metadata.properties[property] !== undefined)) continue;
     addProperty({ kind: "root" }, property, value, []);
   }
@@ -257,7 +353,7 @@ export function planPatchTranslation(input: {
       continue;
     documents.push({
       key: contentDigest({
-        source: source.terminal.identity,
+        source: source.identity,
         locale,
         material: materialKey(material),
         content: material.content,

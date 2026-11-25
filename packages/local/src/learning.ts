@@ -418,7 +418,7 @@ export class LearningHost<S> {
     if (exists === create) throw new Error(create ? "Mission already exists" : "Unknown Mission");
     for (const target of mission.targets) {
       if (!view.graph.nodes.some(({ id }) => id === target.node)) throw new Error("Mission target is not in the graph");
-      const source = await this.runtime.snapshot(target.provenance);
+      const source = await this.runtime.readPatch(target.provenance, view.profile);
       if (!source.graph.nodes.some(({ id }) => id === target.node))
         throw new Error("Invalid Mission target provenance");
     }

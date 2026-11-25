@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -95,10 +96,10 @@ test("a Profile directory round-trips, retaining transcripts and relocating pi c
     await writeFile(join(source, "sessions", "untrusted.jsonl"), "not a trusted transcript");
     await writeFile(join(source, "materials", "working-copy"), "not exchanged");
     const archive = await directory.pack();
-    const pure = unpack(archive, theories);
+    const pure = await unpack(archive, theories);
     expect(pure.has("materials/working-copy")).toBe(false);
     expect(pure.has("sessions/untrusted.jsonl")).toBe(false);
-    expect(validate(pure, theories).log).toEqual(log);
+    expect((await validate(pure, theories)).log).toEqual(log);
     const received = await unpackDirectory(archive, destination, theories);
     const result = await received.read();
     expect(result.patches).toEqual((await directory.read()).patches);
@@ -108,7 +109,7 @@ test("a Profile directory round-trips, retaining transcripts and relocating pi c
     if (!transcript) throw new Error("Missing imported Session");
     expect(parsePiSession(transcript)).toEqual({ ...session, header: { ...session.header, cwd: destination } });
     expect(result.manifest.sessions["surface-one"]).toBe(filename);
-    expect(validate(unpack(await received.pack(), theories), theories).log).toEqual(log);
+    expect((await validate(await unpack(await received.pack(), theories), theories)).log).toEqual(log);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -141,16 +142,24 @@ test("Profile exchange refuses tampered content, a broken base chain and malform
     await directory.setPersonal(ref);
     const files = await directory.files();
     const tampered = new Map(files);
-    tampered.set("patches/" + ref.digest + ".json", jsonBytes(emptyPatch()));
-    expect(() => pack(tampered, theories)).toThrow("Patch content digest mismatch");
+    tampered.set("manifests/" + ref.digest + ".json", jsonBytes(emptyPatch()));
+    await assert.rejects(pack(tampered, theories), /Patch content digest mismatch/);
+    for (const [folder, body, reason] of [
+      ["chunks/", { kind: "fragment", data: "other" }, /Patch content digest mismatch/],
+      ["blobs/", "other", /Blob digest mismatch/],
+    ] as const) {
+      const invalid = new Map(files);
+      invalid.set(folder + ref.digest + (folder === "chunks/" ? ".json" : ""), jsonBytes(body));
+      await assert.rejects(pack(invalid, theories), reason);
+    }
     const broken = new Map(files);
-    broken.delete("patches/" + original.digest + ".json");
-    expect(() => pack(broken, theories)).toThrow("missing Patch");
+    broken.delete("manifests/" + original.digest + ".json");
+    await assert.rejects(pack(broken, theories), /missing Patch/);
     const malformed = new Map(files);
     malformed.set("log.jsonl", new TextEncoder().encode("{}\n"));
-    expect(() => pack(malformed, theories)).toThrow("Invalid Profile log entry at line 1");
+    await assert.rejects(pack(malformed, theories), /Invalid Profile log entry at line 1/);
     malformed.set("log.jsonl", new TextEncoder().encode("{broken}\n"));
-    expect(() => pack(malformed, theories)).toThrow("Malformed Profile log JSON at line 1");
+    await assert.rejects(pack(malformed, theories), /Malformed Profile log JSON at line 1/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

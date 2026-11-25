@@ -53,6 +53,11 @@ export function theoryPinMigration(
   return rewrites ? undefined : plan.requirement;
 }
 
+/** A release can stay packed when its pin needs no Patch rewrite. */
+export function theoryPatchNeedsMigration(theory: MigrationTheory, requirement: TheoryRequirement): boolean {
+  return planTheoryMigration(theory, requirement).steps.some((step) => step.migratePatch !== undefined);
+}
+
 export type TheoryProfileMigrationResult = Readonly<{
   profile: Profile;
   requirement: TheoryRequirement;
@@ -101,10 +106,11 @@ export function migrateTheoryPatchClosure(
     if (!revision) throw new Error("Incomplete Patch closure");
     const pin = declared.get(key) ?? inherited;
     const authoredBases = revision.bases;
-    const bases = authoredBases.map((base) => visit(base, pin).ref);
+    const relinkBase = (base: PatchContent["bases"][number]) => ({ ...base, ...visit(base, pin).ref });
+    const bases = authoredBases.map(relinkBase);
     const basesChanged = bases.some((base, i) => base.digest !== revision.bases[i]?.digest);
     function relink(content: PatchContent): PatchContent {
-      const pointers = content.bases === authoredBases ? bases : content.bases.map((base) => visit(base, pin).ref);
+      const pointers = content.bases === authoredBases ? bases : content.bases.map(relinkBase);
       if (pointers.every((base, i) => base.digest === content.bases[i]?.digest)) return content;
       return {
         ...content,

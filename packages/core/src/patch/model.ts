@@ -53,6 +53,27 @@ export interface ExactPatchRef {
   readonly digest: ContentDigest;
 }
 
+export type BaseQuery =
+  | Extract<GraphQuery, { readonly tag: string } | { readonly cone: unknown } | { readonly dependents: unknown }>
+  | { readonly nodes: readonly NodeId[] }
+  | { readonly union: readonly [BaseQuery, BaseQuery, ...BaseQuery[]] }
+  | { readonly intersection: readonly [BaseQuery, BaseQuery, ...BaseQuery[]] }
+  | { readonly difference: readonly [BaseQuery, BaseQuery] };
+export type BaseTake =
+  | "needed"
+  | { readonly kind: "needed"; readonly include?: BaseQuery }
+  | {
+      readonly kind: "only";
+      readonly nodes: readonly NodeId[];
+      readonly edges?: readonly EdgeId[];
+      readonly metadataSets?: readonly MetadataSetId[];
+      readonly materials?: readonly MaterialRef[];
+      readonly tagSubjects?: readonly string[];
+    };
+export interface BaseRef extends ExactPatchRef {
+  readonly take?: BaseTake;
+}
+
 export function exactPatchRefKey(ref: ExactPatchRef): string {
   return `${ref.identity}\0${ref.digest}`;
 }
@@ -195,7 +216,7 @@ export interface SemanticDelta {
 
 /** Canonical authored content: no own instance identity, lifecycle fields or embedded bytes. */
 export interface PatchContent {
-  readonly bases: readonly ExactPatchRef[];
+  readonly bases: readonly BaseRef[];
   readonly delta: SemanticDelta;
   readonly metadata: PatchMetadata;
 }

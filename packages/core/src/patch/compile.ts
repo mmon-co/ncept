@@ -18,6 +18,14 @@ import { metadataSetsForEntity } from "./metadata.js";
 import { nodeCascadedProperty } from "./guidance.js";
 import { projectVisualGraph } from "./project.js";
 import { resolvePatchBundle } from "./resolve.js";
+import { manifestDigest, packPatchContent, unpackPatchContentAsync } from "./merkle.js";
+import {
+  resolveSparsePatch,
+  resolveSparsePatchView,
+  readSparseManifest,
+  sparseReader,
+  type SparsePatchInput,
+} from "./sparse.js";
 import { selectGraph } from "./select.js";
 
 const HIGH_IN_DEGREE = 5;
@@ -251,13 +259,11 @@ function resolvedLabels(graph: ResolvedGraph): Set<NodeId> {
 }
 
 function approximateReport(
-  bundle: ClosedPatchBundle,
+  terminal: ExactPatchRef,
+  current: ResolvedGraph,
   operations: SemanticDelta["operations"],
   targets: readonly NodeId[],
-  retractions: readonly string[],
-  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): GraphDiffCompileReport {
-  const current = resolvePatchBundle(prospectiveBundle(bundle, [], [], retractions), undefined, selection);
   const nodes = new Set(current.nodes.map(({ id }) => id));
   const edges = new Map(current.edges.map((edge) => [edge.id, edge]));
   const labelled = resolvedLabels(current);
@@ -269,7 +275,7 @@ function approximateReport(
         if (subject.kind === "node" && typeof operation.metadataSet.properties[NODE_LABEL_PROPERTY] === "string")
           labelled.add(subject.id);
   }
-  return reportFor(bundle.terminal, nodes, edges, labelled, targets);
+  return reportFor(terminal, nodes, edges, labelled, targets);
 }
 
 /**
@@ -278,11 +284,10 @@ function approximateReport(
  * release closures, not an authored strand.
  */
 function carryElaborationTags(
-  bundle: ClosedPatchBundle,
+  before: ResolvedGraph,
   operations: SemanticDelta["operations"],
-  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
+  authoredTags: () => ReadonlySet<string>,
 ): SemanticDelta["operations"] {
-  const before = resolvePatchBundle(bundle, undefined, selection);
   const existing = new Set(before.nodes.map(({ id }) => id));
   const added = new Set(
     operations.flatMap((op) => (op.kind === "add-node" && !existing.has(op.node.id) ? [op.node.id] : [])),
@@ -297,11 +302,7 @@ function carryElaborationTags(
   }
   if (!parents.size) return operations;
   const explicit = new Set(operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])));
-  const authored = new Set(
-    bundle.revisions.flatMap((revision) =>
-      revision.delta.operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])),
-    ),
-  );
+  const authored = authoredTags();
   return [
     ...operations,
     ...before.tags.flatMap((tag): SemanticDelta["operations"] => {
@@ -328,21 +329,48 @@ export function compileGraphDiff(
   retractions: readonly string[] = [],
   selection?: ReadonlyMap<PatchId, ExactPatchRef>,
 ): CompiledGraphDiff {
-  operations = carryElaborationTags(bundle, operations, selection);
-  let graph: ResolvedGraph;
+  operations = carryElaborationTags(
+    resolvePatchBundle(bundle, undefined, selection),
+    operations,
+    () =>
+      new Set(
+        bundle.revisions.flatMap((revision) =>
+          revision.delta.operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])),
+        ),
+      ),
+  );
   try {
-    graph = resolvePatchBundle(prospectiveBundle(bundle, operations, citations, retractions), undefined, selection);
-    projectVisualGraph({ graph, annotations: {} });
+    const graph = resolvePatchBundle(
+      prospectiveBundle(bundle, operations, citations, retractions),
+      undefined,
+      selection,
+    );
+    return finishDiff(bundle.terminal, graph, operations, targets, citations, retractions);
   } catch (error) {
-    if (
-      error instanceof PatchCompileError &&
-      ["dangling-edge", "missing-display-metadata", "dependency-cycle"].includes(error.code)
-    )
-      throw new GraphDiffCompileError(approximateReport(bundle, operations, targets, retractions, selection));
-    throw error;
+    if (!structuralError(error)) throw error;
+    const current = resolvePatchBundle(prospectiveBundle(bundle, [], [], retractions), undefined, selection);
+    throw new GraphDiffCompileError(approximateReport(bundle.terminal, current, operations, targets));
   }
+}
+
+function structuralError(error: unknown) {
+  return (
+    error instanceof PatchCompileError &&
+    ["dangling-edge", "missing-display-metadata", "dependency-cycle"].includes(error.code)
+  );
+}
+
+function finishDiff(
+  terminal: ExactPatchRef,
+  graph: ResolvedGraph,
+  operations: SemanticDelta["operations"],
+  targets: readonly NodeId[],
+  citations: PatchMetadata["citations"],
+  retractions: readonly string[],
+): CompiledGraphDiff {
+  projectVisualGraph({ graph, annotations: {} });
   const report = reportFor(
-    bundle.terminal,
+    terminal,
     new Set(graph.nodes.map(({ id }) => id)),
     new Map(graph.edges.map((edge) => [edge.id, edge])),
     resolvedLabels(graph),
@@ -352,8 +380,62 @@ export function compileGraphDiff(
   return { graph, report, operations, citations, retractions };
 }
 
+export async function compileSparseGraphDiff(
+  input: SparsePatchInput,
+  operations: SemanticDelta["operations"],
+  targets: readonly NodeId[],
+  citations: PatchMetadata["citations"] = [],
+  retractions: readonly string[] = [],
+  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
+): Promise<CompiledGraphDiff & { readonly content: PatchContent }> {
+  const { terminal } = input;
+  const { store } = sparseReader(input);
+  const options = selection ? { selection } : {};
+  const before = await resolveSparsePatch(terminal, store, options);
+  operations = carryElaborationTags(before.graph, operations, () => before.authoredTags);
+  const own = await unpackPatchContentAsync(await readSparseManifest(store, terminal), (d) =>
+    store.getChunk(d, terminal.digest),
+  );
+  async function prospective(content: PatchContent) {
+    const { manifest, chunks } = packPatchContent(content);
+    const ref = { identity: terminal.identity, digest: manifestDigest(manifest) };
+    const overlay = {
+      getManifest: (d: typeof ref.digest) => store.getManifest(d),
+      getChunk: async (d: typeof ref.digest, owner?: typeof ref.digest) =>
+        (owner === undefined || owner === ref.digest ? chunks.get(d) : undefined) ?? store.getChunk(d, owner),
+    };
+    return (await resolveSparsePatchView(ref, overlay, options, new Map([[exactPatchRefKey(ref), manifest]]))).graph;
+  }
+  const content = composePatch(own, operations, citations, retractions);
+  try {
+    return {
+      ...finishDiff(terminal, await prospective(content), operations, targets, citations, retractions),
+      content,
+    };
+  } catch (error) {
+    if (!structuralError(error)) throw error;
+    const current = retractions.length ? await prospective(composePatch(own, [], [], retractions)) : before.graph;
+    throw new GraphDiffCompileError(approximateReport(terminal, current, operations, targets));
+  }
+}
+
+export async function compileSparseGraph(
+  input: Omit<GraphCompilationInput, "bundle"> & { readonly bundle: SparsePatchInput },
+): Promise<VisualGraph> {
+  const { graph } = await resolveSparsePatch(
+    input.bundle.terminal,
+    sparseReader(input.bundle).store,
+    input.selection ? { selection: input.selection } : {},
+  );
+  return visualGraph(input, graph);
+}
+
 export function compileGraph(input: GraphCompilationInput): VisualGraph {
   const resolved = resolvePatchBundle(input.bundle, undefined, input.selection);
+  return visualGraph(input, resolved);
+}
+
+export function visualGraph(input: Omit<GraphCompilationInput, "bundle">, resolved: ResolvedGraph): VisualGraph {
   const attachedNames = new Set<string>();
   for (const tag of input.attachedTags ?? []) {
     if (tag.authority === "patch") throw new Error(`attached tag '${tag.name}' cannot claim Patch authority`);

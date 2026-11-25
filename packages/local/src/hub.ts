@@ -4,16 +4,14 @@ import { randomUUID } from "node:crypto";
 import metadata from "../package.json" with { type: "json" };
 import {
   attachmentDigest,
-  bundleForRevision,
-  candidateRevision,
+  contentAttachments,
+  extractSparseClosure,
   exactPatchRefKey,
-  isAttachment,
   isContentDigest,
   isMissionRevision,
   latestMissionRevision,
   isPatchId,
   migrateTheoryPatchClosure,
-  notebookSelection,
   PATCH_MISSIONS_PROPERTY,
   readReifiedMissions,
   reifyProfileMissions,
@@ -21,19 +19,21 @@ import {
   reifyView,
   releasePrecedenceKey,
   resolveTheory,
-  resolvePatchBundle,
+  resolveSparsePatch,
+  resolvedGraphAttachments,
   revisionContent,
+  theoryPatchNeedsMigration,
+  verifySparseBundle,
   sameExactPatchRef,
   selectGraph,
   withReifiedMissions,
-  type Attachment,
-  type ClosedPatchBundle,
   type ContentDigest,
   type ExactPatchRef,
   type Mission,
   type NodeId,
+  type ResolvedGraph,
   type PatchContent,
-  type PatchRevision,
+  type SparsePatchBundle,
   type ReifiedMission,
   type ReifiedMissionOrigin,
   type TheoryRequirement,
@@ -43,6 +43,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { hubBaseUrl, HubAuth, HubSignInRequired } from "./hub-auth.js";
 import { unpackDirectory, type ProfileDirectory } from "./directory.js";
+import { PackedPatches } from "./packed.js";
 import { object, parsePiSession } from "./sessions.js";
 import { validate, unpack, type ConfiguredTheory } from "./exchange.js";
 import type { Confirm, Host, HubOptions } from "./host.js";
@@ -52,13 +53,12 @@ import type { Confirm, Host, HubOptions } from "./host.js";
  * the release carries that map alone whatever Patches it was learnt from, and offering the
  * Mission to whoever opens it.
  */
-export function missionBundle(
-  patches: ClosedPatchBundle,
+export async function missionBundle(
+  graph: ResolvedGraph,
   mission: Mission,
   title: string,
   origin?: ReifiedMissionOrigin,
-): { bundle: ClosedPatchBundle; skills: number } {
-  const graph = resolvePatchBundle(patches, new Set(["local"]), notebookSelection(patches));
+) {
   const cone = selectGraph(graph, { cone: { targets: mission.targets.map(({ node }) => node) } });
   if (!cone.nodes.length) throw new Error("This Mission has no map yet");
   // Flattened: the link carries the Mission's map alone, whatever Patches it was learnt from.
@@ -94,9 +94,9 @@ export function missionBundle(
       [suggestion],
     ),
   };
-  const revision = candidateRevision(`patch-${randomUUID()}`, content);
-  const bundle = bundleForRevision(revision.ref, new Map([[revision.ref.digest, content]]));
-  resolvePatchBundle(bundle);
+  const store = new PackedPatches();
+  const terminal = { identity: `patch-${randomUUID()}` as const, digest: store.add(content) };
+  const bundle = await extractSparseClosure(terminal, store, { completeTerminal: true });
   return { bundle, skills: cone.nodes.length };
 }
 
@@ -124,49 +124,61 @@ async function fetched(url: string, init?: RequestInit): Promise<Response> {
   if (!response.ok) throw new Error("Hub request failed (" + response.status + "): " + (await response.text()));
   return response;
 }
-function attachments(bundle: ClosedPatchBundle): readonly Attachment[] {
-  const found = new Map<ContentDigest, Attachment>();
-  const add = (values: readonly unknown[]) => {
-    for (const value of values) if (isAttachment(value)) found.set(value.hash, value);
-  };
-  for (const revision of bundle.revisions) {
-    add(Object.values(revision.metadata.properties));
-    for (const operation of revision.delta.operations) {
-      if (operation.kind === "add-metadata-set") add(Object.values(operation.metadataSet.properties));
-      if (operation.kind === "add-material" || operation.kind === "edit-material") {
-        add([operation.material.content, ...Object.values(operation.material.meta)]);
-      }
-    }
+async function fetchReleaseBlobs(endpoint: string, headers: Record<string, string>, graph: ResolvedGraph) {
+  const hashes = [...new Set(Array.from(resolvedGraphAttachments(graph), (item) => item.hash))];
+  const blobs = new Map<ContentDigest, Uint8Array>();
+  function retain(hash: ContentDigest, bytes: Uint8Array) {
+    if (attachmentDigest(bytes) !== hash) throw new Error("Hub attachment digest mismatch: " + hash);
+    blobs.set(hash, bytes);
   }
-  return [...found.values()];
+  let legacy = false;
+  async function batch(group: ContentDigest[]): Promise<void> {
+    if (!legacy) {
+      const response = await fetch(endpoint + "/attachments", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ hashes: group }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const batchRoute = response.headers.has("X-Hub-Attachment-Batch");
+      if (response.ok && batchRoute) {
+        const bytes = await response.arrayBuffer();
+        const frame = new DataView(bytes);
+        let offset = 0;
+        for (const hash of group) {
+          const length = frame.getUint32(offset);
+          retain(hash, new Uint8Array(bytes, offset + 4, length));
+          offset += 4 + length;
+        }
+        if (offset !== bytes.byteLength) throw new Error("Unexpected Hub attachment frame");
+        return;
+      }
+      if (response.status === 413) {
+        if (group.length > 1) {
+          const mid = Math.ceil(group.length / 2);
+          await batch(group.slice(0, mid));
+          await batch(group.slice(mid));
+          return;
+        }
+      } else if (!batchRoute && (response.ok || response.status === 404 || response.status === 405)) {
+        await response.body?.cancel();
+        legacy = true;
+      } else throw new Error("Hub request failed (" + response.status + "): " + (await response.text()));
+    }
+    for (const hash of group)
+      retain(hash, new Uint8Array(await (await fetched(endpoint + "/attachments/" + hash, { headers })).arrayBuffer()));
+  }
+  for (let i = 0; i < hashes.length; i += 256) await batch(hashes.slice(i, i + 256));
+  return blobs;
 }
-/** Reject malformed wire data before handing its typed operations to Core's bundle verifier. */
-function verifiedBundle(value: unknown): ClosedPatchBundle {
-  if (!object(value) || !object(value.terminal) || !Array.isArray(value.revisions))
-    throw new Error("Invalid Hub bundle");
-  const exact = (ref: unknown): ref is ExactPatchRef =>
-    object(ref) && isPatchId(ref.identity) && isContentDigest(ref.digest);
-  if (!exact(value.terminal)) throw new Error("Invalid Hub terminal");
-  const isRevision = (revision: unknown): revision is ClosedPatchBundle["revisions"][number] =>
-    object(revision) &&
-    exact(revision.ref) &&
-    Array.isArray(revision.bases) &&
-    revision.bases.every(exact) &&
-    object(revision.delta) &&
-    Array.isArray(revision.delta.operations) &&
-    object(revision.metadata) &&
-    object(revision.metadata.properties) &&
-    Array.isArray(revision.metadata.citations);
-  const revisions = value.revisions.map((revision: unknown) => {
-    if (!isRevision(revision)) throw new Error("Invalid Hub revision");
-    return revision;
-  });
-  const bundle = { terminal: value.terminal, revisions };
-  resolvePatchBundle(bundle);
-  return bundleForRevision(
-    bundle.terminal,
-    new Map(revisions.map((revision) => [revision.ref.digest, revisionContent(revision)])),
-  );
+
+const captureReading = { completeTerminal: true, includeCompleteBases: true };
+
+function bundleStore(bundle: SparsePatchBundle) {
+  const store = new PackedPatches();
+  for (const [d, manifest] of bundle.manifests) store.manifests.set(d, manifest);
+  for (const [d, chunk] of bundle.chunks) store.chunks.set(d, chunk);
+  return store;
 }
 
 function theoryRequirement(value: unknown): TheoryRequirement {
@@ -238,18 +250,23 @@ export function connectHub(
     });
     return hash;
   }
-  /** Upload a closed bundle's attachments, capture it as a new Hub Patch and release it. */
+  /** Upload supplied content, capture it as a new Hub Patch and release it. */
   async function release(
-    bundle: ClosedPatchBundle,
+    bundle: SparsePatchBundle,
     blobs: ReadonlyMap<ContentDigest, Uint8Array>,
     version: string,
     visibility: "public" | "unlisted",
   ) {
+    const { completeContents } = await verifySparseBundle(bundle, captureReading);
+    const uploads = new Map(
+      [...completeContents.values()].flatMap(contentAttachments).map((attachment) => [attachment.hash, attachment]),
+    );
     return connected(async (call) => {
-      for (const attachment of attachments(bundle)) {
-        const bytes = blobs.get(attachment.hash);
-        if (!bytes) throw new Error("Missing Profile blob: " + attachment.hash);
-        await upload(call, bytes, attachment.mediaType);
+      for (const [hash, attachment] of uploads) {
+        // A complete revision can still come from a sparse reading that omitted some blobs.
+        // Capture decides if the Hub can reuse those bytes or requires an upload.
+        const bytes = blobs.get(hash);
+        if (bytes) await upload(call, bytes, attachment.mediaType);
       }
       const captured = await call<{ ref: ExactPatchRef }>("capture", { bundle });
       await call("name", { patchId: captured.ref.identity, digest: captured.ref.digest, version });
@@ -269,9 +286,9 @@ export function connectHub(
       if (!object(response) || response.patchId !== selected.patchId || response.version !== selected.version)
         throw new Error("Hub release address mismatch");
       const requirement = theoryRequirement(response.theoryRequirement);
-      const bundle = verifiedBundle(response.bundle);
+      const { bundle, graph } = await verifySparseBundle(response.bundle);
       if (bundle.terminal.identity !== selected.patchId) throw new Error("Hub release identity mismatch");
-      const revisions = new Map(bundle.revisions.map((revision) => [exactPatchRefKey(revision.ref), revision]));
+      const refs = new Set(graph.patchOrder.map(exactPatchRefKey));
       if (!Array.isArray(response.baseTheoryRequirements)) throw new Error("Invalid Hub base Theory requirements");
       const baseRequirements = new Map<string, TheoryRequirement>();
       for (const declaration of response.baseTheoryRequirements) {
@@ -283,57 +300,50 @@ export function connectHub(
         )
           throw new Error("Invalid Hub base Theory requirement");
         const key = exactPatchRefKey({ identity: declaration.ref.identity, digest: declaration.ref.digest });
-        if (!revisions.has(key) || baseRequirements.has(key) || key === exactPatchRefKey(bundle.terminal))
+        if (!refs.has(key) || baseRequirements.has(key) || key === exactPatchRefKey(bundle.terminal))
           throw new Error("Invalid Hub base Theory requirement");
         baseRequirements.set(key, theoryRequirement(declaration.requirement));
       }
-      const blobs = new Map<ContentDigest, Uint8Array>();
-      for (const { hash } of attachments(bundle)) {
-        const bytes = new Uint8Array(
-          await (await fetched(endpoint + "/attachments/" + hash, { headers })).arrayBuffer(),
-        );
-        if (attachmentDigest(bytes) !== hash) throw new Error("Hub attachment digest mismatch: " + hash);
-        blobs.set(hash, bytes);
-      }
       const current = await profile.read();
       const theory = resolveTheory(current.manifest.theory, theories);
-      let migrated: readonly PatchRevision[];
-      let adopted: PatchRevision;
+      let reading = { bundle, graph };
       try {
-        ({ terminal: adopted, revisions: migrated } = migrateTheoryPatchClosure(
-          theory,
-          bundle,
-          requirement,
-          baseRequirements,
-        ));
+        const rewrites = [requirement, ...baseRequirements.values()].map((pin) =>
+          theoryPatchNeedsMigration(theory, pin),
+        );
+        if (rewrites.some(Boolean)) {
+          const { terminal, revisions } = migrateTheoryPatchClosure(
+            theory,
+            bundleStore(bundle).dense(bundle.terminal),
+            requirement,
+            baseRequirements,
+          );
+          if (!sameExactPatchRef(terminal.ref, bundle.terminal)) {
+            const store = new PackedPatches();
+            for (const revision of revisions) store.add(revisionContent(revision));
+            reading = await verifySparseBundle(await extractSparseClosure(terminal.ref, store));
+          }
+        }
       } catch (error) {
         throw new Error(
           "Cannot adopt Hub release; its publisher must republish for the installed Theory: " + String(error),
         );
       }
-      const contents = new Map(
-        current.patches.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]),
-      );
-      for (const revision of bundle.revisions) contents.set(revision.ref.digest, revisionContent(revision));
-      for (const revision of migrated) contents.set(revision.ref.digest, revisionContent(revision));
-      const personal = current.patches.revisions.find(({ ref }) => sameExactPatchRef(ref, current.manifest.personal));
-      if (!personal) throw new Error("Missing personal Patch");
+      const blobs = await fetchReleaseBlobs(endpoint, headers, graph);
+      const adopted = reading.bundle.terminal;
+      const manifest = new Map(reading.bundle.manifests).get(adopted.digest);
+      if (!manifest) throw new Error("Missing Hub terminal manifest");
+      const personal = current.personal;
       const content: PatchContent = {
-        ...revisionContent(personal),
-        bases: [...personal.bases.filter((ref) => ref.identity !== adopted.ref.identity), adopted.ref],
+        ...personal,
+        bases: [...personal.bases.filter((ref) => ref.identity !== adopted.identity), adopted],
       };
-      const next = candidateRevision(personal.ref.identity, content);
-      contents.set(next.ref.digest, content);
-      resolvePatchBundle(bundleForRevision(next.ref, contents));
-      const suggestions = readReifiedMissions(
-        revisionContent(adopted),
-        resolvePatchBundle(bundleForRevision(adopted.ref, contents)),
-      );
+      const suggestions = readReifiedMissions(manifest, reading.graph);
       const existing = new Set<string>();
       for (const entry of current.log) {
         if (!isMissionRevision(entry)) continue;
         const source = entry.mission.source;
-        if (source?.patch.identity === adopted.ref.identity) existing.add(source.suggestionId);
+        if (source?.patch.identity === adopted.identity) existing.add(source.suggestionId);
       }
       const selectedMissions: Mission[] = [];
       for (const item of suggestions) {
@@ -351,7 +361,7 @@ export function connectHub(
             id: `mission-${randomUUID()}`,
             statement: item.statement,
             priority: 1,
-            targets: item.targetNodes.map((node) => ({ node, provenance: adopted.ref })),
+            targets: item.targetNodes.map((node) => ({ node, provenance: adopted })),
             ...(item.guidance === undefined ? {} : { guidance: item.guidance }),
             ...(item.assessment === undefined ? {} : { assessment: item.assessment }),
             source: {
@@ -362,16 +372,13 @@ export function connectHub(
             },
           });
       }
-      // Nothing touches the live head until every downloaded revision and blob verifies.
+      // Nothing touches the live head until every downloaded manifest, chunk and blob verifies.
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
-      for (const revision of bundle.revisions)
-        await profile.addRevision(revision.ref.identity, revisionContent(revision));
-      for (const revision of migrated)
-        if (!revisions.has(exactPatchRefKey(revision.ref)))
-          await profile.addRevision(revision.ref.identity, revisionContent(revision));
-      await profile.setPersonal(await profile.addRevision(personal.ref.identity, content));
+      await profile.addSparseClosure(bundle);
+      if (reading.bundle !== bundle) await profile.addSparseClosure(reading.bundle);
+      await profile.setPersonal(await profile.addRevision(current.manifest.personal.identity, content));
       for (const mission of selectedMissions) await createMission(mission);
-      return adopted.ref;
+      return adopted;
     },
     async signIn() {
       await (await HubAuth.open(resource, options)).signIn();
@@ -379,23 +386,23 @@ export function connectHub(
     async publish(input) {
       releasePrecedenceKey(input.version);
       const current = await profile.read();
-      const contents = new Map(
-        current.patches.revisions.map((revision) => [revision.ref.digest, revisionContent(revision)]),
-      );
-      const original = bundleForRevision(input.patch, contents);
-      const terminal = original.revisions.find(({ ref }) => sameExactPatchRef(ref, input.patch));
-      if (!terminal) throw new Error("Patch is not in this Profile");
-      if (
-        original.revisions.some(
-          (revision) => revision !== terminal && PATCH_MISSIONS_PROPERTY in revision.metadata.properties,
+      if (!current.graph.patchOrder.some((ref) => sameExactPatchRef(ref, input.patch)))
+        throw new Error("Patch is not in this Profile");
+      const store = PackedPatches.fromFiles(await profile.files());
+      const terminal = store.content(input.patch);
+      const { graph } = await resolveSparsePatch(input.patch, store);
+      for (const base of graph.patchOrder) {
+        const manifest = store.manifests.get(base.digest);
+        if (
+          !sameExactPatchRef(base, input.patch) &&
+          manifest &&
+          PATCH_MISSIONS_PROPERTY in manifest.metadata.properties
         )
-      )
-        throw new Error("Cannot publish a Patch with private Mission pointers in a pinned base");
-      const { metadata } = reifyProfileMissions(revisionContent(terminal), current.log, resolvePatchBundle(original), {
-        missionIds: input.missions ?? [],
-      });
+          throw new Error("Cannot publish a Patch with private Mission pointers in a pinned base");
+      }
+      const { metadata } = reifyProfileMissions(terminal, current.log, graph, { missionIds: input.missions ?? [] });
       const packaged: PatchContent = {
-        ...revisionContent(terminal),
+        ...terminal,
         metadata: {
           ...metadata,
           properties: {
@@ -405,10 +412,8 @@ export function connectHub(
           },
         },
       };
-      const ref = candidateRevision(input.patch.identity, packaged).ref;
-      contents.set(ref.digest, packaged);
-      const bundle = bundleForRevision(ref, contents);
-      resolvePatchBundle(bundle);
+      const ref = { identity: input.patch.identity, digest: store.add(packaged) };
+      const bundle = await extractSparseClosure(ref, store, captureReading);
       if (
         !(await confirm({
           kind: "hub.publish",
@@ -429,7 +434,7 @@ export function connectHub(
       if (!revision) throw new Error("Unknown Mission");
       const { entry, position } = revision;
       const { mission } = entry;
-      const { bundle, skills } = missionBundle(current.patches, mission, title, {
+      const { bundle, skills } = await missionBundle(current.graph, mission, title, {
         missionId: mission.id,
         logEntryId: entry.id,
         logPosition: position,
@@ -481,7 +486,7 @@ export function connectHub(
         const download = await call<{ url: string }>("export_profile", {});
         return new Uint8Array(await (await fetched(download.url)).arrayBuffer());
       });
-      const imported = validate(unpack(archive, theories), theories);
+      const imported = await validate(await unpack(archive, theories), theories);
       const backup = profile.dir + ".backup-" + randomUUID();
       if (
         !(await confirm({

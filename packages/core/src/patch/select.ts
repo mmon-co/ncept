@@ -1,8 +1,12 @@
+import { isMaterialRef } from "./material.js";
 import type { TagIndex } from "../theory/theory.js";
 import { isContentDigest } from "../digest.js";
 import { PatchCompileError } from "./errors.js";
-import { provenanceOf, materialKey, sameExactPatchRef } from "./model.js";
+import { contributionKey, provenanceOf, materialKey, sameExactPatchRef } from "./model.js";
 import type {
+  BaseQuery,
+  BaseTake,
+  SemanticOperation,
   EdgeId,
   ExactPatchRef,
   GraphQuery,
@@ -97,6 +101,54 @@ export function parseGraphQuery(value: unknown, label = "query"): GraphQuery {
     };
   }
   return malformed(`${label} has an unknown query term '${keys[0]}'`);
+}
+
+export function parseBaseQuery(value: unknown): BaseQuery {
+  if (!isRecord(value) || Object.keys(value).length !== 1) return malformed("expected one base query term");
+  if ("nodes" in value && isArray(value.nodes) && value.nodes.every(isNodeId)) return { nodes: value.nodes };
+  for (const key of ["union", "intersection", "difference"] as const)
+    if (key in value) {
+      const items = value[key];
+      if (!isArray(items) || items.length < 2 || (key === "difference" && items.length !== 2))
+        return malformed("invalid base query operands");
+      const a = parseBaseQuery(items[0]),
+        b = parseBaseQuery(items[1]);
+      if (key === "difference") return { difference: [a, b] };
+      const terms: [BaseQuery, BaseQuery, ...BaseQuery[]] = [a, b, ...items.slice(2).map(parseBaseQuery)];
+      return key === "intersection" ? { intersection: terms } : { union: terms };
+    }
+  const term = parseGraphQuery(value);
+  if ("cone" in term || "dependents" in term || ("tag" in term && !term.tag.startsWith("is:"))) return term;
+  return malformed("base queries require authored graph terms");
+}
+
+export function validateBaseTake(take: unknown): asserts take is BaseTake {
+  if (take === "needed") return;
+  if (!isRecord(take)) return malformed("invalid base take");
+  if (take.kind === "needed" && Object.keys(take).every((k) => k === "kind" || k === "include")) {
+    if ("include" in take) parseBaseQuery(take.include);
+    return;
+  }
+  const named = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  if (take.kind !== "only" || !isArray(take.nodes) || !take.nodes.every(isNodeId))
+    return malformed("invalid only.nodes");
+  for (const [key, list] of Object.entries(take)) {
+    if (key === "kind" || key === "nodes") continue;
+    if (
+      !["edges", "metadataSets", "materials", "tagSubjects"].includes(key) ||
+      !isArray(list) ||
+      !list.every((v) =>
+        key === "edges"
+          ? typeof v === "string" && /^edge-[0-9a-z-]+$/.test(v)
+          : key === "metadataSets"
+            ? typeof v === "string" && /^metadata-[0-9a-z-]+$/.test(v)
+            : key === "tagSubjects"
+              ? named(v)
+              : isMaterialRef(v),
+      )
+    )
+      return malformed("invalid only." + key);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -252,27 +304,35 @@ function provenanceFragment(graph: ResolvedGraph, ref: ExactPatchRef): Fragment 
   return fragment;
 }
 
-function evaluate(graph: ResolvedGraph, query: GraphQuery, tags?: TagIndex): Fragment {
+function evaluate(graph: ResolvedGraph, query: GraphQuery | BaseQuery, tags?: TagIndex, traversal = graph): Fragment {
+  if ("nodes" in query)
+    return { nodes: new Set(query.nodes), edges: new Set(), metadataSets: new Set(), tags: new Set() };
   if ("tag" in query) return tagFragment(graph, query.tag, tags);
-  if ("cone" in query) return coneFragment(graph, query.cone.targets);
-  if ("dependents" in query) return coneFragment(graph, query.dependents.targets, true);
+  if ("cone" in query) return coneFragment(traversal, query.cone.targets);
+  if ("dependents" in query) return coneFragment(traversal, query.dependents.targets, true);
   if ("provenance" in query) return provenanceFragment(graph, query.provenance);
   if ("difference" in query)
     return combine(
-      evaluate(graph, query.difference[0], tags),
-      evaluate(graph, query.difference[1], tags),
+      evaluate(graph, query.difference[0], tags, traversal),
+      evaluate(graph, query.difference[1], tags, traversal),
       "difference",
     );
   const operation = "union" in query ? "union" : "intersection";
   const children = "union" in query ? query.union : query.intersection;
   const [first, ...rest] = children;
   return rest.reduce(
-    (fragment, child) => combine(fragment, evaluate(graph, child, tags), operation),
-    evaluate(graph, first, tags),
+    (fragment, child) => combine(fragment, evaluate(graph, child, tags, traversal), operation),
+    evaluate(graph, first, tags, traversal),
   );
 }
 
-function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph {
+function selectedGraph(
+  graph: ResolvedGraph,
+  fragment: Fragment,
+  roots?: ReadonlySet<string>,
+  extraRoots?: ReadonlySet<string>,
+  tagSubjects?: ReadonlySet<string>,
+): SelectedGraph {
   const nodes = fragment.nodes;
   const edges = new Set(
     [...fragment.edges].filter((id) => {
@@ -282,12 +342,20 @@ function selectedGraph(graph: ResolvedGraph, fragment: Fragment): SelectedGraph 
   );
   const selectedMetadata = graph.metadataSets.flatMap((metadata) => {
     if (!fragment.metadataSets.has(metadata.id)) return [];
-    const subjects = metadata.subjects.filter((subject) => subjectInFragment(graph, subject, { ...fragment, edges }));
+    const subjects = metadata.subjects.filter((subject) =>
+      subject.kind === "tag" && tagSubjects
+        ? tagSubjects.has(subject.name)
+        : subjectInFragment(graph, subject, { ...fragment, edges }),
+    );
     return subjects.length === 0 ? [] : [{ ...metadata, subjects }];
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
 
-  let selectedMaterials = graph.materials.filter((material) => material.about.some((id) => nodes.has(id)));
+  let selectedMaterials = graph.materials.filter(
+    (material) =>
+      (roots?.has(materialKey(material)) ?? material.about.some((id) => nodes.has(id))) ||
+      extraRoots?.has(materialKey(material)),
+  );
   if (selectedMaterials.some((material) => material.dependsOn?.length)) {
     const available = new Map(graph.materials.map((material) => [materialKey(material), material]));
     const selected = new Set(selectedMaterials);
@@ -354,6 +422,98 @@ export function selectNodeSubset(graph: ResolvedGraph, nodes: ReadonlySet<NodeId
     edges: new Set(graph.edges.map(({ id }) => id)),
     metadataSets: new Set(graph.metadataSets.map(({ id }) => id)),
   });
+}
+
+/** The export of one direct base along one dependent's path. */
+export function takeBase(
+  graph: ResolvedGraph,
+  take: BaseTake,
+  operations: readonly SemanticOperation[],
+): SelectedGraph {
+  validateBaseTake(take);
+  const only = typeof take === "object" && take.kind === "only" ? take : undefined;
+  const nodes = new Set<NodeId>(only?.nodes),
+    tagNames = new Set<string>(),
+    extraRoots = new Set<string>();
+  const edge = (id: EdgeId) => {
+    const e = graph.edges.find((x) => x.id === id);
+    if (e) {
+      nodes.add(e.from);
+      nodes.add(e.to);
+    }
+  };
+  const tag = (name: string) => {
+    if (graph.tags.some((t) => t.name === name)) {
+      tagNames.add(name);
+      for (const id of tagFragment(graph, name).nodes) nodes.add(id);
+    }
+  };
+  const subjects = (list: readonly MetadataSubject[]) => {
+    for (const s of list) {
+      if (s.kind === "node") nodes.add(s.id);
+      else if (s.kind === "edge") edge(s.id);
+      else tag(s.name);
+    }
+  };
+  const masks = new Set(
+    operations.flatMap((op) =>
+      op.kind === "mask-contribution" && op.mask.entity.kind === "edge"
+        ? [contributionKey(op.mask.source, op.mask.operationIndex)]
+        : [],
+    ),
+  );
+  const traversal = masks.size
+    ? {
+        ...graph,
+        edges: graph.edges.filter((e) =>
+          provenanceOf(graph.provenance.edges, e.id)?.some(
+            (p) => !masks.has(contributionKey(p.patch, p.operationIndex)),
+          ),
+        ),
+      }
+    : graph;
+  for (const op of operations) {
+    if (op.kind === "edit-material") extraRoots.add(materialKey(op.material));
+    if (op.kind === "add-material" || op.kind === "edit-material")
+      for (const ref of op.material.dependsOn ?? []) extraRoots.add(materialKey(ref));
+    if (only) continue;
+    if (op.kind === "add-edge") {
+      nodes.add(op.edge.from);
+      nodes.add(op.edge.to);
+    }
+    if (op.kind === "add-material" || op.kind === "edit-material") for (const n of op.material.about) nodes.add(n);
+    if (op.kind === "add-metadata-set") subjects(op.metadataSet.subjects);
+    if (op.kind === "define-tag") {
+      for (const n of op.tag.nodes) nodes.add(n);
+      op.tag.edges.forEach(edge);
+      for (const id of op.tag.metadataSets) subjects(graph.metadataSets.find((s) => s.id === id)?.subjects ?? []);
+    }
+  }
+  if (!only) {
+    const reachable = coneFragment(
+      traversal,
+      graph.nodes.filter((n) => nodes.has(n.id)).map((n) => n.id),
+    );
+    nodes.clear();
+    for (const n of reachable.nodes) nodes.add(n);
+    if (typeof take === "object" && take.kind === "needed" && take.include) {
+      const inc = evaluate(graph, take.include, undefined, traversal);
+      for (const n of inc.nodes) nodes.add(n);
+      for (const t of inc.tags) tagNames.add(t);
+    }
+  }
+  return selectedGraph(
+    graph,
+    {
+      nodes,
+      edges: new Set(only?.edges ?? graph.edges.map((e) => e.id)),
+      metadataSets: new Set(only?.metadataSets ?? graph.metadataSets.map((s) => s.id)),
+      tags: tagNames,
+    },
+    only?.materials && new Set(only.materials.map(materialKey)),
+    extraRoots,
+    only?.tagSubjects && new Set(only.tagSubjects),
+  );
 }
 
 /** Select a valid attributed subgraph through the restricted tag algebra. */

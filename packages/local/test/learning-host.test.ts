@@ -189,7 +189,8 @@ test("opening a legacy Profile closes its Mission Review and rewrites detached R
     mode: "lesson",
     entry: { kind: "target", node: "node-addition" },
   });
-  // A handle already open on this directory sees the migrated log on disk.
+  // A writable open commits the same migration that the learning reader saw in memory.
+  await openProfile(dir, [defaultTheory]);
   const migrated = await host.profile.read();
   expect(JSON.stringify(migrated.log)).not.toContain('"kind":"review"');
   expect((await (await openProfile(dir, [defaultTheory])).read()).manifest.log).toBe(migrated.manifest.log);

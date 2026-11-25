@@ -5,11 +5,14 @@ import { randomUUID } from "node:crypto";
 import { lock, lockSync } from "proper-lockfile";
 import {
   attachmentDigest,
+  verifySparseBundle,
+  type SparsePatchBundle,
   candidateRevision,
   emptyPatch,
   isPatchId,
   mergeProfileLogs,
   PERSONAL_PATCH_ID,
+  resolveTheory,
   type ContentDigest,
   type ExactPatchRef,
   type PatchContent,
@@ -44,6 +47,8 @@ import {
   type PiSession,
 } from "./sessions.js";
 
+import { PackedPatches, packedFiles } from "./packed.js";
+
 /** Account credentials never belong to a Profile or its exchange tar. */
 export function credentialsPath(home = homedir()): string {
   return join(home, ".config", "ncept", "credentials.json");
@@ -63,7 +68,7 @@ async function atomic(dir: string, path: string, bytes: Uint8Array): Promise<voi
   await rename(join(dir, temp), join(dir, path));
 }
 async function immutable(dir: string, path: string, bytes: Uint8Array): Promise<void> {
-  // Stage outside patches/: an interrupted write must not leave a truncated
+  // Stage outside the content-addressed directories: an interrupted write must not leave a truncated
   // content-addressed file that prevents reopening even the old live generation.
   const temp = join(dir, "." + randomUUID() + ".tmp");
   try {
@@ -73,8 +78,12 @@ async function immutable(dir: string, path: string, bytes: Uint8Array): Promise<
     } catch (error) {
       if (!existsError(error)) throw error;
       const existing = await regular(dir, path);
-      if (existing.length !== bytes.length || existing.some((byte, index) => byte !== bytes[index]))
-        throw new Error("Conflicting immutable Profile file: " + path);
+      if (existing.length !== bytes.length || existing.some((byte, index) => byte !== bytes[index])) {
+        // Merkle filenames identify JSON values. Another exchange writer can encode the same value differently.
+        if (path.startsWith("manifests/") || path.startsWith("chunks/"))
+          PackedPatches.fromFiles(new Map([[path, existing]]));
+        else throw new Error("Conflicting immutable Profile file: " + path);
+      }
     }
   } finally {
     await rm(temp, { force: true });
@@ -95,7 +104,7 @@ async function filesAt(dir: string, retries = 3): Promise<Map<string, Uint8Array
       return filesAt(dir, retries - 1);
     throw error;
   }
-  for (const folder of ["patches", "blobs"]) {
+  for (const folder of manifest.format === 1 ? ["patches", "blobs"] : ["manifests", "chunks", "blobs"]) {
     if (!(await lstat(join(dir, folder))).isDirectory()) throw new Error("Not a Profile directory: " + folder);
     for (const name of await readdir(join(dir, folder))) {
       const path = folder + "/" + name;
@@ -117,13 +126,13 @@ export interface InitOptions {
 export async function init(dir: string, options: InitOptions = {}): Promise<void> {
   dir = resolve(dir);
   await mkdir(dir, { recursive: true });
-  for (const folder of ["patches", "blobs", "sessions", "materials"]) {
+  for (const folder of ["manifests", "chunks", "blobs", "sessions", "materials"]) {
     await mkdir(join(dir, folder), { recursive: true });
     if (!(await lstat(join(dir, folder))).isDirectory()) throw new Error("Not a Profile directory: " + folder);
   }
   const patch = candidateRevision(PERSONAL_PATCH_ID, emptyPatch());
   const manifest: ProfileManifest = {
-    format: 1,
+    format: 2,
     personal: patch.ref,
     theory: options.theory ?? DEFAULT_THEORY_REQUIREMENT,
     theories: options.theories ?? DEFAULT_THEORY_PACKAGES,
@@ -131,7 +140,9 @@ export async function init(dir: string, options: InitOptions = {}): Promise<void
   };
   // Reserve the manifest first: a second init must not erase a learner's log.
   await writeFile(join(dir, "profile.json"), jsonBytes(manifest), { flag: "wx" });
-  await immutable(dir, "patches/" + patch.ref.digest + ".json", jsonBytes(emptyPatch()));
+  const packed = new PackedPatches();
+  packed.add(emptyPatch());
+  for (const [path, data] of packedFiles(packed)) await immutable(dir, path, data);
   await writeFile(join(dir, "log.jsonl"), new Uint8Array(), { flag: "wx" });
 }
 export interface ProfileDirectory {
@@ -141,6 +152,7 @@ export interface ProfileDirectory {
   /** A conditional append checks the current Profile while holding its write lock. */
   appendLog(entries: readonly ProfileLogEntry[], accept?: (current: ValidatedProfile) => boolean): Promise<void>;
   addRevision(identity: PatchId, content: PatchContent): Promise<ExactPatchRef>;
+  addSparseClosure(bundle: SparsePatchBundle): Promise<void>;
   setPersonal(ref: ExactPatchRef): Promise<void>;
   configure(options: InitOptions): Promise<void>;
   addBlob(bytes: Uint8Array): Promise<ContentDigest>;
@@ -166,24 +178,22 @@ async function locked<T>(dir: string, operation: () => Promise<T>): Promise<T> {
     await release();
   }
 }
-function installedPin(files: ProfileFiles, theories: readonly ConfiguredTheory[]): boolean {
-  const { theory, range } = parseManifest(files.get("profile.json")).theory;
-  const version = theories.find((candidate) => candidate.id === theory)?.version;
-  return version !== undefined && range === "~" + version.split(".").slice(0, 2).join(".");
-}
 export async function openProfile(
   dir: string,
   theories: readonly ConfiguredTheory[],
   options: { readOnly?: boolean } = {},
 ): Promise<ProfileDirectory> {
   dir = resolve(dir);
-  const readOnlyFiles = options.readOnly ? await filesAt(dir) : undefined;
-  // A read-only open migrates like a writable one, but only takes the lock (and pays a second
-  // validation beyond read()'s) when the Lesson log or the stored Theory pin is behind.
-  if (!readOnlyFiles || migrateLessonLog(readOnlyFiles) !== readOnlyFiles || !installedPin(readOnlyFiles, theories))
+  if (!options.readOnly)
     await locked(dir, async () => {
       const stored = await filesAt(dir);
-      const initial = migrateProfileFiles(stored, theories);
+      const initial = await migrateProfileFiles(stored, theories);
+      const legacy = parseManifest(stored.get("profile.json")).format === 1;
+      if (legacy)
+        for (const folder of ["manifests", "chunks"]) {
+          await mkdir(join(dir, folder), { recursive: true });
+          if (!(await lstat(join(dir, folder))).isDirectory()) throw new Error("Not a Profile directory: " + folder);
+        }
       // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
       // leaves either the old generation or the complete new one; retry never repeats a step.
       for (const [path, bytes] of initial) {
@@ -191,9 +201,10 @@ export async function openProfile(
       }
       const manifest = initial.get("profile.json");
       if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
-      if (options.readOnly) return;
+      if (legacy) await rm(join(dir, "patches"), { recursive: true });
+      const current = parseManifest(manifest);
       // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
-      for (const filename of Object.values(parseManifest(manifest).sessions)) {
+      for (const filename of Object.values(current.sessions)) {
         const path = "sessions/" + filename;
         const bytes = initial.get(path);
         if (bytes) {
@@ -211,8 +222,23 @@ export async function openProfile(
     tail = result.catch(() => {});
     return result;
   }
+  async function files() {
+    const stored = await filesAt(dir);
+    if (!options.readOnly) return stored;
+    // Learn reads before opening its first writable tutor session, even after init.
+    const manifest = parseManifest(stored.get("profile.json"));
+    if (manifest.format === 2) {
+      try {
+        resolveTheory(manifest.theory, theories);
+        return migrateLessonLog(stored);
+      } catch {
+        // An older stored pin can migrate in memory without changing the live files.
+      }
+    }
+    return migrateProfileFiles(stored, theories);
+  }
   async function read(): Promise<ValidatedProfile> {
-    return validate(await filesAt(dir), theories);
+    return validate(await files(), theories);
   }
   async function manifestWith(change: Partial<ProfileManifest>): Promise<void> {
     const files = await filesAt(dir);
@@ -226,7 +252,7 @@ export async function openProfile(
       const path = "sessions/" + filename;
       if (!files.has(path)) files.set(path, await regular(dir, path));
     }
-    validate(files, theories);
+    await validate(files, theories);
     const bytes = files.get("profile.json");
     if (bytes) await atomic(dir, "profile.json", bytes);
   }
@@ -242,7 +268,7 @@ export async function openProfile(
   return {
     dir,
     read,
-    files: () => filesAt(dir),
+    files,
     appendLog: (entries, accept) =>
       serial(async () => {
         const current = await read();
@@ -262,12 +288,19 @@ export async function openProfile(
         if (!isPatchId(identity)) throw new Error("Invalid Patch identity");
         const revision = candidateRevision(identity, content);
         const files = await filesAt(dir);
-        const path = "patches/" + revision.ref.digest + ".json";
-        files.set(path, jsonBytes(content));
+        const store = new PackedPatches();
+        store.add(content);
+        const parts = packedFiles(store);
+        for (const [path, data] of parts) files.set(path, data);
         files.set("profile.json", jsonBytes({ ...parseManifest(files.get("profile.json")), personal: revision.ref }));
-        validate(files, theories);
-        await immutable(dir, path, jsonBytes(content));
+        await validate(files, theories);
+        for (const [path, data] of parts) await immutable(dir, path, data);
         return revision.ref;
+      }),
+    addSparseClosure: (bundle) =>
+      serial(async () => {
+        await verifySparseBundle(bundle);
+        for (const [path, data] of packedFiles(bundle)) await immutable(dir, path, data);
       }),
     setPersonal: (personal) => serial(() => manifestWith({ personal })),
     configure: (options) => serial(() => manifestWith(options)),
@@ -291,7 +324,7 @@ export async function openProfile(
         await register(surface, filename, options);
         return filename;
       }),
-    pack: async () => pack(await filesAt(dir), theories),
+    pack: async () => pack(await files(), theories),
   };
 }
 /** Unpack into a new Profile, leaving unrelated project files alone and never following links. */
@@ -301,10 +334,10 @@ export async function unpackDirectory(
   theories: readonly ConfiguredTheory[],
 ): Promise<ProfileDirectory> {
   dir = resolve(dir);
-  const files = unpack(archive, theories, { cwd: dir });
+  const files = await unpack(archive, theories, { cwd: dir });
   await mkdir(dir, { recursive: true });
   // Exclusive creation of reserved directories avoids merging with old data or symlink trees.
-  for (const folder of ["patches", "blobs", "sessions"]) await mkdir(join(dir, folder));
+  for (const folder of ["manifests", "chunks", "blobs", "sessions"]) await mkdir(join(dir, folder));
   for (const [path, bytes] of files) {
     if (path !== "profile.json") await writeFile(join(dir, path), bytes, { flag: "wx" });
   }

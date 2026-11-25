@@ -125,7 +125,7 @@ function validateSuggestions(missions: readonly ReifiedMission[], graph: Pick<Re
 
 /** Read only published definitions. A private pointer on a malformed release offers nothing. */
 export function readReifiedMissions(
-  content: PatchContent,
+  content: Pick<PatchContent, "metadata">,
   graph: Pick<ResolvedGraph, "nodes">,
 ): readonly ReifiedMission[] {
   const encoded = content.metadata.properties[MISSION_SUGGESTIONS_PROPERTY];

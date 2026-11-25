@@ -1,5 +1,5 @@
 import { PatchCompileError } from "./errors.js";
-import { materialKey, type Material, type MaterialRef } from "./model.js";
+import { materialKey, type Material, type MaterialRef, type SemanticDelta } from "./model.js";
 
 export function canonicalMaterial(material: Material): Material {
   const refs = material.dependsOn;
@@ -9,7 +9,18 @@ export function canonicalMaterial(material: Material): Material {
   return rest;
 }
 
-function isMaterialRef(ref: unknown): ref is MaterialRef {
+/** Material operations with `dependsOn: []` written as omitted, so both spellings share one digest. */
+export function canonicalDelta(delta: SemanticDelta): SemanticDelta {
+  let operations: SemanticDelta["operations"][number][] | undefined;
+  for (const [index, op] of delta.operations.entries()) {
+    if (op.kind !== "add-material" && op.kind !== "edit-material") continue;
+    const material = canonicalMaterial(op.material);
+    if (material !== op.material) (operations ??= [...delta.operations])[index] = { ...op, material };
+  }
+  return operations ? { ...delta, operations } : delta;
+}
+
+export function isMaterialRef(ref: unknown): ref is MaterialRef {
   if (ref === null || typeof ref !== "object") return false;
   const prototype: unknown = Object.getPrototypeOf(ref);
   if (prototype !== Object.prototype && prototype !== null) return false;

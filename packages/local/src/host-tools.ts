@@ -1,9 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  applyGraphDiff,
   attachmentDigest,
-  compileGraphDiff,
+  compileSparseGraphDiff,
   composePatch,
   graphDraftOperationKey,
   isMaterialMeta,
@@ -11,7 +10,6 @@ import {
   isNodeId,
   nodeCascadedProperty,
   parseGraphQuery,
-  revisionContent,
   projectVisualGraph,
   sameExactPatchRef,
   selectGraph,
@@ -27,6 +25,7 @@ import {
   type Skill,
 } from "@mmon-co/ncept-core";
 import type { HostTool, HostToolResult, ModeSwitch } from "./host.js";
+import { PackedPatches } from "./packed.js";
 import type { LearningHost } from "./learning.js";
 import { localPayload, platform, sessionStates, transcript, type LocalSession } from "./runtime.js";
 import { mechanics } from "./mechanics.js";
@@ -123,8 +122,15 @@ function graphDiff<S>(
       citations: input.citations === undefined ? (previous?.citations ?? []) : citations(input.citations),
       retractions: input.retractions === undefined ? (previous?.retractions ?? []) : strings(input.retractions),
     };
-    const compiled = compileGraphDiff(view.bundle, edits.operations, edits.targets, edits.citations, edits.retractions);
-    return { view, compiled, edits, content: applyGraphDiff(await host.runtime.content(), compiled) };
+    const compiled = await compileSparseGraphDiff(
+      { terminal: view.bundle.terminal, store: PackedPatches.fromFiles(await host.runtime.profile.files()) },
+      edits.operations,
+      edits.targets,
+      edits.citations,
+      edits.retractions,
+      new Map(view.personal.bases.map((ref) => [ref.identity, ref])),
+    );
+    return { view, compiled, edits, content: compiled.content };
   });
 }
 function page(items: readonly unknown[], input: Record<string, unknown>) {
@@ -262,7 +268,8 @@ export function hostTools<S>(
             };
           }
           case "patch": {
-            const patch = input.ref === undefined ? view : await host.runtime.snapshot(exactRef(input.ref));
+            const patch =
+              input.ref === undefined ? view : await host.runtime.readPatch(exactRef(input.ref), view.profile);
             return { content: patch.bundle };
           }
           case "session": {
@@ -590,15 +597,20 @@ export function hostTools<S>(
           .map((entry) => localPayload(entry, "local.patch"))
           .filter((entry) => entry !== undefined)
           .at(-1);
-        if (!entry || !object(entry.from) || !object(entry.to) || entry.to.digest !== view.graph.terminal.digest)
+        if (
+          !entry ||
+          entry.undoUnavailable ||
+          !object(entry.from) ||
+          !object(entry.to) ||
+          entry.to.digest !== view.graph.terminal.digest
+        )
           throw new Error("No current Session edit to undo");
         const before = await host.runtime.snapshot(exactRef(entry.from));
-        const revision = before.bundle.revisions.find(({ ref }) => sameExactPatchRef(ref, before.bundle.terminal));
-        if (!revision) throw new Error("Undo revision is missing");
+
         return {
           content: {
             status: "restored",
-            patch: await acceptContent(host, session, view.graph.terminal, revisionContent(revision)),
+            patch: await acceptContent(host, session, view.graph.terminal, before.personal),
           },
         };
       },
