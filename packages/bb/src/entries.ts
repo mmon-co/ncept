@@ -19,7 +19,6 @@ export const entrySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("skip-to"), missionId: z.string().min(1), stop: skipStop }).strict(),
   z.object({ kind: z.literal("continue"), missionId: z.string().min(1) }).strict(),
   z.object({ kind: z.literal("new-mission") }).strict(),
-  z.object({ kind: z.literal("review") }).strict(),
   z
     .object({
       kind: z.literal("tell-tutor"),

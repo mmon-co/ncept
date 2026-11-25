@@ -59,7 +59,7 @@ import { mechanics } from "./mechanics.js";
 import type { ValidatedProfile } from "./exchange.js";
 import { ENTRY_KINDS, isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
-import { reviewStop, sessionLength } from "./session-policy.js";
+import { sessionLength } from "./session-policy.js";
 
 type LearningView<S> = Awaited<ReturnType<Runtime<S>["snapshot"]>>;
 
@@ -193,20 +193,15 @@ function lessonAtEntry<S>(
 function sessionTitle(session: LocalSession, profile: ValidatedProfile, label: (id: NodeId) => string): string {
   const entry = session.entry;
   const mode = session.mode.charAt(0).toUpperCase() + session.mode.slice(1);
-  let title = mode;
-  if (entry?.kind === "review") title = "Review · " + entry.nodes.length + " due";
-  else {
-    const name =
-      entry?.kind === "mission"
-        ? missions(profile).find((mission) => mission.id === entry.id)?.statement
-        : entry?.kind === "target"
-          ? label(entry.node)
-          : entry?.kind === "goal"
-            ? entry.text
-            : undefined;
-    if (name) title += " · " + name;
-  }
-  return title.slice(0, 200);
+  const name =
+    entry?.kind === "mission"
+      ? missions(profile).find((mission) => mission.id === entry.id)?.statement
+      : entry?.kind === "target"
+        ? label(entry.node)
+        : entry?.kind === "goal"
+          ? entry.text
+          : undefined;
+  return (name ? mode + " · " + name : mode).slice(0, 200);
 }
 
 function identity(): string {
@@ -327,7 +322,10 @@ export class LearningHost<S> {
     return state;
   }
   mode(theory: Theory<S>, mode: string, entry?: ModeEntry): SessionMode<S> | undefined {
-    if (entry) modeEntry(entry);
+    if (entry) {
+      modeEntry(entry);
+      if (!ENTRY_KINDS.some((kind) => kind === entry.kind)) throw new Error("Unsupported Session entry");
+    }
     const selected = theory.modes?.[mode];
     if (theory.modes && !selected) throw new Error("Unknown Theory mode: " + mode);
     if (selected && ((selected.entry.required && !entry) || (entry && !selected.entry.kinds.includes(entry.kind))))
@@ -461,21 +459,6 @@ export class LearningHost<S> {
   }
   async begin(intent: SessionIntent): Promise<HostSession> {
     if (intent.kind === "new-mission") return this.open({ mode: "charting" });
-    if (intent.kind === "review") {
-      const view = await this.runtime.snapshot();
-      const stop = reviewStop(view.theory, {
-        graph: view.graph,
-        projection: view.theory.project(view.graph, view.state),
-        observations: view.observations,
-        activities: [],
-        past: [],
-        now: view.now,
-        minutes: sessionLength(localSettings(view.profile)),
-      });
-      if (!stop?.nodes.length) throw new Error("No review due");
-      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes } });
-    }
-    if (!("missionId" in intent)) throw new Error("Expected a Mission entry");
     const reading = (await this.missionReadings()).find(({ mission }) => mission.id === intent.missionId);
     if (!reading || reading.run.retired?.outcome === "abandoned") throw new Error("Mission is not available");
     const { mission, run, next, path } = reading;
@@ -496,10 +479,8 @@ export class LearningHost<S> {
     }
     if (intent.kind === "tell-tutor" || intent.kind === "revise-route" || !mission.targets.length)
       return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
+    if (run.retired) throw new Error("This Mission is finished");
     const stop = next[0];
-    if (stop?.kind === "review")
-      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes }, mission: mission.id });
-    if (run.retired) throw new Error("No review is due for this finished Mission");
     if (!stop) throw new Error("This Mission has no following stop; revise the route or finish it");
     if (stop.checkpoint) return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
     return this.open({ mode: "lesson", entry });
@@ -533,9 +514,10 @@ export class LearningHost<S> {
         throw new Error("Choose an uncleared stop after the current Lesson");
       skipped = stops.slice(now, index).filter((stop) => stop.numbered && !stop.cleared && !stop.checkpoint);
       const stop = stops[index];
-      const entry: ModeEntry =
-        stop.kind === "review" ? { kind: "review", nodes: stop.nodes } : { kind: "mission", id: reading.mission.id };
-      input = { mode: stop.checkpoint ? "charting" : "lesson", entry };
+      input = {
+        mode: stop.checkpoint ? "charting" : "lesson",
+        entry: { kind: "mission", id: reading.mission.id },
+      };
     }
     const view = await this.runtime.snapshot();
     const known = sessionStates(view.profile);
@@ -549,17 +531,15 @@ export class LearningHost<S> {
             surface,
             mode: input.mode,
             about:
-              input.entry?.kind === "review"
-                ? input.entry.nodes
-                : input.entry?.kind === "target"
-                  ? [input.entry.node]
-                  : [
-                      ...new Set(
-                        view.observations
-                          .filter((observation) => observation.surface === surface)
-                          .flatMap((observation) => observation.nodes ?? observation.about ?? []),
-                      ),
-                    ],
+              input.entry?.kind === "target"
+                ? [input.entry.node]
+                : [
+                    ...new Set(
+                      view.observations
+                        .filter((observation) => observation.surface === surface)
+                        .flatMap((observation) => observation.nodes ?? observation.about ?? []),
+                    ),
+                  ],
             closed: true,
             ...(input.entry === undefined ? {} : { entry: input.entry }),
           };
@@ -590,13 +570,11 @@ export class LearningHost<S> {
       (mode === "lesson" && entry?.kind === "mission" ? undefined : resumed?.about) ??
       (entry?.kind === "target"
         ? [entry.node]
-        : entry?.kind === "review"
-          ? entry.nodes
-          : mission
-            ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                ({ id }) => id,
-              )
-            : []);
+        : mission
+          ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+              ({ id }) => id,
+            )
+          : []);
     for (const node of about)
       if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
     const id = resumed?.id ?? identity();
@@ -692,15 +670,13 @@ export class LearningHost<S> {
       const mission = missions(view.profile).find(({ id }) => id === missionId);
       if (missionId && !mission) throw new Error("Unknown Mission");
       const about =
-        to.entry?.kind === "review"
-          ? to.entry.nodes
-          : to.entry?.kind === "target"
-            ? [to.entry.node]
-            : mission
-              ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                  ({ id }) => id,
-                )
-              : session.about;
+        to.entry?.kind === "target"
+          ? [to.entry.node]
+          : mission
+            ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+                ({ id }) => id,
+              )
+            : session.about;
       for (const node of about)
         if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
       const updated: LocalSession = {

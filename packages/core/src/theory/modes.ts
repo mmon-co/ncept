@@ -20,7 +20,6 @@ export type ModeEntry =
     }>
   | Readonly<{ kind: "mission"; id: string }>
   | Readonly<{ kind: "target"; node: NodeId }>
-  | Readonly<{ kind: "review"; nodes: readonly NodeId[] }>
   | Readonly<{
       kind: "checkpoint";
       missionId: string;

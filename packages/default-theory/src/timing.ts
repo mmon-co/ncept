@@ -1,38 +1,10 @@
 import { isNodeId, type ResolvedGraph } from "@mmon-co/ncept-core/patch";
 import type { Observation } from "@mmon-co/ncept-core/observations";
 import type { LessonActivity } from "@mmon-co/ncept-core/theory";
-import { isDemonstration, isHoming, homeDefaultRecords, initDefaultState } from "./state.js";
+import { isHoming, initDefaultState } from "./state.js";
 
 export type LessonTiming = Readonly<{ minutesPerNode: number; rough: boolean }>;
 export const UNMEASURED_LESSON_TIMING: LessonTiming = { minutesPerNode: 20, rough: true };
-export const UNMEASURED_REVIEW_TIMING: LessonTiming = { minutesPerNode: 2, rough: true };
-
-/** Unique unaided checks in Review Sessions; acquisition already predates these checks. */
-export function measuredReviewTiming(
-  graph: ResolvedGraph,
-  observations: readonly Observation[],
-  activities: readonly LessonActivity[],
-): LessonTiming {
-  const reviews = activities.filter((activity) => activity.kind === "review");
-  const activeMs = reviews.reduce((sum, activity) => sum + activity.activeMs, 0);
-  if (activeMs <= 0) return UNMEASURED_REVIEW_TIMING;
-  const surfaces = new Map(
-    reviews.flatMap((activity) =>
-      [activity.surface, ...(activity.relatedSurfaces ?? [])].map((surface) => [surface, activity] as const),
-    ),
-  );
-  const reviewed = new Set<string>();
-  const last = observations.reduce((at, observation) => (observation.at > at ? observation.at : at), "");
-  const { records, current } = homeDefaultRecords(graph, observations, last);
-  for (const record of records) {
-    const activity = record.surface === undefined ? undefined : surfaces.get(record.surface);
-    if (!activity || record.at < activity.startedAt || !isDemonstration(record.payload) || !record.payload.unaided)
-      continue;
-    for (const node of current.get(record.id) ?? [])
-      if (activity.nodes.includes(node)) reviewed.add(activity.surface + "/" + node);
-  }
-  return reviewed.size ? { minutesPerNode: activeMs / 60_000 / reviewed.size, rough: false } : UNMEASURED_REVIEW_TIMING;
-}
 
 /** Measure demonstrated transitions at recording time. Later forgetting or a change in
  * Record homes does not erase work the Session did.
@@ -52,9 +24,8 @@ export function prepareLessonTiming(
   observations: readonly Observation[],
   activities: readonly LessonActivity[],
 ) {
-  const teaching = activities.filter((activity) => activity.kind === "lesson");
   const lessonSurfaces = new Map(
-    teaching.flatMap((activity) =>
+    activities.flatMap((activity) =>
       [activity.surface, ...(activity.relatedSurfaces ?? [])].map((surface) => [surface, activity] as const),
     ),
   );
@@ -88,7 +59,7 @@ export function prepareLessonTiming(
     }
   }
   const scan = transitions();
-  const activeMs = teaching.reduce((sum, activity) => sum + activity.activeMs, 0);
+  const activeMs = activities.reduce((sum, activity) => sum + activity.activeMs, 0);
   const rough = () => {
     // Single-turn lessons have no gaps; zero active time is already unmeasured.
     if (activeMs <= 0) return true;

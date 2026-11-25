@@ -215,20 +215,13 @@ export function LearnPanel({ subPath }: PluginNavPanelProps) {
             {data.dueReview.length > 0 && (
               <section>
                 <h2 className="text-xs text-muted-foreground mb-3">Today</h2>
-                <div className="rounded-xl border border-border p-4 flex items-center gap-4">
-                  <div className="flex-1">
-                    <span>
-                      {data.dueReview.length} {data.dueReview.length === 1 ? "card" : "cards"} due
-                    </span>
-                    <span className="text-muted-foreground text-sm">
-                      {" "}
-                      · {data.dueReview.map((item) => item.label).join(", ")}
-                    </span>
-                  </div>
-                  <Button variant="outline" disabled={pending} onClick={() => void open({ kind: "review" })}>
-                    Review →
-                  </Button>
-                </div>
+                <p>
+                  {data.dueReview.length} {data.dueReview.length === 1 ? "Node" : "Nodes"} due
+                  <span className="text-muted-foreground text-sm">
+                    {" "}
+                    · {data.dueReview.map((item) => item.label).join(", ")}
+                  </span>
+                </p>
               </section>
             )}
           </>
