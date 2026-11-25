@@ -7,7 +7,7 @@ import {
 } from "../profile.js";
 import { isPatchSkillEntries, isPatchToolEntries, type PatchCapabilities } from "./capabilities.js";
 import { PatchCompileError } from "./errors.js";
-import { isGuidanceEntries, type GuidanceEntry, type GuidanceRef } from "./guidance.js";
+import { isGuidanceEntries, relocateGuidance, type GuidanceEntry } from "./guidance.js";
 import type { NodeId, PatchContent, PatchMetadata, ResolvedGraph } from "./model.js";
 import { isNodeId } from "./release.js";
 
@@ -161,18 +161,6 @@ export function reifyProfileMissions(
   const ids = new Set([...readPatchMissionPointers(content), ...(options.missionIds ?? [])]);
   if (ids.size === 0) return { metadata: withoutPatchMissionPointers(content.metadata), missions: existing };
   const node = (id: NodeId) => options.nodeMapping?.get(id) ?? id;
-  const ref = (item: GuidanceRef): GuidanceRef => ("name" in item ? item : { node: node(item.node) });
-  const guidance = (entries: readonly GuidanceEntry[]) =>
-    entries.map(({ text, mode, nodes }) => ({
-      text,
-      mode:
-        mode === "append"
-          ? mode
-          : "replace" in mode
-            ? { replace: mode.replace.map(ref) }
-            : { keep: mode.keep.map(ref) },
-      ...(nodes === undefined ? {} : { nodes: nodes.map(node) }),
-    }));
   const missions: ReifiedMission[] = [...existing];
   for (const missionId of ids) {
     const revision = latestMissionRevision(log, missionId);
@@ -185,8 +173,8 @@ export function reifyProfileMissions(
       statement: mission.statement,
       shortName: mission.statement,
       targetNodes: mission.targets.map((target) => node(target.node)),
-      ...(mission.guidance === undefined ? {} : { guidance: guidance(mission.guidance) }),
-      ...(mission.assessment === undefined ? {} : { assessment: guidance(mission.assessment) }),
+      ...(mission.guidance === undefined ? {} : { guidance: relocateGuidance(mission.guidance, node) }),
+      ...(mission.assessment === undefined ? {} : { assessment: relocateGuidance(mission.assessment, node) }),
       origin: { missionId, logEntryId: entry.id, logPosition: position },
     });
   }

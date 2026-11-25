@@ -17,6 +17,7 @@ import {
   PATCH_MISSIONS_PROPERTY,
   readReifiedMissions,
   reifyProfileMissions,
+  relocateGuidance,
   reifyView,
   releasePrecedenceKey,
   resolveTheory,
@@ -69,18 +70,8 @@ export function missionBundle(
     provenance?.kind === "reified_from" ? provenance.entities.nodes.map(({ source, target }) => [source, target]) : [],
   );
   const node = (id: NodeId) => mapped.get(id) ?? id;
-  const entries = (list: Mission["guidance"]) =>
-    list?.map((entry) => ({
-      ...entry,
-      ...(entry.nodes ? { nodes: entry.nodes.map(node) } : {}),
-      ...(entry.mode === "append"
-        ? {}
-        : "replace" in entry.mode
-          ? { mode: { replace: entry.mode.replace.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }
-          : { mode: { keep: entry.mode.keep.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }),
-    }));
-  const guidance = entries(mission.guidance);
-  const assessment = entries(mission.assessment);
+  const guidance = mission.guidance && relocateGuidance(mission.guidance, node);
+  const assessment = mission.assessment && relocateGuidance(mission.assessment, node);
   // The Hub offers this to whoever opens the link as a Mission they can start.
   const suggestion: ReifiedMission = {
     id: randomUUID(),
