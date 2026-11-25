@@ -23,6 +23,7 @@ import {
   jsonBytes,
   logBytes,
   liveLogPath,
+  migrateLessonLog,
   migrateProfileFiles,
   pack,
   parseManifest,
@@ -165,6 +166,11 @@ async function locked<T>(dir: string, operation: () => Promise<T>): Promise<T> {
     await release();
   }
 }
+function installedPin(files: ProfileFiles, theories: readonly ConfiguredTheory[]): boolean {
+  const { theory, range } = parseManifest(files.get("profile.json")).theory;
+  const version = theories.find((candidate) => candidate.id === theory)?.version;
+  return version !== undefined && range === "~" + version.split(".").slice(0, 2).join(".");
+}
 export async function openProfile(
   dir: string,
   theories: readonly ConfiguredTheory[],
@@ -172,11 +178,9 @@ export async function openProfile(
 ): Promise<ProfileDirectory> {
   dir = resolve(dir);
   const readOnlyFiles = options.readOnly ? await filesAt(dir) : undefined;
-  // Any migration publishes a new manifest. Current read-only opens need no write lock.
-  if (
-    !readOnlyFiles ||
-    migrateProfileFiles(readOnlyFiles, theories).get("profile.json") !== readOnlyFiles.get("profile.json")
-  )
+  // A read-only open migrates like a writable one, but only takes the lock (and pays a second
+  // validation beyond read()'s) when the Lesson log or the stored Theory pin is behind.
+  if (!readOnlyFiles || migrateLessonLog(readOnlyFiles) !== readOnlyFiles || !installedPin(readOnlyFiles, theories))
     await locked(dir, async () => {
       const stored = await filesAt(dir);
       const initial = migrateProfileFiles(stored, theories);
