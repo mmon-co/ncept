@@ -213,16 +213,8 @@ export function teachingPath(graph: ResolvedGraph, targets: readonly NodeId[]): 
   return { sections, warnings: [...warnings.values()] };
 }
 
-export function pathDefault(context: PathContext): MissionFuture {
-  return readPath(context);
-}
-
-export function preparePathDefault(inputs: PathInputs, _state?: DefaultState) {
-  return (selection: PathSelection): MissionFuture => readPath({ ...inputs, ...selection });
-}
-
 /** The syllabus stays addressable as progress changes; only the future is upcoming. */
-function readPath(context: PathContext): MissionFuture {
+export function pathDefault(context: PathContext): MissionFuture {
   const { graph, targets, projection, retired } = context;
   const validity = projection.validUntil === undefined ? {} : { validUntil: projection.validUntil };
   const path = teachingPath(graph, retired?.outcome === "abandoned" ? [] : (targets ?? []));
@@ -236,4 +228,8 @@ function readPath(context: PathContext): MissionFuture {
     ...validity,
     future: lessons.filter((lesson) => !lesson.numbered || lesson.nodes.some((id) => progress[id]?.status === "open")),
   };
+}
+
+export function preparePathDefault(inputs: PathInputs, _state?: DefaultState) {
+  return (selection: PathSelection): MissionFuture => pathDefault({ ...inputs, ...selection });
 }
