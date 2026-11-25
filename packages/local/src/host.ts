@@ -111,7 +111,13 @@ export interface Host {
     pull(address: string): Promise<ExactPatchRef>;
     signIn(): Promise<void>;
     publish(
-      input: Readonly<{ patch: ExactPatchRef; version: string; title: string; description?: string }>,
+      input: Readonly<{
+        patch: ExactPatchRef;
+        version: string;
+        title: string;
+        description?: string;
+        missions?: readonly string[];
+      }>,
     ): Promise<HubRelease>;
     /**
      * Publish one Mission's map (its targets and their prerequisites) as a new Hub release and
