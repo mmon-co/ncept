@@ -92,13 +92,13 @@ export default experimental_defineHostEntry({
     reading: async ({ directory }) => {
       const reading = await (await openLearningReader(directory, [defaultTheory])).reading();
       return {
-        missions: reading.missions.map(({ mission, run, next }) => ({
+        missions: reading.missions.map(({ mission, run, next, checkIn }) => ({
           id: mission.id,
           statement: mission.statement,
           active: Boolean(run.active),
           retired: Boolean(run.retired),
           nodes: mission.targets.length,
-          next: next[0]?.name ?? null,
+          next: checkIn ? "Check-in" : (next[0]?.name ?? null),
         })),
         dueReview: reading.dueReview,
         sessions: reading.sessions,
@@ -142,9 +142,7 @@ export default experimental_defineHostEntry({
       const active = reading.sessions.find((session) => session.id === item.run.active);
       const here = item.path && lessonHere(item.path)?.lesson;
       const canReviseLesson = Boolean(here && active?.mode === "lesson" && active.entry?.kind === "mission");
-      const lessons = (item.path?.sections ?? []).flatMap(({ lessons }) =>
-        lessons.filter((stop) => stop.numbered && !stop.checkpoint),
-      );
+      const lessons = (item.path?.sections ?? []).flatMap(({ lessons }) => lessons.filter((stop) => stop.numbered));
       const { records, current } = homeDefaultRecords(reading.graph, reading.observations, reading.now);
       const recordNodes = new Map<string, Set<NodeId>>();
       for (const { id, surface } of records) {
@@ -172,13 +170,14 @@ export default experimental_defineHostEntry({
         retired: Boolean(item.run.retired),
         canReviseLesson,
         next: item.next[0]?.name ?? null,
+        checkIn: item.checkIn,
         asides: [...item.run.asides],
         sections: (item.path?.sections ?? []).map((section) => ({
           number: section.number,
           label: label(section.milestone),
           minutesLeft: section.minutesLeft,
           lessons: section.lessons.map((stop) => ({
-            skip: { kind: stop.kind, number: stop.number, ...(stop.checkpoint ? { checkpoint: stop.checkpoint } : {}) },
+            skip: { kind: stop.kind, number: stop.number },
             kind: stop.kind,
             name: stop.name ?? stop.nodes.map(label).join(" · "),
             nodes: [...stop.nodes],
@@ -189,7 +188,6 @@ export default experimental_defineHostEntry({
               stop.cleared &&
               stop.nodes.some((id) => reading.nodes.find((node) => node.id === id)?.status === "tentative"),
             minutes: stop.minutes,
-            checkpoint: Boolean(stop.checkpoint),
             active: canReviseLesson && stop === here,
           })),
         })),

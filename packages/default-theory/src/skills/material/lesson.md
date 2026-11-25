@@ -1,6 +1,6 @@
 # lesson
 
-When a short Lesson clears and there is time and attention left, carry on into the next Lesson. When it makes sense to stop, recount what the learner did and end the Session even if its Lesson is unfinished.
+When a milestone clears, recount the work, tell the learner the check-in is next, and close the Session. When another short Lesson clears and there is time and attention left, carry on into the next Lesson. When it makes sense to stop, recount what the learner did and end the Session even if its Lesson is unfinished.
 
 1. **Read the Lesson:** the current Lesson in context, its focus Nodes, their criteria, guidance, memory, trail, and existing Materials (`items`). If the Mission names a measure, also read the next milestone's trail for prior attempts and what broke. If an adopted Patch's Materials are already open, wait for the learner.
 

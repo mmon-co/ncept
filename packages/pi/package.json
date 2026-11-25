@@ -32,7 +32,7 @@
     }
   },
   "scripts": {
-    "build": "bun run --cwd ../local build && bun run --cwd ../default-theory build && tsc -p tsconfig.build.json",
+    "build": "bun run --cwd ../local build && tsc -p tsconfig.build.json",
     "prepack": "bun run build"
   },
   "dependencies": {

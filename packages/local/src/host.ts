@@ -48,11 +48,13 @@ export interface HostSession {
   readonly mode: string;
   readonly entry?: ModeEntry;
 }
+export type DueCheckIn = Readonly<{ milestone?: NodeId; required: boolean; final?: true }>;
 export interface MissionReading {
   readonly mission: Mission;
   readonly run: MissionRunReading;
   readonly next: readonly LessonReading[];
   readonly path?: MissionPathReading;
+  readonly checkIn?: DueCheckIn;
 }
 export interface HostReading {
   readonly missions: readonly MissionReading[];
@@ -79,12 +81,12 @@ export type SessionOpening = Readonly<{ mode: string; entry?: ModeEntry; resume?
   Readonly<{
     skip?:
       | { mission: string; kind: "skip-lesson" }
-      | { mission: string; kind: "skip-to"; stop: Pick<LessonReading, "kind" | "number" | "checkpoint"> };
+      | { mission: string; kind: "skip-to"; stop: Pick<LessonReading, "kind" | "number"> };
   }>;
 /** Learner entry controls; resolved against current Profile state by its writing tutor. */
 export type SessionIntent =
   | Readonly<{ kind: "skip-lesson"; missionId: string }>
-  | Readonly<{ kind: "skip-to"; missionId: string; stop: Pick<LessonReading, "kind" | "number" | "checkpoint"> }>
+  | Readonly<{ kind: "skip-to"; missionId: string; stop: Pick<LessonReading, "kind" | "number"> }>
   | Readonly<{ kind: "continue" | "revise-lesson" | "revise-route"; missionId: string }>
   | Readonly<{ kind: "tell-tutor"; missionId: string; request: string }>
   | Readonly<{ kind: "new-mission" }>;

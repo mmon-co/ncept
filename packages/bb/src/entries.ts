@@ -3,15 +3,6 @@ import { z } from "zod";
 export const skipStop = z.object({
   kind: z.string(),
   number: z.number(),
-  checkpoint: z
-    .object({
-      milestone: z
-        .custom<`node-${string}`>((value) => typeof value === "string" && value.startsWith("node-"))
-        .optional(),
-      required: z.boolean(),
-      final: z.literal(true).optional(),
-    })
-    .optional(),
 });
 
 export const entrySchema = z.discriminatedUnion("kind", [

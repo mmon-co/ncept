@@ -504,7 +504,7 @@ export default function ncept(pi: ExtensionAPI) {
   pi.on("agent_start", () => {
     // Global prompt renderers can run after before_agent_start; discard their
     // forced projection once every renderer has seen the tutor-owned options.
-    if (promptOptions) promptOptions.forceSystemPrompt = undefined;
+    if (promptOptions) delete promptOptions.forceSystemPrompt;
   });
   pi.on("context_with_system", async (event, ctx) => {
     if (relayingContinuation)

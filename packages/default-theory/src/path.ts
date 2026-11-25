@@ -24,6 +24,8 @@ import type { DefaultState } from "./state.js";
 import { REVIEW_PROPERTY, type ReviewSchedule } from "./schedules.js";
 export { REVIEW_PROPERTY, validateReviewSchedule, type ReviewSchedule } from "./schedules.js";
 
+export const CHECKED_IN_PROPERTY = "pedagogy:checked-in";
+
 /** Default-theory authoring metadata, not Core graph vocabulary. */
 export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): unknown {
   return lastMetadataContribution(
@@ -33,6 +35,33 @@ export function pathProperty(graph: ResolvedGraph, node: NodeId, key: string): u
       return source === undefined ? [] : [{ value: set.properties[key], source }];
     }),
   )?.value;
+}
+
+/** Coarse (`pedagogy:elaborate: true`) Nodes in a section's numbered Lessons, in path order. */
+export function sectionCoarseNodes(graph: ResolvedGraph, section: MissionPath["sections"][number]): NodeId[] {
+  const seen = new Set<NodeId>();
+  const coarse: NodeId[] = [];
+  for (const lesson of section.lessons) {
+    if (!lesson.numbered) continue;
+    for (const node of lesson.nodes) {
+      if (seen.has(node) || pathProperty(graph, node, NODE_ELABORATE_PROPERTY) !== true) continue;
+      seen.add(node);
+      coarse.push(node);
+    }
+  }
+  return coarse;
+}
+
+/** Whether the check-in after `milestone` (or before the first section when omitted) cannot be skipped. */
+export function checkInRequired(graph: ResolvedGraph, path: MissionPath, milestone?: NodeId): boolean {
+  if (milestone === undefined) {
+    const first = path.sections[0];
+    return first !== undefined && sectionCoarseNodes(graph, first).length > 0;
+  }
+  const index = path.sections.findIndex((section) => section.milestone === milestone);
+  if (index < 0) return false;
+  const next = path.sections[index + 1];
+  return next === undefined || sectionCoarseNodes(graph, next).length > 0;
 }
 
 export function nodeReviewSchedule(graph: ResolvedGraph, node: NodeId): ReviewSchedule {
@@ -187,29 +216,6 @@ export function teachingPath(graph: ResolvedGraph, targets: readonly NodeId[]): 
       if (!unit.nodes.length) units.splice(units.indexOf(unit), 1);
     }
   }
-  for (const [index, section] of sections.entries()) {
-    const next = sections[index + 1];
-    const required =
-      next === undefined ||
-      next.lessons.some((lesson) =>
-        lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
-      );
-    section.lessons.push({
-      kind: "checkpoint",
-      numbered: false,
-      milestone: section.milestone,
-      nodes: [section.milestone],
-      checkpoint: { milestone: section.milestone, required, ...(next === undefined ? { final: true } : {}) },
-    });
-  }
-  // Nothing precedes the first span, so its check-in has no milestone and is due only while the span is coarse.
-  const first = sections[0];
-  if (
-    first?.lessons.some((lesson) =>
-      lesson.nodes.some((node) => pathProperty(graph, node, NODE_ELABORATE_PROPERTY) === true),
-    )
-  )
-    first.lessons.unshift({ kind: "checkpoint", numbered: false, nodes: [], checkpoint: { required: true } });
   return { sections, warnings: [...warnings.values()] };
 }
 

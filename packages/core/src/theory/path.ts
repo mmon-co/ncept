@@ -25,8 +25,7 @@ export function lessonHere(
   reading: MissionPathReading,
 ): { lesson: LessonReading; section: MissionPathReading["sections"][number] } | undefined {
   for (const section of reading.sections)
-    for (const lesson of section.lessons)
-      if (isNumberedStop(lesson) && !lesson.checkpoint && !lesson.cleared) return { lesson, section };
+    for (const lesson of section.lessons) if (isNumberedStop(lesson) && !lesson.cleared) return { lesson, section };
   return undefined;
 }
 export type PathTheory = Pick<Theory<unknown>, "progress" | "estimate" | "prepareEstimate">;
