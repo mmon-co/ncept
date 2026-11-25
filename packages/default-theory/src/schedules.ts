@@ -200,16 +200,6 @@ export function prepareReviewReplay(schedule: ReviewSchedule): Replay {
   }
 }
 
-export function sameReviewCurve(a: NodeSchedule, b: NodeSchedule): boolean {
-  if (a.lastReview !== b.lastReview) return false;
-  return a.kind === "fsrs"
-    ? b.kind === "fsrs" &&
-        a.stability === b.stability &&
-        a.stabilityFast === b.stabilityFast &&
-        a.difficulty === b.difficulty
-    : b.kind === "interval" && a.days === b.days;
-}
-
 export function retrievabilityAt(schedule: ReplayedSchedule, time: number): number {
   const elapsed = (time - Date.parse(schedule.lastReview)) / DAY_MS;
   if (schedule.kind === "fsrs") return SCHEDULER.model.forgettingCurve(schedule, elapsed);

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { composePatch, emptyPatch, isObservation, type Mission } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
-import { init, openHost, openProfile, type HostChatSetup, type Model } from "../src/index";
+import { init, openHost, openLearningReader, openProfile, type HostChatSetup, type Model } from "../src/index";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -118,7 +118,7 @@ test("a goal switches to a Lesson, records a demonstration, and the next Session
     model: async () => ({ interpretations: [] }),
     confirm: async () => true,
   });
-  const next = await reopened.sessions.open({ mode: "lesson", entry: { kind: "review", nodes: ["node-addition"] } });
+  const next = await reopened.sessions.open({ mode: "lesson", entry: { kind: "target", node: "node-addition" } });
   const context = await reopened.sessions.turn(next, {});
   expect(context.context).toContain("What is 2 + 3?");
   const memory = await tool(context, "memory").run({ node: "node-addition" });
@@ -131,6 +131,68 @@ test("a goal switches to a Lesson, records a demonstration, and the next Session
     ),
   ).toBe(true);
   expect((await reopened.missions.list())[0]?.run.active).toBeNull();
+});
+
+test("opening a legacy Profile closes its Mission Review and rewrites detached Review to a target", async () => {
+  const { host, dir, ref } = await seeded();
+  const mission = {
+    id: "addition",
+    statement: "Add integers",
+    priority: 1,
+    targets: [{ node: "node-addition" as const, provenance: ref }],
+  };
+  await host.missions.create(mission);
+  const attached = await host.sessions.begin({ kind: "continue", missionId: mission.id });
+  const before = (await host.missions.list()).find((reading) => reading.mission.id === mission.id);
+  if (!before) throw new Error("Missing Mission");
+  const { past } = before.run;
+  const at = new Date().toISOString();
+  await host.profile.appendLog([
+    {
+      id: "obs-legacy-review-mission",
+      at,
+      by: "platform",
+      payload: {
+        kind: "local.session",
+        session: { ...attached, entry: { kind: "review", nodes: ["node-addition"] } },
+      },
+    },
+    {
+      id: "obs-legacy-review-detached",
+      at,
+      by: "platform",
+      payload: {
+        kind: "local.session",
+        session: {
+          id: "detached",
+          surface: "surface-detached",
+          about: ["node-addition"],
+          mode: "lesson",
+          closed: true,
+          entry: { kind: "review", nodes: ["invalid", "node-addition"] },
+        },
+      },
+    },
+  ]);
+
+  const reader = await openLearningReader(dir, [defaultTheory]);
+  const reading = await reader.reading();
+  expect(reading.missions[0]?.run).toMatchObject({ active: null, past });
+  expect(reading.sessions.find(({ id }) => id === attached.id)).toMatchObject({
+    closed: true,
+    mode: "lesson",
+    mission: mission.id,
+    entry: { kind: "mission", id: mission.id },
+  });
+  expect(reading.sessions.find(({ id }) => id === "detached")).toMatchObject({
+    closed: true,
+    mode: "lesson",
+    entry: { kind: "target", node: "node-addition" },
+  });
+  // A handle already open on this directory sees the migrated log on disk.
+  const migrated = await host.profile.read();
+  expect(JSON.stringify(migrated.log)).not.toContain('"kind":"review"');
+  expect((await (await openProfile(dir, [defaultTheory])).read()).manifest.log).toBe(migrated.manifest.log);
 });
 
 test("refusing a proposal changes no Profile files", async () => {
@@ -170,7 +232,7 @@ test("a missed learner-day fires day.ended once across host restarts", async () 
   };
   const { host, dir } = await seeded(true, model);
   await host.config.update({ ...(await host.config.read()), timezone: "UTC" });
-  const session = await host.sessions.open({ mode: "lesson", entry: { kind: "review", nodes: ["node-addition"] } });
+  const session = await host.sessions.open({ mode: "lesson", entry: { kind: "target", node: "node-addition" } });
   await demonstrate(await host.sessions.turn(session, {}));
   await host.sessions.close(session);
   setSystemTime(new Date("2026-11-08T12:00:00Z"));

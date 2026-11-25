@@ -4,7 +4,7 @@ import {
   PEDAGOGY_SKILLS_PROPERTY,
   PEDAGOGY_TOOLS_PROPERTY,
 } from "./capabilities.js";
-import { isGuidanceEntries, GUIDANCE_PROPERTIES, type GuidanceEntry } from "./guidance.js";
+import { isGuidanceEntries, GUIDANCE_PROPERTIES, relocateGuidance } from "./guidance.js";
 import {
   materialKey,
   type EdgeId,
@@ -120,31 +120,7 @@ export function namespaceCapture(graph: ResolvedGraph, delta: SemanticDelta, ins
               ...Object.fromEntries(
                 GUIDANCE_PROPERTIES.flatMap((property) => {
                   const guidance = set.properties[property];
-                  return isGuidanceEntries(guidance)
-                    ? [
-                        [
-                          property,
-                          guidance.map(({ text, mode, nodes }): GuidanceEntry => ({
-                            text,
-                            ...(nodes === undefined ? {} : { nodes: nodes.map(node) }),
-                            mode:
-                              mode === "append"
-                                ? mode
-                                : "replace" in mode
-                                  ? {
-                                      replace: mode.replace.map((ref) =>
-                                        "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
-                                      ),
-                                    }
-                                  : {
-                                      keep: mode.keep.map((ref) =>
-                                        "name" in ref ? { name: tagName(ref.name) } : { node: node(ref.node) },
-                                      ),
-                                    },
-                          })),
-                        ],
-                      ]
-                    : [];
+                  return isGuidanceEntries(guidance) ? [[property, relocateGuidance(guidance, node, tagName)]] : [];
                 }),
               ),
             },

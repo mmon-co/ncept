@@ -10,7 +10,7 @@ import type {
   TheoryProjection,
 } from "@mmon-co/ncept-core/theory";
 import { defaultTheoryMessages } from "./messages.js";
-import { prepareLessonTiming, measuredReviewTiming, type LessonTiming } from "./timing.js";
+import { prepareLessonTiming, type LessonTiming } from "./timing.js";
 
 /** Read a frozen default assessment through the same boundary as a live projection. */
 export function defaultTagProgress(tags: readonly Tag[]): NodeProgress {
@@ -77,18 +77,15 @@ export function estimateDefault(context: EstimateContext, lessons: readonly Less
 export function prepareEstimateDefault(context: EstimateContext): (lessons: readonly Lesson[]) => Estimate {
   let teachingTiming: ReturnType<typeof prepareLessonTiming> | undefined;
   let timing: LessonTiming | undefined;
-  let reviewTiming: LessonTiming | undefined;
   return (lessons) => {
     const teaching = new Set(lessons.filter(isNumberedStop).flatMap(({ nodes }) => nodes));
     const progress = progressDefault(context.graph, context.projection, [...teaching]);
     const open = [...teaching].filter((id) => progress[id]?.status === "open").length;
-    const reviews = lessons.filter(({ kind }) => kind === "review").reduce((sum, { nodes }) => sum + nodes.length, 0);
     teachingTiming ??= prepareLessonTiming(context.graph, context.observations, context.activities);
     if (open > 0) timing ??= teachingTiming.measure();
-    if (reviews > 0) reviewTiming ??= measuredReviewTiming(context.graph, context.observations, context.activities);
     return {
-      minutes: open * (timing?.minutesPerNode ?? 0) + reviews * (reviewTiming?.minutesPerNode ?? 0),
-      rough: (timing?.rough ?? teachingTiming.rough()) || (reviews > 0 && (reviewTiming?.rough ?? false)),
+      minutes: open * (timing?.minutesPerNode ?? 0),
+      rough: timing?.rough ?? teachingTiming.rough(),
     };
   };
 }

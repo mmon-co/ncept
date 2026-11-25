@@ -9,6 +9,7 @@ import {
   PEDAGOGY_OPENING_PROPERTY,
   PEDAGOGY_FIRST_MESSAGE_PROPERTY,
   nodeCascadedProperty,
+  route,
   type NodeId,
 } from "@mmon-co/ncept-core/patch";
 import type { Program } from "@mmon-co/ncept-core/observations";
@@ -21,6 +22,7 @@ import { catalogToolsForMode } from "./catalog.js";
 import { evaluationContext, evaluateWatchedReply } from "./evaluation.js";
 import { lessonOpening, openingLanguage } from "./opening.js";
 import { nodeReviewSchedule } from "./path.js";
+import { defaultQueryTokens } from "./tags.js";
 import { graphDraftBatch } from "./graph-draft-batch.js";
 const COMMON_CONCEPT_PATCH_PROPERTY = "app:common-concept";
 
@@ -218,6 +220,38 @@ function tutorOpening(ctx: ChatContext<DefaultState>): string | undefined {
     .join("\n");
 }
 
+function dueNodes(ctx: ChatContext<DefaultState>) {
+  const { graph, state, entry } = ctx;
+  const due = defaultQueryTokens["review:due"](state, graph);
+  const fading = defaultQueryTokens["review:fading"](state, graph);
+  if (due.size === 0 && fading.size === 0) return [];
+
+  const here = ctx.lesson?.here;
+  const focus = new Set(here?.nodes);
+  const prerequisites = new Set<NodeId>();
+  for (const node of focus) {
+    const result = route(graph, node);
+    if (result.kind === "found") for (const { id } of result.nodes) if (!focus.has(id)) prerequisites.add(id);
+  }
+  const missionId = here?.mission.id ?? (entry?.kind === "mission" ? entry.id : undefined);
+  const mission = ctx.missions?.find(({ id }) => id === missionId);
+  const scope = new Set([...ctx.about, ...(mission?.nodes ?? []), ...prerequisites]);
+  const retrievability = (node: NodeId) => state.nodes[node]?.schedule?.retrievability ?? 1;
+  return [...scope]
+    .filter((node) => due.has(node) || fading.has(node))
+    .sort((a, b) => retrievability(a) - retrievability(b) || a.localeCompare(b))
+    .map((node) => {
+      const label = nodeCascadedProperty(graph, node, NODE_LABEL_PROPERTY);
+      return {
+        node,
+        label: typeof label === "string" ? label : node,
+        status: fading.has(node) ? "fading" : "due",
+        ...(fading.has(node) && prerequisites.has(node) ? { fadingPrerequisiteOfHere: true } : {}),
+        ...(nodeReviewSchedule(graph, node).kind === "interval" ? { interval: true } : {}),
+      };
+    });
+}
+
 function* setup(
   ctx: ChatContext<DefaultState>,
   mode?: "empty" | "charting" | "authoring" | "lesson",
@@ -228,11 +262,7 @@ function* setup(
   const prompt = tutorSystemPrompt(mode);
   const { documents, candidates } = documentListing(ctx);
   const offered = linkedDocuments(ctx, documents, ctx.tutorMessages ?? []);
-  const entry = ctx.entry;
-  const intervalNodes =
-    entry?.kind === "review"
-      ? entry.nodes.filter((node) => nodeReviewSchedule(ctx.graph, node).kind === "interval")
-      : [];
+  const retention = dueNodes(ctx);
   return {
     prompt,
     context: [
@@ -249,14 +279,7 @@ function* setup(
         : "This Session is attached to no Nodes; name Nodes explicitly where a tool needs them.",
       ...(ctx.entry === undefined ? [] : [`Session opening (host-resolved facts):\n${JSON.stringify(ctx.entry)}`]),
       ...(ctx.missions?.length ? [`Current Missions (context data):\n${JSON.stringify(ctx.missions)}`] : []),
-      ...(entry?.kind === "review"
-        ? [
-            `Current Review (frozen batch; check retention, not teach):\n${JSON.stringify({
-              ...entry,
-              ...(intervalNodes.length > 0 ? { intervalNodes } : {}),
-            })}`,
-          ]
-        : []),
+      retention.length ? `Due and fading Nodes (most overdue first):\n${JSON.stringify(retention)}` : undefined,
       ...(here === undefined
         ? []
         : [
@@ -337,7 +360,7 @@ export const modes = {
   lesson: {
     title: CATALOG_MODE_TITLES.lesson,
     frontTab: "document",
-    entry: { required: true, kinds: ["mission", "target", "review"] },
+    entry: { required: true, kinds: ["mission", "target"] },
     capabilities: catalogCapabilities("lesson"),
     graphDraftBatch,
     metadataKeys: CATALOG_MODE_METADATA_KEYS.lesson,

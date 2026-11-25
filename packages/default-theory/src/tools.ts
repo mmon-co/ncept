@@ -24,7 +24,6 @@ import { isAttemptOutcome } from "./outcomes.js";
 import { learnerAttempt, posedTask } from "./evaluation.js";
 import {
   activeDefaultRecords,
-  completionNodeRef,
   electedObservations,
   assertDefaultRetraction,
   emptyNodeMemory,
@@ -520,7 +519,7 @@ export const defaultInstrumentTools = [
   }),
   scopedTool(
     "mission",
-    "Effective Missions, revisions and resolved scopes. Each run shows its active Session, open asides, recent past and next stops; the path shows numbered lesson sections, cleared stops and estimated minutes left. Checkpoints follow milestone Lessons and refine the next section.",
+    "Effective Missions, revisions and resolved scopes. Each run shows its active Session, open asides, recent past and next stops; the path shows numbered lesson sections, cleared stops and estimated minutes left. A due check-in is a charting Session to reflect and refine the next section.",
     (ctx, scope) =>
       missionFacts(ctx, scope).map((mission) => ({
         ...mission,
@@ -567,30 +566,7 @@ export const defaultInstrumentTools = [
     }),
     *run(raw, ctx) {
       const input = args(raw, ["practising"]);
-      const recount = closeRecount(ctx, input.practising);
-      if (ctx.entry?.kind === "review") {
-        const session = new Set(ctx.sessionObservations ?? []);
-        for (const node of ctx.entry.nodes) {
-          const verdict = ctx.state.nodes[node]?.records.findLast(
-            (record) => session.has(record.id) && isDemonstration(record.payload),
-          );
-          if (
-            verdict === undefined ||
-            !isDemonstration(verdict.payload) ||
-            !verdict.payload.unaided ||
-            verdict.payload.outcome !== "success"
-          )
-            continue;
-          yield* write({
-            at: ctx.now,
-            surface: ctx.surface,
-            nodes: [node],
-            cites: [verdict.id],
-            payload: { kind: "review-pass", node: completionNodeRef(ctx.graph, node) },
-          });
-        }
-      }
-      return recount;
+      return closeRecount(ctx, input.practising);
     },
   },
 ] satisfies readonly DefaultTool[];
@@ -738,7 +714,7 @@ export const defaultRecordingTools = [
   {
     name: "record_retrieval_opener" as const,
     description:
-      "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Quiz, Review, Material outcome, or generic demonstration.",
+      "Record the learner's actual attempted answer to a posed conversational retrieval prompt at the opening of a lesson. Use only for that explicit lesson-opening check, never for a Material outcome or generic demonstration.",
     schema: schema(
       {
         node: nodeProperty,

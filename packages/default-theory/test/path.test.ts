@@ -90,17 +90,8 @@ test("random grouped DAG paths preserve prerequisites, contiguous sections, cone
       const members = new Set(section.lessons.flatMap(({ nodes }) => nodes));
       const fresh = [...cone([section.milestone])].filter((id) => !claimed.has(id));
       expect([...members].sort(), `section ownership at trial ${trial}`).toEqual(fresh.sort());
-      const opening = section.lessons.filter((lesson) => lesson.checkpoint && !lesson.checkpoint.milestone);
-      if (opening.length) {
-        expect(section === path.sections[0], `opening check-in belongs to section 0 at trial ${trial}`).toBe(true);
-        expect(section.lessons[0], `opening check-in leads at trial ${trial}`).toBe(opening[0]);
-      }
-      const checkpoints = section.lessons.filter((lesson) => lesson.checkpoint?.milestone);
-      expect(checkpoints.length, `one checkpoint per milestone at trial ${trial}`).toBe(1);
-      expect(section.lessons.at(-1), `checkpoint follows its milestone at trial ${trial}`).toBe(checkpoints[0]);
-      expect(checkpoints[0]?.nodes).toEqual([section.milestone]);
       for (const lesson of section.lessons) {
-        if (lesson.checkpoint) continue;
+        expect(lesson.kind).toBe("lesson");
         expect(lesson.nodes.length).toBeGreaterThan(0);
         for (const id of lesson.nodes) {
           const prerequisites = edges.filter(({ to }) => to === id).map(({ from }) => from);
@@ -175,7 +166,7 @@ test("independent target sections follow target order, not priority hints", () =
   const graph = resolvePatchBundle({ terminal: revision.ref, revisions: [revision] });
   const path = defaultTheory.path(context(graph, ["node-conversation", "node-social"]));
   expect(path.sections.map(({ milestone }) => milestone)).toEqual(["node-conversation", "node-social"]);
-  expect(path.sections[0]?.lessons.filter((lesson) => !lesson.checkpoint).map(({ nodes }) => nodes)).toEqual([
+  expect(path.sections[0]?.lessons.map(({ nodes }) => nodes)).toEqual([
     ["node-words"],
     ["node-sentences"],
     ["node-conversation"],

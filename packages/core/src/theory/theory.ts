@@ -72,15 +72,6 @@ export type Lesson = Readonly<{
   numberOffset?: number;
   /** Optional captured identity facts, independent of future numbering. */
   tag?: string;
-  milestone?: NodeId;
-  /** The check-in after `milestone`; absent for the check-in before the first span. */
-  checkpoint?: Readonly<{
-    milestone?: NodeId;
-    required: boolean;
-    final?: true;
-    /** Host-inserted update stop; never emitted by the theory's graph-only path. */
-    updates?: readonly { patch: string; title: string; version: string }[];
-  }>;
 }>;
 export type MissionPath = Readonly<{
   /** Earliest clock instant requiring a fresh path read; input changes always invalidate it. */
@@ -96,7 +87,7 @@ export interface LessonActivity {
   readonly surface: string;
   readonly activeMs: number;
   readonly startedAt: string;
-  readonly kind: "lesson" | "review";
+  readonly kind: "lesson";
   /** Nodes touched by the Session's Records, including its related Material surfaces. */
   readonly nodes: readonly NodeId[];
   /** Related Material surfaces owned by the same Session. */
@@ -142,7 +133,7 @@ export type PathSelection = Pick<PathContext, "targets" | "past" | "retired">;
 export type PathInputs = Omit<PathContext, keyof PathSelection>;
 export type MissionFuture = MissionPath &
   Readonly<{
-    /** Ordered upcoming stops; sections retain the structural syllabus and checkpoint addresses. */
+    /** Ordered upcoming stops; sections retain the structural syllabus. */
     future: readonly Lesson[];
   }>;
 

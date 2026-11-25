@@ -45,7 +45,7 @@ function isBeginSession(value: unknown): value is BeginSession {
     return false;
   const intent = value.intent;
   if (!intent || typeof intent !== "object" || !("kind" in intent)) return false;
-  if (intent.kind === "new-mission" || intent.kind === "review") return true;
+  if (intent.kind === "new-mission") return true;
   if (!("missionId" in intent) || typeof intent.missionId !== "string") return false;
   return (
     intent.kind === "continue" ||
@@ -366,7 +366,8 @@ export default function ncept(pi: ExtensionAPI) {
               mission.statement + " — " + (next[0]?.name ?? "chart the next stop") + "  /learn " + mission.id,
           ),
         reading.missions.length ? "" : "No Missions yet.  /learn <what I want to learn>",
-        reading.dueReview.length + " Nodes due for review.  /review",
+        reading.dueReview.length +
+          (reading.dueReview.length === 1 ? " Node due for review." : " Nodes due for review."),
         "/learn  ·  /missions  ·  /author  ·  /hub share  ·  /hub pull <url>",
       ].filter(Boolean),
     );
@@ -503,7 +504,7 @@ export default function ncept(pi: ExtensionAPI) {
   pi.on("agent_start", () => {
     // Global prompt renderers can run after before_agent_start; discard their
     // forced projection once every renderer has seen the tutor-owned options.
-    if (promptOptions) promptOptions.forceSystemPrompt = undefined;
+    if (promptOptions) delete promptOptions.forceSystemPrompt;
   });
   pi.on("context_with_system", async (event, ctx) => {
     if (relayingContinuation)
@@ -685,17 +686,6 @@ export default function ncept(pi: ExtensionAPI) {
             : undefined;
       if (!skip) return;
       await enter(ctx, { mode: "lesson", skip }, "Let's continue this Mission.");
-    },
-  });
-  pi.registerCommand("review", {
-    description: "Review what is due",
-    handler: async (_args, ctx) => {
-      const { dueReview } = await (await getHost(ctx)).reading();
-      if (!dueReview.length) {
-        ctx.ui.notify("No review due.", "info");
-        return;
-      }
-      await enter(ctx, { mode: "lesson", entry: { kind: "review", nodes: dueReview } }, "Let's review.");
     },
   });
   pi.registerCommand("author", {
