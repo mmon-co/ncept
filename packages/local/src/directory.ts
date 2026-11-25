@@ -166,6 +166,11 @@ async function locked<T>(dir: string, operation: () => Promise<T>): Promise<T> {
     await release();
   }
 }
+function installedPin(files: ProfileFiles, theories: readonly ConfiguredTheory[]): boolean {
+  const { theory, range } = parseManifest(files.get("profile.json")).theory;
+  const version = theories.find((candidate) => candidate.id === theory)?.version;
+  return version !== undefined && range === "~" + version.split(".").slice(0, 2).join(".");
+}
 export async function openProfile(
   dir: string,
   theories: readonly ConfiguredTheory[],
@@ -173,11 +178,12 @@ export async function openProfile(
 ): Promise<ProfileDirectory> {
   dir = resolve(dir);
   const readOnlyFiles = options.readOnly ? await filesAt(dir) : undefined;
-  if (!readOnlyFiles || migrateLessonLog(readOnlyFiles) !== readOnlyFiles)
+  // A read-only open migrates like a writable one, but only takes the lock (and pays a second
+  // validation beyond read()'s) when the Lesson log or the stored Theory pin is behind.
+  if (!readOnlyFiles || migrateLessonLog(readOnlyFiles) !== readOnlyFiles || !installedPin(readOnlyFiles, theories))
     await locked(dir, async () => {
       const stored = await filesAt(dir);
-      const initial = options.readOnly ? migrateLessonLog(stored) : migrateProfileFiles(stored, theories);
-      const profile = validate(initial, theories);
+      const initial = migrateProfileFiles(stored, theories);
       // Immutable data first, then a single atomic live-head/log/pin switch. An interruption
       // leaves either the old generation or the complete new one; retry never repeats a step.
       for (const [path, bytes] of initial) {
@@ -187,7 +193,7 @@ export async function openProfile(
       if (manifest !== stored.get("profile.json") && manifest) await atomic(dir, "profile.json", manifest);
       if (options.readOnly) return;
       // A copied or moved Profile must still appear in pi's cwd-filtered /resume list.
-      for (const filename of Object.values(profile.manifest.sessions)) {
+      for (const filename of Object.values(parseManifest(manifest).sessions)) {
         const path = "sessions/" + filename;
         const bytes = initial.get(path);
         if (bytes) {
