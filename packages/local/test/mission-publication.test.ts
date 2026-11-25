@@ -147,9 +147,9 @@ test("local publication freezes a Profile Mission and pull adopts the public def
     await reader.hub.pull("patch-malformed@1.0.0");
     expect(offers).toEqual([]);
 
-    const adopted = await reader.hub.pull(release.url);
+    await reader.hub.pull(release.url);
     expect(offers).toEqual([mission.statement]);
-    const source = { patch: adopted, version: release.version, suggestionId: missionId, origin };
+    const source = { patch: release.ref, version: release.version, suggestionId: missionId, origin };
     const imported = (await reader.missions.list()).find(({ mission }) => mission.source)?.mission;
     expect(imported?.id).toMatch(/^mission-[0-9a-f-]{36}$/);
     expect(imported?.id).not.toBe(missionId);

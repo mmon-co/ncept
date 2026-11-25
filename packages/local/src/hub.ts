@@ -355,7 +355,7 @@ export function connectHub(
             ...(item.guidance === undefined ? {} : { guidance: item.guidance }),
             ...(item.assessment === undefined ? {} : { assessment: item.assessment }),
             source: {
-              patch: adopted.ref,
+              patch: bundle.terminal,
               version: selected.version,
               suggestionId: item.id,
               ...(item.origin === undefined ? {} : { origin: item.origin }),
