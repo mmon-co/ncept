@@ -1,5 +1,6 @@
 import { canonicalJson, isContentDigest } from "../digest.js";
 import { PatchCompileError } from "./errors.js";
+import { validatePatchMissionPointers } from "./missions.js";
 import {
   isPatchSkillEntries,
   isPatchToolEntries,
@@ -232,6 +233,7 @@ export function validateAuthoredOpenings(graph: ResolvedGraph): void {
  * and a migration overwrites it with a new revision rather than rewriting it.
  */
 export function validateAuthoredContent(content: PatchContent): void {
+  validatePatchMissionPointers(content.metadata.properties);
   const sets = [
     content.metadata.properties,
     ...content.delta.operations.flatMap((operation) =>
