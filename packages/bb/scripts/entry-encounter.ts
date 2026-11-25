@@ -131,7 +131,6 @@ try {
   await open({ kind: "revise-lesson", missionId: "count-liberties" });
   await open({ kind: "tell-tutor", missionId: "count-liberties", request: "Use a smaller board; keep blue pebble." });
   await open({ kind: "revise-route", missionId: "count-liberties" });
-  await open({ kind: "review" });
   const packet = { setup: JSON.parse(await readFile(join(directory, "bb-first-use.json"), "utf8")), observations };
   await writeFile(join(directory, "bb-entry-encounter.json"), JSON.stringify(packet, null, 2) + "\n");
   console.log("Encounter saved: " + join(directory, "bb-entry-encounter.json"));

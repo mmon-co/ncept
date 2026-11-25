@@ -201,7 +201,7 @@ export function strings(value: unknown): readonly string[] {
     throw new Error("Expected strings");
   return value;
 }
-export const ENTRY_KINDS = ["goal", "mission", "target", "review", "checkpoint"] satisfies readonly ModeEntry["kind"][];
+export const ENTRY_KINDS = ["goal", "mission", "target", "checkpoint"] satisfies readonly ModeEntry["kind"][];
 
 export function modeEntry(value: unknown): ModeEntry {
   const input = record(value);
@@ -245,8 +245,6 @@ export function modeEntry(value: unknown): ModeEntry {
     case "target":
       if (!isNodeId(input.node)) throw new Error("A target entry needs a Node");
       return { kind: "target", node: input.node };
-    case "review":
-      return { kind: "review", nodes: nodeIds(input.nodes) };
     case "checkpoint":
       if (!nonempty(input.missionId) || (input.milestone !== undefined && !isNodeId(input.milestone)))
         throw new Error("Invalid checkpoint entry");

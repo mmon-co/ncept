@@ -4,12 +4,15 @@ import { composePatch, emptyPatch } from "@mmon-co/ncept-core";
 import { defaultTheory, DEFAULT_THEORY_REF } from "@mmon-co/ncept-default-theory";
 import { openHost, openProfile, openLearningReader } from "@mmon-co/ncept-local";
 import { registerDisposableProject } from "./disposable-projects";
+import { seedCheckIns } from "./check-in-seed";
 
 // Run on the bb server machine after building and installing packages/bb.
 // Creates an unused Profile/project with two Missions, due review and a no-paid tutor.
 const [directory, machine, fresh] = process.argv.slice(2);
 if (!directory || !isAbsolute(directory) || !machine)
-  throw new Error("Usage: bun packages/bb/scripts/first-use.ts <unused-absolute-profile-directory> <machine-id>");
+  throw new Error(
+    "Usage: bun packages/bb/scripts/first-use.ts <unused-absolute-profile-directory> <machine-id> [--check-ins|--empty]",
+  );
 const source = resolve(import.meta.dir, "..");
 const child = Bun.spawn(
   [process.env.BB_CLI || "bb", "concept", "init", directory, "--machine", machine, "--source", source],
@@ -22,7 +25,8 @@ const output = await new Response(child.stdout).text();
 if (await child.exited) throw new Error("bb concept init failed");
 const setup = JSON.parse(output);
 const captureRun = await registerDisposableProject(setup.projectId, directory);
-if (fresh !== "--empty") {
+if (fresh === "--check-ins") await seedCheckIns(directory);
+else if (fresh !== "--empty") {
   const profile = await openProfile(directory, [defaultTheory]);
   const content = composePatch(emptyPatch(), [
     { kind: "add-node", node: { id: "node-count-liberties" } },
@@ -117,7 +121,7 @@ await writeFile(
     2,
   ) + "\n",
 );
-if (fresh !== "--empty") {
+if (fresh !== "--empty" && fresh !== "--check-ins") {
   const run = async (args: string[]) => {
     const child = Bun.spawn([process.env.BB_CLI || "bb", ...args], { stdout: "pipe", stderr: "inherit" });
     const output = await new Response(child.stdout).text();
@@ -197,11 +201,22 @@ if (fresh !== "--empty") {
 }
 console.log(JSON.stringify(setup));
 console.error("After inspection, retain any live project citation under docs/, then run mise run bb:sweep-disposable.");
-console.log(
-  "bb thread spawn --project " +
-    setup.projectId +
-    " --provider pi --model ncept-bb-scripted/tutor --prompt '/learn Count liberties; remember blue pebble'",
-);
+if (fresh === "--check-ins") {
+  const entry = join(directory, "bb-check-in-entry.json");
+  const mission = join(directory, "bb-check-in-mission.json");
+  await writeFile(
+    entry,
+    JSON.stringify({ projectId: setup.projectId, intent: { kind: "continue", missionId: "check-in-due" } }),
+  );
+  await writeFile(mission, JSON.stringify({ projectId: setup.projectId, missionId: "check-in-due" }));
+  console.log(`bb plugin rpc call ncept-bb mission --input-file ${JSON.stringify(mission)} --json`);
+  console.log(`bb plugin rpc call ncept-bb open --input-file ${JSON.stringify(entry)} --json`);
+} else
+  console.log(
+    "bb thread spawn --project " +
+      setup.projectId +
+      " --provider pi --model ncept-bb-scripted/tutor --prompt '/learn Count liberties; remember blue pebble'",
+  );
 console.log(
   "In a worker checkout, finish the source-install.ts wrapper to re-home these Profile sources and the shared plugin to main.\n" +
     "For the Session context row: bb settings experiment threadContextCard true, then press Thread context in the thread pane.",

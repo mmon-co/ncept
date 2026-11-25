@@ -27,6 +27,22 @@ export type GuidanceEntry = {
   readonly mode: GuidanceMode;
   readonly nodes?: readonly NodeId[];
 };
+/** Relocate both an entry's Node scope and the references its cascade selects. */
+export function relocateGuidance(
+  entries: readonly GuidanceEntry[],
+  node: (id: NodeId) => NodeId,
+  tag: (name: string) => string = (name) => name,
+): GuidanceEntry[] {
+  const ref = (item: GuidanceRef): GuidanceRef =>
+    "name" in item ? { name: tag(item.name) } : { node: node(item.node) };
+  return entries.map(({ text, mode, nodes }) => ({
+    text,
+    mode:
+      mode === "append" ? mode : "replace" in mode ? { replace: mode.replace.map(ref) } : { keep: mode.keep.map(ref) },
+    ...(nodes === undefined ? {} : { nodes: nodes.map(node) }),
+  }));
+}
+
 export type GuidanceSubject = Exclude<MetadataSubject, { readonly kind: "edge" }>;
 export type ResolvedGuidanceEntry = GuidanceEntry & {
   readonly origin: {

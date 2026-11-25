@@ -1,6 +1,6 @@
 ---
 name: material
-description: A Lesson or Review is starting or its Materials have run, or a Material needs making or changing.
+description: A Lesson is starting or its Materials have run, due Nodes need a recheck, or a Material needs making or changing.
 ---
 
 Materials carry the learner into the work: worked examples, drills, structured checks, or briefs for real-world steps. Reuse existing Materials on a Node (`items`) before making new ones.
@@ -9,10 +9,10 @@ Prefer real-world, best-in-class tools when the real performance lives there (th
 
 A Material can teach, assess, or both, escalating difficulty and letting the learner retry until they clear the bar. Assess with unaided checks at the Nodes' criteria under Mission assessment guidance—enough independent checks to demonstrate each Node, graded mechanically wherever answers are mechanical. Once confusable skills are learned, interleave them in practice (not on first exposure).
 
-Load the guide for the Session with `skill {name:'material', resource}`:
+Load the guide for the work with `skill {name:'material', resource}`:
 
 - Lesson: [lesson.md](lesson.md) (and for a milestone, [milestone.md](milestone.md))
-- Review: [review.md](review.md)
+- Rechecking due or fading Nodes: [review.md](review.md)
 
 Choose from the Material kinds your host provides (load your host's Material skill for available kinds and formats).
 

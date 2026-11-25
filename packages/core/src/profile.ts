@@ -1,17 +1,24 @@
 import { canonicalJson, isContentDigest } from "./digest.js";
 import { isObservation, isObservationTimestamp, type Observation } from "./observations.js";
-import {
-  isGuidanceEntries,
-  isNodeId,
-  isPatchId,
-  type ClosedPatchBundle,
-  type ExactPatchRef,
-  type GuidanceEntry,
-  type NodeId,
-} from "./patch/index.js";
+import { isGuidanceEntries, type GuidanceEntry } from "./patch/guidance.js";
+import type { ClosedPatchBundle, ExactPatchRef, NodeId } from "./patch/model.js";
+import { isNodeId, isPatchId } from "./patch/release.js";
 import { isPastEntry, type PastEntry, type SessionRef } from "./run.js";
 
-/** Portable definition; presentation, tutor mechanics and publication source belong to the host. */
+export interface ReifiedMissionOrigin {
+  readonly missionId: string;
+  readonly logEntryId: string;
+  readonly logPosition: number;
+}
+
+export interface MissionSource {
+  readonly patch: ExactPatchRef;
+  readonly version?: string;
+  readonly suggestionId: string;
+  readonly origin?: ReifiedMissionOrigin;
+}
+
+/** Portable definition; presentation and tutor mechanics belong to the host. */
 export interface Mission {
   readonly id: string;
   readonly statement: string;
@@ -19,6 +26,7 @@ export interface Mission {
   readonly assessment?: readonly GuidanceEntry[];
   readonly targets: readonly { readonly node: NodeId; readonly provenance: ExactPatchRef }[];
   readonly priority: number;
+  readonly source?: MissionSource;
 }
 
 export type MissionRevision = Readonly<{
@@ -66,6 +74,31 @@ function text(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
+export function isReifiedMissionOrigin(value: unknown): value is ReifiedMissionOrigin {
+  return (
+    object(value) &&
+    text(value.missionId) &&
+    text(value.logEntryId) &&
+    typeof value.logPosition === "number" &&
+    Number.isSafeInteger(value.logPosition) &&
+    value.logPosition >= 0
+  );
+}
+
+function isExactPatchRef(value: unknown): value is ExactPatchRef {
+  return object(value) && isPatchId(value.identity) && isContentDigest(value.digest);
+}
+
+export function isMissionSource(value: unknown): value is MissionSource {
+  return (
+    object(value) &&
+    isExactPatchRef(value.patch) &&
+    (value.version === undefined || text(value.version)) &&
+    text(value.suggestionId) &&
+    (value.origin === undefined || isReifiedMissionOrigin(value.origin))
+  );
+}
+
 export function isMission(value: unknown): value is Mission {
   return (
     object(value) &&
@@ -75,15 +108,11 @@ export function isMission(value: unknown): value is Mission {
     (value.assessment === undefined || isGuidanceEntries(value.assessment)) &&
     Array.isArray(value.targets) &&
     value.targets.every(
-      (target: unknown) =>
-        object(target) &&
-        isNodeId(target.node) &&
-        object(target.provenance) &&
-        isPatchId(target.provenance.identity) &&
-        isContentDigest(target.provenance.digest),
+      (target: unknown) => object(target) && isNodeId(target.node) && isExactPatchRef(target.provenance),
     ) &&
     typeof value.priority === "number" &&
-    Number.isFinite(value.priority)
+    Number.isFinite(value.priority) &&
+    (value.source === undefined || isMissionSource(value.source))
   );
 }
 
@@ -129,6 +158,18 @@ export function isProfileLogEntry(value: unknown): value is ProfileLogEntry {
     isRunActiveChange(value) ||
     isRunRetirement(value)
   );
+}
+
+/** Revision order is the Profile's append order, independent of timestamps. */
+export function latestMissionRevision(
+  log: readonly ProfileLogEntry[],
+  missionId: string,
+): { readonly entry: MissionRevision; readonly position: number } | undefined {
+  for (let position = log.length - 1; position >= 0; position--) {
+    const entry = log[position];
+    if (entry && "kind" in entry && entry.kind === "mission.revised" && entry.mission.id === missionId)
+      return { entry, position };
+  }
 }
 
 /** Union by immutable identity. Preserve recording order, not authored-time order (evidence can arrive late).

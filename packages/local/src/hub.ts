@@ -4,18 +4,20 @@ import { randomUUID } from "node:crypto";
 import metadata from "../package.json" with { type: "json" };
 import {
   attachmentDigest,
-  canonicalJson,
-  contentDigest,
   bundleForRevision,
   candidateRevision,
   exactPatchRefKey,
   isAttachment,
   isContentDigest,
-  isMission,
   isMissionRevision,
+  latestMissionRevision,
   isPatchId,
   migrateTheoryPatchClosure,
   notebookSelection,
+  PATCH_MISSIONS_PROPERTY,
+  readReifiedMissions,
+  reifyProfileMissions,
+  relocateGuidance,
   reifyView,
   releasePrecedenceKey,
   resolveTheory,
@@ -23,6 +25,7 @@ import {
   revisionContent,
   sameExactPatchRef,
   selectGraph,
+  withReifiedMissions,
   type Attachment,
   type ClosedPatchBundle,
   type ContentDigest,
@@ -31,6 +34,8 @@ import {
   type NodeId,
   type PatchContent,
   type PatchRevision,
+  type ReifiedMission,
+  type ReifiedMissionOrigin,
   type TheoryRequirement,
 } from "@mmon-co/ncept-core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -51,6 +56,7 @@ export function missionBundle(
   patches: ClosedPatchBundle,
   mission: Mission,
   title: string,
+  origin?: ReifiedMissionOrigin,
 ): { bundle: ClosedPatchBundle; skills: number } {
   const graph = resolvePatchBundle(patches, new Set(["local"]), notebookSelection(patches));
   const cone = selectGraph(graph, { cone: { targets: mission.targets.map(({ node }) => node) } });
@@ -64,20 +70,10 @@ export function missionBundle(
     provenance?.kind === "reified_from" ? provenance.entities.nodes.map(({ source, target }) => [source, target]) : [],
   );
   const node = (id: NodeId) => mapped.get(id) ?? id;
-  const entries = (list: Mission["guidance"]) =>
-    list?.map((entry) => ({
-      ...entry,
-      ...(entry.nodes ? { nodes: entry.nodes.map(node) } : {}),
-      ...(entry.mode === "append"
-        ? {}
-        : "replace" in entry.mode
-          ? { mode: { replace: entry.mode.replace.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }
-          : { mode: { keep: entry.mode.keep.map((ref) => ("name" in ref ? ref : { node: node(ref.node) })) } }),
-    }));
-  const guidance = entries(mission.guidance);
-  const assessment = entries(mission.assessment);
+  const guidance = mission.guidance && relocateGuidance(mission.guidance, node);
+  const assessment = mission.assessment && relocateGuidance(mission.assessment, node);
   // The Hub offers this to whoever opens the link as a Mission they can start.
-  const suggestion = {
+  const suggestion: ReifiedMission = {
     id: randomUUID(),
     preselected: true,
     statement: mission.statement,
@@ -85,57 +81,23 @@ export function missionBundle(
     targetNodes: mission.targets.map((target) => node(target.node)),
     ...(guidance?.length ? { guidance } : {}),
     ...(assessment?.length ? { assessment } : {}),
+    ...(origin === undefined ? {} : { origin }),
   };
   const content: PatchContent = {
     ...reified,
-    metadata: {
-      // The Hub records provenance itself and refuses it from a client.
-      citations: reified.metadata.citations.filter((citation) => citation.kind !== "reified_from"),
-      properties: { ...reified.metadata.properties, [MISSION_SUGGESTIONS]: canonicalJson([suggestion]) },
-    },
+    metadata: withReifiedMissions(
+      {
+        ...reified.metadata,
+        // The Hub records graph provenance itself and refuses it from a client.
+        citations: reified.metadata.citations.filter((citation) => citation.kind !== "reified_from"),
+      },
+      [suggestion],
+    ),
   };
   const revision = candidateRevision(`patch-${randomUUID()}`, content);
   const bundle = bundleForRevision(revision.ref, new Map([[revision.ref.digest, content]]));
   resolvePatchBundle(bundle);
   return { bundle, skills: cone.nodes.length };
-}
-
-/** The Application's metadata property for Missions a release offers its readers. */
-const MISSION_SUGGESTIONS = "application:mission-suggestions";
-
-function suggestedMissions(
-  revision: PatchRevision,
-  contents: ReadonlyMap<ContentDigest, PatchContent>,
-): { mission: Mission; preselected: boolean }[] {
-  const encoded = revision.metadata.properties[MISSION_SUGGESTIONS];
-  if (encoded === undefined) return [];
-  if (typeof encoded !== "string") throw new Error("Invalid Mission suggestions metadata");
-  const suggestions: unknown = JSON.parse(encoded);
-  if (!Array.isArray(suggestions)) throw new Error("Invalid Mission suggestions metadata");
-  const nodes = new Set(resolvePatchBundle(bundleForRevision(revision.ref, contents)).nodes.map(({ id }) => id));
-  const ids = new Set<string>();
-  return suggestions.map((item: unknown) => {
-    if (!object(item) || typeof item.id !== "string" || !item.id || !Array.isArray(item.targetNodes))
-      throw new Error("Invalid Mission suggestion");
-    const { statement, targetNodes, guidance, assessment, preselected } = item;
-    const mission: unknown = {
-      id: "hub-" + contentDigest([revision.ref.identity, item.id]),
-      statement,
-      priority: 1,
-      targets: targetNodes.map((node: unknown) => ({ node, provenance: revision.ref })),
-      ...(guidance === undefined ? {} : { guidance }),
-      ...(assessment === undefined ? {} : { assessment }),
-    };
-    if (
-      !isMission(mission) ||
-      ids.has(mission.id) ||
-      new Set(targetNodes).size !== targetNodes.length ||
-      mission.targets.some(({ node }) => !nodes.has(node))
-    )
-      throw new Error("Invalid Mission suggestion");
-    ids.add(mission.id);
-    return { mission, preselected: preselected === true };
-  });
 }
 
 interface ImportPreview {
@@ -363,21 +325,42 @@ export function connectHub(
       const next = candidateRevision(personal.ref.identity, content);
       contents.set(next.ref.digest, content);
       resolvePatchBundle(bundleForRevision(next.ref, contents));
-      const suggestions = suggestedMissions(adopted, contents);
-      const existing = new Set(current.log.filter(isMissionRevision).map(({ mission }) => mission.id));
+      const suggestions = readReifiedMissions(
+        revisionContent(adopted),
+        resolvePatchBundle(bundleForRevision(adopted.ref, contents)),
+      );
+      const existing = new Set<string>();
+      for (const entry of current.log) {
+        if (!isMissionRevision(entry)) continue;
+        const source = entry.mission.source;
+        if (source?.patch.identity === adopted.ref.identity) existing.add(source.suggestionId);
+      }
       const selectedMissions: Mission[] = [];
-      for (const { mission, preselected } of suggestions) {
-        if (existing.has(mission.id)) continue;
+      for (const item of suggestions) {
+        if (existing.has(item.id)) continue;
         if (
           await confirm({
             kind: "hub.pull.mission",
             title: "Add the suggested Mission?",
-            description: mission.statement,
-            detail: { statement: mission.statement },
-            defaultAccepted: preselected,
+            description: item.statement,
+            detail: { statement: item.statement },
+            defaultAccepted: item.preselected === true,
           })
         )
-          selectedMissions.push(mission);
+          selectedMissions.push({
+            id: `mission-${randomUUID()}`,
+            statement: item.statement,
+            priority: 1,
+            targets: item.targetNodes.map((node) => ({ node, provenance: adopted.ref })),
+            ...(item.guidance === undefined ? {} : { guidance: item.guidance }),
+            ...(item.assessment === undefined ? {} : { assessment: item.assessment }),
+            source: {
+              patch: bundle.terminal,
+              version: selected.version,
+              suggestionId: item.id,
+              ...(item.origin === undefined ? {} : { origin: item.origin }),
+            },
+          });
       }
       // Nothing touches the live head until every downloaded revision and blob verifies.
       for (const bytes of blobs.values()) await profile.addBlob(bytes);
@@ -402,12 +385,21 @@ export function connectHub(
       const original = bundleForRevision(input.patch, contents);
       const terminal = original.revisions.find(({ ref }) => sameExactPatchRef(ref, input.patch));
       if (!terminal) throw new Error("Patch is not in this Profile");
+      if (
+        original.revisions.some(
+          (revision) => revision !== terminal && PATCH_MISSIONS_PROPERTY in revision.metadata.properties,
+        )
+      )
+        throw new Error("Cannot publish a Patch with private Mission pointers in a pinned base");
+      const { metadata } = reifyProfileMissions(revisionContent(terminal), current.log, resolvePatchBundle(original), {
+        missionIds: input.missions ?? [],
+      });
       const packaged: PatchContent = {
         ...revisionContent(terminal),
         metadata: {
-          ...terminal.metadata,
+          ...metadata,
           properties: {
-            ...terminal.metadata.properties,
+            ...metadata.properties,
             "patch:title": input.title,
             ...(input.description === undefined ? {} : { "patch:description": input.description }),
           },
@@ -433,11 +425,15 @@ export function connectHub(
       if (!title) throw new Error("A shared Mission needs a title");
       const visibility = input.visibility ?? "unlisted";
       const current = await profile.read();
-      const mission = current.log
-        .filter(isMissionRevision)
-        .findLast((entry) => entry.mission.id === input.mission)?.mission;
-      if (!mission) throw new Error("Unknown Mission");
-      const { bundle, skills } = missionBundle(current.patches, mission, title);
+      const revision = latestMissionRevision(current.log, input.mission);
+      if (!revision) throw new Error("Unknown Mission");
+      const { entry, position } = revision;
+      const { mission } = entry;
+      const { bundle, skills } = missionBundle(current.patches, mission, title, {
+        missionId: mission.id,
+        logEntryId: entry.id,
+        logPosition: position,
+      });
       if (
         !(await confirm({
           kind: "hub.share",

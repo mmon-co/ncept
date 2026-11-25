@@ -3,11 +3,15 @@ import {
   candidateRevision,
   emptyPatch,
   isMission,
+  isMissionSource,
   isObservation,
   isProfileLogEntry,
+  isReifiedMissionOrigin,
+  latestMissionRevision,
   mergeProfileLogs,
   type Profile,
   type ProfileLogEntry,
+  type MissionRevision,
 } from "../src";
 
 // The ticket's portable-format property, through Core's public operations.
@@ -68,4 +72,45 @@ test("Profile logs validate envelopes and union identities without interpreting 
   if (!first) throw new Error("Missing first observation");
   expect(() => mergeProfileLogs(merged, [{ ...first, at: "2026-11-06T10:00:00Z" }])).toThrow("Conflicting");
   for (const entry of entries) expect(isProfileLogEntry({ ...entry, at: "yesterday" })).toBe(false);
+});
+
+test("adopted Mission revisions retain their exact publication source through the Profile log", () => {
+  const patch = candidateRevision("patch-shared", emptyPatch()).ref;
+  const origin = { missionId: "mission-authored", logEntryId: "revision-authored", logPosition: 0 };
+  const source = { patch, version: "1.0.0", suggestionId: "suggestion-shared", origin };
+  const entry: MissionRevision = {
+    kind: "mission.revised",
+    id: "revision-adopted",
+    at: "2026-11-06T09:00:00.000Z",
+    mission: { id: "mission-adopted", statement: "Learn place value", targets: [], priority: 1, source },
+  };
+  const revised = { ...entry, id: "revision-edited", mission: { ...entry.mission, statement: "Read large numbers" } };
+  const log: unknown = JSON.parse(
+    JSON.stringify([
+      entry,
+      revised,
+      { ...entry, id: "revision-other", mission: { ...entry.mission, id: "mission-other" } },
+    ]),
+  );
+  if (!Array.isArray(log) || !log.every(isProfileLogEntry)) throw new Error("Invalid round trip");
+  expect(latestMissionRevision(log, entry.mission.id)).toEqual({ entry: revised, position: 1 });
+  expect(latestMissionRevision(log, "mission-absent")).toBeUndefined();
+  for (const badOrigin of [
+    { ...origin, missionId: "" },
+    { ...origin, logEntryId: "" },
+    ...[-1, 1.5, 2 ** 53].map((logPosition) => ({ ...origin, logPosition })),
+  ]) {
+    expect(isReifiedMissionOrigin(badOrigin)).toBe(false);
+    expect(
+      isProfileLogEntry({ ...entry, mission: { ...entry.mission, source: { ...source, origin: badOrigin } } }),
+    ).toBe(false);
+  }
+  for (const badSource of [
+    { ...source, suggestionId: "" },
+    { ...source, version: "" },
+    { ...source, patch: { ...patch, digest: "no-digest" } },
+    { ...source, patch: { ...patch, identity: "no-patch-id" } },
+  ]) {
+    expect(isMissionSource(badSource)).toBe(false);
+  }
 });

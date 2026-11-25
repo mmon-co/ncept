@@ -229,15 +229,13 @@ export default function ncept(bb: BbPluginApi) {
           ? intent.request
           : intent.kind === "new-mission"
             ? "/ncept-kickoff Chart a new Mission."
-            : intent.kind === "review"
-              ? "/ncept-kickoff Begin the Review."
-              : intent.kind === "revise-lesson"
-                ? "/ncept-kickoff Rework this Lesson; the learner requested a different approach."
-                : intent.kind === "revise-route"
-                  ? "/ncept-kickoff Revise the route for this Mission."
-                  : intent.kind === "skip-lesson" || intent.kind === "skip-to"
-                    ? "/ncept-kickoff Continue from the stop the learner skipped to."
-                    : "/ncept-kickoff Continue this Mission.";
+            : intent.kind === "revise-lesson"
+              ? "/ncept-kickoff Rework this Lesson; the learner requested a different approach."
+              : intent.kind === "revise-route"
+                ? "/ncept-kickoff Revise the route for this Mission."
+                : intent.kind === "skip-lesson" || intent.kind === "skip-to"
+                  ? "/ncept-kickoff Continue from the stop the learner skipped to."
+                  : "/ncept-kickoff Continue this Mission.";
       const next = await bb.sdk.threads.spawn({
         projectId,
         environment: environment

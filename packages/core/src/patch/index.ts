@@ -5,6 +5,7 @@ export * from "./capabilities.js";
 export * from "./errors.js";
 export * from "./resolve.js";
 export * from "./reify.js";
+export * from "./missions.js";
 export { unscopedCopyTagName, type PatchCopy, type PatchInstanceId } from "./copy.js";
 export * from "./select.js";
 export * from "./project.js";

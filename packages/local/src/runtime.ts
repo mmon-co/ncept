@@ -36,6 +36,7 @@ export interface LocalSession extends HostSession {
   readonly surface: SurfaceId;
   readonly about: readonly NodeId[];
   readonly closed: boolean;
+  readonly closedAt?: string;
   /** Identifies a pending close; resuming the Session clears it. */
   readonly closing?: string;
   readonly mission?: string;
@@ -64,7 +65,7 @@ export function sessionStates(profile: ValidatedProfile): readonly LocalSession[
   const states = new Map<string, LocalSession>();
   for (const entry of profile.log) {
     const payload = localPayload(entry, "local.session");
-    if (payload && object(payload.session)) {
+    if (payload && isObservation(entry) && object(payload.session)) {
       const session = payload.session;
       if (
         !nonempty(session.id) ||
@@ -78,6 +79,7 @@ export function sessionStates(profile: ValidatedProfile): readonly LocalSession[
         surface: session.surface,
         mode: session.mode,
         closed: session.closed,
+        ...(session.closed ? { closedAt: entry.at } : {}),
         ...(typeof session.closing === "string" ? { closing: session.closing } : {}),
         about: nodeIds(session.about),
         ...(session.entry === undefined ? {} : { entry: modeEntry(session.entry) }),

@@ -16,6 +16,8 @@ import {
   type LessonProgress,
   type LessonReading,
   type Mission,
+  type MissionPath,
+  type MissionPathReading,
   type MissionRun,
   type ModeEntry,
   type ModeSwitchDefault,
@@ -29,11 +31,19 @@ import {
   type Theory,
   type Tool,
 } from "@mmon-co/ncept-core";
+import {
+  CHECKED_IN_PROPERTY,
+  checkInRequired,
+  pathProperty,
+  sectionCoarseNodes,
+} from "@mmon-co/ncept-default-theory/path";
+import { DEFAULT_THEORY_ID, homeDefaultRecords } from "@mmon-co/ncept-default-theory/state";
 import { join } from "node:path";
 import { lock } from "proper-lockfile";
 import { openProfile } from "./directory.js";
 import { connectHub } from "./hub.js";
 import type {
+  DueCheckIn,
   Host,
   HostChatSetup,
   HostConfig,
@@ -59,13 +69,65 @@ import { mechanics } from "./mechanics.js";
 import type { ValidatedProfile } from "./exchange.js";
 import { ENTRY_KINDS, isSurface, modeEntry } from "./inputs.js";
 import { object, parsePiSession } from "./sessions.js";
-import { reviewStop, sessionLength } from "./session-policy.js";
+import { sessionLength } from "./session-policy.js";
 
 type LearningView<S> = Awaited<ReturnType<Runtime<S>["snapshot"]>>;
 
-function readMissions<S>(view: LearningView<S>, complete = false): readonly MissionReading[] {
+type CheckInEntry = Extract<ModeEntry, { kind: "checkpoint" }>;
+
+function dueCheckIn<S>(
+  view: LearningView<S>,
+  run: MissionRun,
+  path: MissionPath,
+  reading: MissionPathReading,
+  closed: ReadonlyMap<string, LocalSession>,
+  touches: (surface: string, milestone: NodeId) => boolean,
+): { checkIn: DueCheckIn; entry: CheckInEntry } | undefined {
+  if (run.retired || view.theory.id !== DEFAULT_THEORY_ID) return;
+  const here = lessonHere(reading);
+  const section = here ? reading.sections.indexOf(here.section) : reading.sections.length;
+  const milestone = path.sections[section - 1]?.milestone;
+  const final = !here && milestone !== undefined ? (true as const) : undefined;
+  const required = checkInRequired(view.graph, path, milestone);
+  const stamp = milestone && pathProperty(view.graph, milestone, CHECKED_IN_PROPERTY);
+  let source: { sessionId: string; closedAt: string } | undefined;
+  if (milestone) {
+    for (const past of run.past) {
+      const session = past.kind === "session" ? closed.get(past.session) : undefined;
+      if (!session?.closedAt || (source && session.closedAt <= source.closedAt)) continue;
+      if (!final && typeof stamp === "string" && session.closedAt <= stamp) continue;
+      if (touches(session.surface, milestone)) source = { sessionId: session.id, closedAt: session.closedAt };
+    }
+  }
+  if (!source && !required) return;
+  const context = { ...(milestone === undefined ? {} : { milestone }), ...(final ? { final } : {}) };
+  return {
+    checkIn: { ...context, required },
+    entry: { kind: "checkpoint", missionId: run.mission, ...context, ...source, outcome: { kind: "cleared" } },
+  };
+}
+
+function readMissionStates<S>(view: LearningView<S>, complete = false) {
   const projection = view.theory.project(view.graph, view.state);
-  const sessions = runs(sessionStates(view.profile));
+  const states = sessionStates(view.profile);
+  const sessions = runs(states);
+  const closed = new Map(states.filter(({ closed }) => closed).map((session) => [session.id, session]));
+  let recordNodes: Map<string, Set<NodeId>> | undefined;
+  const touches = (surface: string, node: NodeId) => {
+    if (!recordNodes) {
+      recordNodes = new Map();
+      const { records, current } = homeDefaultRecords(view.graph, view.observations, view.now);
+      for (const record of records) {
+        if (!record.surface) continue;
+        const homes = current.get(record.id);
+        if (!homes?.size) continue;
+        const nodes = recordNodes.get(record.surface) ?? new Set<NodeId>();
+        for (const home of homes) nodes.add(home);
+        recordNodes.set(record.surface, nodes);
+      }
+    }
+    return recordNodes.get(surface)?.has(node) ?? false;
+  };
   return missions(view.profile).map((mission) => {
     const run = missionRun(view.profile, mission.id);
     const context = { graph: view.graph, projection, observations: view.observations, activities: [] };
@@ -77,31 +139,31 @@ function readMissions<S>(view: LearningView<S>, complete = false): readonly Miss
       minutes: sessionLength(localSettings(view.profile)),
       ...(run.retired ? { retired: run.retired } : {}),
     });
-    const itinerary = path ? readMissionPath(path, view.theory, context) : undefined;
+    const itinerary = path && readMissionPath(path, view.theory, context);
+    const due = path && itinerary && dueCheckIn(view, run, path, itinerary, closed, touches);
     const structured = itinerary?.sections.flatMap(({ lessons }) => lessons) ?? [];
-    return {
+    const reading: MissionReading = {
       mission,
       run: readMissionRun(run, sessions, complete ? run.past.length : 20),
       path: itinerary,
-      next: (path?.future ?? [])
-        .filter((stop) => {
-          if (!stop.checkpoint || stop.checkpoint.required) return true;
-          const progress = view.theory.progress(view.graph, projection, stop.nodes);
-          return stop.nodes.some((node) => !progress[node] || progress[node].status === "open");
-        })
-        .map((lesson, index) => ({
-          ...(structured.find(
-            (item) =>
-              item.kind === lesson.kind &&
-              item.tag === lesson.tag &&
-              JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
-          ) ?? { ...lesson, number: index + 1, cleared: false }),
-          name:
-            lesson.name ??
-            lesson.nodes.map((node) => stringProperty(view.graph, node, "display:label", node)).join(", "),
-        })),
+      ...(due ? { checkIn: due.checkIn } : {}),
+      next: (path?.future ?? []).map((lesson, index) => ({
+        ...(structured.find(
+          (item) =>
+            item.kind === lesson.kind &&
+            item.tag === lesson.tag &&
+            JSON.stringify(item.nodes) === JSON.stringify(lesson.nodes),
+        ) ?? { ...lesson, number: index + 1, cleared: false }),
+        name:
+          lesson.name ?? lesson.nodes.map((node) => stringProperty(view.graph, node, "display:label", node)).join(", "),
+      })),
     };
+    return { reading, entry: due?.entry };
   });
+}
+
+function readMissions<S>(view: LearningView<S>, complete = false): readonly MissionReading[] {
+  return readMissionStates(view, complete).map(({ reading }) => reading);
 }
 
 /** Read current learning state without day processing, receipts or model calls. */
@@ -194,8 +256,10 @@ function sessionTitle(session: LocalSession, profile: ValidatedProfile, label: (
   const entry = session.entry;
   const mode = session.mode.charAt(0).toUpperCase() + session.mode.slice(1);
   let title = mode;
-  if (entry?.kind === "review") title = "Review · " + entry.nodes.length + " due";
-  else {
+  if (entry?.kind === "checkpoint") {
+    const name = missions(profile).find((mission) => mission.id === entry.missionId)?.statement;
+    title = "Check-in" + (name ? " · " + name : "");
+  } else {
     const name =
       entry?.kind === "mission"
         ? missions(profile).find((mission) => mission.id === entry.id)?.statement
@@ -327,7 +391,10 @@ export class LearningHost<S> {
     return state;
   }
   mode(theory: Theory<S>, mode: string, entry?: ModeEntry): SessionMode<S> | undefined {
-    if (entry) modeEntry(entry);
+    if (entry) {
+      modeEntry(entry);
+      if (!ENTRY_KINDS.some((kind) => kind === entry.kind)) throw new Error("Unsupported Session entry");
+    }
     const selected = theory.modes?.[mode];
     if (theory.modes && !selected) throw new Error("Unknown Theory mode: " + mode);
     if (selected && ((selected.entry.required && !entry) || (entry && !selected.entry.kinds.includes(entry.kind))))
@@ -461,28 +528,14 @@ export class LearningHost<S> {
   }
   async begin(intent: SessionIntent): Promise<HostSession> {
     if (intent.kind === "new-mission") return this.open({ mode: "charting" });
-    if (intent.kind === "review") {
-      const view = await this.runtime.snapshot();
-      const stop = reviewStop(view.theory, {
-        graph: view.graph,
-        projection: view.theory.project(view.graph, view.state),
-        observations: view.observations,
-        activities: [],
-        past: [],
-        now: view.now,
-        minutes: sessionLength(localSettings(view.profile)),
-      });
-      if (!stop?.nodes.length) throw new Error("No review due");
-      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes } });
-    }
-    if (!("missionId" in intent)) throw new Error("Expected a Mission entry");
-    const reading = (await this.missionReadings()).find(({ mission }) => mission.id === intent.missionId);
-    if (!reading || reading.run.retired?.outcome === "abandoned") throw new Error("Mission is not available");
-    const { mission, run, next, path } = reading;
+    const state = readMissionStates(await this.runtime.snapshot()).find(
+      ({ reading }) => reading.mission.id === intent.missionId,
+    );
+    if (!state || state.reading.run.retired?.outcome === "abandoned") throw new Error("Mission is not available");
+    const { mission, run, next, path } = state.reading;
     const entry = { kind: "mission", id: mission.id } as const;
     if (intent.kind === "continue" && run.active) return this.open({ mode: "empty", resume: run.active });
-    if (run.retired && intent.kind !== "continue")
-      throw new Error("A finished Mission can only continue or resume a Session");
+    if (run.retired) throw new Error("This Mission is finished");
     if (intent.kind === "skip-lesson" || intent.kind === "skip-to")
       return this.open({ mode: "lesson", skip: { ...intent, mission: mission.id } });
     if (intent.kind === "tell-tutor" && !intent.request.trim())
@@ -496,17 +549,15 @@ export class LearningHost<S> {
     }
     if (intent.kind === "tell-tutor" || intent.kind === "revise-route" || !mission.targets.length)
       return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
+    if (state.entry) return this.open({ mode: "charting", entry: state.entry });
     const stop = next[0];
-    if (stop?.kind === "review")
-      return this.open({ mode: "lesson", entry: { kind: "review", nodes: stop.nodes }, mission: mission.id });
-    if (run.retired) throw new Error("No review is due for this finished Mission");
     if (!stop) throw new Error("This Mission has no following stop; revise the route or finish it");
-    if (stop.checkpoint) return this.open({ mode: "charting", entry: { kind: "mission", id: mission.id } });
     return this.open({ mode: "lesson", entry });
   }
   async open(input: SessionOpening): Promise<HostSession> {
     const skipMission = input.skip?.mission;
     let skipped: readonly LessonReading[] = [];
+    let skipSection: MissionPathReading["sections"][number] | undefined;
     if (input.skip) {
       if (input.resume || input.entry) throw new Error("A skip cannot resume or supply an entry");
       const reading = (await this.missionReadings()).find(({ mission }) => mission.id === input.skip?.mission);
@@ -521,21 +572,15 @@ export class LearningHost<S> {
       const index =
         skip.kind === "skip-lesson"
           ? stops.findIndex((stop, position) => position > now && !stop.cleared)
-          : stops.findIndex(
-              (stop) =>
-                stop.kind === skip.stop.kind &&
-                stop.number === skip.stop.number &&
-                stop.checkpoint?.milestone === skip.stop.checkpoint?.milestone,
-            );
+          : stops.findIndex((stop) => stop.kind === skip.stop.kind && stop.number === skip.stop.number);
       if (index < 0 || !stops[index])
         throw new Error("This Mission has no following stop; revise the route or finish it");
       if (now < 0 || index <= now || stops[index].cleared)
         throw new Error("Choose an uncleared stop after the current Lesson");
-      skipped = stops.slice(now, index).filter((stop) => stop.numbered && !stop.cleared && !stop.checkpoint);
+      skipped = stops.slice(now, index).filter((stop) => stop.numbered && !stop.cleared);
       const stop = stops[index];
-      const entry: ModeEntry =
-        stop.kind === "review" ? { kind: "review", nodes: stop.nodes } : { kind: "mission", id: reading.mission.id };
-      input = { mode: stop.checkpoint ? "charting" : "lesson", entry };
+      skipSection = path.sections.find(({ lessons }) => lessons.includes(stop));
+      input = { mode: "lesson", entry: { kind: "mission", id: reading.mission.id } };
     }
     const view = await this.runtime.snapshot();
     const known = sessionStates(view.profile);
@@ -549,17 +594,15 @@ export class LearningHost<S> {
             surface,
             mode: input.mode,
             about:
-              input.entry?.kind === "review"
-                ? input.entry.nodes
-                : input.entry?.kind === "target"
-                  ? [input.entry.node]
-                  : [
-                      ...new Set(
-                        view.observations
-                          .filter((observation) => observation.surface === surface)
-                          .flatMap((observation) => observation.nodes ?? observation.about ?? []),
-                      ),
-                    ],
+              input.entry?.kind === "target"
+                ? [input.entry.node]
+                : [
+                    ...new Set(
+                      view.observations
+                        .filter((observation) => observation.surface === surface)
+                        .flatMap((observation) => observation.nodes ?? observation.about ?? []),
+                    ),
+                  ],
             closed: true,
             ...(input.entry === undefined ? {} : { entry: input.entry }),
           };
@@ -586,17 +629,18 @@ export class LearningHost<S> {
           : (input.mission ?? skipMission ?? pending?.from.mission));
     const mission = missionId ? missions(view.profile).find(({ id }) => id === missionId) : undefined;
     if (missionId && !mission) throw new Error("Unknown Mission");
+    // Resuming an open Lesson stays possible, so Continue never strands an active run.
+    if (mode === "lesson" && mission && !resumed && (entry?.kind === "mission" || skipSection))
+      this.requireRefinedSection(view, mission.id, skipSection);
     const about: readonly NodeId[] =
       (mode === "lesson" && entry?.kind === "mission" ? undefined : resumed?.about) ??
       (entry?.kind === "target"
         ? [entry.node]
-        : entry?.kind === "review"
-          ? entry.nodes
-          : mission
-            ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                ({ id }) => id,
-              )
-            : []);
+        : mission
+          ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+              ({ id }) => id,
+            )
+          : []);
     for (const node of about)
       if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
     const id = resumed?.id ?? identity();
@@ -676,12 +720,24 @@ export class LearningHost<S> {
     if (pending) this.pendingSwitch = undefined;
     return session;
   }
+  private requireRefinedSection(
+    view: LearningView<S>,
+    missionId: string,
+    destination?: MissionPathReading["sections"][number],
+  ): void {
+    if (view.theory.id !== DEFAULT_THEORY_ID) return;
+    const path = readMissions(view).find(({ mission }) => mission.id === missionId)?.path;
+    const here = path && lessonHere(path)?.section;
+    if ([here, destination].some((section) => section && sectionCoarseNodes(view.graph, section).length > 0))
+      throw new Error("Complete the check-in before starting the next Lesson");
+  }
   async switchMode(session: LocalSession, to: ModeSwitch): Promise<void> {
     const view = await this.runtime.snapshot();
     const selected = this.mode(view.theory, session.mode, session.entry);
     if (!selected?.switches.some((allowed: ModeSwitchDefault) => allowed.mode === to.mode && allowed.then === to.then))
       throw new Error("This mode does not allow that switch");
     this.mode(view.theory, to.mode, to.entry);
+    if (to.mode === "lesson" && to.entry?.kind === "mission") this.requireRefinedSection(view, to.entry.id);
     if (to.then === "here") {
       const missionId =
         to.entry?.kind === "mission"
@@ -692,15 +748,13 @@ export class LearningHost<S> {
       const mission = missions(view.profile).find(({ id }) => id === missionId);
       if (missionId && !mission) throw new Error("Unknown Mission");
       const about =
-        to.entry?.kind === "review"
-          ? to.entry.nodes
-          : to.entry?.kind === "target"
-            ? [to.entry.node]
-            : mission
-              ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
-                  ({ id }) => id,
-                )
-              : session.about;
+        to.entry?.kind === "target"
+          ? [to.entry.node]
+          : mission
+            ? selectGraph(view.graph, { cone: { targets: mission.targets.map(({ node }) => node) } }).nodes.map(
+                ({ id }) => id,
+              )
+            : session.about;
       for (const node of about)
         if (!view.graph.nodes.some(({ id }) => id === node)) throw new Error("Missing Node " + node);
       const updated: LocalSession = {

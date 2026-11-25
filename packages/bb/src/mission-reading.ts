@@ -11,7 +11,6 @@ const stop = z.object({
   probablyKnown: z.boolean(),
   active: z.boolean(),
   minutes: z.number().optional(),
-  checkpoint: z.boolean(),
   skip: skipStop,
 });
 export const missionReading = z.object({
@@ -21,6 +20,9 @@ export const missionReading = z.object({
   retired: z.boolean(),
   canReviseLesson: z.boolean(),
   next: z.string().nullable(),
+  checkIn: z
+    .object({ milestone: z.string().optional(), required: z.boolean(), final: z.literal(true).optional() })
+    .optional(),
   asides: z.array(z.string()),
   sections: z.array(
     z.object({ number: z.number(), label: z.string(), minutesLeft: z.number(), lessons: z.array(stop) }),

@@ -91,7 +91,7 @@ export function MissionPage({
   const data = reading.data;
   if (!data) return <p role={reading.error ? "alert" : undefined}>{reading.error?.message ?? "Loading Mission…"}</p>;
   const stops = data.sections.flatMap((section) => section.lessons);
-  const here = stops.findIndex((stop) => stop.numbered && !stop.checkpoint && !stop.cleared);
+  const here = stops.findIndex((stop) => stop.numbered && !stop.cleared);
   const later = stops.filter((stop, index) => here >= 0 && index > here && !stop.cleared);
   const currentSection =
     data.sections.find((section) => section.lessons.some((stop) => stop.active)) ??
@@ -115,7 +115,7 @@ export function MissionPage({
         <div className="flex flex-wrap gap-4">
           <Button disabled={pending || data.retired} onClick={() => void open({ kind: "continue", missionId })}>
             {data.active ? "Continue" : "Start"}
-            {data.next ? " · " + data.next : ""} →
+            {data.active ? "" : data.checkIn ? " · Check-in" : data.next ? " · " + data.next : ""} →
           </Button>
           <Button
             variant="outline"
@@ -210,7 +210,7 @@ export function MissionPage({
                     disabled={pending || data.retired}
                     onClick={() => void open({ kind: "skip-to", missionId, stop: stop.skip })}
                   >
-                    {stop.checkpoint ? "Checkpoint: " : stop.number + " · "}
+                    {stop.number + " · "}
                     {stop.name}
                   </MenuItem>
                 ))}
@@ -289,6 +289,15 @@ export function MissionPage({
       {data.active && !data.sections.some((section) => section.lessons.some((stop) => stop.active)) && (
         <p className="text-sm">Open · {sessions.find((session) => session.id === data.active)?.title ?? "Session"}</p>
       )}
+      {data.checkIn && (
+        <p className="text-sm">
+          {data.checkIn.final
+            ? "Mission retrospective due"
+            : data.checkIn.required
+              ? "Check-in required before the next Lesson"
+              : "Check-in due"}
+        </p>
+      )}
       <section
         aria-label="Itinerary"
         className="rounded-xl border border-border overflow-hidden divide-y divide-border"
@@ -314,13 +323,8 @@ export function MissionPage({
               return (
                 <div key={index} className={"px-4 py-3 text-sm " + (active ? "bg-accent" : "")}>
                   <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground">
-                      {stop.cleared ? "✓" : stop.checkpoint ? "◇" : stop.number}
-                    </span>
-                    <span className="flex-1">
-                      {stop.checkpoint ? "Checkpoint: " : stop.kind === "review" ? "Review: " : ""}
-                      {stop.name}
-                    </span>
+                    <span className="text-muted-foreground">{stop.cleared ? "✓" : stop.number}</span>
+                    <span className="flex-1">{stop.name}</span>
                     <span className="text-xs text-muted-foreground">
                       {active
                         ? "open"

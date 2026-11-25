@@ -58,7 +58,7 @@ Record payload types are exported from `@mmon-co/ncept-default-theory/state` and
 | `demonstration` | `Demonstration` | A Node's success/failure/don't-know, whether unaided, grader, task and response; optional evaluation records criterion probabilities and overrides. `recording: "retrieval-opener"` marks lesson-opening retrieval. |
 | `lapse` | `Lapse` | Diagnosed regression for a Node, optionally linked to the same lesson's prior slip; affects retention, not acquisition |
 | `grade` | `Grade` | A Node's whole-day retention judgment (`Again`, `Hard`, `Good`, `Easy`) and the exact learner-day interval |
-| `review-pass` | `ReviewPass` | A passed Review for a Node, clearing the path until its covering grade sets retention |
+| `review-pass` | `ReviewPass` | Historical evidence of a passed Review for a Node, suppressing its due and fading tags until a covering grade sets retention |
 | `feature-use` | `FeatureUse` | An accepted operation name, not proof of every criterion clause |
 | `teaching` | `Teaching` | An explicit explanation taught for a Node, separate from competence evidence |
 | `claim` | `Claim` | A statement, optional eliciting prompt and learner stance (`knows`, `forgotten`, `unfamiliar`) |
