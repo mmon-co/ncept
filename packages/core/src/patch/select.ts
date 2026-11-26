@@ -1,6 +1,6 @@
-import { isMaterialRef } from "./material.js";
 import type { TagIndex } from "../theory/theory.js";
 import { isContentDigest } from "../digest.js";
+import { isMaterialRef, reachableMaterials } from "./material.js";
 import { PatchCompileError } from "./errors.js";
 import { contributionKey, provenanceOf, materialKey, sameExactPatchRef } from "./model.js";
 import type {
@@ -351,21 +351,12 @@ function selectedGraph(
   });
   const metadataSets = new Set(selectedMetadata.map(({ id }) => id));
 
-  let selectedMaterials = graph.materials.filter(
+  const selectedMaterials = reachableMaterials(
+    graph.materials,
     (material) =>
       (roots?.has(materialKey(material)) ?? material.about.some((id) => nodes.has(id))) ||
-      extraRoots?.has(materialKey(material)),
+      extraRoots?.has(materialKey(material)) === true,
   );
-  if (selectedMaterials.some((material) => material.dependsOn?.length)) {
-    const available = new Map(graph.materials.map((material) => [materialKey(material), material]));
-    const selected = new Set(selectedMaterials);
-    for (const material of selected)
-      for (const ref of material.dependsOn ?? []) {
-        const target = available.get(materialKey(ref));
-        if (target) selected.add(target);
-      }
-    selectedMaterials = graph.materials.filter((material) => selected.has(material));
-  }
   const materials = selectedMaterials.map((material) => ({
     ...material,
     about: material.about.filter((id) => nodes.has(id)),
