@@ -3,7 +3,12 @@ import { takeBase } from "./select.js";
 import { joinExport, narrowExport, type Export } from "./base-export.js";
 import { canonicalJson } from "../digest.js";
 import { candidateRevision } from "./release.js";
-import { canonicalMaterial, requireAcyclicMaterialDependencies, validateMaterialDependencies } from "./material.js";
+import {
+  canonicalMaterial,
+  reachableMaterials,
+  requireAcyclicMaterialDependencies,
+  validateMaterialDependencies,
+} from "./material.js";
 import {
   discoveryTags,
   isAttachment,
@@ -898,7 +903,7 @@ function resolveOrdered(
   const nodes = new Map<NodeId, StructureNode>();
   const edges = new Map<EdgeId, StructureEdge>();
   const metadataSets = new Map<MetadataSetId, MetadataSet>();
-  const materials: Material[] = [];
+  let materials: Material[] = [];
   const materialProvenance = new Map<string, ContributionProvenance[]>();
   const tags = new Map<string, GraphTag>();
   const nodeProvenance = new Map<NodeId, ContributionProvenance[]>();
@@ -908,7 +913,7 @@ function resolveOrdered(
 
   // An entity whose every contribution is masked is removed, and takes what can't stand without it:
   // Edges incident to a removed Node, metadata subjects on removed entities (the set goes when none
-  // remain), and Materials' about entries (the Material goes when it was only about removed Nodes).
+  // remain), and Materials' about entries (a dependency of a surviving Material stays).
   // So one mask stays enough as a base revision adds more around the entity.
   const removedNodes = new Set<NodeId>();
   const removedEdges = new Set<EdgeId>();
@@ -1013,7 +1018,6 @@ function resolveOrdered(
     metadataPropertyProvenance.set(id, merged.provenance);
   }
 
-  const orphaned = new Set<string>();
   for (const [key, contributions] of collection.materials) {
     let current: Material | undefined;
     let chain: ContributionProvenance[] = [];
@@ -1036,31 +1040,20 @@ function resolveOrdered(
         chain = [];
       }
     }
-    if (current && Array.isArray(current.about) && current.about.some((node) => removedNodes.has(node))) {
-      const about = current.about.filter((node) => !removedNodes.has(node));
-      if (!about.length) orphaned.add(key);
-      current = { ...current, about };
-    }
     if (current) {
       materials.push(current);
       materialProvenance.set(key, chain);
     }
   }
-  if (orphaned.size) {
-    const byKey = new Map(materials.map((m) => [materialKey(m), m]));
-    const keep = new Set(materials.filter((m) => !orphaned.has(materialKey(m))));
-    for (const m of keep)
-      for (const ref of m.dependsOn ?? []) {
-        const target = byKey.get(materialKey(ref));
-        if (target) keep.add(target);
-      }
-    for (let i = materials.length - 1; i >= 0; i--) {
-      const m = materials[i];
-      if (m && !keep.has(m)) {
-        materials.splice(i, 1);
-        materialProvenance.delete(materialKey(m));
-      }
-    }
+  if (removedNodes.size) {
+    materials = reachableMaterials(
+      materials,
+      ({ about }) => !Array.isArray(about) || about.length === 0 || about.some((id) => !removedNodes.has(id)),
+    ).map((material) => {
+      if (Array.isArray(material.about) && material.about.some((id) => removedNodes.has(id)))
+        return { ...material, about: material.about.filter((id) => !removedNodes.has(id)) };
+      return material;
+    });
   }
   requireAcyclicMaterialDependencies(materials);
   materials.sort((a, b) => materialKey(a).localeCompare(materialKey(b)));
@@ -1174,7 +1167,10 @@ function resolveOrdered(
       nodes: [...nodeProvenance],
       edges: [...edgeProvenance],
       metadataSets: [...metadataProvenance],
-      materials: [...materialProvenance],
+      materials: materials.map((material) => {
+        const key = materialKey(material);
+        return [key, materialProvenance.get(key) ?? []] as const;
+      }),
       metadataProperties: [...metadataPropertyProvenance],
     },
   };

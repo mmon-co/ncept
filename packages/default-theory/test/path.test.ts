@@ -14,6 +14,18 @@ const context = (graph: import("@mmon-co/ncept-core/patch").ResolvedGraph, targe
   projection: defaultTheory.project(graph, readTheoryState(defaultTheory, graph, [], now)),
 });
 
+test("Mission suggestions prefer a due check-in, an active chat, and even one due card before a new Lesson", () => {
+  const future = { sections: [], warnings: [], future: [{ kind: "lesson", numbered: true, nodes: [] }] };
+  const host = { future, checkIn: true, activeToday: true, dueCards: 1 };
+  expect(defaultTheory.suggest(host)).toEqual({ kind: "check-in" });
+  expect(defaultTheory.suggest({ ...host, checkIn: false })).toEqual({ kind: "chat" });
+  expect(defaultTheory.suggest({ ...host, checkIn: false, activeToday: false })).toEqual({ kind: "cards", count: 1 });
+  expect(defaultTheory.suggest({ ...host, checkIn: false, activeToday: false, dueCards: 0 })).toEqual({ kind: "chat" });
+  const done = { ...host, future: { ...future, future: [] } };
+  expect(defaultTheory.suggest(done)).toEqual({ kind: "check-in" });
+  expect(defaultTheory.suggest({ ...done, checkIn: false })).toBeUndefined();
+});
+
 test("random grouped DAG paths preserve prerequisites, contiguous sections, cone coverage and lesson grouping", () => {
   // A fixed seed makes a failing graph reproducible without a property-testing dependency.
   let seed = 12851;

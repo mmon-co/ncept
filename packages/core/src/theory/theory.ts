@@ -130,6 +130,24 @@ export type PathContext = EstimateContext &
     minutes: number;
   }>;
 export type PathSelection = Pick<PathContext, "targets" | "past" | "retired">;
+/** What to do now on one Mission: any sitting may be suggested, never stored. */
+export type Suggestion = Readonly<
+  | { kind: "check-in" }
+  /** Flashcards scoped to the Mission's due cards; one due card is enough. */
+  | { kind: "cards"; count: number }
+  /** Enter the Mission: resume its active Session or open one. */
+  | { kind: "chat" }
+>;
+/** Host facts beside the Mission's computed future; only the host knows these. */
+export type SuggestContext = Readonly<{
+  future: MissionFuture;
+  /** A check-in is due on this Mission (the host's due check-in reading). */
+  checkIn: boolean;
+  /** The Mission's active Session was last active within the current learner day. */
+  activeToday: boolean;
+  /** Due cards on the Mission's View. */
+  dueCards: number;
+}>;
 export type PathInputs = Omit<PathContext, keyof PathSelection>;
 export type MissionFuture = MissionPath &
   Readonly<{
@@ -258,6 +276,8 @@ export interface Theory<S, Outcomes extends Record<string, unknown> = Record<str
   path?(context: PathContext): MissionFuture;
   /** Reuse one graph, time and evidence reading across different Mission selections. */
   preparePath?(inputs: PathInputs, state: S): (selection: PathSelection) => MissionFuture;
+  /** What to do now; undefined when the Mission is done. A theory without it gets `{ kind: "chat" }`. */
+  suggest?(context: SuggestContext): Suggestion | undefined;
   readonly tags: readonly string[];
   readonly outcomes: { readonly [K in keyof Outcomes]: (payload: unknown) => payload is Outcomes[K] };
   /** A historical act's meaning, from its accepted evidence rather than present progress. */

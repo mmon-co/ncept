@@ -432,6 +432,48 @@ test("masking a Node removes what cannot stand without it, including what a late
   expect(graph.edges).toEqual([]);
 });
 
+test("a Set keeps its Problem when masking the Problem's only Node", () => {
+  const problem: Material = {
+    playground: "quiz",
+    type: "problem",
+    id: "P",
+    about: ["node-a"],
+    content: { kind: "blob", hash: `sha256:${"e".repeat(64)}`, mediaType: "application/json" },
+    meta: {},
+  };
+  const set: Material = {
+    ...problem,
+    id: "S",
+    type: "set",
+    about: ["node-b"],
+    dependsOn: [{ playground: "quiz", id: "P" }],
+  };
+  const unused = { ...problem, id: "Q" };
+  const source = root([
+    { kind: "add-node", node: { id: "node-a" } },
+    { kind: "add-node", node: { id: "node-b" } },
+    ...[problem, unused, set].map((material) => ({ kind: "add-material" as const, material })),
+  ]);
+  const masked = based(
+    ref("patch-edition", "c"),
+    [source.ref],
+    [
+      {
+        kind: "mask-contribution",
+        mask: {
+          source: source.ref,
+          operationIndex: 0,
+          entity: { kind: "node", id: "node-a" },
+        },
+      },
+    ],
+  );
+  const resolve = (edition: PatchRevision) =>
+    resolvePatchBundle({ terminal: edition.ref, revisions: [source, edition] }).materials;
+  expect(resolve(masked)).toEqual([{ ...problem, about: [] }, set]);
+  expect(resolve(based(ref("patch-edition", "d"), [source.ref]))).toEqual([problem, unused, set]);
+});
+
 test("a selected base that drops a contribution reports the authored mask and retains the edition", () => {
   const node = { id: "node-branch" } as const;
   const oldSource = based(ref("patch-source", "8"), [], [{ kind: "add-node", node }]);
