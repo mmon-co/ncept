@@ -47,11 +47,11 @@ await mkdir(join(dir, ".pi/extensions"), { recursive: true });
 await writeFile(
   join(dir, ".pi/extensions/confirm-encounter.ts"),
   [
-    "import ncept from " + JSON.stringify(resolve(import.meta.dir, "../src/extension.ts")) + ";",
+    "import concept from " + JSON.stringify(resolve(import.meta.dir, "../src/extension.ts")) + ";",
     "import scripted from " + JSON.stringify(resolve(import.meta.dir, "confirm-provider.ts")) + ";",
     "export default function(pi) {",
     "  scripted(pi);",
-    "  ncept(pi);",
+    "  concept(pi);",
     "  pi.on('session_start', () => pi.events.emit('ncept:adopt-session', {session: " +
       JSON.stringify(session.id) +
       "}));",

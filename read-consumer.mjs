@@ -18,7 +18,7 @@ console.log(
     version +
     " installed " +
     Object.entries(lock.packages)
-      .filter(([path]) => path.includes("/ncept-") && path.includes("@mmon-co/"))
+      .filter(([path]) => path.includes("@mmon-co/ncept-"))
       .map(([path, { version }]) => path + "@" + version)
       .join(", "),
 );

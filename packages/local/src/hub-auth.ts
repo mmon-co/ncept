@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import {
@@ -28,6 +29,29 @@ export function hubBaseUrl(value = defaultHub): string {
   )
     throw new Error("Hub URL must use HTTPS (or loopback HTTP)");
   return url.href.replace(/\/$/, "");
+}
+
+async function prepareCredentialsPath(): Promise<string> {
+  const home = homedir();
+  const current = credentialsPath(home);
+  const previous = join(home, ".config", "ncept", "credentials.json");
+  try {
+    await mkdir(dirname(current), { recursive: true, mode: 0o700 });
+    await link(previous, current);
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      if (error.code === "ENOENT") return current;
+      if (error.code !== "EEXIST") throw error;
+    } else throw error;
+  }
+  // A new-format sign-in wins if both files exist. Retire the old file so it
+  // cannot be restored by a later lookup after sign-out.
+  await rm(previous, { force: true });
+  return current;
+}
+
+export async function clearHubCredentials(credentialsFile?: string): Promise<void> {
+  await rm(credentialsFile ?? (await prepareCredentialsPath()), { force: true });
 }
 
 export async function hasHubCredentials(options: HubOptions): Promise<boolean> {
@@ -94,7 +118,7 @@ export class HubAuth implements OAuthClientProvider {
   static async open(resource: string, options: HubOptions): Promise<HubAuth> {
     const provider = new HubAuth(
       resource,
-      options.credentialsFile ?? credentialsPath(),
+      options.credentialsFile ?? (await prepareCredentialsPath()),
       options.openUrl ?? browser,
       options.clientMetadataUrl,
     );
