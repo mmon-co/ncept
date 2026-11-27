@@ -9,6 +9,7 @@ import {
   PEDAGOGY_OPENING_PROPERTY,
   PEDAGOGY_FIRST_MESSAGE_PROPERTY,
   nodeCascadedProperty,
+  nodeGuidance,
   route,
   type NodeId,
 } from "@mmon-co/ncept-core/patch";
@@ -220,6 +221,19 @@ function tutorOpening(ctx: ChatContext<DefaultState>): string | undefined {
     .join("\n");
 }
 
+/** The focus Nodes' cascaded teaching guidance, each origin entry once with the Nodes it reaches. */
+function lessonGuidance(graph: ChatContext<DefaultState>["graph"], nodes: readonly NodeId[]) {
+  const pooled = new Map<string, { text: string; nodes: NodeId[] }>();
+  for (const node of nodes)
+    for (const { text, origin } of nodeGuidance(graph, node)) {
+      const key = origin.metadataSet + "#" + origin.entryIndex;
+      const entry = pooled.get(key) ?? { text, nodes: [] };
+      entry.nodes.push(node);
+      pooled.set(key, entry);
+    }
+  return [...pooled.values()];
+}
+
 function dueNodes(ctx: ChatContext<DefaultState>) {
   const { graph, state, entry } = ctx;
   const due = defaultQueryTokens["review:due"](state, graph);
@@ -285,6 +299,7 @@ function* setup(
         : [
             `Current Lesson progress (current theory reading):\n${JSON.stringify({
               lesson: here,
+              guidance: lessonGuidance(ctx.graph, here.nodes),
               ...progress,
               completion: here.nodes.map((node) => ({
                 node,
