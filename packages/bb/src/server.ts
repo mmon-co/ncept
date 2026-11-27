@@ -4,7 +4,7 @@ import { hostContract, rpcContract } from "./contract";
 import { entrySchema } from "./entries";
 import { stateName } from "./reading";
 
-export default function ncept(bb: BbPluginApi) {
+export default function concept(bb: BbPluginApi) {
   const host = bb.hosts.experimental_client({ contract: hostContract });
 
   bb.events.on("thread.idle", () => bb.rpc.experimental_invalidate(["learning"]));
@@ -228,14 +228,14 @@ export default function ncept(bb: BbPluginApi) {
         intent.kind === "tell-tutor"
           ? intent.request
           : intent.kind === "new-mission"
-            ? "/ncept-kickoff Chart a new Mission."
+            ? "/concept-kickoff Chart a new Mission."
             : intent.kind === "revise-lesson"
-              ? "/ncept-kickoff Rework this Lesson; the learner requested a different approach."
+              ? "/concept-kickoff Rework this Lesson; the learner requested a different approach."
               : intent.kind === "revise-route"
-                ? "/ncept-kickoff Revise the route for this Mission."
+                ? "/concept-kickoff Revise the route for this Mission."
                 : intent.kind === "skip-lesson" || intent.kind === "skip-to"
-                  ? "/ncept-kickoff Continue from the stop the learner skipped to."
-                  : "/ncept-kickoff Continue this Mission.";
+                  ? "/concept-kickoff Continue from the stop the learner skipped to."
+                  : "/concept-kickoff Continue this Mission.";
       const next = await bb.sdk.threads.spawn({
         projectId,
         environment: environment
@@ -277,7 +277,7 @@ export default function ncept(bb: BbPluginApi) {
       return entry.success
         ? [
             {
-              name: "NCEPT_BB_ENTRY",
+              name: "CONCEPT_BB_ENTRY",
               value: JSON.stringify(entry.data),
               reason: "Open the requested tutoring Session entry",
             },
@@ -286,16 +286,16 @@ export default function ncept(bb: BbPluginApi) {
     }
     if (typeof metadata.session !== "string") return [];
     const entries = [
-      { name: "NCEPT_BB_SESSION", value: metadata.session, reason: "Adopt this thread's tutoring Session" },
+      { name: "CONCEPT_BB_SESSION", value: metadata.session, reason: "Adopt this thread's tutoring Session" },
     ];
     if (typeof metadata.carryRef === "string")
       entries.push({
-        name: "NCEPT_BB_CARRY_REF",
+        name: "CONCEPT_BB_CARRY_REF",
         value: threadId,
         reason: "Fetch the full Session carry through bb concept carry",
       });
     else if (typeof metadata.carry === "string")
-      entries.push({ name: "NCEPT_BB_CARRY", value: metadata.carry, reason: "Carry context to the next tutor" });
+      entries.push({ name: "CONCEPT_BB_CARRY", value: metadata.carry, reason: "Carry context to the next tutor" });
     return entries;
   });
 
@@ -401,7 +401,7 @@ export default function ncept(bb: BbPluginApi) {
                   mentions: [],
                   text: request.learnerKickoff
                     ? (request.kickoff ?? "")
-                    : "/ncept-kickoff " + (request.kickoff || "Continue."),
+                    : "/concept-kickoff " + (request.kickoff || "Continue."),
                   ...(request.learnerKickoff ? {} : { visibility: "agent-only" as const }),
                 },
               ],
@@ -418,7 +418,13 @@ export default function ncept(bb: BbPluginApi) {
         }),
         associate: cliCommand({
           summary: "Associate this tutoring thread with its pi-owned Session",
-          options: { session: { type: "string", required: true, description: "The Session recorded by ncept-pi" } },
+          options: {
+            session: {
+              type: "string",
+              required: true,
+              description: "The Session recorded by the Common Concept pi extension",
+            },
+          },
           async run(input, ctx) {
             if (!ctx.threadId) throw new Error("Run from a bb thread");
             const thread = await bb.sdk.threads.get({ threadId: ctx.threadId });
@@ -445,7 +451,7 @@ export default function ncept(bb: BbPluginApi) {
         carry: cliCommand({
           summary: "Read a thread's hidden tutoring carry (for the pi extension)",
           options: {
-            thread: { type: "string", required: true, description: "Thread ID supplied by NCEPT_BB_CARRY_REF" },
+            thread: { type: "string", required: true, description: "Thread ID supplied by CONCEPT_BB_CARRY_REF" },
           },
           async run(input) {
             return { exitCode: 0, stdout: JSON.stringify({ carry: await carried(input.options.thread) }) };

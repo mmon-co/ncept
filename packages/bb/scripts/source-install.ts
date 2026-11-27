@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
+import { conceptPluginId } from "./plugin-id";
 
 // Run on the bb server. A command gets a temporary candidate install; on exit,
 // restore the main checkout, including disposable Profiles' pi/provider sources.
@@ -82,7 +83,9 @@ async function restore() {
   const profiles = z
     .array(z.object({ directory: z.string(), hostId: z.string() }))
     .parse(
-      JSON.parse(await run([bb, "plugin", "rpc", "call", "ncept-bb", "profiles", "--input-file", input, "--json"])),
+      JSON.parse(
+        await run([bb, "plugin", "rpc", "call", conceptPluginId, "profiles", "--input-file", input, "--json"]),
+      ),
     );
   for (const profile of profiles) {
     if (profile.hostId !== machine) continue;

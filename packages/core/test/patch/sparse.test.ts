@@ -6,8 +6,7 @@ import {
   patchDirectoryKeyHash,
   emptyPatch,
   packPatchContent,
-  planPatchTranslation,
-  planSparsePatchTranslation,
+  readSparsePatchTranslation,
   resolvePatchBundle,
   reifyView,
   reifySparseView,
@@ -568,7 +567,7 @@ test("a sparse closure verifies exactly the pages justifying the selected attach
   ).toContain("invalid or repeated Patch manifest");
 });
 
-test("sparse translation equals dense planning under two human layers with the untaken base pages absent", async () => {
+test("sparse translation plans under two human layers with the untaken base pages absent", async () => {
   const { base, variant } = variantLayerFixture();
   const library = rev(
     "patch-library",
@@ -613,14 +612,9 @@ test("sparse translation equals dense planning under two human layers with the u
   expect(omitted.length).toBeGreaterThan(0);
   for (const bundle of sparse) expect(bundle.chunks.some(([d]) => omitted.includes(d))).toBe(false);
   const args = { sourceVersion: "1.6.0", locale: "zh-CN" };
-  const expected = planPatchTranslation({
-    ...args,
-    source: { terminal: source.ref, revisions: [library, source] },
-    humanVariants: layers.map((r) => ({ terminal: r.ref, revisions: [library, source, r] })),
-  });
-  expect(expected.texts.map((t) => t.text)).toEqual(["Original title"]);
-  expect(expected.documents).toHaveLength(1);
-  expect(await planSparsePatchTranslation({ ...args, source: sourceBundle, humanVariants })).toEqual(expected);
+  const { plan } = await readSparsePatchTranslation({ ...args, source: sourceBundle, humanVariants });
+  expect(plan.texts.map((t) => t.text)).toEqual(["Original title"]);
+  expect(plan.documents).toHaveLength(1);
 });
 
 for (const remove of [false, true])

@@ -39,8 +39,8 @@ export default function encounter(pi: ExtensionAPI) {
   const model: Model<Api> = {
     id: "tutor",
     name: "Scripted bb encounter",
-    api: "ncept-bb-scripted-api",
-    provider: "ncept-bb-scripted",
+    api: "concept-bb-scripted-api",
+    provider: "concept-bb-scripted",
     baseUrl: "http://localhost",
     reasoning: false,
     input: ["text"],
