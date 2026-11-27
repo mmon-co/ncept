@@ -1,5 +1,5 @@
 ---
-name: ncept-bb
+name: concept-bb
 description: "Create a Common Concept learning Profile and bb project."
 ---
 

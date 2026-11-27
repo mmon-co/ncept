@@ -5,6 +5,7 @@ import { defaultTheory, DEFAULT_THEORY_REF } from "@mmon-co/ncept-default-theory
 import { openHost, openProfile, openLearningReader } from "@mmon-co/ncept-local";
 import { registerDisposableProject } from "./disposable-projects";
 import { seedCheckIns } from "./check-in-seed";
+import { conceptPluginId } from "./plugin-id";
 
 // Run on the bb server machine after building and installing packages/bb.
 // Creates an unused Profile/project with two Missions, due review and a no-paid tutor.
@@ -114,7 +115,7 @@ await writeFile(
     {
       ...settings,
       extensions: [join(source, "scripts/encounter-provider.ts")],
-      defaultProvider: "ncept-bb-scripted",
+      defaultProvider: "concept-bb-scripted",
       defaultModel: "tutor",
     },
     null,
@@ -133,7 +134,7 @@ if (fresh !== "--empty" && fresh !== "--check-ins") {
     requestFile,
     JSON.stringify({ projectId: setup.projectId, intent: { kind: "revise-route", missionId: "count-liberties" } }),
   );
-  const past = await run(["plugin", "rpc", "call", "ncept-bb", "open", "--input-file", requestFile, "--json"]);
+  const past = await run(["plugin", "rpc", "call", conceptPluginId, "open", "--input-file", requestFile, "--json"]);
   await run(["thread", "wait", past.threadId, "--status", "idle", "--timeout", "90s", "--json"]);
   await run(["thread", "stop", past.threadId, "--json"]);
   const host = await openHost({
@@ -151,7 +152,7 @@ if (fresh !== "--empty" && fresh !== "--check-ins") {
     requestFile,
     JSON.stringify({ projectId: setup.projectId, intent: { kind: "continue", missionId: "count-liberties" } }),
   );
-  const lesson = await run(["plugin", "rpc", "call", "ncept-bb", "open", "--input-file", requestFile, "--json"]);
+  const lesson = await run(["plugin", "rpc", "call", conceptPluginId, "open", "--input-file", requestFile, "--json"]);
   await run(["thread", "wait", lesson.threadId, "--status", "idle", "--timeout", "90s", "--json"]);
   await run(["thread", "tell", lesson.threadId, "Open an aside", "--json"]);
   await run(["thread", "wait", lesson.threadId, "--status", "idle", "--timeout", "90s", "--json"]);
@@ -209,13 +210,13 @@ if (fresh === "--check-ins") {
     JSON.stringify({ projectId: setup.projectId, intent: { kind: "continue", missionId: "check-in-due" } }),
   );
   await writeFile(mission, JSON.stringify({ projectId: setup.projectId, missionId: "check-in-due" }));
-  console.log(`bb plugin rpc call ncept-bb mission --input-file ${JSON.stringify(mission)} --json`);
-  console.log(`bb plugin rpc call ncept-bb open --input-file ${JSON.stringify(entry)} --json`);
+  console.log(`bb plugin rpc call ${conceptPluginId} mission --input-file ${JSON.stringify(mission)} --json`);
+  console.log(`bb plugin rpc call ${conceptPluginId} open --input-file ${JSON.stringify(entry)} --json`);
 } else
   console.log(
     "bb thread spawn --project " +
       setup.projectId +
-      " --provider pi --model ncept-bb-scripted/tutor --prompt '/learn Count liberties; remember blue pebble'",
+      " --provider pi --model concept-bb-scripted/tutor --prompt '/learn Count liberties; remember blue pebble'",
   );
 console.log(
   "In a worker checkout, finish the source-install.ts wrapper to re-home these Profile sources and the shared plugin to main.\n" +

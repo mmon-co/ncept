@@ -112,7 +112,7 @@ async function checkPublished(scratch, id, local, tarball) {
   }
 }
 
-const scratch = await mkdtemp(join(tmpdir(), "ncept-release-"));
+const scratch = await mkdtemp(join(tmpdir(), "concept-release-"));
 try {
   const metadata = new Map(
     await Promise.all(packages.map(async (directory) => [nameOf(directory), await packument(nameOf(directory))])),

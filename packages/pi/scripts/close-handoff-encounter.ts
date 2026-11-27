@@ -22,7 +22,7 @@ import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { openHost, openProfile } from "@mmon-co/ncept-local";
 import { sessionStates } from "../../local/src/runtime";
 import { initProject } from "../src/init";
-import ncept from "../src/extension";
+import concept from "../src/extension";
 import { ADOPT_SESSION, OPEN_SESSION, type OpenSession } from "../src/events";
 
 // Offline first-use setup for the local handoff story; leaves its Profile and transcript inspectable.
@@ -211,7 +211,7 @@ async function open(manager: SessionManager, adopt?: string) {
     noSkills: true,
     noPromptTemplates: true,
     noThemes: true,
-    extensionFactories: [scripted, ncept, bridge],
+    extensionFactories: [scripted, concept, bridge],
   });
   await loader.reload();
   const result = await createAgentSession({

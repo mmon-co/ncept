@@ -1,26 +1,22 @@
 import { expect, test } from "bun:test";
 import {
-  applyGraphDiff,
   candidateRevision,
   compileGraph,
-  compileGraphDiff,
-  compileSparseGraph,
   compileSparseGraphDiff,
   emptyPatch,
   extractSparseClosure,
   GraphDiffCompileError,
   packPatchContent,
   sparseNotebookSelection,
+  resolvePatchBundle,
+  resolveSparsePatch,
+  sparseStoreFromBundle,
   sparseStoreFromPacked,
 } from "../../src/patch";
+import { compileDiff } from "./compile-diff";
 import type { ClosedPatchBundle, NodeId, PatchRevision, ResolvedGraph, SemanticOperation } from "../../src/patch/model";
 
-const revision: PatchRevision = {
-  ref: {
-    identity: "patch-linear-algebra",
-
-    digest: `sha256:${"a".repeat(64)}`,
-  },
+const revision: PatchRevision = candidateRevision("patch-linear-algebra", {
   bases: [],
 
   metadata: {
@@ -74,11 +70,11 @@ const revision: PatchRevision = {
       },
     ],
   },
-};
+});
 
 const bundle: ClosedPatchBundle = { terminal: revision.ref, revisions: [revision] };
 
-test("a proposed graph diff reports its target cone and suspicious fan-in", () => {
+test("a proposed graph diff reports its target cone and suspicious fan-in", async () => {
   const fan = Array.from({ length: 6 }, (_, index) => `node-fan-${index}` as const);
   const operations = fan.flatMap((node, index) => [
     { kind: "add-node" as const, node: { id: node } },
@@ -100,7 +96,7 @@ test("a proposed graph diff reports its target cone and suspicious fan-in", () =
     },
   ]);
 
-  const { report } = compileGraphDiff(bundle, operations, ["node-vectors"]);
+  const { report } = await compileDiff(bundle, operations, ["node-vectors"]);
 
   expect(report).toMatchObject({
     valid: true,
@@ -130,9 +126,9 @@ test("a proposed graph diff reports its target cone and suspicious fan-in", () =
   });
 });
 
-test("an invalid proposed graph diff returns structural and target failures together", () => {
+test("an invalid proposed graph diff returns structural and target failures together", async () => {
   try {
-    compileGraphDiff(
+    await compileDiff(
       bundle,
       [
         { kind: "add-node", node: { id: "node-unlabelled" } },
@@ -306,8 +302,7 @@ test("content source follows the effective display label after metadata edits", 
   });
 });
 
-const templateRevision: PatchRevision = {
-  ref: { identity: "patch-language-template", digest: `sha256:${"b".repeat(64)}` },
+const templateRevision: PatchRevision = candidateRevision("patch-language-template", {
   bases: [],
   metadata: { properties: { "patch:title": "Language template" }, citations: [] },
   delta: {
@@ -338,7 +333,7 @@ const templateRevision: PatchRevision = {
       { kind: "define-tag", tag: { name: "lesson:first-words", nodes: ["node-lexicon"], edges: [], metadataSets: [] } },
     ],
   },
-};
+});
 const templateBundle: ClosedPatchBundle = { terminal: templateRevision.ref, revisions: [templateRevision] };
 
 function elaboration(child: NodeId, parent: NodeId): SemanticOperation[] {
@@ -360,8 +355,8 @@ function membership(diff: { graph: ResolvedGraph }, node: NodeId): string[] {
   return diff.graph.tags.filter((tag) => tag.nodes.includes(node)).map(({ name }) => name);
 }
 
-test("a new prerequisite of an elaborate Node joins its authored method tags, but not lesson tags", () => {
-  const diff = compileGraphDiff(
+test("a new prerequisite of an elaborate Node joins its authored method tags, but not lesson tags", async () => {
+  const diff = await compileDiff(
     templateBundle,
     [...elaboration("node-words", "node-lexicon"), ...elaboration("node-verbs", "node-grammar")],
     ["node-lexicon"],
@@ -370,13 +365,13 @@ test("a new prerequisite of an elaborate Node joins its authored method tags, bu
   // Grammar is not marked elaborate, so its new prerequisite has nothing to follow.
   expect(membership(diff, "node-verbs")).toEqual([]);
   // The returned operations alone reproduce the membership.
-  expect(membership(compileGraphDiff(templateBundle, diff.operations, ["node-lexicon"]), "node-words")).toEqual([
+  expect(membership(await compileDiff(templateBundle, diff.operations, ["node-lexicon"]), "node-words")).toEqual([
     "language",
     "strand:lexicon",
   ]);
 });
 
-test("sparse Notebook compilation matches the dense candidate and fetches newly demanded base labels", async () => {
+test("sparse Notebook compilation resolves its candidate and fetches only newly demanded base labels", async () => {
   const full = candidateRevision(templateRevision.ref.identity, templateRevision);
   const base = candidateRevision("patch-base", revision);
   const dependent = candidateRevision("patch-dependent", { ...emptyPatch(), bases: [base.ref] });
@@ -398,8 +393,8 @@ test("sparse Notebook compilation matches the dense candidate and fetches newly 
   const selection = sparseNotebookSelection(packPatchContent(notebook).manifest);
   const previous = await extractSparseClosure(notebook.ref, store, { selection });
   expect(new Map(previous.chunks).has(fresh)).toBe(false);
-  expect(await compileSparseGraph({ bundle: previous, selection, annotations: {} })).toEqual(
-    compileGraph({ bundle, selection, annotations: {} }),
+  expect((await resolveSparsePatch(notebook.ref, sparseStoreFromBundle(previous), { selection })).graph).toEqual(
+    resolvePatchBundle(bundle, undefined, selection),
   );
   const reads = new Set<string>();
   const input = {
@@ -423,19 +418,27 @@ test("sparse Notebook compilation matches the dense candidate and fetches newly 
     ["metadata-old"],
     selection,
   ] as const;
-  const dense = compileGraphDiff(bundle, ...args);
   const { content, ...diff } = await compileSparseGraphDiff(input, ...args);
-  expect(diff).toEqual(dense);
-  expect(content).toEqual(applyGraphDiff(notebook, dense));
+  const next = candidateRevision(notebook.ref.identity, content);
+  expect(diff.report.compiledAgainst).toEqual(notebook.ref);
+  expect(diff.graph).toEqual(
+    resolvePatchBundle({ terminal: next.ref, revisions: [full, base, dependent, next] }, undefined, selection),
+  );
   expect(membership(diff, "node-words")).toEqual(["language", "strand:lexicon"]);
   expect(reads.has(fresh)).toBe(true);
   expect(reads.has(absent)).toBe(false);
 
-  for (const invalid of [
-    [{ kind: "add-node", node: { id: "node-unlabelled" } }],
-    [{ kind: "add-edge", edge: { id: "edge-missing", from: "node-words", to: "node-absent" } }],
-    [{ kind: "add-edge", edge: { id: "edge-loop", from: "node-lexicon", to: "node-lexicon" } }],
-  ] satisfies SemanticOperation[][]) {
+  for (const [invalid, expected] of [
+    [[{ kind: "add-node", node: { id: "node-unlabelled" } }], { missingDisplayLabels: ["node-unlabelled"] }],
+    [
+      [{ kind: "add-edge", edge: { id: "edge-missing", from: "node-words", to: "node-absent" } }],
+      { danglingEndpoints: [{ edge: "edge-missing", missing: ["node-absent", "node-words"] }] },
+    ],
+    [
+      [{ kind: "add-edge", edge: { id: "edge-loop", from: "node-lexicon", to: "node-lexicon" } }],
+      { cycles: [["node-lexicon"]] },
+    ],
+  ] satisfies [SemanticOperation[], object][]) {
     const report = async (run: () => unknown) => {
       try {
         await run();
@@ -445,14 +448,14 @@ test("sparse Notebook compilation matches the dense candidate and fetches newly 
       }
       throw new Error("expected compilation to fail");
     };
-    expect(await report(() => compileSparseGraphDiff(input, invalid, [], [], ["metadata-old"], selection))).toEqual(
-      await report(() => compileGraphDiff(bundle, invalid, [], [], ["metadata-old"], selection)),
-    );
+    expect(
+      await report(() => compileSparseGraphDiff(input, invalid, [], [], ["metadata-old"], selection)),
+    ).toMatchObject({ valid: false, ...expected });
   }
 });
 
-test("an explicit tag definition is the complete membership and excludes a prerequisite", () => {
-  const diff = compileGraphDiff(
+test("an explicit tag definition is the complete membership and excludes a prerequisite", async () => {
+  const diff = await compileDiff(
     templateBundle,
     [
       ...elaboration("node-words", "node-lexicon"),

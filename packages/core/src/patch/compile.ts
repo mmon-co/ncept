@@ -1,7 +1,5 @@
-import { candidateRevision } from "./release.js";
 import { PatchCompileError } from "./errors.js";
 import type {
-  ClosedPatchBundle,
   EdgeId,
   ExactPatchRef,
   GraphCompilationInput,
@@ -112,28 +110,6 @@ export function composePatch(
       ],
     },
     metadata: { ...content.metadata, citations: [...content.metadata.citations, ...citations] },
-  };
-}
-
-export function applyGraphDiff(content: PatchContent, diff: CompiledGraphDiff): PatchContent {
-  return composePatch(content, diff.operations, diff.citations, diff.retractions);
-}
-
-function prospectiveBundle(
-  bundle: ClosedPatchBundle,
-  operations: SemanticDelta["operations"],
-  citations: PatchMetadata["citations"],
-  retractions: readonly string[],
-): ClosedPatchBundle {
-  const terminalKey = exactPatchRefKey(bundle.terminal);
-  const terminal = bundle.revisions.find((revision) => exactPatchRefKey(revision.ref) === terminalKey);
-  if (terminal === undefined) throw new PatchCompileError("invalid-bundle", "terminal Patch revision is missing");
-  const { ref, ...value } = terminal;
-  const content = composePatch(value, operations, citations, retractions);
-  const next = candidateRevision(ref.identity, content);
-  return {
-    terminal: next.ref,
-    revisions: bundle.revisions.map((item) => (item === terminal ? next : item)),
   };
 }
 
@@ -320,39 +296,6 @@ function carryElaborationTags(
   ];
 }
 
-/** Compile a proposed delta against one exact User graph and describe its Mission cone. */
-export function compileGraphDiff(
-  bundle: ClosedPatchBundle,
-  operations: SemanticDelta["operations"],
-  targets: readonly NodeId[],
-  citations: PatchMetadata["citations"] = [],
-  retractions: readonly string[] = [],
-  selection?: ReadonlyMap<PatchId, ExactPatchRef>,
-): CompiledGraphDiff {
-  operations = carryElaborationTags(
-    resolvePatchBundle(bundle, undefined, selection),
-    operations,
-    () =>
-      new Set(
-        bundle.revisions.flatMap((revision) =>
-          revision.delta.operations.flatMap((op) => (op.kind === "define-tag" ? [op.tag.name] : [])),
-        ),
-      ),
-  );
-  try {
-    const graph = resolvePatchBundle(
-      prospectiveBundle(bundle, operations, citations, retractions),
-      undefined,
-      selection,
-    );
-    return finishDiff(bundle.terminal, graph, operations, targets, citations, retractions);
-  } catch (error) {
-    if (!structuralError(error)) throw error;
-    const current = resolvePatchBundle(prospectiveBundle(bundle, [], [], retractions), undefined, selection);
-    throw new GraphDiffCompileError(approximateReport(bundle.terminal, current, operations, targets));
-  }
-}
-
 function structuralError(error: unknown) {
   return (
     error instanceof PatchCompileError &&
@@ -417,17 +360,6 @@ export async function compileSparseGraphDiff(
     const current = retractions.length ? await prospective(composePatch(own, [], [], retractions)) : before.graph;
     throw new GraphDiffCompileError(approximateReport(terminal, current, operations, targets));
   }
-}
-
-export async function compileSparseGraph(
-  input: Omit<GraphCompilationInput, "bundle"> & { readonly bundle: SparsePatchInput },
-): Promise<VisualGraph> {
-  const { graph } = await resolveSparsePatch(
-    input.bundle.terminal,
-    sparseReader(input.bundle).store,
-    input.selection ? { selection: input.selection } : {},
-  );
-  return visualGraph(input, graph);
 }
 
 export function compileGraph(input: GraphCompilationInput): VisualGraph {
