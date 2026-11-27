@@ -9,6 +9,8 @@ bb plugin install npm:@mmon-co/ncept-bb
 bb concept init ~/learn
 ```
 
+For an existing installation, run the plugin install command again, then update both extensions from your Profile: `pi update npm:@mmon-co/ncept-pi` and `pi update npm:@mmon-co/ncept-bb`. Restart any running tutoring sessions so they use the updated extensions.
+
 `init` creates the Profile directory and a bb project for it. Open **Learn** in bb's navigation rail and press **+ New Mission**, or start a thread in that project with the **pi** provider and say what you want to learn.
 
 Your pi models and authentication stay yours. Initialization adds both pi packages and saves the Profile's project-trust entry on its machine, since pi's RPC mode cannot ask for trust. `--machine <id-or-name>` selects a machine explicitly; otherwise init uses the current thread's machine or, outside a thread, the server. Use an absolute directory or ~/ path. Existing Profiles are never overwritten.
@@ -19,7 +21,7 @@ Your pi models and authentication stay yours. Initialization adds both pi packag
 - **Today** shows which Nodes are due. The tutor can recheck them during your Session.
 - A Mission's page shows a due check-in beside its route of milestones and Lessons. Kept asides and past Sessions link to their threads.
 - **Skip…** takes what you already know, in a sentence or by choosing a later stop. **Revise…** reworks the current Lesson or the route, or finishes the Mission.
-- **Share…** on a Mission's page publishes its map and Materials on the Hub at a link and gives you the link to copy. It isn't listed. Sharing needs a free Common Concept account: send `/ncept login` in one of the project's threads once.
+- **Share…** on a Mission's page publishes its map and Materials on the Hub at a link and gives you the link to copy. It isn't listed. Sharing needs a free Common Concept account: send `/concept login` in one of the project's threads once.
 - A question off the Lesson's path opens an aside as a child thread, so bb's parent row takes you back.
 - With several Profiles, the path in Learn's title bar chooses one.
 

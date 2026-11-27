@@ -7,6 +7,7 @@ import { openProfile, object } from "@mmon-co/ncept-local";
 import { z } from "zod";
 import { getCurrentSystemPrompt } from "@earendil-works/pi-ai";
 import { entrySchema } from "../src/entries";
+import { conceptPluginId } from "./plugin-id";
 
 // A disposable first-use journey, leaving its Profile and recorded provider contexts
 // available to the panel's next encounter. Every spawned runtime is stopped on exit.
@@ -42,7 +43,7 @@ try {
   async function rpc(method: string, input: unknown) {
     const path = join(scratch, "request.json");
     await writeFile(path, JSON.stringify(input));
-    return JSON.parse(await bb("plugin", "rpc", "call", "ncept-bb", method, "--input-file", path, "--json"));
+    return JSON.parse(await bb("plugin", "rpc", "call", conceptPluginId, method, "--input-file", path, "--json"));
   }
   async function record(label: string, threadId: string) {
     threads.add(threadId);
@@ -102,7 +103,7 @@ try {
       "--provider",
       "pi",
       "--model",
-      "ncept-bb-scripted/tutor",
+      "concept-bb-scripted/tutor",
       "--prompt",
       "Hello; remember blue pebble",
       "--json",

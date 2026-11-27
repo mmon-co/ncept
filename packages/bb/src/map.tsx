@@ -35,11 +35,11 @@ type Selection = { kind: "node"; id: string } | { kind: "edge"; from: string; to
 
 function MarkNode({ data }: NodeProps<Mark>) {
   return (
-    <div className={"ncept-mark" + (data.out ? " out" : "") + (data.sel ? " sel" : "")} data-state={data.state}>
+    <div className={"concept-mark" + (data.out ? " out" : "") + (data.sel ? " sel" : "")} data-state={data.state}>
       <Handle type="target" position={Position.Top} isConnectable={false} />
       <Handle type="source" position={Position.Top} isConnectable={false} />
-      <i className="ncept-tok" />
-      <div className="ncept-lab">
+      <i className="concept-tok" />
+      <div className="concept-lab">
         <span>{data.label}</span>
         <small>{data.state}</small>
       </div>
@@ -54,7 +54,7 @@ function TrailEdge({ data, selected }: EdgeProps<Trail>) {
   const end = curve.at(curve.end);
   const line = `M${start.x},${start.y} Q${curve.control.x},${curve.control.y} ${end.x},${end.y}`;
   return (
-    <g className={"ncept-edge " + data.kind + (data.out ? " out" : "") + (selected ? " sel" : "")}>
+    <g className={"concept-edge " + data.kind + (data.out ? " out" : "") + (selected ? " sel" : "")}>
       {data.kind === "dash" ? (
         <path className="dash" d={line} />
       ) : (
@@ -234,7 +234,7 @@ export function LearnMap({
   return (
     <div
       className={
-        "ncept-map relative flex h-full w-full flex-col bg-background text-foreground" + (still ? " still" : "")
+        "concept-map relative flex h-full w-full flex-col bg-background text-foreground" + (still ? " still" : "")
       }
     >
       <div className="relative min-h-0 flex-1">
