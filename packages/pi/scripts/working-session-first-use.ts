@@ -96,7 +96,15 @@ export async function runPiThread({
     noSkills: true,
     noPromptTemplates: true,
     noThemes: true,
-    extensionFactories: [scripted, ...(mcpUrl ? [createCodemodeExtension(), createMcpExtension()] : [])],
+    extensionFactories: [
+      scripted,
+      ...(mcpUrl
+        ? [
+            createCodemodeExtension(),
+            createMcpExtension({ loadConfig: () => ({ servers: [], errors: [] }), logPath: join(agentDir, "mcp.log") }),
+          ]
+        : []),
+    ],
   });
   await loader.reload();
   const manager = SessionManager.create(cwd, join(agentDir, "sessions"));
@@ -134,6 +142,10 @@ export async function runPiThread({
     assert(file, "pi did not persist its thread");
     return file;
   } finally {
-    session.dispose();
+    try {
+      await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });
+    } finally {
+      session.dispose();
+    }
   }
 }
