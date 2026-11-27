@@ -118,7 +118,9 @@ export async function runPiThread({
         errors.push(event.message.errorMessage ?? "Scripted model failed");
       if (event.type === "tool_execution_end") {
         const parts: readonly (TextContent | ImageContent)[] = event.result.content;
-        lastResult = parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+        const texts = parts.flatMap((part) => (part.type === "text" ? [part.text] : []));
+        // codemode returns its execution summary separately from the script's text output.
+        lastResult = (event.toolName === "codemode" && !event.isError ? texts.slice(1) : texts).join("\n");
         if (event.isError) errors.push(event.toolName + ": " + lastResult);
       }
     });
