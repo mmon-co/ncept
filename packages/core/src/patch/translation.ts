@@ -14,7 +14,6 @@ import {
   materialKey,
   sameExactPatchRef,
   type Attachment,
-  type ClosedPatchBundle,
   type ExactContributionMask,
   type ExactPatchRef,
   type Material,
@@ -25,10 +24,8 @@ import {
   type ResolvedGraph,
   type SemanticOperation,
 } from "./model.js";
-import { unpackPatchContentAsync } from "./merkle.js";
 import { readSparseManifest, resolveSparsePatch, sparseReader, type SparsePatchInput } from "./sparse.js";
 import { resolveSparseVariantBundle } from "./sparse-variants.js";
-import { resolvePatchBundle, resolveVariantBundle } from "./resolve.js";
 import { satisfiesVersionRange } from "../version_range.js";
 import { declaredPatchLocale, patchVariantMetadata } from "./variants.js";
 
@@ -85,18 +82,6 @@ export interface PatchTranslationResults {
   readonly documents?: Readonly<Record<string, Attachment>>;
 }
 
-export function translationSource(source: ClosedPatchBundle): PatchRevision {
-  const revision = source.revisions.find(({ ref }) => sameExactPatchRef(ref, source.terminal));
-  if (!revision) throw new PatchCompileError("invalid-bundle", "terminal source revision is missing");
-  return revision;
-}
-
-export async function sparseTranslationSource(input: SparsePatchInput): Promise<PatchRevision> {
-  const { terminal, store } = sparseReader(input);
-  const manifest = await readSparseManifest(store, terminal);
-  return { ref: terminal, ...(await unpackPatchContentAsync(manifest, (d) => store.getChunk(d, terminal.digest))) };
-}
-
 type HumanLayer<Revision = Pick<PatchRevision, "ref" | "metadata">> = {
   readonly revision: Revision;
   readonly graph: ResolvedGraph;
@@ -112,27 +97,6 @@ function humanClaim(
   if (metadata.properties[PATCH_MACHINE_TRANSLATION] === true) return false;
   const claim = patchVariantMetadata(ref.identity, metadata).claim;
   return claim?.patchId === source.identity && claim.locale === locale && satisfiesVersionRange(version, claim.range);
-}
-
-/** Resolve masks against today's source before deciding coverage. Stale human text, another
- * locale, an out-of-range claim, and an existing machine result are not human coverage. */
-export function translationHumanLayers(
-  source: ClosedPatchBundle,
-  sourceVersion: string,
-  locale: string,
-  variants: readonly ClosedPatchBundle[],
-): readonly HumanLayer<PatchRevision>[] {
-  return variants.flatMap((variant) => {
-    try {
-      const revision = translationSource(variant);
-      if (!humanClaim(source.terminal, sourceVersion, locale, revision.ref, revision.metadata)) return [];
-      const { graph } = resolveVariantBundle(source, variant, sourceVersion);
-      return graph.patchOrder.some((ref) => sameExactPatchRef(ref, revision.ref)) ? [{ revision, graph }] : [];
-    } catch (error) {
-      if (!(error instanceof PatchCompileError)) throw error;
-      return [];
-    }
-  });
 }
 
 export async function sparseTranslationHumanLayers(
@@ -223,31 +187,6 @@ function emptyPlan(
     documents,
     properties,
   };
-}
-
-/** A reusable to-do list over an exact source and only the human layers below the machine.
- * Results are cumulative by key: replay retained results into a fresh plan after a source
- * update, and only changed strings/Document bytes need another provider request. */
-export function planPatchTranslation(input: TranslationInput<ClosedPatchBundle>): PatchTranslationPlan {
-  const { source, sourceVersion } = input;
-  const { metadata } = translationSource(source);
-  const plan = emptyPlan(source.terminal, metadata, input);
-  if (plan.sourceLocale === plan.locale) return plan;
-  const graph = resolvePatchBundle(source);
-  const humans = translationHumanLayers(source, sourceVersion, plan.locale, input.humanVariants ?? []);
-  return collectPlan(
-    plan,
-    metadata,
-    graph,
-    humans,
-    source.revisions.map(({ ref }) => ref),
-  );
-}
-
-export async function planSparsePatchTranslation(
-  input: TranslationInput<SparsePatchInput>,
-): Promise<PatchTranslationPlan> {
-  return (await readSparsePatchTranslation(input)).plan;
 }
 
 /** Reuse the planner's exact reading for host-owned fields such as Mission suggestions. */

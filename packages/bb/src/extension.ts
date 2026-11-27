@@ -27,7 +27,7 @@ function isHandoff(value: unknown): value is OpenSession {
   );
 }
 
-export default function nceptBb(pi: ExtensionAPI) {
+export default function conceptBb(pi: ExtensionAPI) {
   if (!process.env.BB_THREAD_ID) return;
 
   async function command(args: string[]) {
@@ -36,7 +36,7 @@ export default function nceptBb(pi: ExtensionAPI) {
     return JSON.parse(result.stdout);
   }
 
-  pi.registerCommand("ncept-kickoff", {
+  pi.registerCommand("concept-kickoff", {
     description: "Begin a tutor-led Session from host context",
     handler: async (instruction) => {
       pi.sendMessage(
@@ -65,7 +65,7 @@ export default function nceptBb(pi: ExtensionAPI) {
   }
 
   // session_start errors are reported by pi but do not stop the first prompt.
-  // Consume input before ncept-pi can prepare an ordinary empty Session instead.
+  // Consume input before the pi extension can prepare an ordinary empty Session instead.
   pi.on("input", (_event, ctx) => {
     if (!refusal) return;
     // bb reports an exited pi process, including stderr, as a failed turn.
@@ -87,9 +87,9 @@ export default function nceptBb(pi: ExtensionAPI) {
     const stored = ctx.sessionManager
       .getBranch()
       .some((entry) => entry.type === "custom" && entry.customType === "ncept.session");
-    if (!stored && process.env.NCEPT_BB_ENTRY) {
+    if (!stored && process.env.CONCEPT_BB_ENTRY) {
       try {
-        const intent = entrySchema.parse(JSON.parse(process.env.NCEPT_BB_ENTRY));
+        const intent = entrySchema.parse(JSON.parse(process.env.CONCEPT_BB_ENTRY));
         let begin: (() => ReturnType<Parameters<BeginSession["claim"]>[0]>) | undefined;
         pi.events.emit(BEGIN_SESSION, {
           intent,
@@ -107,15 +107,15 @@ export default function nceptBb(pi: ExtensionAPI) {
       await associate(ctx);
       return;
     }
-    const session = process.env.NCEPT_BB_SESSION;
+    const session = process.env.CONCEPT_BB_SESSION;
     // A restarted pi process must keep the existing conversation and carry.
     if (!session || stored) {
       await associate(ctx);
       return;
     }
-    const carry = process.env.NCEPT_BB_CARRY_REF
-      ? (await command(["carry", "--thread", process.env.NCEPT_BB_CARRY_REF])).carry
-      : process.env.NCEPT_BB_CARRY;
+    const carry = process.env.CONCEPT_BB_CARRY_REF
+      ? (await command(["carry", "--thread", process.env.CONCEPT_BB_CARRY_REF])).carry
+      : process.env.CONCEPT_BB_CARRY;
     pi.events.emit(ADOPT_SESSION, { session, ...(carry ? { carry } : {}) } satisfies AdoptSession);
     await associate(ctx);
   });
@@ -124,7 +124,7 @@ export default function nceptBb(pi: ExtensionAPI) {
     if (!isHandoff(data)) return;
     const handoff = data;
     handoff.claim(async () => {
-      const directory = await mkdtemp(join(tmpdir(), "ncept-bb-"));
+      const directory = await mkdtemp(join(tmpdir(), "concept-bb-"));
       try {
         const path = join(directory, "handoff.json");
         await writeFile(

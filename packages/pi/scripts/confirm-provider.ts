@@ -18,7 +18,7 @@ export default function scripted(pi: ExtensionAPI) {
     },
   });
   pi.registerProvider("bb-local", {
-    api: "ncept-confirm-script",
+    api: "concept-confirm-script",
     baseUrl: "http://localhost",
     apiKey: "offline",
     models: [

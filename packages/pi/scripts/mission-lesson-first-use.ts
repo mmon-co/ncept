@@ -21,7 +21,7 @@ import { composePatch, emptyPatch } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { openHost, openLearningReader, openProfile, type HostSession } from "@mmon-co/ncept-local";
 import { BEGIN_SESSION, type BeginSession } from "../src/events";
-import ncept from "../src/extension";
+import concept from "../src/extension";
 import { initProject } from "../src/init";
 
 const directory = process.argv[2];
@@ -186,7 +186,7 @@ const loader = new DefaultResourceLoader({
   noSkills: true,
   noPromptTemplates: true,
   noThemes: true,
-  extensionFactories: [ncept, scripted],
+  extensionFactories: [concept, scripted],
 });
 await loader.reload();
 const manager = SessionManager.create(cwd, join(cwd, "sessions"));

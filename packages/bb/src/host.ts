@@ -19,7 +19,7 @@ import { defaultTheory, homeDefaultRecords } from "@mmon-co/ncept-default-theory
 import { handoffSchema, hostContract } from "./contract";
 import { settleGraph } from "./graph-positions";
 
-const hub = { url: process.env.NCEPT_HUB_URL, credentialsFile: process.env.NCEPT_CREDENTIALS_FILE };
+const hub = { url: process.env.CONCEPT_HUB_URL, credentialsFile: process.env.CONCEPT_CREDENTIALS_FILE };
 const signIns = new Map<string, { directory: string; signIn: HubBrowserSignIn; polling: boolean }>();
 
 export default experimental_defineHostEntry({
