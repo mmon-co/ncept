@@ -2,11 +2,9 @@ import { expect, test } from "bun:test";
 import { canonicalJson, contentDigest, sha256Hex } from "../../src/digest";
 import {
   provenanceOf,
-  applyGraphDiff,
   bundleForRevision,
   candidateRevision,
   compareReleaseVersions,
-  compileGraphDiff,
   composePatch,
   emptyPatch,
   lessonOperations,
@@ -21,6 +19,7 @@ import {
   type PatchContent,
   type RootPatchDefinition,
 } from "../../src/patch";
+import { compileDiff } from "./compile-diff";
 
 const document = (text: string) => ({ kind: "blob" as const, hash: contentDigest(text), mediaType: "text/markdown" });
 
@@ -93,14 +92,14 @@ test("closing checks content availability and digests; resolution checks compati
   ).toThrow(/resolves to both/);
 });
 
-test("Notebook diff compilation and application preserve citations and compute the resulting exact provenance", () => {
+test("Notebook diff compilation and application preserve citations and compute the resulting exact provenance", async () => {
   const empty = emptyPatch();
   const before = candidateRevision("patch-personal", empty);
   const bundle = bundleForRevision(before.ref, contents(empty));
   const operations = lessonOperations({ id: "node-a", label: "A", lesson: document("Explain A.") });
   const citations = [{ kind: "external_source" as const, source: "https://example.org/source" }];
-  const compiled = compileGraphDiff(bundle, operations, ["node-a"], citations);
-  const next = applyGraphDiff(empty, compiled);
+  const compiled = await compileDiff(bundle, operations, ["node-a"], citations);
+  const next = compiled.content;
   const after = candidateRevision("patch-personal", next);
   expect(compiled.report.compiledAgainst).toEqual(before.ref);
   expect(compiled.graph.terminal).toEqual(after.ref);
@@ -115,7 +114,7 @@ test("Notebook diff compilation and application preserve citations and compute t
   expect(empty.metadata.citations).toEqual([]);
 });
 
-test("an accepted own Edge can be reversed without reminting Nodes or rewriting history", () => {
+test("an accepted own Edge can be reversed without reminting Nodes or rewriting history", async () => {
   const accepted = composePatch(emptyPatch(), [
     ...lessonOperations({ id: "node-a", label: "A", lesson: document("Explain A.") }),
     ...lessonOperations({ id: "node-b", label: "B", lesson: document("Explain B.") }),
@@ -125,14 +124,14 @@ test("an accepted own Edge can be reversed without reminting Nodes or rewriting 
   const bundle = bundleForRevision(before.ref, contents(accepted));
   const oldGraph = resolvePatchBundle(bundle);
   const oldContent = structuredClone(accepted);
-  const compiled = compileGraphDiff(
+  const compiled = await compileDiff(
     bundle,
     [{ kind: "add-edge", edge: { id: "edge-ba", from: "node-b", to: "node-a" } }],
     ["node-a"],
     [],
     ["edge-ab"],
   );
-  const next = applyGraphDiff(accepted, compiled);
+  const next = compiled.content;
   const after = candidateRevision("patch-personal", next);
   const graph = resolvePatchBundle(bundleForRevision(after.ref, contents(accepted, next)));
   expect(graph).toEqual(compiled.graph);
@@ -155,7 +154,7 @@ test("an accepted own Edge can be reversed without reminting Nodes or rewriting 
     [inheritedBundle, "edge-ab"],
   ] as const) {
     try {
-      compileGraphDiff(source, [], [], [], [id]);
+      await compileDiff(source, [], [], [], [id]);
       throw new Error(`expected '${id}' retraction to fail`);
     } catch (error) {
       expect(error).toBeInstanceOf(PatchCompileError);
@@ -165,7 +164,7 @@ test("an accepted own Edge can be reversed without reminting Nodes or rewriting 
   }
 });
 
-test("composed content validates exact masks and conflicts against supplied bases", () => {
+test("composed content validates exact masks and conflicts against supplied bases", async () => {
   const base = rootContent(definition);
   const ref = candidateRevision("patch-course", base).ref;
   const notebook = { ...emptyPatch(), bases: [ref] };
@@ -176,7 +175,7 @@ test("composed content validates exact masks and conflicts against supplied base
     entity: { kind: "metadata-set" as const, id: "metadata-a" as const },
     property: "display:label",
   };
-  const diff = compileGraphDiff(
+  const diff = await compileDiff(
     bundle,
     [
       { kind: "mask-contribution", mask },
@@ -191,21 +190,21 @@ test("composed content validates exact masks and conflicts against supplied base
     ],
     ["node-a"],
   );
-  const next = applyGraphDiff(notebook, diff);
+  const next = diff.content;
   expect(
     resolvePatchBundle(bundleForRevision(candidateRevision("patch-personal", next).ref, contents(base, next)))
       .metadataSets[0]?.properties,
   ).toEqual({ "display:label": "Renamed" });
-  expect(() =>
-    compileGraphDiff(bundle, [{ kind: "mask-contribution", mask: { ...mask, operationIndex: 99 } }], []),
-  ).toThrow(/source operation does not exist/);
-  expect(() =>
-    compileGraphDiff(
+  expect(
+    await compileDiff(bundle, [{ kind: "mask-contribution", mask: { ...mask, operationIndex: 99 } }], []).catch(String),
+  ).toMatch(/source operation does not exist/);
+  expect(
+    await compileDiff(
       bundle,
       [{ kind: "add-metadata-set", metadataSet: { id: "metadata-a", subjects: [], properties: {} } }],
       [],
-    ),
-  ).toThrow(/subjects/);
+    ).catch(String),
+  ).toMatch(/subjects/);
 });
 
 test("root lesson construction and validation are value-only and round trip editable content", () => {

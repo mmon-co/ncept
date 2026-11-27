@@ -126,7 +126,7 @@ export function LearnPanel({ subPath }: PluginNavPanelProps) {
     );
   const missionId = subPath.startsWith("missions/") ? decodeURIComponent(subPath.slice(9)) : undefined;
   return (
-    <div className="ncept-learn h-full overflow-auto bg-background text-foreground">
+    <div className="concept-learn h-full overflow-auto bg-background text-foreground">
       <main className="mx-auto max-w-3xl p-6 space-y-8">
         {error && (
           <p role="alert" className="text-destructive">

@@ -23,7 +23,7 @@ import {
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import { openProfile } from "@mmon-co/ncept-local";
 import { initProject } from "../src/init";
-import ncept from "../src/extension";
+import concept from "../src/extension";
 import { ADOPT_SESSION, OPEN_SESSION, type AdoptSession } from "../src/events";
 
 // The package boundary's one wiring smoke: real pi persistence and tool dispatch,
@@ -35,7 +35,7 @@ test.each([
 ])(
   "pi project with sessions %s tutors, hands off and resumes Sessions",
   async (_where, sessionDir) => {
-    const root = await mkdtemp(join(tmpdir(), "ncept-pi-"));
+    const root = await mkdtemp(join(tmpdir(), "concept-pi-"));
     const cwd = join(root, "profile");
     const sessions = sessionDir(root, cwd);
     const handoffs: { session: string; mode: string; kickoff?: string }[] = [];
@@ -50,11 +50,11 @@ test.each([
     const errors: string[] = [];
     const prompts: string[] = [];
     const toolSets: string[][] = [];
-    const provider = "ncept-scripted";
+    const provider = "concept-scripted";
     const model: Model<Api> = {
       id: "tutor",
       name: "Scripted tutor",
-      api: "ncept-scripted-api",
+      api: "concept-scripted-api",
       provider,
       baseUrl: "http://localhost",
       reasoning: false,
@@ -168,7 +168,7 @@ test.each([
           agentsFilesOverride: () => ({
             agentsFiles: [{ path: "/global/AGENTS.md", content: "GLOBAL_CODING_CONTEXT_MUST_NOT_LEAK" }],
           }),
-          extensionFactories: [createCodemodeExtension(), scripted, ncept, claimer, adopter],
+          extensionFactories: [createCodemodeExtension(), scripted, concept, claimer, adopter],
         });
         await loader.reload();
         const result = await createAgentSession({
