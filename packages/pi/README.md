@@ -12,6 +12,8 @@ cd ~/learn
 pi
 ```
 
+The package installs the `concept-pi` executable. If you already have a Profile, run `pi update npm:@mmon-co/ncept-pi` to get the new commands; your saved Common Concept sign-in moves automatically.
+
 Accept pi's one-time project trust prompt. The dashboard above the editor shows Missions, next stops and due review, and clears when you speak. A fresh conversation is a chat Session. The tutor can recheck due Nodes during your Session.
 
 - `/learn <goal>` charts what you want to learn. `/learn` offers Missions and their next stops; `/learn <mission-id>` opens a particular Mission.
@@ -19,11 +21,11 @@ Accept pi's one-time project trust prompt. The dashboard above the editor shows 
 - `/author [goal]` opens an authoring Session.
 - `/missions` shows the dashboard again.
 - `/hub pull <release-url or patch@version>` adopts a release without an account. You can also paste an address and ask the tutor to pull it.
-- `/ncept login` signs in once through the browser; `/ncept logout` removes the saved Common Concept credential. These are separate from pi's model accounts.
+- `/concept login` signs in once through the browser; `/concept logout` removes the saved Common Concept credential. These are separate from pi's model accounts.
 - `/hub share` publishes one Mission's map and Materials on the Hub at a link: choose the Mission, give it a title, confirm. Whoever has the link can read it and `/hub pull` it; it isn't listed. `/hub share <mission-id>` skips the chooser. Sharing needs a free Common Concept account, not a subscription, and signs you in on first use.
 - In authoring, ask the tutor to publish: its `hub` tool packages the current personal Patch, bases and Materials and confirms public publication. Publishing needs a free Common Concept account, not a subscription.
-- `/ncept export-to-web` replaces web Main with this Profile after confirmation; every Mission moves with it.
-- `/ncept import-from-web` replaces this Profile after confirmation, preserving the old project in the host's backup directory. pi project settings are restored; `/resume` can continue imported Sessions.
+- `/concept export-to-web` replaces web Main with this Profile after confirmation; every Mission moves with it.
+- `/concept import-from-web` replaces this Profile after confirmation, preserving the old project in the host's backup directory. pi project settings are restored; `/resume` can continue imported Sessions.
 
 Every conversation is pi's own JSONL under `sessions/`. `/resume` continues one, `/tree` selects its branch, and `/new` starts a fresh chat. Host mode switches open next or aside pi Sessions with the Theory's declared carry. Observations, Mission progress, saved Materials and trusted Session associations live in the Profile and travel with its exchange archive. A session pi keeps elsewhere (`--session-dir`, `PI_CODING_AGENT_SESSION_DIR`, or a front end such as bb's pi bridge) is mirrored into `sessions/`, so the Profile still carries every transcript.
 
@@ -42,8 +44,8 @@ From a repository checkout:
 ```sh
 bun install
 bun run --cwd packages/pi build
-bun packages/pi/scripts/first-use.ts /tmp/my-ncept-profile
-cd /tmp/my-ncept-profile && pi
+bun packages/pi/scripts/first-use.ts /tmp/my-concept-profile
+cd /tmp/my-concept-profile && pi
 ```
 
 The setup script requires an unused directory and points the project package at this checkout instead of the unpublished npm package. It creates an empty Profile, no account or seed; pi uses your existing model authentication. It does not change your global pi settings or deploy a service.
@@ -60,17 +62,17 @@ From a bb project shell, launch the learner surface directly:
 
 ```sh
 bun run --cwd packages/pi build
-bun packages/pi/scripts/confirm-first-use.ts --bb /tmp/ncept-confirm-profile
+bun packages/pi/scripts/confirm-first-use.ts --bb /tmp/concept-confirm-profile
 ```
 
 Use an unused Profile path. The launcher opens a top-level bb Pi thread, waits up to two minutes for its oversized Map confirmation, and prints `READY` with the pending interaction. No account, seed, deployment or model request is needed. It records the owned thread in the Profile. After the encounter, stop that thread, remove its trust entry and delete the Profile with:
 
 ```sh
-bun packages/pi/scripts/confirm-first-use.ts --cleanup /tmp/ncept-confirm-profile
+bun packages/pi/scripts/confirm-first-use.ts --cleanup /tmp/concept-confirm-profile
 ```
 
-Without `--bb`, `bun packages/pi/scripts/confirm-first-use.ts /tmp/ncept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
+Without `--bb`, `bun packages/pi/scripts/confirm-first-use.ts /tmp/concept-confirm-profile` prepares a fresh authoring Profile with an [offline tutor](scripts/confirm-provider.ts) and prints the plain pi and bb launch commands. It trusts only that new directory in pi's trust store, so bb can load its project extension. Each message proposes 24 capabilities with criteria, then echoes the actual tool result. Accept the first proposal, send another message and dismiss the second. In bb, inspect the `Full change` JSON before answering; standalone pi shows the entire change. Pi returns the same boolean for No and dismissal; both report that the learner declined or did not answer.
 
-Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without the extension's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/ncept-confirm-profile` and remove the scratch directory.
+Send `Probe 8192` or `Probe 8193` in a fresh encounter thread to exercise bb's raw message limit without the extension's file fallback. After stopping its threads, run `bun packages/pi/scripts/confirm-first-use.ts --untrust /tmp/concept-confirm-profile` and remove the scratch directory.
 
-For a checkout-owned hosted endpoint, set `NCEPT_HUB_URL` to its Application base URL (including `/ncept`) before starting pi. `NCEPT_CREDENTIALS_FILE` selects an isolated credential file outside the Profile; login and logout use the same file. Omit both for the public product. OAuth uses pi's public CIMD identity, PKCE and the `patches publish learn` scopes; it does not require the issuer to enable dynamic registration.
+For a checkout-owned hosted endpoint, set `CONCEPT_HUB_URL` to its Application base URL (including `/ncept`) before starting pi. `CONCEPT_CREDENTIALS_FILE` selects an isolated credential file outside the Profile; login and logout use the same file. Omit both for the public product. OAuth uses pi's public CIMD identity, PKCE and the `patches publish learn` scopes; it does not require the issuer to enable dynamic registration.

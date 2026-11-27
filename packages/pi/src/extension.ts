@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { createRequire } from "node:module";
 import type {
@@ -10,7 +10,7 @@ import type {
 import { lessonHere, type Theory } from "@mmon-co/ncept-core";
 import { defaultTheory } from "@mmon-co/ncept-default-theory";
 import {
-  credentialsPath,
+  clearHubCredentials,
   openHost,
   parsePiSession,
   type Host,
@@ -65,7 +65,7 @@ function isBeginSession(value: unknown): value is BeginSession {
 }
 
 /** One extension instance belongs to one pi session, including after /resume. */
-export default function ncept(pi: ExtensionAPI) {
+export default function concept(pi: ExtensionAPI) {
   let host: Host | undefined;
   let active: HostSession | undefined;
   let context: ExtensionContext;
@@ -149,10 +149,10 @@ export default function ncept(pi: ExtensionAPI) {
     host = await openHost({
       profileDir: ctx.cwd,
       hub: {
-        userAgent: "ncept-pi/" + version,
+        userAgent: "concept-pi/" + version,
         clientMetadataUrl: "https://pi.dev/oauth/client.json",
-        url: process.env.NCEPT_HUB_URL,
-        credentialsFile: process.env.NCEPT_CREDENTIALS_FILE,
+        url: process.env.CONCEPT_HUB_URL,
+        credentialsFile: process.env.CONCEPT_CREDENTIALS_FILE,
       },
       theories,
       model,
@@ -235,7 +235,7 @@ export default function ncept(pi: ExtensionAPI) {
     await host.profile.registerSession(active.surface, basename(file), { trusted: ctx.isProjectTrusted() });
   }
 
-  // The mode governs ncept's own tools; the learner's harness tools stay theirs in every mode.
+  // The mode governs Common Concept's tools; the learner's harness tools stay theirs in every mode.
   function permitted(name: string): boolean {
     return !ownTools.has(name) || !!mounted?.tools.some((tool) => tool.name === name);
   }
@@ -252,7 +252,7 @@ export default function ncept(pi: ExtensionAPI) {
         {
           name: "hub",
           description:
-            "Pull a Hub release by address without an account. In authoring mode, publish the current personal Patch and its bases/Materials as a release after learner confirmation; /ncept login signs in first.",
+            "Pull a Hub release by address without an account. In authoring mode, publish the current personal Patch and its bases/Materials as a release after learner confirmation; /concept login signs in first.",
           schema: {
             type: "object",
             properties: {
@@ -356,7 +356,7 @@ export default function ncept(pi: ExtensionAPI) {
   async function dashboard(ctx: ExtensionContext) {
     const reading = await (await getHost(ctx)).reading();
     ctx.ui.setWidget(
-      "ncept",
+      "concept",
       [
         "Me",
         ...reading.missions
@@ -489,7 +489,7 @@ export default function ncept(pi: ExtensionAPI) {
     }
   });
   pi.on("before_agent_start", async (event, ctx) => {
-    ctx.ui.setWidget("ncept", undefined);
+    ctx.ui.setWidget("concept", undefined);
     relayingContinuation = event.messageType === "custom" && event.message.customType === "ncept.continuation";
     gradeReply = event.messageType === "user";
     const setup = relayingContinuation ? undefined : await prepare(ctx);
@@ -560,8 +560,8 @@ export default function ncept(pi: ExtensionAPI) {
   });
   pi.on("agent_settled", async (_event, ctx) => {
     await sync(ctx);
-    if (pendingEnter) pi.sendUserMessage("/ncept-next", { expandPromptTemplates: true });
-    else if (active) ctx.ui.setStatus("ncept", active.mode);
+    if (pendingEnter) pi.sendUserMessage("/concept-next", { expandPromptTemplates: true });
+    else if (active) ctx.ui.setStatus("concept", active.mode);
   });
 
   async function carryFor(ctx: ExtensionContext, to: Exclude<ModeSwitch, { then: "here" }>): Promise<string> {
@@ -618,7 +618,7 @@ export default function ncept(pi: ExtensionAPI) {
     }
     return carry;
   }
-  pi.registerCommand("ncept-next", {
+  pi.registerCommand("concept-next", {
     description: "Continue a tutor-requested Session switch",
     handler: async (_args, ctx) => {
       if (pendingEnter) {
@@ -741,8 +741,8 @@ export default function ncept(pi: ExtensionAPI) {
     const shared = await h.hub.share({ mission: mission.id, title });
     ctx.ui.notify("Shared at " + shared.url + "\nAnyone with the link can read it and learn from it.", "info");
   }
-  pi.registerCommand("ncept", {
-    description: "ncept login | logout | export-to-web | import-from-web",
+  pi.registerCommand("concept", {
+    description: "concept login | logout | export-to-web | import-from-web",
     handler: async (args, ctx) => {
       const h = await getHost(ctx);
       await sync(ctx);
@@ -752,7 +752,7 @@ export default function ncept(pi: ExtensionAPI) {
           ctx.ui.notify("Signed in to Common Concept.", "info");
           break;
         case "logout":
-          await rm(process.env.NCEPT_CREDENTIALS_FILE ?? credentialsPath(), { force: true });
+          await clearHubCredentials(process.env.CONCEPT_CREDENTIALS_FILE);
           host = undefined;
           ctx.ui.notify("Signed out of Common Concept.", "info");
           break;
@@ -779,7 +779,7 @@ export default function ncept(pi: ExtensionAPI) {
           break;
         }
         default:
-          ctx.ui.notify("Usage: /ncept login | logout | export-to-web | import-from-web", "info");
+          ctx.ui.notify("Usage: /concept login | logout | export-to-web | import-from-web", "info");
       }
     },
   });

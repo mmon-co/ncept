@@ -1,32 +1,32 @@
 /* The Learn map: the Application's mark shapes and Edge taper (docs/design/Graphs.md) in bb's theme tokens. */
-.ncept-map .react-flow {
+.concept-map .react-flow {
   --xy-background-color: transparent;
   --xy-edge-stroke: var(--foreground);
 }
-.ncept-map .react-flow__node {
+.concept-map .react-flow__node {
   cursor: pointer;
 }
-.ncept-map.still .react-flow__node,
-.ncept-map.still .react-flow__pane {
+.concept-map.still .react-flow__node,
+.concept-map.still .react-flow__pane {
   cursor: default;
 }
-.ncept-map .react-flow__handle {
+.concept-map .react-flow__handle {
   opacity: 0;
   left: 50%;
   top: 50%;
   pointer-events: none;
 }
-.ncept-mark {
+.concept-mark {
   --m: 28px;
   position: relative;
   width: var(--m);
   height: var(--m);
   color: var(--foreground);
 }
-.ncept-mark.out {
+.concept-mark.out {
   opacity: 0.25;
 }
-.ncept-tok {
+.concept-tok {
   position: absolute;
   inset: 0;
   border-radius: 50%;
@@ -38,47 +38,47 @@
     700 12px Arial,
     sans-serif;
 }
-.ncept-tok::after {
+.concept-tok::after {
   content: "";
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--muted-foreground);
 }
-[data-state="demonstrated"] > .ncept-tok {
+[data-state="demonstrated"] > .concept-tok {
   border: 0;
   background: var(--foreground);
   color: var(--background);
 }
-[data-state="demonstrated"] > .ncept-tok::after {
+[data-state="demonstrated"] > .concept-tok::after {
   content: "✓";
   width: auto;
   height: auto;
   background: none;
 }
-[data-state="tentative"] > .ncept-tok {
+[data-state="tentative"] > .concept-tok {
   border: 2px solid var(--foreground);
 }
-[data-state="tentative"] > .ncept-tok::after {
+[data-state="tentative"] > .concept-tok::after {
   background: var(--foreground);
 }
-[data-state="frontier"] > .ncept-tok {
+[data-state="frontier"] > .concept-tok {
   border: 0;
   box-shadow:
     inset 0 0 0 2px var(--foreground),
     0 0 0 2px var(--background),
     0 0 0 4px var(--foreground);
 }
-[data-state="frontier"] > .ncept-tok::after {
+[data-state="frontier"] > .concept-tok::after {
   width: 7px;
   height: 7px;
   background: var(--foreground);
 }
-.ncept-mark.sel > .ncept-tok {
+.concept-mark.sel > .concept-tok {
   outline: 2px solid var(--ring);
   outline-offset: 6px;
 }
-.ncept-lab {
+.concept-lab {
   position: absolute;
   top: calc(var(--m) + 6px);
   left: calc(var(--m) / 2 - 70px);
@@ -91,41 +91,41 @@
   line-height: 1.25;
   pointer-events: none;
 }
-.ncept-lab span,
-.ncept-lab small {
+.concept-lab span,
+.concept-lab small {
   padding: 0 3px;
   border-radius: 3px;
   background: color-mix(in oklch, var(--background) 80%, transparent);
 }
-.ncept-lab small {
+.concept-lab small {
   color: var(--muted-foreground);
   font-size: 10.5px;
 }
-.ncept-map.still .ncept-lab small {
+.concept-map.still .concept-lab small {
   display: none;
 }
-.ncept-edge .fill {
+.concept-edge .fill {
   fill: var(--foreground);
   opacity: 0.4;
 }
-.ncept-edge.gate .fill {
+.concept-edge.gate .fill {
   opacity: 1;
 }
-.ncept-edge .dash {
+.concept-edge .dash {
   fill: none;
   stroke: var(--foreground);
   stroke-width: 1.5;
   stroke-dasharray: 4 5;
   opacity: 0.45;
 }
-.ncept-edge.out {
+.concept-edge.out {
   opacity: 0.25;
 }
-.ncept-edge.sel .fill {
+.concept-edge.sel .fill {
   fill: var(--ring);
   opacity: 1;
 }
-.ncept-edge.sel .dash {
+.concept-edge.sel .dash {
   stroke: var(--ring);
   opacity: 1;
 }
