@@ -653,7 +653,6 @@ function* projection(m: PatchManifest): Walk<MaterialHeader[]> {
     }
   return result;
 }
-export const readMaterialProjectionAsync = (m: PatchManifest, get: Get) => runAsync(projection(m), get);
 function* directoryEntries(root: Digest, visit: (hash: string, d: Digest) => void): Walk<void> {
   const c = yield root;
   if (c.kind === "directory-branch") {
