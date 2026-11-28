@@ -3,9 +3,19 @@ const uuid = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
 const uuidId = new RegExp(`^(?:([a-z]+)-)?(${uuid})$`);
 const shortSuffix = /(?:^|-)([0-9A-Za-z]{22})$/;
 
+/** The 128-bit hex payload of a trailing short ID. Larger values are ordinary authored words. */
+function shortPayload(segment: string): { hex: string; index: number } | undefined {
+  const suffix = shortSuffix.exec(segment);
+  if (!suffix?.[1]) return;
+  let value = 0n;
+  for (const digit of suffix[1]) value = value * 62n + BigInt(alphabet.indexOf(digit));
+  if (value >= 2n ** 128n) return;
+  return { hex: value.toString(16).padStart(32, "0"), index: suffix.index };
+}
+
 /** Authored identities share the segment with generated IDs. Reserve the short-ID suffix at minting. */
 export function hasShortIdSuffix(id: string): boolean {
-  return shortSuffix.test(id);
+  return shortPayload(id) !== undefined;
 }
 
 function shortId(hex: string): string {
@@ -37,17 +47,14 @@ export function slugged(id: string, title?: string, kind?: string): string {
 }
 
 export function parseResourceSegment(segment: string, kind = ""): { id: string; slug?: string } {
-  const suffix = shortSuffix.exec(segment);
-  if (!suffix?.[1]) return { id: segment };
-  let value = 0n;
-  for (const digit of suffix[1]) value = value * 62n + BigInt(alphabet.indexOf(digit));
-  if (value >= 2n ** 128n) return { id: segment };
-  const hex = value.toString(16).padStart(32, "0");
+  const payload = shortPayload(segment);
+  if (!payload) return { id: segment };
+  const { hex, index } = payload;
   const id =
     kind === "publisher"
       ? hex
       : (kind ? kind + "-" : "") + hex.replace(/^(........)(....)(....)(....)(............)$/, "$1-$2-$3-$4-$5");
-  return { id, slug: segment.slice(0, suffix.index) };
+  return { id, slug: segment.slice(0, index) };
 }
 
 /** Full legacy IDs and authored IDs pass through; the route supplies the omitted kind. */
