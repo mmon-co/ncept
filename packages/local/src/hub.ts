@@ -1,3 +1,4 @@
+import { idOf, slugged } from "@mmon-co/ncept-core/resource-url";
 import { mkdtemp, rename, rm } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -110,7 +111,8 @@ function releaseAddress(value: string, base: string) {
   const api = value.match(/^(https?:\/\/.+)\/hub\/v1\/releases\/([^/]+)\/([^/?#]+)(?:[?#].*)?$/);
   const exact = value.match(/^(patch-[0-9a-z-]+)@(.+)$/);
   const match = page ?? api;
-  const patchId = match ? decodeURIComponent(match[2] ?? "") : exact?.[1];
+  const segment = match ? decodeURIComponent(match[2] ?? "") : exact?.[1];
+  const patchId = page && segment ? idOf(segment, "patch") : segment;
   const version = match ? decodeURIComponent(match[3] ?? "") : exact?.[2];
   if (!isPatchId(patchId) || !version) throw new Error("Use a Hub release page URL or patch-id@version");
   releasePrecedenceKey(version);
@@ -261,6 +263,7 @@ export function connectHub(
     const uploads = new Map(
       [...completeContents.values()].flatMap(contentAttachments).map((attachment) => [attachment.hash, attachment]),
     );
+    const title = completeContents.get(bundle.terminal.digest)?.metadata.properties["patch:title"];
     return connected(async (call) => {
       for (const [hash, attachment] of uploads) {
         // A complete revision can still come from a sparse reading that omitted some blobs.
@@ -274,7 +277,12 @@ export function connectHub(
       return {
         ref: captured.ref,
         version,
-        url: base + "/hub/" + captured.ref.identity + "/releases/" + encodeURIComponent(version),
+        url:
+          base +
+          "/hub/" +
+          encodeURIComponent(slugged(captured.ref.identity, typeof title === "string" ? title : undefined)) +
+          "/releases/" +
+          encodeURIComponent(version),
       };
     });
   }
