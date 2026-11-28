@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { attachmentDigest, contentDigest } from "../../src/digest";
 import {
-  applyGraphDiff,
   bundleForRevision,
   candidateRevision,
-  compileGraphDiff,
   copyPatchGraph,
   emptyPatch,
   NODE_LABEL_PROPERTY,
@@ -19,6 +17,7 @@ import {
   type SemanticOperation,
   type PatchRevision,
 } from "../../src/patch";
+import { compileDiff } from "./compile-diff";
 
 function revision(
   identity: PatchRevision["ref"]["identity"],
@@ -86,7 +85,7 @@ test("a Document lesson follows its content reference through edit, View capture
   expect(removed.materials).toEqual([]);
 });
 
-test("Material dependencies carry through compiled revisions, View capture and namespaced copies", () => {
+test("Material dependencies carry through compiled revisions, View capture and namespaced copies", async () => {
   const baseline = candidateRevision("patch-code", emptyPatch());
   const start = { terminal: baseline.ref, revisions: [baseline] };
   const node = "node-code";
@@ -106,7 +105,7 @@ test("Material dependencies carry through compiled revisions, View capture and n
     dependsOn: [{ playground: library.playground, id: library.id }, external],
   };
   const add = (material: Material): SemanticOperation => ({ kind: "add-material", material });
-  const diff = compileGraphDiff(
+  const diff = await compileDiff(
     start,
     [
       { kind: "add-node", node: { id: node } },
@@ -123,7 +122,7 @@ test("Material dependencies carry through compiled revisions, View capture and n
     ],
     [node],
   );
-  const content = applyGraphDiff(baseline, diff);
+  const content = diff.content;
   const compiled = candidateRevision(baseline.ref.identity, content);
   expect(diff.graph.terminal).toEqual(compiled.ref);
   const resolved = resolvePatchBundle(bundleForRevision(compiled.ref, new Map([[compiled.ref.digest, content]])));
@@ -151,7 +150,7 @@ test("Material dependencies carry through compiled revisions, View capture and n
     [add({ ...library, dependsOn: [ref(library)] })],
     [add({ ...library, dependsOn: [ref(workspace)] }), add({ ...workspace, about: [] })],
   ]) {
-    expect(() => compileGraphDiff(start, operations, [])).toThrow("Material dependencies contain a cycle");
+    expect(await compileDiff(start, operations, []).catch(String)).toContain("Material dependencies contain a cycle");
   }
 });
 
