@@ -74,6 +74,7 @@ export interface AttemptOutcome {
   readonly problem: {
     readonly id: string;
     readonly digest: string;
+    /** Empty when the response is retained but no Node can receive evidence from it. */
     readonly about: readonly NodeId[];
     readonly prompt: string;
     readonly presentation?: string;
@@ -132,7 +133,6 @@ export function isAttemptOutcome(value: unknown): value is AttemptOutcome {
     !text(problem.id) ||
     !isContentDigest(problem.digest) ||
     !Array.isArray(problem.about) ||
-    problem.about.length === 0 ||
     !problem.about.every(nodeId) ||
     new Set(problem.about).size !== problem.about.length ||
     !text(problem.prompt) ||
