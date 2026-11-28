@@ -1099,12 +1099,14 @@ function resolveOrdered(
   }
 
   for (const material of materials) {
+    const { onDemand }: { onDemand?: unknown } = material;
     if (
       !material.playground.trim() ||
       !material.type.trim() ||
       !material.id.trim() ||
       !isAttachment(material.content) ||
-      !isMaterialMeta(material.meta)
+      !isMaterialMeta(material.meta) ||
+      (onDemand !== undefined && onDemand !== true)
     )
       throw new PatchCompileError("invalid-bundle", `invalid material ${materialKey(material)}`);
     if (!Array.isArray(material.about))
