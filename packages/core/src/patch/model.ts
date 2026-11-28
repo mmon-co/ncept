@@ -32,6 +32,8 @@ export interface Material {
   readonly about: readonly NodeId[];
   readonly content: Attachment;
   readonly meta: MaterialMeta;
+  /** Available to open explicitly; leave out of automatic Lesson openings. */
+  readonly onDemand?: true;
   /** Materials this one reads when opened, such as a Set's Problems or a library a code workspace imports. Acyclic. */
   readonly dependsOn?: readonly MaterialRef[];
 }

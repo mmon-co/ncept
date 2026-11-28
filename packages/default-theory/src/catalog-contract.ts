@@ -64,7 +64,7 @@ export interface MaterialToolInput {
   /** Existing Playground identities remain the stored Material kinds. */
   readonly kind: string;
   readonly input: CatalogArguments;
-  /** Applet declared command name, or audio's generate command. */
+  /** Applet declared command name, or Media's speech generate command. */
   readonly command?: string;
 }
 

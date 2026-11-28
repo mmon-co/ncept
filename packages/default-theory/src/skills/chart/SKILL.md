@@ -26,7 +26,7 @@ Charting is dependency resolution from a settled Mission. When authoring a Patch
 
 ## The graph
 
-- **Nodes** are single observable capabilities or steps, defined by what shows them. Include only what the learner can and will do themselves—leave out work an agent can simply do or coordinating other people. Different presentations of one task are one Node.
+- **Nodes** are single capabilities or steps the learner wants for themselves—a target, or what a target cannot be shown without—titled as that want and defined by what shows them. A point with no such Edge goes in a Lesson or guidance. Include only what the learner can and will do themselves—leave out work an agent can simply do or coordinating other people. Different presentations of one task are one Node.
 - **Edges** express definitional necessity—the dependent cannot be demonstrated without the prerequisite—with the reason in `because`. Preferred teaching order is `priority`, never an Edge.
 - **Splitting:** a part too large for one Lesson lacks a prerequisite step or capability (child Node), volume (tiers: top 50 words, then 100), or consolidation (thresholds: 60, then 90 wpm).
 - **Review schedules:** set `review` to `{"kind":"fsrs"}` for what must be remembered, `{"kind":"never"}` for one-off steps, or `{"kind":"interval","days":30}` (choosing the period) for maintained states or capabilities that detrain. Defaults when unset: `never` for milestones, `fsrs` otherwise.
