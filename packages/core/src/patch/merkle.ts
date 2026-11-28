@@ -1,6 +1,7 @@
 import { canonicalJson, contentDigest, isContentDigest, sha256Hex, type ContentDigest as Digest } from "../digest.js";
 import { canonicalDelta } from "./material.js";
 import { materialKey, type PatchContent, type SemanticOperation as Op, type NodeId, type EdgeId } from "./model.js";
+import { hasShortIdSuffix } from "../resource-url.js";
 import { validateBaseTake } from "./select.js";
 
 export const MAX_PATCH_CHUNK_BYTES = 256 * 1024;
@@ -236,6 +237,8 @@ function pack(content: PatchContent): PackedPatch {
   const structure: PackedOperationEntry[] = [];
   const ops = canonicalDelta(content.delta).operations;
   for (const [index, op] of ops.entries()) {
+    if (op.kind === "add-material" && hasShortIdSuffix(op.material.id))
+      throw new Error(`Material identity uses a reserved URL suffix: ${op.material.id}`);
     const entry = packedEntry(index, op, put);
     let signature: string, publish: (digest: Digest) => void;
     if (op.kind === "add-metadata-set") {

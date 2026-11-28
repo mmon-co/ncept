@@ -61,6 +61,10 @@ function effectiveSource(graph: SelectedGraph, node: NodeId): ExactPatchRef {
   );
 }
 
+export function nodeDisplayLabel(graph: SelectedGraph, node: NodeId): string | undefined {
+  return stringProperty(graph, metadataForNode(graph, node), NODE_LABEL_PROPERTY);
+}
+
 export function projectVisualGraph(input: VisualProjectionInput): VisualGraph {
   const ranks = rankNodes(input.graph);
   const groups = input.graph.patchOrder.map((ref) => {

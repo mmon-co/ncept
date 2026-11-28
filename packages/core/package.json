@@ -26,6 +26,10 @@
       "types": "./dist/patch/index.d.ts",
       "default": "./dist/patch/index.js"
     },
+    "./resource-url": {
+      "types": "./dist/resource-url.d.ts",
+      "default": "./dist/resource-url.js"
+    },
     "./observations": {
       "types": "./dist/observations.d.ts",
       "default": "./dist/observations.js"
