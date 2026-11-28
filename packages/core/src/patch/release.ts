@@ -1,3 +1,4 @@
+import { hasShortIdSuffix } from "../resource-url.js";
 import type { ContentDigest } from "../digest.js";
 import { packPatchContent, manifestDigest, manifestBytes, chunkBytes } from "./merkle.js";
 import { compileGraph } from "./compile.js";
@@ -66,6 +67,7 @@ export function revisionBytes(content: PatchContent): number {
 }
 
 export function candidateRevision(identity: PatchId, content: PatchContent): PatchRevision {
+  if (hasShortIdSuffix(identity)) throw new PatchContentError(`Patch identity uses a reserved URL suffix: ${identity}`);
   const { digest, delta } = canonicalForm(content);
   return {
     ref: { identity, digest },
