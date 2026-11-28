@@ -75,7 +75,8 @@ export function isMaterial(value: unknown): value is Material {
     value.content.kind === "blob" &&
     isContentDigest(value.content.hash) &&
     nonempty(value.content.mediaType) &&
-    isMaterialMeta(value.meta)
+    isMaterialMeta(value.meta) &&
+    (value.onDemand === undefined || value.onDemand === true)
   );
 }
 function isSubject(value: unknown): value is MetadataSubject {
